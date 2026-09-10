@@ -1,0 +1,12 @@
+<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="basicTurret" cx="35%" cy="35%" r="75%">
+      <stop offset="0%" stop-color="#7cc0f2"/>
+      <stop offset="100%" stop-color="#2f6fa8"/>
+    </radialGradient>
+  </defs>
+  <rect x="8" y="8" width="48" height="48" rx="10" fill="#20202e" stroke="#000000" stroke-opacity="0.4" stroke-width="2"/>
+  <circle cx="32" cy="32" r="18" fill="url(#basicTurret)" stroke="#12314a" stroke-width="2"/>
+  <rect x="27" y="4" width="10" height="24" rx="3" fill="#3f80b8" stroke="#12314a" stroke-width="1.5"/>
+  <circle cx="32" cy="32" r="6" fill="#dff0ff"/>
+</svg>

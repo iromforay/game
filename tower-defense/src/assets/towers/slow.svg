@@ -1,0 +1,11 @@
+<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="slowCrystal" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#c9a8f2"/>
+      <stop offset="100%" stop-color="#6a2fa8"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="48" height="48" rx="10" fill="#20202e" stroke="#000000" stroke-opacity="0.4" stroke-width="2"/>
+  <polygon points="32,10 44,32 32,54 20,32" fill="url(#slowCrystal)" stroke="#3a1264" stroke-width="2"/>
+  <polygon points="32,18 38,32 32,46 26,32" fill="#e6d6ff" opacity="0.7"/>
+</svg>

@@ -1,0 +1,80 @@
+.dashboard {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 48px 24px;
+}
+
+.dashboard-section {
+  margin-top: 32px;
+}
+
+.placeholder-note {
+  color: var(--text-h, #888);
+}
+
+.game-select-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.game-select-button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  font-size: 18px;
+  padding: 14px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.game-select-title {
+  font-weight: 600;
+}
+
+.game-select-desc {
+  font-size: 13px;
+  color: var(--text-h, #888);
+}
+
+.lobby {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.lobby-section {
+  margin-top: 24px;
+}
+
+.start-button {
+  margin-top: 32px;
+  width: 100%;
+  font-size: 18px;
+  padding: 14px 24px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.game-screen {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.exit-button {
+  align-self: flex-start;
+  margin: 12px;
+  padding: 8px 16px;
+  cursor: pointer;
+}
+
+.game-canvas-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
