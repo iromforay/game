@@ -5,14 +5,26 @@
 
 export const PIECES_URL = '/data/strategy-marbles/pieces.json';
 
+// Every icon file any piece in the catalog might reference. GameScene
+// preloads all of these up front (small, fixed set) rather than trying to
+// dynamically load images after pieces.json (which is itself runtime-fetched)
+// resolves.
+export const PIECE_ICON_FILES = ['rock', 'tree', 'car'] as const;
+
 export interface PieceDef {
   id: number;
   name: string;
   radius: number;
-  color: string; // "#rrggbb"
-  // Not wired up to a texture loader yet - round maps can already reference a
-  // piece by id, so once art exists this fills in without a schema change.
-  image: string | null;
+  color: string; // "#rrggbb" - fallback fill when a piece has no image
+  image: string | null; // e.g. "/data/strategy-marbles/icons/rock.svg"
+}
+
+// GameScene preloads each of these once (see preload()) and reuses the
+// texture at whatever size a given piece's radius calls for, rather than
+// loading a fresh image per placement.
+export function pieceTextureKey(imagePath: string): string {
+  const file = imagePath.split('/').pop() ?? imagePath;
+  return `piece-icon-${file.replace(/\.[^.]+$/, '')}`;
 }
 
 export async function fetchPieces(): Promise<PieceDef[]> {

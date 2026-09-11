@@ -3,6 +3,7 @@ import { WEIGHT_DEFS } from '../config/weights';
 import type { WeightTier } from '../config/weights';
 import { PLAYER_COLORS } from '../config/constants';
 import { floorFrictionToAir } from '../config/physics';
+import { ensureEggTexture } from './eggTexture';
 
 let nextEggId = 1;
 
@@ -11,8 +12,9 @@ export class Egg {
   readonly scene: Phaser.Scene;
   readonly ownerId: number;
   readonly weightTier: WeightTier;
-  readonly circle: Phaser.GameObjects.Arc & { body: MatterJS.BodyType };
+  readonly circle: Phaser.GameObjects.Image & { body: MatterJS.BodyType };
   readonly weightLabel: Phaser.GameObjects.Text;
+  readonly selectionRing: Phaser.GameObjects.Arc;
   readonly frictionMultiplier: number;
   readonly baseFrictionAir: number;
 
@@ -36,8 +38,10 @@ export class Egg {
     this.baseFrictionAir = floorFrictionToAir(floorFriction) * def.frictionMultiplier;
     const color = PLAYER_COLORS[ownerId % PLAYER_COLORS.length];
 
-    const arc = scene.add.circle(x, y, def.radius, color).setStrokeStyle(2, 0x000000, 0.5);
-    scene.matter.add.gameObject(arc, {
+    // A glossy, domed Go-stone look instead of a flat-filled circle.
+    const textureKey = ensureEggTexture(scene, color, def.radius);
+    const image = scene.add.image(x, y, textureKey);
+    scene.matter.add.gameObject(image, {
       shape: { type: 'circle', radius: def.radius },
       mass: def.mass,
       frictionAir: this.baseFrictionAir,
@@ -45,7 +49,12 @@ export class Egg {
       restitution: 0.65,
       label: `egg:${this.id}`,
     });
-    this.circle = arc as Phaser.GameObjects.Arc & { body: MatterJS.BodyType };
+    this.circle = image as Phaser.GameObjects.Image & { body: MatterJS.BodyType };
+
+    this.selectionRing = scene.add
+      .circle(x, y, def.radius + 3, 0x000000, 0)
+      .setStrokeStyle(2, 0xffffff, 1)
+      .setVisible(false);
 
     this.weightLabel = scene.add
       .text(x, y, def.label, { fontSize: '11px', color: '#ffffff' })
@@ -72,6 +81,7 @@ export class Egg {
 
   syncLabel() {
     this.weightLabel.setPosition(this.x, this.y - this.radius - 12);
+    this.selectionRing.setPosition(this.x, this.y);
   }
 
   setWeightVisible(visible: boolean) {
@@ -79,7 +89,7 @@ export class Egg {
   }
 
   setSelected(selected: boolean) {
-    this.circle.setStrokeStyle(selected ? 3 : 2, selected ? 0xffffff : 0x000000, selected ? 1 : 0.5);
+    this.selectionRing.setPosition(this.x, this.y).setVisible(selected);
   }
 
   setFrictionAir(value: number) {
@@ -97,5 +107,6 @@ export class Egg {
     this.scene.matter.world.remove(this.circle.body);
     this.circle.destroy();
     this.weightLabel.destroy();
+    this.selectionRing.destroy();
   }
 }

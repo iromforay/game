@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { CANVAS_HEIGHT, CANVAS_WIDTH, GAME_HEIGHT, GAME_WIDTH, PLAYER_COLORS } from '../config/constants';
+import { CANVAS_HEIGHT, CANVAS_WIDTH, GAME_HEIGHT, GAME_WIDTH, PLAYER_COLORS, uiTextColor } from '../config/constants';
 import { gameEvents, Events } from '../events';
 import type { GameOverInfo, MapInfo, ScoreEntry, TurnInfo } from '../events';
 
@@ -141,7 +141,7 @@ export class UIScene extends Phaser.Scene {
     }
     if (info.activePlayerIndex === null) return;
 
-    const color = Phaser.Display.Color.IntegerToRGB(PLAYER_COLORS[info.activePlayerIndex % PLAYER_COLORS.length]);
+    const color = Phaser.Display.Color.IntegerToRGB(uiTextColor(PLAYER_COLORS[info.activePlayerIndex % PLAYER_COLORS.length]));
     const colorString = Phaser.Display.Color.RGBToString(color.r, color.g, color.b, 0, '#');
     this.showPhaseBanner(`${info.turn}턴 · Player ${info.activePlayerIndex + 1} 행동예약`, colorString);
 
@@ -159,7 +159,7 @@ export class UIScene extends Phaser.Scene {
     this.scoreTexts = [];
 
     entries.forEach((entry, i) => {
-      const color = PLAYER_COLORS[entry.playerIndex % PLAYER_COLORS.length];
+      const color = uiTextColor(PLAYER_COLORS[entry.playerIndex % PLAYER_COLORS.length]);
       const text = this.add.text(
         CANVAS_WIDTH - 190,
         GAME_HEIGHT + 12 + i * 20,

@@ -17,7 +17,7 @@ import { randomWeightTier } from '../config/weights';
 import { mapUrl } from '../config/maps';
 import type { RoundMapDef } from '../config/maps';
 import { bounceToRestitution, floorFrictionToAir } from '../config/physics';
-import { PIECES_URL, pieceColorNumber } from '../config/pieces';
+import { PIECES_URL, PIECE_ICON_FILES, pieceColorNumber, pieceTextureKey } from '../config/pieces';
 import type { PieceDef } from '../config/pieces';
 import { seededRandom } from '../config/rng';
 import { Egg } from '../objects/Egg';
@@ -84,6 +84,9 @@ export class GameScene extends Phaser.Scene {
   preload() {
     this.load.json(`map-${this.roundId}`, mapUrl(this.roundId));
     this.load.json('pieces', PIECES_URL);
+    for (const file of PIECE_ICON_FILES) {
+      this.load.svg(pieceTextureKey(`${file}.svg`), `/data/strategy-marbles/icons/${file}.svg`, { width: 64, height: 64 });
+    }
   }
 
   create() {
@@ -146,7 +149,9 @@ export class GameScene extends Phaser.Scene {
       const piece = this.getPiece(placement.pieceId);
       const x = BOARD_CENTER_X + placement.dx;
       const y = BOARD_CENTER_Y + placement.dy;
-      const obstacle = this.add.circle(x, y, piece.radius, pieceColorNumber(piece)).setStrokeStyle(2, 0x000000, 0.4);
+      const obstacle = piece.image
+        ? this.add.image(x, y, pieceTextureKey(piece.image)).setDisplaySize(piece.radius * 2, piece.radius * 2)
+        : this.add.circle(x, y, piece.radius, pieceColorNumber(piece)).setStrokeStyle(2, 0x000000, 0.4);
       this.matter.add.gameObject(obstacle, {
         shape: { type: 'circle', radius: piece.radius },
         isStatic: true,

@@ -4,7 +4,7 @@
   "floorFriction": 5,
   "terrain": [
     { "pieceId": 3, "dx": -70, "dy": -40, "bounce": 5 },
-    { "pieceId": 2, "dx": 90, "dy": 30, "bounce": 5 },
+    { "pieceId": 5, "dx": 90, "dy": 30, "bounce": 5 },
     { "pieceId": 1, "dx": 10, "dy": 110, "bounce": 5 }
   ],
   "zones": []
