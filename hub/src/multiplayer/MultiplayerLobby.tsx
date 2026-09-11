@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { fetchAllRoundMaps } from 'strategy-marbles';
 import type { RoundMapDef } from 'strategy-marbles';
-import { SERVER_URL, useMultiplayer } from './MultiplayerContext';
+import { useMultiplayer } from './MultiplayerContext';
 import type { RoomVisibility } from './types';
 
 const MIN_PLAYERS = 2;
@@ -97,7 +97,7 @@ export function MultiplayerLobby({ onExit }: MultiplayerLobbyProps) {
   if (multiplayer.connection !== 'connected') {
     return (
       <p className="placeholder-note">
-        멀티플레이 서버에 연결하는 중... ({SERVER_URL}){multiplayer.error && <><br />{multiplayer.error}</>}
+        멀티플레이 서버에 연결하는 중...{multiplayer.error && <><br />{multiplayer.error}</>}
       </p>
     );
   }

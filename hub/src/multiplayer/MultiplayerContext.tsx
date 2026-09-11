@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import type { AckResponse, ListRoomsResponse, RoomState, RoomVisibility } from './types';
 
-export const SERVER_URL = import.meta.env.VITE_MULTIPLAYER_SERVER_URL ?? 'http://localhost:3001';
+const SERVER_URL = import.meta.env.VITE_MULTIPLAYER_SERVER_URL ?? 'http://localhost:3001';
 
 export type ConnectionState = 'idle' | 'connecting' | 'connected';
 
@@ -65,9 +65,8 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
       setConnection('connected');
       refreshPublicRooms();
     });
-    socket.on('connect_error', (err) => {
-      console.error('[multiplayer] connect_error', err.message, err);
-      setError(`멀티플레이 서버에 연결할 수 없습니다 (${err.message}). BE 서버가 켜져 있는지 확인해주세요.`);
+    socket.on('connect_error', () => {
+      setError('멀티플레이 서버에 연결할 수 없습니다. BE 서버가 켜져 있는지 확인해주세요.');
     });
     socket.on('disconnect', () => {
       setConnection('idle');
