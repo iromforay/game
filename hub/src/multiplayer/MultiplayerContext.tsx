@@ -53,7 +53,11 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
   const connect = useCallback(() => {
     if (socketRef.current) return;
     setConnection('connecting');
-    const socket = io(SERVER_URL, { transports: ['websocket'] });
+    // Start on polling and let engine.io upgrade to websocket once it
+    // confirms the upgrade actually works - some mobile carrier networks
+    // block/break the WS upgrade outright, and websocket-only here means a
+    // single failed upgrade kills the connection with no fallback.
+    const socket = io(SERVER_URL, { transports: ['polling', 'websocket'] });
     socketRef.current = socket;
 
     socket.on('connect', () => {

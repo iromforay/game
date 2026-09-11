@@ -2,6 +2,9 @@
   "name": "be",
   "private": true,
   "version": "0.0.0",
+  "engines": {
+    "node": "22.23.1"
+  },
   "scripts": {
     "dev": "ts-node --transpile-only src/main.ts",
     "build": "tsc -p tsconfig.json",
