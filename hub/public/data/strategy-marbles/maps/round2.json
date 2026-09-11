@@ -1,0 +1,14 @@
+{
+  "id": 2,
+  "name": "카펫 코트",
+  "floorFriction": 5,
+  "terrain": [
+    { "pieceId": 2, "dx": -110, "dy": 60, "bounce": 2 },
+    { "pieceId": 2, "dx": 120, "dy": -60, "bounce": 8 },
+    { "pieceId": 1, "dx": 0, "dy": -140, "bounce": 5 },
+    { "pieceId": 1, "dx": 0, "dy": 140, "bounce": 5 }
+  ],
+  "zones": [
+    { "dx": 40, "dy": 90, "radius": 55, "friction": 0 }
+  ]
+}

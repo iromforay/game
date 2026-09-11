@@ -1,0 +1,6 @@
+[
+  { "id": 1, "name": "작은 돌", "radius": 16, "color": "#5a5248", "image": null },
+  { "id": 2, "name": "중간 돌", "radius": 20, "color": "#5a5248", "image": null },
+  { "id": 3, "name": "큰 바위", "radius": 26, "color": "#5a5248", "image": null },
+  { "id": 4, "name": "탄성 범퍼", "radius": 20, "color": "#8a5a3a", "image": null }
+]

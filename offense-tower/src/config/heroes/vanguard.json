@@ -1,0 +1,14 @@
+{
+  "id": "vanguard",
+  "name": "뱅가드",
+  "description": "모든 타워에 내성을 가진 만능형 영웅. 게임당 단 1회만 소환 가능.",
+  "hp": 260,
+  "speed": 55,
+  "reward": 40,
+  "color": "#ffd166",
+  "radius": 22,
+  "resistance": 0.6,
+  "attackRange": 90,
+  "attackDamage": 20,
+  "attackRate": 800
+}
