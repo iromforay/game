@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import type { AckResponse, ListRoomsResponse, RoomState, RoomVisibility } from './types';
 
-const SERVER_URL = import.meta.env.VITE_MULTIPLAYER_SERVER_URL ?? 'http://localhost:3001';
+export const SERVER_URL = import.meta.env.VITE_MULTIPLAYER_SERVER_URL ?? 'http://localhost:3001';
 
 export type ConnectionState = 'idle' | 'connecting' | 'connected';
 
