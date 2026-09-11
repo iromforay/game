@@ -32,3 +32,6 @@ export { Projectile } from './objects/Projectile';
 export { default as towerBasicUrl } from './assets/towers/basic.svg?url';
 export { default as towerSplashUrl } from './assets/towers/splash.svg?url';
 export { default as towerSlowUrl } from './assets/towers/slow.svg?url';
+export { logEvent, getAllLogs, clearLogs, pruneLogsOlderThan, exportLogsAsJson } from './logger';
+export type { LogEntry } from './logger';
+export { getCoins, addCoins } from './metaCurrency';

@@ -16,18 +16,23 @@ export class Enemy {
   slowUntil = 0;
   slowFactor = 1;
 
+  // Defaults to the shared normal-mode path; callers with their own map
+  // (e.g. offense-tower's per-round paths) pass their own points array.
+  pathPoints: { x: number; y: number }[];
+
   body: Phaser.GameObjects.Arc;
   hpBarBg: Phaser.GameObjects.Rectangle;
   hpBarFill: Phaser.GameObjects.Rectangle;
   container: Phaser.GameObjects.Container;
 
-  constructor(scene: Phaser.Scene, def: EnemyDef, hpMultiplier = 1) {
+  constructor(scene: Phaser.Scene, def: EnemyDef, hpMultiplier = 1, pathPoints: { x: number; y: number }[] = PATH_POINTS) {
     this.scene = scene;
     this.def = def;
     this.maxHp = Math.round(def.hp * hpMultiplier);
     this.hp = this.maxHp;
-    this.x = PATH_POINTS[0].x;
-    this.y = PATH_POINTS[0].y;
+    this.pathPoints = pathPoints;
+    this.x = this.pathPoints[0].x;
+    this.y = this.pathPoints[0].y;
 
     this.body = scene.add.circle(0, 0, def.radius, def.color).setStrokeStyle(2, 0x000000, 0.35);
     this.hpBarBg = scene.add.rectangle(0, -def.radius - 10, def.radius * 2, 5, 0x000000, 0.5);
@@ -69,9 +74,9 @@ export class Enemy {
     const speed = this.def.speed * this.slowFactor;
     let remaining = (speed * deltaMs) / 1000;
 
-    while (remaining > 0 && this.segmentIndex < PATH_POINTS.length - 1) {
-      const a = PATH_POINTS[this.segmentIndex];
-      const b = PATH_POINTS[this.segmentIndex + 1];
+    while (remaining > 0 && this.segmentIndex < this.pathPoints.length - 1) {
+      const a = this.pathPoints[this.segmentIndex];
+      const b = this.pathPoints[this.segmentIndex + 1];
       const segLen = Phaser.Math.Distance.Between(a.x, a.y, b.x, b.y);
       const left = segLen - this.segmentProgress;
 
@@ -82,15 +87,15 @@ export class Enemy {
         remaining -= left;
         this.segmentIndex++;
         this.segmentProgress = 0;
-        if (this.segmentIndex >= PATH_POINTS.length - 1) {
+        if (this.segmentIndex >= this.pathPoints.length - 1) {
           this.reachedEnd = true;
           break;
         }
       }
     }
 
-    const a = PATH_POINTS[Math.min(this.segmentIndex, PATH_POINTS.length - 2)];
-    const b = PATH_POINTS[Math.min(this.segmentIndex + 1, PATH_POINTS.length - 1)];
+    const a = this.pathPoints[Math.min(this.segmentIndex, this.pathPoints.length - 2)];
+    const b = this.pathPoints[Math.min(this.segmentIndex + 1, this.pathPoints.length - 1)];
     const segLen = Phaser.Math.Distance.Between(a.x, a.y, b.x, b.y) || 1;
     const t = Phaser.Math.Clamp(this.segmentProgress / segLen, 0, 1);
     this.x = Phaser.Math.Linear(a.x, b.x, t);

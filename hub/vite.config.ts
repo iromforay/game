@@ -17,4 +17,13 @@ export default defineConfig({
     // resolve to a real file URL (relevant for embedded packages like tower-defense).
     assetsInlineLimit: 0,
   },
+  optimizeDeps: {
+    // tower-defense and offense-tower are workspace-linked source, not real
+    // dependencies. Without this, Vite pre-bundles and caches them like any
+    // other node_modules package, so editing their source doesn't invalidate
+    // the cache and changes silently don't show up until node_modules/.vite
+    // is deleted by hand. Excluding them keeps them live-transformed and
+    // watched, so edits actually hot-reload.
+    exclude: ['tower-defense', 'offense-tower', 'strategy-marbles'],
+  },
 })

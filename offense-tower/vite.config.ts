@@ -14,4 +14,9 @@ export default defineConfig({
   build: {
     assetsInlineLimit: 0,
   },
+  optimizeDeps: {
+    // tower-defense is workspace-linked source, not a real dependency - see
+    // hub/vite.config.ts for why this must stay excluded from pre-bundling.
+    exclude: ['tower-defense'],
+  },
 });

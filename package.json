@@ -5,6 +5,8 @@
   "workspaces": [
     "hub",
     "tower-defense",
-    "offense-tower"
+    "offense-tower",
+    "strategy-marbles",
+    "BE"
   ]
 }
