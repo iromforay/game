@@ -32,6 +32,21 @@ export { Projectile } from './objects/Projectile';
 export { default as towerBasicUrl } from './assets/towers/basic.svg?url';
 export { default as towerSplashUrl } from './assets/towers/splash.svg?url';
 export { default as towerSlowUrl } from './assets/towers/slow.svg?url';
+// Painted art (fantasy/crystal tone) - sibling packages load these with the
+// same 'tower-<id>-lv1' texture keys the shared Tower class already looks
+// for, so towers render with real art instead of the flat SVG fallback with
+// no other code changes needed.
+export { default as towerBasicLv1Url } from './assets/towers/basic-lv1.png?url';
+export { default as towerSplashLv1Url } from './assets/towers/splash-lv1.png?url';
+export { default as towerSlowLv1Url } from './assets/towers/slow-lv1.png?url';
+export { default as boardBackgroundUrl } from './assets/board/background.png?url';
+// Painted monster art - offense-tower's units are the same kind of creature
+// (walks a path, drawn by the shared Enemy class) so it reuses these instead
+// of needing brand-new art: grunt/tank/fast map to swarm/tank/speed by radius
+// and role (grunt~swarm: common & quick, tank~tank, fast~speed).
+export { default as enemyGruntUrl } from './assets/enemies/grunt.png?url';
+export { default as enemyTankUrl } from './assets/enemies/tank.png?url';
+export { default as enemyFastUrl } from './assets/enemies/fast.png?url';
 export { logEvent, getAllLogs, clearLogs, pruneLogsOlderThan, exportLogsAsJson } from './logger';
 export type { LogEntry } from './logger';
 export { getCoins, addCoins } from './metaCurrency';

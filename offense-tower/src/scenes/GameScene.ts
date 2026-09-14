@@ -1,5 +1,26 @@
 import Phaser from 'phaser';
-import { COLS, ROWS, TILE, GAME_WIDTH, GAME_HEIGHT, TOWER_DEFS, Tower, Enemy, Projectile, towerBasicUrl, towerSplashUrl, towerSlowUrl, logEvent, addCoins } from 'tower-defense';
+import {
+  COLS,
+  ROWS,
+  TILE,
+  GAME_WIDTH,
+  GAME_HEIGHT,
+  TOWER_DEFS,
+  Tower,
+  Enemy,
+  Projectile,
+  towerBasicUrl,
+  towerSplashUrl,
+  towerSlowUrl,
+  towerBasicLv1Url,
+  towerSplashLv1Url,
+  towerSlowLv1Url,
+  enemyGruntUrl,
+  enemyTankUrl,
+  enemyFastUrl,
+  logEvent,
+  addCoins,
+} from 'tower-defense';
 import type { TowerType } from 'tower-defense';
 import { UNIT_DEFS, damageMultiplier } from '../config/units';
 import type { UnitDef, UnitType } from '../config/units';
@@ -60,9 +81,21 @@ export class GameScene extends Phaser.Scene {
   }
 
   preload() {
+    // SVG kept as a fallback - Tower.textureKey() prefers 'tower-<id>-lv1'
+    // (the painted PNG art below) when it's loaded, same swap logic that
+    // already lets tower-defense's upgrade art work with no other changes.
     this.load.svg('tower-basic', towerBasicUrl, { width: 64, height: 64 });
     this.load.svg('tower-splash', towerSplashUrl, { width: 64, height: 64 });
     this.load.svg('tower-slow', towerSlowUrl, { width: 64, height: 64 });
+    this.load.image('tower-basic-lv1', towerBasicLv1Url);
+    this.load.image('tower-splash-lv1', towerSplashLv1Url);
+    this.load.image('tower-slow-lv1', towerSlowLv1Url);
+    // Units are the same "creature walking a path" role as tower-defense's
+    // enemies, drawn by the same shared Enemy class - reuse that painted
+    // monster art instead of needing new art (grunt~swarm, tank~tank, fast~speed).
+    this.load.image('enemy-swarm', enemyGruntUrl);
+    this.load.image('enemy-tank', enemyTankUrl);
+    this.load.image('enemy-speed', enemyFastUrl);
     if (this.stage.background) {
       this.load.image(`round-bg-${this.stage.id}`, this.stage.background);
     }
@@ -131,7 +164,12 @@ export class GameScene extends Phaser.Scene {
 
   private drawPath() {
     const g = this.add.graphics();
-    g.lineStyle(4, 0x8a5a4a, 0.5);
+    // Same dimmed gold guide-line tower-defense uses once a painted
+    // background is present - the art already shows a stone path, so a bold
+    // line here would just clash with it.
+    const hasBackground = !!this.stage.background;
+    if (hasBackground) g.lineStyle(3, 0xffe9a8, 0.18);
+    else g.lineStyle(4, 0x8a5a4a, 0.5);
     g.beginPath();
     g.moveTo(this.pathPoints[0].x, this.pathPoints[0].y);
     for (let i = 1; i < this.pathPoints.length; i++) g.lineTo(this.pathPoints[i].x, this.pathPoints[i].y);

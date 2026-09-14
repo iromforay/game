@@ -1,4 +1,4 @@
-import { COLS } from 'tower-defense';
+import { COLS, boardBackgroundUrl } from 'tower-defense';
 import type { StageDef } from './types';
 
 export const ROUND_1: StageDef = {
@@ -18,4 +18,7 @@ export const ROUND_1: StageDef = {
   heroZoneTile: { col: 9, row: 3 },
   heroUnlockSegmentIndex: 2,
   goalBreakthroughs: 10,
+  // Same pathGrid shape as tower-defense's round 1, so the painted path in
+  // this background lines up pixel-for-pixel with offense-tower's own map.
+  background: boardBackgroundUrl,
 };
