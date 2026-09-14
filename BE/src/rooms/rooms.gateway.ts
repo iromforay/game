@@ -87,7 +87,7 @@ export class RoomsGateway implements OnGatewayDisconnect {
       this.server.to(room.roomCode).emit('actionReceived', {
         playerId: client.id,
         count: room.pendingActions.size,
-        total: room.players.length,
+        total: room.activePlayers.size,
       });
       if (resolved) {
         const { turn, actions } = this.rooms.consumeTurn(room);
@@ -102,10 +102,14 @@ export class RoomsGateway implements OnGatewayDisconnect {
   // Pure relay: the host client resolves collisions/scores itself and hands
   // the result here so every other client in the room can adopt it as the
   // single source of truth instead of trusting their own local physics.
+  // This is also the room's only "player got eliminated" signal - the host
+  // reports activePlayerIds every turn, and BE narrows room.activePlayers
+  // from it so submitAction() stops waiting on eliminated players.
   @SubscribeMessage('reportTurnOutcome')
   handleReportTurnOutcome(@ConnectedSocket() client: Socket, @MessageBody() body: TurnOutcomePayload) {
     const room = this.rooms.getRoomByPlayer(client.id);
     if (!room) return { ok: false, error: '참가 중인 방이 없습니다.' };
+    this.rooms.setActivePlayers(room, body.activePlayerIds);
     this.server.to(room.roomCode).emit('turnOutcome', body);
     return { ok: true };
   }

@@ -31,7 +31,7 @@ interface PlayerState {
   eggs: Egg[];
 }
 
-type Phase = 'aiming' | 'waiting' | 'resolving' | 'ended';
+type Phase = 'aiming' | 'waiting' | 'resolving' | 'ended' | 'eliminated';
 
 const SETTLE_SPEED_THRESHOLD = 0.05;
 const RESOLUTION_TIMEOUT_MS = 6000;
@@ -67,6 +67,7 @@ export class GameScene extends Phaser.Scene {
   network: NetworkOptions | null = null;
   selfPlayerIndex = 0;
   submittedThisTurn = false;
+  playerNames: string[] = [];
 
   constructor() {
     super('Game');
@@ -78,6 +79,9 @@ export class GameScene extends Phaser.Scene {
     if (this.network) {
       this.playerCount = this.network.playerIds.length;
       this.selfPlayerIndex = Math.max(0, this.network.playerIds.indexOf(this.network.selfId));
+      this.playerNames = this.network.playerNames;
+    } else {
+      this.playerNames = [];
     }
   }
 
@@ -134,6 +138,9 @@ export class GameScene extends Phaser.Scene {
     // this one finishes - defer the first emits so it doesn't miss them.
     this.time.delayedCall(0, () => {
       gameEvents.emit(Events.MapChanged, { name: this.map.name, floorFriction: this.map.floorFriction });
+      if (this.playerNames.length > 0) {
+        gameEvents.emit(Events.PlayersChanged, this.playerNames);
+      }
       this.emitScore();
       if (this.network) {
         this.startNetworkTurn();
@@ -261,6 +268,29 @@ export class GameScene extends Phaser.Scene {
       this.endGame();
       return;
     }
+
+    const selfPlayer = this.players[this.selfPlayerIndex];
+    if (selfPlayer && this.aliveEggs(selfPlayer).length === 0) {
+      // All of this client's eggs are gone - spectate instead of prompting
+      // for a flick. No 'submitAction' ever comes from this client again;
+      // the host's reportTurnOutcome already told BE (activePlayerIds) not
+      // to wait on this player for future turns.
+      this.phase = 'eliminated';
+      this.activePlayerIndex = null;
+      this.submittedThisTurn = false;
+      this.selectedEgg = null;
+      this.pullGraphics.clear();
+      this.refreshWeightVisibility();
+
+      gameEvents.emit(Events.TurnChanged, {
+        turn: this.turnNumber,
+        maxTurns: MAX_TURNS,
+        activePlayerIndex: null,
+        phase: this.phase,
+      });
+      return;
+    }
+
     this.phase = 'aiming';
     this.activePlayerIndex = this.selfPlayerIndex;
     this.submittedThisTurn = false;
@@ -630,12 +660,16 @@ export class GameScene extends Phaser.Scene {
     }
 
     const scores: Record<string, number> = {};
+    const activePlayerIds: string[] = [];
     for (const player of this.players) {
       const playerId = this.network.playerIds[player.index];
-      if (playerId) scores[playerId] = player.score;
+      if (!playerId) continue;
+      scores[playerId] = player.score;
+      const stillAlive = player.eggs.some((egg) => !eliminatedSet.has(egg));
+      if (stillAlive) activePlayerIds.push(playerId);
     }
 
-    this.network.socket.emit('reportTurnOutcome', { turn: this.turnNumber, scores, eggs });
+    this.network.socket.emit('reportTurnOutcome', { turn: this.turnNumber, scores, eggs, activePlayerIds });
   }
 
   // Guest-only: adopt the host's resolution wholesale instead of running our

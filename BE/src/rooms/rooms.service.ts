@@ -4,6 +4,12 @@ import type { PlayerInfo, RoomState, RoomVisibility, TurnActionPayload } from '.
 export interface InternalRoom extends RoomState {
   pendingActions: Map<string, TurnActionPayload>;
   turnNumber: number;
+  // playerIds still alive in the current game - starts as every player at
+  // startGame() and is narrowed by the host's reportTurnOutcome each turn
+  // (see RoomsGateway.handleReportTurnOutcome / RoomsService.setActivePlayers).
+  // submitAction() waits for this count, not room.players.length, so an
+  // eliminated player's silence no longer stalls the room forever.
+  activePlayers: Set<string>;
 }
 
 // Ambiguous characters (0/O, 1/I) left out so a room code is easy to read aloud.
@@ -36,6 +42,7 @@ export class RoomsService {
       visibility,
       pendingActions: new Map(),
       turnNumber: 1,
+      activePlayers: new Set(),
     };
     this.rooms.set(roomCode, room);
     this.playerRoom.set(hostId, roomCode);
@@ -75,6 +82,7 @@ export class RoomsService {
 
     room.players = room.players.filter((p) => p.id !== playerId);
     room.pendingActions.delete(playerId);
+    room.activePlayers.delete(playerId);
 
     if (room.players.length === 0) {
       this.rooms.delete(roomCode);
@@ -96,6 +104,7 @@ export class RoomsService {
     room.status = 'playing';
     room.turnNumber = 1;
     room.pendingActions.clear();
+    room.activePlayers = new Set(room.players.map((p) => p.id));
     if (roundId !== undefined) room.roundId = roundId;
     return this.toState(room);
   }
@@ -106,8 +115,15 @@ export class RoomsService {
     if (room.status !== 'playing') throw new Error('게임이 진행 중이 아닙니다.');
 
     room.pendingActions.set(playerId, action);
-    const resolved = room.pendingActions.size >= room.players.length;
+    const resolved = room.pendingActions.size >= room.activePlayers.size;
     return { room, resolved };
+  }
+
+  // Called from the host's reportTurnOutcome relay so BE knows who is still
+  // alive for the *next* turn's completion check. BE never computes this
+  // itself - it has no game-state knowledge, it only trusts the host.
+  setActivePlayers(room: InternalRoom, activePlayerIds: string[]): void {
+    room.activePlayers = new Set(activePlayerIds);
   }
 
   // Drains the pending actions for a turn once every player has submitted,

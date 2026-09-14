@@ -33,6 +33,9 @@ export interface TurnOutcomePayload {
   turn: number;
   scores: Record<string, number>; // playerId -> authoritative total score
   eggs: EggOutcome[];
+  // playerIds who still have at least one egg after this turn - lets BE (and
+  // the other clients) stop waiting on/prompting eliminated players.
+  activePlayerIds: string[];
 }
 
 export interface NetworkOptions {
@@ -41,6 +44,8 @@ export interface NetworkOptions {
   // Ordered by join order (host first) - index into this array is the local
   // player index used throughout GameScene.
   playerIds: string[];
+  // Same order as playerIds - the nickname each player entered at room entry.
+  playerNames: string[];
   roomCode: string;
   // Only the room's host resolves collisions/scores authoritatively and
   // reports the outcome; everyone else adopts it instead of trusting their

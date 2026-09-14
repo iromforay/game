@@ -32,4 +32,9 @@ export interface TurnOutcomePayload {
   turn: number;
   scores: Record<string, number>; // playerId -> authoritative total score
   eggs: Array<{ playerIndex: number; eggIndex: number; x: number; y: number; eliminated: boolean }>;
+  // playerIds who still have at least one egg after this turn - BE uses this
+  // to know how many submissions the *next* turn actually needs (an
+  // eliminated player's client never submits again, so counting them would
+  // make the room wait forever).
+  activePlayerIds: string[];
 }

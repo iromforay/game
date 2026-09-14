@@ -3,10 +3,14 @@ import { CANVAS_HEIGHT, CANVAS_WIDTH, GAME_HEIGHT, GAME_WIDTH, PLAYER_COLORS, ui
 import { gameEvents, Events } from '../events';
 import type { GameOverInfo, MapInfo, ScoreEntry, TurnInfo } from '../events';
 
+// Real nicknames arrive only in network mode (see Events.PlayersChanged);
+// local hotseat play never fires it, so every label falls back to this.
+
 const PHASE_BADGE = {
   aiming: { label: '예약 중', color: 0x2a6fdb },
   waiting: { label: '대기 중', color: 0x6a6a6a },
   resolving: { label: '실행 중', color: 0xff5a3c },
+  eliminated: { label: '탈락', color: 0x4a4a52 },
 } as const;
 
 export class UIScene extends Phaser.Scene {
@@ -25,6 +29,8 @@ export class UIScene extends Phaser.Scene {
   phaseBannerText!: Phaser.GameObjects.Text;
   phaseBannerTween: Phaser.Tweens.Tween | null = null;
 
+  playerNames: string[] = [];
+
   constructor() {
     super({ key: 'UI', active: true });
   }
@@ -34,6 +40,10 @@ export class UIScene extends Phaser.Scene {
     this.buildPhaseBanner();
     this.buildOverlay();
 
+    this.playerNames = [];
+    gameEvents.on(Events.PlayersChanged, (names: string[]) => {
+      this.playerNames = names;
+    });
     gameEvents.on(Events.TurnChanged, (info: TurnInfo) => this.onTurnChanged(info));
     gameEvents.on(Events.TimerTick, (seconds: number) => {
       this.timerText.setText(seconds > 0 ? `남은 시간 ${seconds}초` : '');
@@ -48,7 +58,12 @@ export class UIScene extends Phaser.Scene {
       gameEvents.removeAllListeners(Events.ScoreChanged);
       gameEvents.removeAllListeners(Events.MapChanged);
       gameEvents.removeAllListeners(Events.GameOver);
+      gameEvents.removeAllListeners(Events.PlayersChanged);
     });
+  }
+
+  private playerLabel(index: number): string {
+    return this.playerNames[index] ?? `Player ${index + 1}`;
   }
 
   private buildHud() {
@@ -103,7 +118,7 @@ export class UIScene extends Phaser.Scene {
     });
   }
 
-  private setPhaseBadge(phase: 'aiming' | 'waiting' | 'resolving') {
+  private setPhaseBadge(phase: 'aiming' | 'waiting' | 'resolving' | 'eliminated') {
     const def = PHASE_BADGE[phase];
     this.phaseBadgeBg.setFillStyle(def.color, 1);
     this.phaseBadgeText.setText(def.label);
@@ -139,14 +154,22 @@ export class UIScene extends Phaser.Scene {
       this.timerText.setText('');
       return;
     }
+    if (info.phase === 'eliminated') {
+      this.setPhaseBadge('eliminated');
+      this.turnText.setText(`${info.turn}/${info.maxTurns}턴 - 당신의 알이 모두 제거되어 관전 중입니다`);
+      this.turnText.setColor('#9aa0b4');
+      this.timerText.setText('');
+      return;
+    }
     if (info.activePlayerIndex === null) return;
 
     const color = Phaser.Display.Color.IntegerToRGB(uiTextColor(PLAYER_COLORS[info.activePlayerIndex % PLAYER_COLORS.length]));
     const colorString = Phaser.Display.Color.RGBToString(color.r, color.g, color.b, 0, '#');
-    this.showPhaseBanner(`${info.turn}턴 · Player ${info.activePlayerIndex + 1} 행동예약`, colorString);
+    const name = this.playerLabel(info.activePlayerIndex);
+    this.showPhaseBanner(`${info.turn}턴 · ${name} 행동예약`, colorString);
 
     this.setPhaseBadge('aiming');
-    this.turnText.setText(`${info.turn}/${info.maxTurns}턴 - Player ${info.activePlayerIndex + 1} 행동 예약 대기`);
+    this.turnText.setText(`${info.turn}/${info.maxTurns}턴 - ${name} 행동 예약 대기`);
     this.turnText.setColor(colorString);
   }
 
@@ -163,7 +186,7 @@ export class UIScene extends Phaser.Scene {
       const text = this.add.text(
         CANVAS_WIDTH - 190,
         GAME_HEIGHT + 12 + i * 20,
-        `P${entry.playerIndex + 1}  점수 ${entry.score}  알 ${entry.eggsAlive}`,
+        `${this.playerLabel(entry.playerIndex)}  점수 ${entry.score}  알 ${entry.eggsAlive}`,
         { fontSize: '13px', color: Phaser.Display.Color.IntegerToColor(color).rgba },
       );
       this.scoreTexts.push(text);
@@ -194,9 +217,9 @@ export class UIScene extends Phaser.Scene {
   private onGameOver(info: GameOverInfo) {
     const winnerLabel =
       info.winnerIndexes.length > 1
-        ? `무승부 (Player ${info.winnerIndexes.map((i) => i + 1).join(', ')})`
-        : `Player ${info.winnerIndexes[0] + 1} 승리!`;
-    const detail = info.scores.map((s) => `P${s.playerIndex + 1}: ${s.score}점`).join('   ');
+        ? `무승부 (${info.winnerIndexes.map((i) => this.playerLabel(i)).join(', ')})`
+        : `${this.playerLabel(info.winnerIndexes[0])} 승리!`;
+    const detail = info.scores.map((s) => `${this.playerLabel(s.playerIndex)}: ${s.score}점`).join('   ');
 
     const overlay = this.overlay as unknown as { titleText: Phaser.GameObjects.Text; subtitleText: Phaser.GameObjects.Text };
     overlay.titleText.setText(winnerLabel);

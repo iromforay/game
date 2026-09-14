@@ -34,6 +34,7 @@ export function GameScreen({ gameId, roundId, onExit }: GameScreenProps) {
             socket,
             selfId: multiplayer.selfId,
             playerIds: networkRoom.players.map((p) => p.id),
+            playerNames: networkRoom.players.map((p) => p.name),
             roomCode: networkRoom.roomCode,
             isHost: networkRoom.players.find((p) => p.id === multiplayer.selfId)?.isHost ?? false,
           }
