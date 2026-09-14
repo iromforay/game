@@ -3,8 +3,9 @@ import {
   COLS,
   ROWS,
   TILE,
+  GAME_WIDTH,
+  GAME_HEIGHT,
   PATH_POINTS,
-  PATH_TILES,
   isBuildable,
   STARTING_GOLD,
   STARTING_LIVES,
@@ -20,6 +21,17 @@ import type { SelectedTowerInfo } from '../events';
 import towerBasicUrl from '../assets/towers/basic.svg?url';
 import towerSplashUrl from '../assets/towers/splash.svg?url';
 import towerSlowUrl from '../assets/towers/slow.svg?url';
+import towerBasicLv1Url from '../assets/towers/basic-lv1.png?url';
+import towerBasicLv2Url from '../assets/towers/basic-lv2.png?url';
+import towerSplashLv1Url from '../assets/towers/splash-lv1.png?url';
+import towerSplashLv2Url from '../assets/towers/splash-lv2.png?url';
+import towerSlowLv1Url from '../assets/towers/slow-lv1.png?url';
+import towerSlowLv2Url from '../assets/towers/slow-lv2.png?url';
+import enemyGruntUrl from '../assets/enemies/grunt.png?url';
+import enemyFastUrl from '../assets/enemies/fast.png?url';
+import enemyTankUrl from '../assets/enemies/tank.png?url';
+import enemyBossUrl from '../assets/enemies/boss.png?url';
+import boardBackgroundUrl from '../assets/board/background.png?url';
 
 export class GameScene extends Phaser.Scene {
   gold = STARTING_GOLD;
@@ -46,6 +58,20 @@ export class GameScene extends Phaser.Scene {
     this.load.svg('tower-basic', towerBasicUrl, { width: 64, height: 64 });
     this.load.svg('tower-splash', towerSplashUrl, { width: 64, height: 64 });
     this.load.svg('tower-slow', towerSlowUrl, { width: 64, height: 64 });
+
+    this.load.image('tower-basic-lv1', towerBasicLv1Url);
+    this.load.image('tower-basic-lv2', towerBasicLv2Url);
+    this.load.image('tower-splash-lv1', towerSplashLv1Url);
+    this.load.image('tower-splash-lv2', towerSplashLv2Url);
+    this.load.image('tower-slow-lv1', towerSlowLv1Url);
+    this.load.image('tower-slow-lv2', towerSlowLv2Url);
+
+    this.load.image('enemy-grunt', enemyGruntUrl);
+    this.load.image('enemy-fast', enemyFastUrl);
+    this.load.image('enemy-tank', enemyTankUrl);
+    this.load.image('enemy-boss', enemyBossUrl);
+
+    this.load.image('board-bg', boardBackgroundUrl);
   }
 
   create() {
@@ -60,6 +86,7 @@ export class GameScene extends Phaser.Scene {
     this.selectedTower = null;
     this.gameEnded = false;
 
+    this.drawBackground();
     this.drawBoard();
     this.drawPath();
 
@@ -90,22 +117,28 @@ export class GameScene extends Phaser.Scene {
     gameEvents.removeAllListeners(Events.Restart);
   }
 
+  private drawBackground() {
+    this.add.image(0, 0, 'board-bg').setOrigin(0, 0).setDisplaySize(GAME_WIDTH, GAME_HEIGHT);
+  }
+
   private drawBoard() {
+    // The painted background already shows ground/path art - just a faint
+    // grid so build placement still reads clearly on top of it.
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS; c++) {
-        const isPath = PATH_TILES.has(`${c},${r}`);
-        const color = isPath ? 0x3a3a2a : (r + c) % 2 === 0 ? 0x24314a : 0x28364f;
         this.add
-          .rectangle(c * TILE, r * TILE, TILE, TILE, color)
+          .rectangle(c * TILE, r * TILE, TILE, TILE, 0x000000, 0)
           .setOrigin(0, 0)
-          .setStrokeStyle(1, 0x000000, 0.15);
+          .setStrokeStyle(1, 0xffffff, 0.06);
       }
     }
   }
 
   private drawPath() {
+    // Thin guide line in case the painted road doesn't line up pixel-perfect
+    // with the walkable path - kept subtle so it doesn't fight the art.
     const g = this.add.graphics();
-    g.lineStyle(4, 0x8a7a4a, 0.5);
+    g.lineStyle(3, 0xffe9a8, 0.18);
     g.beginPath();
     g.moveTo(PATH_POINTS[0].x, PATH_POINTS[0].y);
     for (let i = 1; i < PATH_POINTS.length; i++) g.lineTo(PATH_POINTS[i].x, PATH_POINTS[i].y);

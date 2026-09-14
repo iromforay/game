@@ -20,7 +20,7 @@ export class Enemy {
   // (e.g. offense-tower's per-round paths) pass their own points array.
   pathPoints: { x: number; y: number }[];
 
-  body: Phaser.GameObjects.Arc;
+  body: Phaser.GameObjects.Arc | Phaser.GameObjects.Image;
   hpBarBg: Phaser.GameObjects.Rectangle;
   hpBarFill: Phaser.GameObjects.Rectangle;
   container: Phaser.GameObjects.Container;
@@ -34,7 +34,21 @@ export class Enemy {
     this.x = this.pathPoints[0].x;
     this.y = this.pathPoints[0].y;
 
-    this.body = scene.add.circle(0, 0, def.radius, def.color).setStrokeStyle(2, 0x000000, 0.35);
+    // Real art (`enemy-<id>`) if the scene loaded it, else the flat-color
+    // placeholder circle (still used by offense-tower's units/hero).
+    const spriteKey = `enemy-${def.id}`;
+    if (scene.textures.exists(spriteKey)) {
+      const image = scene.add.image(0, 0, spriteKey);
+      // Uniform scale (not setDisplaySize, which would squash non-square art)
+      // so aspect ratio is preserved - only the target diameter is fixed.
+      // Bigger multiplier than the old placeholder circle's implied size so
+      // the painted detail (gems, shading) actually reads on screen.
+      const targetDiameter = def.radius * 3.2;
+      image.setScale(targetDiameter / Math.max(image.width, image.height));
+      this.body = image;
+    } else {
+      this.body = scene.add.circle(0, 0, def.radius, def.color).setStrokeStyle(2, 0x000000, 0.35);
+    }
     this.hpBarBg = scene.add.rectangle(0, -def.radius - 10, def.radius * 2, 5, 0x000000, 0.5);
     this.hpBarFill = scene.add.rectangle(-def.radius, -def.radius - 10, def.radius * 2, 5, 0x33dd55).setOrigin(0, 0.5);
 

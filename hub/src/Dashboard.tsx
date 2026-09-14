@@ -1,4 +1,4 @@
-import { GAMES } from './games';
+import { GAMES, CARD_FRAME_URL } from './games';
 import type { GameId } from './games';
 
 interface DashboardProps {
@@ -23,10 +23,14 @@ export function Dashboard({ onSelectGame }: DashboardProps) {
               key={game.id}
               type="button"
               className="game-select-button"
+              style={{ backgroundImage: `url(${CARD_FRAME_URL})` }}
               onClick={() => onSelectGame(game.id)}
             >
-              <span className="game-select-title">{game.title}</span>
-              <span className="game-select-desc">{game.description}</span>
+              <img className="game-select-icon" src={game.iconUrl} alt="" />
+              <span className="game-select-text">
+                <span className="game-select-title">{game.title}</span>
+                <span className="game-select-desc">{game.description}</span>
+              </span>
             </button>
           ))}
         </div>

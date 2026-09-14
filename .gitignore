@@ -23,3 +23,6 @@ lerna-debug.log*
 # temp directory
 .temp
 .tmp
+
+# design source files (raw AI-gen assets, not part of build)
+/design

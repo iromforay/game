@@ -19,24 +19,58 @@
 }
 
 .game-select-button {
+  position: relative;
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-  font-size: 18px;
-  padding: 14px 20px;
-  border-radius: 8px;
+  align-items: center;
+  aspect-ratio: 3 / 1;
+  width: 100%;
+  border: none;
+  border-radius: 18px;
+  background-color: transparent;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
   cursor: pointer;
   text-align: left;
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+
+.game-select-button:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.12);
+}
+
+.game-select-button:active {
+  transform: translateY(0);
+  filter: brightness(0.96);
+}
+
+.game-select-icon {
+  position: absolute;
+  left: 6.5%;
+  top: 50%;
+  width: 19%;
+  aspect-ratio: 1 / 1;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.game-select-text {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-left: 34%;
+  padding-right: 6%;
 }
 
 .game-select-title {
+  font-size: 18px;
   font-weight: 600;
+  color: #fff3d6;
 }
 
 .game-select-desc {
   font-size: 13px;
-  color: var(--text-h, #888);
+  color: #b9aee0;
 }
 
 .mode-select-list {

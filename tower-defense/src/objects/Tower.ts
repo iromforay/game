@@ -40,7 +40,8 @@ export class Tower {
     this.maxHp = maxHp;
     this.hp = maxHp;
 
-    this.sprite = scene.add.image(0, 0, `tower-${def.id}`).setDisplaySize(52, 52);
+    this.sprite = scene.add.image(0, 0, this.textureKey());
+    this.fitSprite();
     this.levelText = scene.add.text(0, 24, 'Lv1', { fontSize: '11px', color: '#ffffff' }).setOrigin(0.5);
     this.rangeCircle = scene.add.circle(0, 0, def.range, 0xffffff, 0.08).setStrokeStyle(1, 0xffffff, 0.25);
     this.rangeCircle.setVisible(false);
@@ -84,6 +85,30 @@ export class Tower {
     this.level++;
     this.levelText.setText(`Lv${this.level}`);
     this.rangeCircle.setRadius(this.range);
+    this.sprite.setTexture(this.textureKey());
+    this.fitSprite();
+  }
+
+  /** Per-level art (`tower-<id>-lv<level>`) if loaded, else the single shared texture. */
+  private textureKey(): string {
+    const leveled = `tower-${this.def.id}-lv${this.level}`;
+    return this.scene.textures.exists(leveled) ? leveled : `tower-${this.def.id}`;
+  }
+
+  /**
+   * Uniform-scale the sprite to fit within the tile instead of forcing a
+   * square display size - the tower art is portrait (taller than wide), so
+   * squashing it to 52x52 stretched/distorted it and looked low-quality.
+   *
+   * Deliberately bigger than the 64px tile (towers overflow into neighbors
+   * a bit) - shrinking the detailed source art down to fit inside one tile
+   * lost most of its fine detail, and letting towers "pop" past their tile
+   * is normal for the genre.
+   */
+  private fitSprite() {
+    const target = 88;
+    const scale = target / Math.max(this.sprite.width, this.sprite.height);
+    this.sprite.setScale(scale);
   }
 
   findTarget(enemies: Enemy[]): Enemy | null {

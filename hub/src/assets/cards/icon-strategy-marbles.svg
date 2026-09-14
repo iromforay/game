@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160">
+<defs>
+<radialGradient id="marbleA" cx="35%" cy="30%" r="70%">
+<stop offset="0%" stop-color="#ffe0f0"/>
+<stop offset="45%" stop-color="#ff7ab8"/>
+<stop offset="100%" stop-color="#a5306f"/>
+</radialGradient>
+<radialGradient id="marbleB" cx="35%" cy="30%" r="70%">
+<stop offset="0%" stop-color="#e0f6ff"/>
+<stop offset="45%" stop-color="#5cc7ff"/>
+<stop offset="100%" stop-color="#1c6fa8"/>
+</radialGradient>
+<radialGradient id="aura3" cx="50%" cy="55%" r="60%">
+<stop offset="0%" stop-color="#ffb3e0" stop-opacity="0.35"/>
+<stop offset="100%" stop-color="#ffb3e0" stop-opacity="0"/>
+</radialGradient>
+</defs>
+<circle cx="80" cy="80" r="58" fill="url(#aura3)"/>
+<ellipse cx="80" cy="122" rx="46" ry="8" fill="#000000" opacity="0.18"/>
+<circle cx="56" cy="96" r="30" fill="url(#marbleB)"/>
+<circle cx="47" cy="86" r="7" fill="#ffffff" opacity="0.6"/>
+<circle cx="104" cy="72" r="36" fill="url(#marbleA)"/>
+<circle cx="93" cy="59" r="8" fill="#ffffff" opacity="0.7"/>
+<path d="M40 40 L46 34 M120 30 L126 36 M116 118 L122 124" stroke="#ffd166" stroke-width="3" stroke-linecap="round" opacity="0.6"/>
+</svg>
