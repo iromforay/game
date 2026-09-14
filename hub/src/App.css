@@ -304,6 +304,7 @@
 .game-screen {
   display: flex;
   flex-direction: column;
+  width: 100%;
   /* Fixed (not min-) height: Phaser's Scale.FIT sizes the canvas against
      this container's actual box. A min-height lets the canvas's own intrinsic
      size grow the box instead of being scaled down to fit it - exactly what
@@ -339,12 +340,19 @@
 .game-canvas-wrapper {
   position: relative;
   flex: 1;
+  width: 100%;
   min-height: 0;
   display: flex;
+  /* On very wide viewports (real mobile landscape especially) the fixed-
+     aspect game canvas pillarboxes - dress the margins with the same
+     fantasy palette as the game art instead of flat black so it reads as
+     intentional framing rather than empty space. */
+  background: radial-gradient(ellipse at center, #241a3d 0%, #1a1330 40%, #130d24 70%, #0a0715 100%);
 }
 
 .game-canvas-container {
   flex: 1;
+  width: 100%;
   min-height: 0;
   display: flex;
   align-items: center;

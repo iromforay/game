@@ -57,16 +57,35 @@ export function GameScreen({ gameId, roundId, onExit }: GameScreenProps) {
           ? Promise.resolve(mountStrategyMarbles(containerRef.current, { roundId: effectiveRoundId, network }))
           : Promise.resolve(mountTowerDefense(containerRef.current));
 
+    // Real mobile browsers often report a stale/incorrect layout size right
+    // at rotation (the URL bar shows/hides and animates, shifting the
+    // viewport after the resize/orientationchange event already fired).
+    // Phaser's own resize listener can end up scaling the canvas against
+    // that transient size and never recovering. Force a recalculation a
+    // beat after the viewport settles, on both events since mobile browsers
+    // are inconsistent about which one they fire (or fire first).
+    let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+    const scheduleRefresh = () => {
+      clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(() => gameRef.current?.scale.refresh(), 200);
+    };
+    window.addEventListener('resize', scheduleRefresh);
+    window.addEventListener('orientationchange', scheduleRefresh);
+
     mount.then((game) => {
       if (cancelled) {
         game.destroy(true);
         return;
       }
       gameRef.current = game;
+      scheduleRefresh();
     });
 
     return () => {
       cancelled = true;
+      clearTimeout(refreshTimer);
+      window.removeEventListener('resize', scheduleRefresh);
+      window.removeEventListener('orientationchange', scheduleRefresh);
       gameRef.current?.destroy(true);
       gameRef.current = null;
     };
