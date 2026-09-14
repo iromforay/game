@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { CANVAS_WIDTH, GAME_HEIGHT, GAME_WIDTH } from 'tower-defense';
+import { CANVAS_WIDTH, CANVAS_HEIGHT, GAME_WIDTH, SIDEBAR_WIDTH } from 'tower-defense';
 import { UNIT_DEFS } from '../config/units';
 import type { UnitType } from '../config/units';
 import { gameEvents, Events } from '../events';
@@ -13,6 +13,13 @@ const UNIT_ORDER: UnitType[] = ['swarm', 'tank', 'speed'];
 const PANEL_BG = 0x171029;
 const PANEL_BORDER = 0xffd166;
 const PANEL_TOP = 0x241a3d;
+
+// The sidebar sits to the right of the board (not a strip below it) so the
+// overall canvas is wide instead of tall - mirrors tower-defense's UIScene.
+const SIDEBAR_X = GAME_WIDTH;
+const PAD = 12;
+const CONTENT_X = SIDEBAR_X + PAD;
+const CONTENT_W = SIDEBAR_WIDTH - PAD * 2;
 
 interface ButtonStyle {
   base: number;
@@ -105,14 +112,15 @@ export class UIScene extends Phaser.Scene {
   }
 
   create() {
-    this.buildStatusBar();
+    this.buildSidebarPanel();
+    this.buildStatusBlock();
     this.buildHud();
     this.buildClearOverlay();
 
     gameEvents.on(Events.ScoreChanged, (score: ScoreInfo) => {
       this.roundText.setText(score.roundName);
-      this.scoreText.setText(`돌파 ${score.unitBreakthroughs}/${score.goal}   처치 ${score.kills}`);
-      this.aiGoldText.setText(`AI 골드 ${score.aiGold}`);
+      this.scoreText.setText(`돌파 ${score.unitBreakthroughs}/${score.goal}`);
+      this.aiGoldText.setText(`AI 골드 ${score.aiGold} · 처치 ${score.kills}`);
     });
 
     gameEvents.on(Events.GameCleared, (info: ClearInfo) => this.showClearOverlay(info));
@@ -166,23 +174,29 @@ export class UIScene extends Phaser.Scene {
     this.heroButtonLabel.setText(label);
   }
 
-  private buildStatusBar() {
-    const bar = this.add.graphics();
-    bar.fillStyle(0x0d0818, 0.72);
-    bar.fillRect(0, 0, CANVAS_WIDTH, 32);
-    bar.lineStyle(1, PANEL_BORDER, 0.25);
-    bar.lineBetween(0, 32, CANVAS_WIDTH, 32);
-    this.roundText = this.add.text(12, 8, '', { fontSize: '15px', color: '#ffd166', fontStyle: 'bold' });
-    this.scoreText = this.add.text(110, 8, '돌파 0/10   처치 0', { fontSize: '15px', color: '#8affb0' });
-    this.aiGoldText = this.add.text(360, 8, 'AI 골드 0', { fontSize: '15px', color: '#ffb08a' });
+  private buildSidebarPanel() {
+    const panel = this.add.graphics();
+    panel.fillGradientStyle(PANEL_TOP, PANEL_TOP, PANEL_BG, PANEL_BG, 1);
+    panel.fillRect(SIDEBAR_X, 0, SIDEBAR_WIDTH, CANVAS_HEIGHT);
+    panel.lineStyle(2, PANEL_BORDER, 0.4);
+    panel.lineBetween(SIDEBAR_X, 0, SIDEBAR_X, CANVAS_HEIGHT);
+  }
+
+  private buildStatusBlock() {
+    this.roundText = this.add.text(CONTENT_X, 12, '', { fontSize: '14px', color: '#ffd166', fontStyle: 'bold' });
+    this.scoreText = this.add.text(CONTENT_X, 34, '돌파 0/10', { fontSize: '13px', color: '#8affb0' });
+    this.aiGoldText = this.add.text(CONTENT_X, 56, 'AI 골드 0 · 처치 0', { fontSize: '12px', color: '#ffb08a' });
+    const div = this.add.graphics();
+    div.lineStyle(1, PANEL_BORDER, 0.25);
+    div.lineBetween(CONTENT_X, 84, SIDEBAR_X + SIDEBAR_WIDTH - PAD, 84);
   }
 
   private buildClearOverlay() {
-    const bg = this.add.rectangle(0, 0, CANVAS_WIDTH, GAME_HEIGHT + 176, 0x000000, 0.75).setOrigin(0, 0);
-    const title = this.add.text(CANVAS_WIDTH / 2, GAME_HEIGHT / 2 - 30, '클리어!', { fontSize: '36px', color: '#ffe9a8' }).setOrigin(0.5);
+    const bg = this.add.rectangle(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT, 0x000000, 0.75).setOrigin(0, 0);
+    const title = this.add.text(GAME_WIDTH / 2, CANVAS_HEIGHT / 2 - 30, '클리어!', { fontSize: '36px', color: '#ffe9a8' }).setOrigin(0.5);
     title.setShadow(0, 0, '#ffd166', 12);
     const subtitle = this.add
-      .text(CANVAS_WIDTH / 2, GAME_HEIGHT / 2 + 20, '', { fontSize: '15px', color: '#cccccc' })
+      .text(GAME_WIDTH / 2, CANVAS_HEIGHT / 2 + 20, '', { fontSize: '15px', color: '#cccccc', align: 'center' })
       .setOrigin(0.5);
     this.clearOverlay = this.add.container(0, 0, [bg, title, subtitle]);
     this.clearOverlay.setVisible(false);
@@ -195,22 +209,16 @@ export class UIScene extends Phaser.Scene {
   }
 
   private buildHud() {
-    const hudTop = GAME_HEIGHT;
-
-    const panel = this.add.graphics();
-    panel.fillGradientStyle(PANEL_TOP, PANEL_TOP, PANEL_BG, PANEL_BG, 1);
-    panel.fillRect(0, hudTop, GAME_WIDTH, 176);
-    panel.lineStyle(2, PANEL_BORDER, 0.4);
-    panel.lineBetween(0, hudTop, GAME_WIDTH, hudTop);
-
-    this.add.text(16, hudTop - 20, '유닛 소환 (쿨타임만 있음, 자원 소모 없음)', { fontSize: '12px', color: '#9aa0b4' });
+    const startY = 96;
+    const rowH = 72;
+    const gap = 8;
 
     UNIT_ORDER.forEach((type, i) => {
       const def = UNIT_DEFS[type];
-      const x = 16 + i * 190;
-      const y = hudTop + 14;
-      const w = 175;
-      const h = 64;
+      const x = CONTENT_X;
+      const y = startY + i * (rowH + gap);
+      const w = CONTENT_W;
+      const h = rowH;
 
       const g = this.add.graphics({ x, y });
       paintButton(g, w, h, { base: 0x2a2438, border: def.color });
@@ -219,7 +227,8 @@ export class UIScene extends Phaser.Scene {
       this.add.circle(x + 26, y + h / 2, 15, def.color, 0.18);
       const iconG = this.add.graphics({ x, y });
       UNIT_ICON_DRAWERS[type](iconG, 26, h / 2, def.color);
-      this.add.text(x + 50, y + 8, `${def.name}\nHP${def.hp} / 속도${def.speed}`, { fontSize: '13px', color: '#ffffff', lineSpacing: 4 });
+      this.add.text(x + 50, y + 7, `${def.name}`, { fontSize: '12px', color: '#ffffff' });
+      this.add.text(x + 50, y + 26, `HP${def.hp} / 속도${def.speed}`, { fontSize: '10px', color: '#b9aee0' });
 
       const cooldownOverlay = this.add.graphics({ x, y });
       cooldownOverlay.setVisible(true);
@@ -231,19 +240,22 @@ export class UIScene extends Phaser.Scene {
       this.spawnButtons[type] = { g, cooldownOverlay, w, h };
     });
 
-    const hx = 16 + UNIT_ORDER.length * 190;
-    const hy = hudTop + 14;
+    const hx = CONTENT_X;
+    const hy = startY + UNIT_ORDER.length * (rowH + gap) + 4;
+    const hw = CONTENT_W;
+    const hh = 70;
     // Hero button intentionally left in its original plain style for now -
     // hero UI is being redesigned separately, not part of this HUD pass.
     this.heroButton = this.add
-      .rectangle(hx, hy, 175, 64, 0x2a2a2a)
+      .rectangle(hx, hy, hw, hh, 0x2a2a2a)
       .setOrigin(0, 0)
       .setStrokeStyle(2, 0xffd166, 0.9)
       .setAlpha(0.45);
-    this.heroButtonLabel = this.add.text(hx + 8, hy + 6, `${this.heroName}\n잠김 (영웅존 진입 시 해금)`, {
-      fontSize: '13px',
+    this.heroButtonLabel = this.add.text(hx + 8, hy + 8, `${this.heroName}\n잠김 (영웅존 진입 시 해금)`, {
+      fontSize: '11px',
       color: '#ffffff',
       lineSpacing: 4,
+      wordWrap: { width: hw - 16 },
     });
     this.heroButton.on('pointerdown', () => gameEvents.emit(Events.RequestSpawnHero));
   }

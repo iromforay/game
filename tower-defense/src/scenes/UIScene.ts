@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { CANVAS_WIDTH, GAME_HEIGHT, GAME_WIDTH, HUD_HEIGHT, STARTING_GOLD, STARTING_LIVES } from '../config/constants';
+import { CANVAS_WIDTH, CANVAS_HEIGHT, GAME_WIDTH, SIDEBAR_WIDTH, STARTING_GOLD, STARTING_LIVES } from '../config/constants';
 import { TOWER_DEFS } from '../config/towers';
 import type { TowerType } from '../config/towers';
 import { WAVES } from '../config/enemies';
@@ -15,6 +15,13 @@ const PANEL_TOP = 0x241a3d;
 const GOLD_LIGHT = 0xffe9a8;
 const GOLD = 0xffd166;
 const DISABLED_GREY = 0x3a3a45;
+
+// The sidebar sits to the right of the board (not a strip below it) so the
+// overall canvas is wide instead of tall - see SIDEBAR_WIDTH's comment.
+const SIDEBAR_X = GAME_WIDTH;
+const PAD = 12;
+const CONTENT_X = SIDEBAR_X + PAD;
+const CONTENT_W = SIDEBAR_WIDTH - PAD * 2;
 
 interface ButtonStyle {
   base: number;
@@ -108,7 +115,8 @@ export class UIScene extends Phaser.Scene {
     this.lives = STARTING_LIVES;
     this.buildType = null;
     this.selectedInfo = null;
-    this.buildStatusBar();
+    this.buildSidebarPanel();
+    this.buildStatusBlock();
     this.buildHud();
     this.buildInfoPanel();
     this.buildOverlay();
@@ -146,32 +154,34 @@ export class UIScene extends Phaser.Scene {
     });
   }
 
-  private buildStatusBar() {
-    const bar = this.add.graphics();
-    bar.fillStyle(0x0d0818, 0.72);
-    bar.fillRect(0, 0, CANVAS_WIDTH, 32);
-    bar.lineStyle(1, PANEL_BORDER, 0.25);
-    bar.lineBetween(0, 32, CANVAS_WIDTH, 32);
-    this.goldText = this.add.text(12, 8, `골드 ${this.gold}`, { fontSize: '15px', color: '#ffe08a' });
-    this.livesText = this.add.text(140, 8, `라이프 ${this.lives}`, { fontSize: '15px', color: '#ff8a8a' });
-    this.waveText = this.add.text(280, 8, `웨이브 1/${WAVES.length}`, { fontSize: '15px', color: '#8ad1ff' });
+  private buildSidebarPanel() {
+    const panel = this.add.graphics();
+    panel.fillGradientStyle(PANEL_TOP, PANEL_TOP, PANEL_BG, PANEL_BG, 1);
+    panel.fillRect(SIDEBAR_X, 0, SIDEBAR_WIDTH, CANVAS_HEIGHT);
+    panel.lineStyle(2, PANEL_BORDER, 0.4);
+    panel.lineBetween(SIDEBAR_X, 0, SIDEBAR_X, CANVAS_HEIGHT);
+  }
+
+  private buildStatusBlock() {
+    this.goldText = this.add.text(CONTENT_X, 12, `골드 ${this.gold}`, { fontSize: '14px', color: '#ffe08a' });
+    this.livesText = this.add.text(CONTENT_X, 34, `라이프 ${this.lives}`, { fontSize: '14px', color: '#ff8a8a' });
+    this.waveText = this.add.text(CONTENT_X, 56, `웨이브 1/${WAVES.length}`, { fontSize: '14px', color: '#8ad1ff' });
+    const div = this.add.graphics();
+    div.lineStyle(1, PANEL_BORDER, 0.25);
+    div.lineBetween(CONTENT_X, 84, SIDEBAR_X + SIDEBAR_WIDTH - PAD, 84);
   }
 
   private buildHud() {
-    const hudTop = GAME_HEIGHT;
-
-    const panel = this.add.graphics();
-    panel.fillGradientStyle(PANEL_TOP, PANEL_TOP, PANEL_BG, PANEL_BG, 1);
-    panel.fillRect(0, hudTop, GAME_WIDTH, HUD_HEIGHT);
-    panel.lineStyle(2, PANEL_BORDER, 0.4);
-    panel.lineBetween(0, hudTop, GAME_WIDTH, hudTop);
+    const startY = 96;
+    const rowH = 72;
+    const gap = 8;
 
     TOWER_ORDER.forEach((type, i) => {
       const def = TOWER_DEFS[type];
-      const x = 16 + i * 190;
-      const y = hudTop + 14;
-      const w = 175;
-      const h = 88;
+      const x = CONTENT_X;
+      const y = startY + i * (rowH + gap);
+      const w = CONTENT_W;
+      const h = rowH;
 
       const glow = this.add.graphics({ x, y });
       glow.fillStyle(def.color, 0.3);
@@ -183,21 +193,21 @@ export class UIScene extends Phaser.Scene {
       g.setInteractive(new Phaser.Geom.Rectangle(0, 0, w, h), Phaser.Geom.Rectangle.Contains);
 
       const iconKey = `tower-${type}-lv1`;
-      const iconX = x + 30;
+      const iconX = x + 28;
       const iconY = y + h / 2;
       let iconPlaceholder: Phaser.GameObjects.Arc | null = null;
       if (this.textures.exists(iconKey)) {
         const icon = this.add.image(iconX, iconY, iconKey);
-        scaleToFit(icon, 46);
+        scaleToFit(icon, 44);
       } else {
         // GameScene loads the real art asynchronously and may not be done
         // yet when this scene boots - fall back to a color dot until the
         // 'addtexture' listener below swaps it for the real icon.
-        iconPlaceholder = this.add.circle(iconX, iconY, 16, def.color);
+        iconPlaceholder = this.add.circle(iconX, iconY, 15, def.color);
       }
 
-      this.add.text(x + 58, y + 8, `${def.name}\n${def.cost}G`, { fontSize: '13px', color: '#ffffff', lineSpacing: 4 });
-      this.add.text(x + 58, y + 46, def.description, { fontSize: '10px', color: '#b9aee0', lineSpacing: 3, wordWrap: { width: 112 } });
+      this.add.text(x + 52, y + 7, `${def.name}  ${def.cost}G`, { fontSize: '12px', color: '#ffffff' });
+      this.add.text(x + 52, y + 26, def.description, { fontSize: '10px', color: '#b9aee0', lineSpacing: 3, wordWrap: { width: CONTENT_W - 52 } });
 
       g.on('pointerover', () => {
         if (this.buildType !== type) g.setAlpha(0.85);
@@ -221,33 +231,7 @@ export class UIScene extends Phaser.Scene {
       btn.iconPlaceholder.destroy();
       btn.iconPlaceholder = null;
       const icon = this.add.image(btn.iconX, btn.iconY, key);
-      scaleToFit(icon, 46);
-    });
-
-    const wx = 16 + TOWER_ORDER.length * 190;
-    const ww = 150;
-    const wh = 88;
-    this.waveButtonW = ww;
-    this.waveButtonH = wh;
-    this.waveButton = this.add.graphics({ x: wx, y: hudTop + 14 });
-    paintButton(this.waveButton, ww, wh, { base: GOLD, border: GOLD_LIGHT, sheenAlpha: 0.22 });
-    this.waveButton.setInteractive(new Phaser.Geom.Rectangle(0, 0, ww, wh), Phaser.Geom.Rectangle.Contains);
-    this.waveButtonText = this.add
-      .text(wx + ww / 2, hudTop + 14 + wh / 2, '다음 웨이브 시작', {
-        fontSize: '13px',
-        color: '#241a3d',
-        fontStyle: 'bold',
-        align: 'center',
-        wordWrap: { width: 130 },
-      })
-      .setOrigin(0.5);
-    this.waveButton.on('pointerover', () => {
-      if (this.waveButtonEnabled) this.waveButton.setAlpha(0.88);
-    });
-    this.waveButton.on('pointerout', () => this.waveButton.setAlpha(1));
-    this.waveButton.on('pointerdown', () => {
-      if (!this.waveButtonEnabled) return;
-      gameEvents.emit(Events.RequestStartWave);
+      scaleToFit(icon, 44);
     });
   }
 
@@ -278,32 +262,36 @@ export class UIScene extends Phaser.Scene {
   }
 
   private buildInfoPanel() {
-    const hudTop = GAME_HEIGHT;
-    const x = 16;
-    const y = hudTop + 112;
-    const panelW = GAME_WIDTH - 32;
+    const x = CONTENT_X;
+    const y = 96 + 3 * (72 + 8) + 6; // just below the three build buttons
+    const panelW = CONTENT_W;
+    const panelH = 92;
 
     const bg = this.add.graphics({ x, y });
     bg.fillStyle(0x120c22, 0.85);
-    bg.fillRoundedRect(0, 0, panelW, 52, 8);
+    bg.fillRoundedRect(0, 0, panelW, panelH, 8);
     bg.lineStyle(1, PANEL_BORDER, 0.25);
-    bg.strokeRoundedRect(0.5, 0.5, panelW - 1, 51, 8);
+    bg.strokeRoundedRect(0.5, 0.5, panelW - 1, panelH - 1, 8);
 
-    this.infoText = this.add.text(x + 10, y + 8, '타워를 클릭하면 업그레이드/판매할 수 있습니다.', { fontSize: '12px', color: '#cfd3e0' });
+    this.infoText = this.add.text(x + 8, y + 7, '타워를 클릭하면\n업그레이드/판매할 수 있습니다.', {
+      fontSize: '11px',
+      color: '#cfd3e0',
+      lineSpacing: 3,
+    });
 
-    const upgradeX = x + panelW - 220;
-    const sellX = x + panelW - 110;
-    const btnY = y + 8;
-    const btnW = 100;
-    const btnH = 36;
+    const btnW = (panelW - 8 * 2 - 8) / 2;
+    const btnH = 38;
+    const btnY = y + panelH - btnH - 8;
+    const upgradeX = x + 8;
+    const sellX = x + 8 + btnW + 8;
 
     this.upgradeBtn = this.add.graphics({ x: upgradeX, y: btnY });
     paintButton(this.upgradeBtn, btnW, btnH, { base: 0x3a5c8a, border: 0x8ec7ff, radius: 8 });
     this.upgradeBtn.setInteractive(new Phaser.Geom.Rectangle(0, 0, btnW, btnH), Phaser.Geom.Rectangle.Contains);
     this.upgradeBtnIcon = this.add.graphics({ x: upgradeX, y: btnY });
-    drawUpgradeIcon(this.upgradeBtnIcon, 20, btnH / 2);
+    drawUpgradeIcon(this.upgradeBtnIcon, 18, btnH / 2);
     this.upgradeBtnText = this.add
-      .text(upgradeX + 34, btnY + btnH / 2, '업그레이드', { fontSize: '11px', color: '#ffffff', lineSpacing: 3, align: 'left' })
+      .text(upgradeX + 30, btnY + btnH / 2, '업그레이드', { fontSize: '10px', color: '#ffffff', lineSpacing: 2, align: 'left' })
       .setOrigin(0, 0.5);
     this.upgradeBtn.on('pointerdown', () => gameEvents.emit(Events.RequestUpgrade));
 
@@ -311,8 +299,8 @@ export class UIScene extends Phaser.Scene {
     paintButton(this.sellBtn, btnW, btnH, { base: 0x8a3a3a, border: 0xff9a9a, radius: 8 });
     this.sellBtn.setInteractive(new Phaser.Geom.Rectangle(0, 0, btnW, btnH), Phaser.Geom.Rectangle.Contains);
     this.sellBtnIcon = this.add.graphics({ x: sellX, y: btnY });
-    drawCoinIcon(this.sellBtnIcon, 20, btnH / 2);
-    this.sellBtnText = this.add.text(sellX + 34, btnY + btnH / 2, '판매', { fontSize: '11px', color: '#ffffff' }).setOrigin(0, 0.5);
+    drawCoinIcon(this.sellBtnIcon, 18, btnH / 2);
+    this.sellBtnText = this.add.text(sellX + 30, btnY + btnH / 2, '판매', { fontSize: '10px', color: '#ffffff' }).setOrigin(0, 0.5);
     this.sellBtn.on('pointerdown', () => gameEvents.emit(Events.RequestSell));
 
     this.infoPanel = this.add.container(0, 0, [
@@ -326,6 +314,34 @@ export class UIScene extends Phaser.Scene {
       this.sellBtnText,
     ]);
     this.setInfoControlsVisible(false);
+
+    // Wave button goes right below the info panel, at the bottom of the sidebar.
+    const wx = x;
+    const wy = y + panelH + 8;
+    const ww = panelW;
+    const wh = CANVAS_HEIGHT - wy - 12;
+    this.waveButtonW = ww;
+    this.waveButtonH = wh;
+    this.waveButton = this.add.graphics({ x: wx, y: wy });
+    paintButton(this.waveButton, ww, wh, { base: GOLD, border: GOLD_LIGHT, sheenAlpha: 0.22 });
+    this.waveButton.setInteractive(new Phaser.Geom.Rectangle(0, 0, ww, wh), Phaser.Geom.Rectangle.Contains);
+    this.waveButtonText = this.add
+      .text(wx + ww / 2, wy + wh / 2, '다음 웨이브 시작', {
+        fontSize: '13px',
+        color: '#241a3d',
+        fontStyle: 'bold',
+        align: 'center',
+        wordWrap: { width: ww - 16 },
+      })
+      .setOrigin(0.5);
+    this.waveButton.on('pointerover', () => {
+      if (this.waveButtonEnabled) this.waveButton.setAlpha(0.88);
+    });
+    this.waveButton.on('pointerout', () => this.waveButton.setAlpha(1));
+    this.waveButton.on('pointerdown', () => {
+      if (!this.waveButtonEnabled) return;
+      gameEvents.emit(Events.RequestStartWave);
+    });
   }
 
   private setInfoControlsVisible(visible: boolean) {
@@ -339,33 +355,38 @@ export class UIScene extends Phaser.Scene {
 
   private refreshInfoPanel() {
     if (!this.selectedInfo) {
-      this.infoText.setText('타워를 클릭하면 업그레이드/판매할 수 있습니다.');
+      this.infoText.setText('타워를 클릭하면\n업그레이드/판매할 수 있습니다.');
       this.setInfoControlsVisible(false);
       return;
     }
     const info = this.selectedInfo;
     const upgradeLabel = info.maxLevel ? '최대 레벨' : `업그레이드\n${info.upgradeCost}G`;
-    this.infoText.setText(`${info.typeName}  Lv${info.level}  |  판매가 ${info.sellValue}G`);
+    this.infoText.setText(`${info.typeName} Lv${info.level}\n판매가 ${info.sellValue}G`);
     this.upgradeBtnText.setText(upgradeLabel);
     this.sellBtnText.setText(`판매 ${info.sellValue}G`);
     const canUpgrade = !info.maxLevel && this.gold >= (info.upgradeCost ?? Infinity);
-    paintButton(this.upgradeBtn, 100, 36, canUpgrade ? { base: 0x3a5c8a, border: 0x8ec7ff, radius: 8 } : { base: DISABLED_GREY, border: 0x55555f, radius: 8, sheenAlpha: 0.05 });
+    paintButton(
+      this.upgradeBtn,
+      (CONTENT_W - 8 * 2 - 8) / 2,
+      38,
+      canUpgrade ? { base: 0x3a5c8a, border: 0x8ec7ff, radius: 8 } : { base: DISABLED_GREY, border: 0x55555f, radius: 8, sheenAlpha: 0.05 },
+    );
     this.upgradeBtnIcon.setAlpha(canUpgrade ? 1 : 0.4);
     this.setInfoControlsVisible(true);
   }
 
   private buildOverlay() {
-    const bg = this.add.rectangle(0, 0, CANVAS_WIDTH, GAME_HEIGHT + HUD_HEIGHT, 0x000000, 0.75).setOrigin(0, 0);
-    const title = this.add.text(CANVAS_WIDTH / 2, GAME_HEIGHT / 2 - 40, '', { fontSize: '36px', color: '#ffe9a8' }).setOrigin(0.5);
+    const bg = this.add.rectangle(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT, 0x000000, 0.75).setOrigin(0, 0);
+    const title = this.add.text(GAME_WIDTH / 2, CANVAS_HEIGHT / 2 - 40, '', { fontSize: '36px', color: '#ffe9a8' }).setOrigin(0.5);
     title.setShadow(0, 0, '#ffd166', 12);
-    const subtitle = this.add.text(CANVAS_WIDTH / 2, GAME_HEIGHT / 2, '', { fontSize: '15px', color: '#cccccc' }).setOrigin(0.5);
+    const subtitle = this.add.text(GAME_WIDTH / 2, CANVAS_HEIGHT / 2, '', { fontSize: '15px', color: '#cccccc' }).setOrigin(0.5);
 
     const btnW = 160;
     const btnH = 44;
-    const restartBtn = this.add.graphics({ x: CANVAS_WIDTH / 2 - btnW / 2, y: GAME_HEIGHT / 2 + 50 - btnH / 2 });
+    const restartBtn = this.add.graphics({ x: GAME_WIDTH / 2 - btnW / 2, y: CANVAS_HEIGHT / 2 + 50 - btnH / 2 });
     paintButton(restartBtn, btnW, btnH, { base: GOLD, border: GOLD_LIGHT, radius: 12, sheenAlpha: 0.22 });
     restartBtn.setInteractive(new Phaser.Geom.Rectangle(0, 0, btnW, btnH), Phaser.Geom.Rectangle.Contains);
-    const restartText = this.add.text(CANVAS_WIDTH / 2, GAME_HEIGHT / 2 + 50, '다시 시작', { fontSize: '15px', color: '#241a3d', fontStyle: 'bold' }).setOrigin(0.5);
+    const restartText = this.add.text(GAME_WIDTH / 2, CANVAS_HEIGHT / 2 + 50, '다시 시작', { fontSize: '15px', color: '#241a3d', fontStyle: 'bold' }).setOrigin(0.5);
     restartBtn.on('pointerover', () => restartBtn.setAlpha(0.88));
     restartBtn.on('pointerout', () => restartBtn.setAlpha(1));
     restartBtn.on('pointerdown', () => {

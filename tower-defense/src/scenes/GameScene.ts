@@ -146,7 +146,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private onPointerMove(pointer: Phaser.Input.Pointer) {
-    if (!this.buildType || pointer.y > ROWS * TILE) {
+    if (!this.buildType || pointer.x > COLS * TILE) {
       this.hoverTile?.setVisible(false);
       return;
     }
@@ -163,7 +163,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private onPointerDown(pointer: Phaser.Input.Pointer) {
-    if (pointer.y > ROWS * TILE) return;
+    if (pointer.x > COLS * TILE) return;
 
     const col = Math.floor(pointer.x / TILE);
     const row = Math.floor(pointer.y / TILE);

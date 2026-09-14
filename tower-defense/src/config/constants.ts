@@ -1,12 +1,16 @@
 export const TILE = 64;
 export const COLS = 14;
 export const ROWS = 8;
-export const HUD_HEIGHT = 176;
+
+// The HUD lives in a right-side sidebar (not a strip below the board) so the
+// overall canvas aspect ratio (~2.2:1) roughly matches real phones' landscape
+// screens instead of pillarboxing hard on wide viewports.
+export const SIDEBAR_WIDTH = 240;
 
 export const GAME_WIDTH = COLS * TILE; // 896
 export const GAME_HEIGHT = ROWS * TILE; // 512
-export const CANVAS_WIDTH = GAME_WIDTH;
-export const CANVAS_HEIGHT = GAME_HEIGHT + HUD_HEIGHT;
+export const CANVAS_WIDTH = GAME_WIDTH + SIDEBAR_WIDTH;
+export const CANVAS_HEIGHT = GAME_HEIGHT;
 
 export const STARTING_GOLD = 150;
 export const STARTING_LIVES = 20;
