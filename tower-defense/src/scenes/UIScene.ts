@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { CANVAS_WIDTH, GAME_HEIGHT, GAME_WIDTH, STARTING_GOLD, STARTING_LIVES } from '../config/constants';
+import { CANVAS_WIDTH, GAME_HEIGHT, GAME_WIDTH, HUD_HEIGHT, STARTING_GOLD, STARTING_LIVES } from '../config/constants';
 import { TOWER_DEFS } from '../config/towers';
 import type { TowerType } from '../config/towers';
 import { WAVES } from '../config/enemies';
@@ -7,6 +7,56 @@ import { gameEvents, Events } from '../events';
 import type { SelectedTowerInfo } from '../events';
 
 const TOWER_ORDER: TowerType[] = ['basic', 'splash', 'slow'];
+
+// Fantasy/gold theme shared with the hub - dark violet panels, gold accents.
+const PANEL_BG = 0x171029;
+const PANEL_BORDER = 0xffd166;
+const PANEL_TOP = 0x241a3d;
+const GOLD_LIGHT = 0xffe9a8;
+const GOLD = 0xffd166;
+const DISABLED_GREY = 0x3a3a45;
+
+interface ButtonStyle {
+  base: number;
+  border: number;
+  borderAlpha?: number;
+  borderWidth?: number;
+  radius?: number;
+  sheenAlpha?: number;
+}
+
+/** Rounded panel with a subtle top-sheen highlight and a bright border - reused for every button so the whole HUD reads as one consistent, "gilded" style instead of flat rectangles. */
+function paintButton(g: Phaser.GameObjects.Graphics, w: number, h: number, style: ButtonStyle) {
+  const radius = style.radius ?? 10;
+  g.clear();
+  g.fillStyle(style.base, 1);
+  g.fillRoundedRect(0, 0, w, h, radius);
+  g.fillStyle(0xffffff, style.sheenAlpha ?? 0.06);
+  g.fillRoundedRect(2, 2, w - 4, Math.max(h * 0.42, 1), { tl: radius - 2, tr: radius - 2, bl: 0, br: 0 });
+  g.lineStyle(style.borderWidth ?? 2, style.border, style.borderAlpha ?? 0.9);
+  g.strokeRoundedRect(1, 1, w - 2, h - 2, radius);
+}
+
+function scaleToFit(img: Phaser.GameObjects.Image, target: number) {
+  img.setScale(target / Math.max(img.width, img.height));
+}
+
+/** Small up-arrow glyph so the upgrade button reads at a glance, not just by color. */
+function drawUpgradeIcon(g: Phaser.GameObjects.Graphics, cx: number, cy: number, size = 7, color = 0xffffff) {
+  g.fillStyle(color, 1);
+  g.fillTriangle(cx - size, cy + size * 0.35, cx + size, cy + size * 0.35, cx, cy - size * 0.9);
+  g.fillRect(cx - size * 0.32, cy + size * 0.2, size * 0.64, size * 0.9);
+}
+
+/** Small gold-coin glyph for the sell button - makes "판매" read as "cash out" rather than a generic red action. */
+function drawCoinIcon(g: Phaser.GameObjects.Graphics, cx: number, cy: number, r = 8) {
+  g.fillStyle(GOLD, 1);
+  g.fillCircle(cx, cy, r);
+  g.lineStyle(1.5, 0xc89a3f, 1);
+  g.strokeCircle(cx, cy, r);
+  g.fillStyle(0xfff3d6, 0.55);
+  g.fillCircle(cx - r * 0.32, cy - r * 0.32, r * 0.4);
+}
 
 export class UIScene extends Phaser.Scene {
   gold = 0;
@@ -18,16 +68,34 @@ export class UIScene extends Phaser.Scene {
   livesText!: Phaser.GameObjects.Text;
   waveText!: Phaser.GameObjects.Text;
 
-  buildButtons: Record<TowerType, { bg: Phaser.GameObjects.Rectangle; label: Phaser.GameObjects.Text }> = {} as any;
-  waveButton!: Phaser.GameObjects.Rectangle;
+  buildButtons: Record<
+    TowerType,
+    {
+      g: Phaser.GameObjects.Graphics;
+      glow: Phaser.GameObjects.Graphics;
+      affordable: boolean;
+      selected: boolean;
+      w: number;
+      h: number;
+      iconPlaceholder: Phaser.GameObjects.Arc | null;
+      iconX: number;
+      iconY: number;
+    }
+  > = {} as any;
+  waveButton!: Phaser.GameObjects.Graphics;
   waveButtonText!: Phaser.GameObjects.Text;
   waveButtonEnabled = true;
+  waveButtonW = 0;
+  waveButtonH = 0;
 
   infoPanel!: Phaser.GameObjects.Container;
   infoText!: Phaser.GameObjects.Text;
-  upgradeBtn!: Phaser.GameObjects.Rectangle;
+  upgradeBtn!: Phaser.GameObjects.Graphics;
+  upgradeBtnIcon!: Phaser.GameObjects.Graphics;
   upgradeBtnText!: Phaser.GameObjects.Text;
-  sellBtn!: Phaser.GameObjects.Rectangle;
+  sellBtn!: Phaser.GameObjects.Graphics;
+  sellBtnIcon!: Phaser.GameObjects.Graphics;
+  sellBtnText!: Phaser.GameObjects.Text;
 
   overlay!: Phaser.GameObjects.Container;
 
@@ -74,11 +142,16 @@ export class UIScene extends Phaser.Scene {
       gameEvents.removeAllListeners(Events.PlacedTowerSelected);
       gameEvents.removeAllListeners(Events.GameOver);
       gameEvents.removeAllListeners(Events.GameWin);
+      this.textures.off(Phaser.Textures.Events.ADD);
     });
   }
 
   private buildStatusBar() {
-    this.add.rectangle(0, 0, CANVAS_WIDTH, 32, 0x000000, 0.55).setOrigin(0, 0);
+    const bar = this.add.graphics();
+    bar.fillStyle(0x0d0818, 0.72);
+    bar.fillRect(0, 0, CANVAS_WIDTH, 32);
+    bar.lineStyle(1, PANEL_BORDER, 0.25);
+    bar.lineBetween(0, 32, CANVAS_WIDTH, 32);
     this.goldText = this.add.text(12, 8, `골드 ${this.gold}`, { fontSize: '15px', color: '#ffe08a' });
     this.livesText = this.add.text(140, 8, `라이프 ${this.lives}`, { fontSize: '15px', color: '#ff8a8a' });
     this.waveText = this.add.text(280, 8, `웨이브 1/${WAVES.length}`, { fontSize: '15px', color: '#8ad1ff' });
@@ -86,32 +159,92 @@ export class UIScene extends Phaser.Scene {
 
   private buildHud() {
     const hudTop = GAME_HEIGHT;
-    this.add.rectangle(0, hudTop, GAME_WIDTH, 150, 0x14141f).setOrigin(0, 0);
+
+    const panel = this.add.graphics();
+    panel.fillGradientStyle(PANEL_TOP, PANEL_TOP, PANEL_BG, PANEL_BG, 1);
+    panel.fillRect(0, hudTop, GAME_WIDTH, HUD_HEIGHT);
+    panel.lineStyle(2, PANEL_BORDER, 0.4);
+    panel.lineBetween(0, hudTop, GAME_WIDTH, hudTop);
 
     TOWER_ORDER.forEach((type, i) => {
       const def = TOWER_DEFS[type];
       const x = 16 + i * 190;
       const y = hudTop + 14;
-      const bg = this.add.rectangle(x, y, 175, 64, 0x24243a).setOrigin(0, 0).setStrokeStyle(2, def.color, 0.9).setInteractive({ useHandCursor: true });
-      const label = this.add.text(x + 8, y + 6, `${def.name}\n${def.cost}G`, { fontSize: '13px', color: '#ffffff', lineSpacing: 4 });
-      this.add.text(x + 8, y + 44, def.description, { fontSize: '10px', color: '#9aa0b4', wordWrap: { width: 160 } });
+      const w = 175;
+      const h = 88;
 
-      bg.on('pointerdown', () => {
+      const glow = this.add.graphics({ x, y });
+      glow.fillStyle(def.color, 0.3);
+      glow.fillRoundedRect(-4, -4, w + 8, h + 8, 14);
+      glow.setVisible(false);
+
+      const g = this.add.graphics({ x, y });
+      paintButton(g, w, h, { base: 0x24243a, border: def.color });
+      g.setInteractive(new Phaser.Geom.Rectangle(0, 0, w, h), Phaser.Geom.Rectangle.Contains);
+
+      const iconKey = `tower-${type}-lv1`;
+      const iconX = x + 30;
+      const iconY = y + h / 2;
+      let iconPlaceholder: Phaser.GameObjects.Arc | null = null;
+      if (this.textures.exists(iconKey)) {
+        const icon = this.add.image(iconX, iconY, iconKey);
+        scaleToFit(icon, 46);
+      } else {
+        // GameScene loads the real art asynchronously and may not be done
+        // yet when this scene boots - fall back to a color dot until the
+        // 'addtexture' listener below swaps it for the real icon.
+        iconPlaceholder = this.add.circle(iconX, iconY, 16, def.color);
+      }
+
+      this.add.text(x + 58, y + 8, `${def.name}\n${def.cost}G`, { fontSize: '13px', color: '#ffffff', lineSpacing: 4 });
+      this.add.text(x + 58, y + 46, def.description, { fontSize: '10px', color: '#b9aee0', lineSpacing: 3, wordWrap: { width: 112 } });
+
+      g.on('pointerover', () => {
+        if (this.buildType !== type) g.setAlpha(0.85);
+      });
+      g.on('pointerout', () => g.setAlpha(1));
+      g.on('pointerdown', () => {
         const next = this.buildType === type ? null : type;
         this.buildType = next;
         gameEvents.emit(Events.BuildTypeSelected, next);
         this.refreshBuildButtons();
       });
 
-      this.buildButtons[type] = { bg, label };
+      this.buildButtons[type] = { g, glow, affordable: true, selected: false, w, h, iconPlaceholder, iconX, iconY };
+    });
+
+    this.textures.on(Phaser.Textures.Events.ADD, (key: string) => {
+      const type = TOWER_ORDER.find((t) => `tower-${t}-lv1` === key);
+      if (!type) return;
+      const btn = this.buildButtons[type];
+      if (!btn.iconPlaceholder) return;
+      btn.iconPlaceholder.destroy();
+      btn.iconPlaceholder = null;
+      const icon = this.add.image(btn.iconX, btn.iconY, key);
+      scaleToFit(icon, 46);
     });
 
     const wx = 16 + TOWER_ORDER.length * 190;
-    this.waveButton = this.add
-      .rectangle(wx, hudTop + 14, 150, 64, 0x2f5c3a)
-      .setOrigin(0, 0)
-      .setInteractive({ useHandCursor: true });
-    this.waveButtonText = this.add.text(wx + 12, hudTop + 34, '다음 웨이브 시작', { fontSize: '13px', color: '#ffffff', wordWrap: { width: 130 } });
+    const ww = 150;
+    const wh = 88;
+    this.waveButtonW = ww;
+    this.waveButtonH = wh;
+    this.waveButton = this.add.graphics({ x: wx, y: hudTop + 14 });
+    paintButton(this.waveButton, ww, wh, { base: GOLD, border: GOLD_LIGHT, sheenAlpha: 0.22 });
+    this.waveButton.setInteractive(new Phaser.Geom.Rectangle(0, 0, ww, wh), Phaser.Geom.Rectangle.Contains);
+    this.waveButtonText = this.add
+      .text(wx + ww / 2, hudTop + 14 + wh / 2, '다음 웨이브 시작', {
+        fontSize: '13px',
+        color: '#241a3d',
+        fontStyle: 'bold',
+        align: 'center',
+        wordWrap: { width: 130 },
+      })
+      .setOrigin(0.5);
+    this.waveButton.on('pointerover', () => {
+      if (this.waveButtonEnabled) this.waveButton.setAlpha(0.88);
+    });
+    this.waveButton.on('pointerout', () => this.waveButton.setAlpha(1));
     this.waveButton.on('pointerdown', () => {
       if (!this.waveButtonEnabled) return;
       gameEvents.emit(Events.RequestStartWave);
@@ -121,42 +254,87 @@ export class UIScene extends Phaser.Scene {
   private refreshBuildButtons() {
     TOWER_ORDER.forEach((type) => {
       const def = TOWER_DEFS[type];
-      const { bg } = this.buildButtons[type];
+      const btn = this.buildButtons[type];
       const selected = this.buildType === type;
       const affordable = this.gold >= def.cost;
-      bg.setFillStyle(selected ? 0x3a5c3a : 0x24243a, 1);
-      bg.setAlpha(affordable ? 1 : 0.45);
+      btn.selected = selected;
+      btn.affordable = affordable;
+      btn.glow.setVisible(selected);
+      paintButton(btn.g, btn.w, btn.h, {
+        base: selected ? 0x3a3560 : 0x24243a,
+        border: def.color,
+        borderWidth: selected ? 3 : 2,
+      });
+      btn.g.setAlpha(affordable ? 1 : 0.4);
     });
   }
 
   private refreshWaveButton() {
-    this.waveButton.setFillStyle(this.waveButtonEnabled ? 0x2f5c3a : 0x333333);
+    paintButton(this.waveButton, this.waveButtonW, this.waveButtonH, this.waveButtonEnabled
+      ? { base: GOLD, border: GOLD_LIGHT, sheenAlpha: 0.22 }
+      : { base: DISABLED_GREY, border: 0x55555f, sheenAlpha: 0.05 });
     this.waveButtonText.setText(this.waveButtonEnabled ? '다음 웨이브 시작' : '진행 중...');
+    this.waveButtonText.setColor(this.waveButtonEnabled ? '#241a3d' : '#9a9aa5');
   }
 
   private buildInfoPanel() {
     const hudTop = GAME_HEIGHT;
     const x = 16;
-    const y = hudTop + 88;
-    const bg = this.add.rectangle(x, y, GAME_WIDTH - 32, 52, 0x1c1c2c).setOrigin(0, 0);
+    const y = hudTop + 112;
+    const panelW = GAME_WIDTH - 32;
+
+    const bg = this.add.graphics({ x, y });
+    bg.fillStyle(0x120c22, 0.85);
+    bg.fillRoundedRect(0, 0, panelW, 52, 8);
+    bg.lineStyle(1, PANEL_BORDER, 0.25);
+    bg.strokeRoundedRect(0.5, 0.5, panelW - 1, 51, 8);
+
     this.infoText = this.add.text(x + 10, y + 8, '타워를 클릭하면 업그레이드/판매할 수 있습니다.', { fontSize: '12px', color: '#cfd3e0' });
 
-    this.upgradeBtn = this.add.rectangle(x + GAME_WIDTH - 32 - 220, y + 8, 100, 36, 0x3a5c8a).setOrigin(0, 0).setInteractive({ useHandCursor: true });
-    this.upgradeBtnText = this.add.text(x + GAME_WIDTH - 32 - 214, y + 20, '업그레이드', { fontSize: '11px', color: '#ffffff' });
+    const upgradeX = x + panelW - 220;
+    const sellX = x + panelW - 110;
+    const btnY = y + 8;
+    const btnW = 100;
+    const btnH = 36;
+
+    this.upgradeBtn = this.add.graphics({ x: upgradeX, y: btnY });
+    paintButton(this.upgradeBtn, btnW, btnH, { base: 0x3a5c8a, border: 0x8ec7ff, radius: 8 });
+    this.upgradeBtn.setInteractive(new Phaser.Geom.Rectangle(0, 0, btnW, btnH), Phaser.Geom.Rectangle.Contains);
+    this.upgradeBtnIcon = this.add.graphics({ x: upgradeX, y: btnY });
+    drawUpgradeIcon(this.upgradeBtnIcon, 20, btnH / 2);
+    this.upgradeBtnText = this.add
+      .text(upgradeX + 34, btnY + btnH / 2, '업그레이드', { fontSize: '11px', color: '#ffffff', lineSpacing: 3, align: 'left' })
+      .setOrigin(0, 0.5);
     this.upgradeBtn.on('pointerdown', () => gameEvents.emit(Events.RequestUpgrade));
 
-    this.sellBtn = this.add.rectangle(x + GAME_WIDTH - 32 - 110, y + 8, 100, 36, 0x8a3a3a).setOrigin(0, 0).setInteractive({ useHandCursor: true });
-    this.add.text(x + GAME_WIDTH - 32 - 90, y + 20, '판매', { fontSize: '11px', color: '#ffffff' });
+    this.sellBtn = this.add.graphics({ x: sellX, y: btnY });
+    paintButton(this.sellBtn, btnW, btnH, { base: 0x8a3a3a, border: 0xff9a9a, radius: 8 });
+    this.sellBtn.setInteractive(new Phaser.Geom.Rectangle(0, 0, btnW, btnH), Phaser.Geom.Rectangle.Contains);
+    this.sellBtnIcon = this.add.graphics({ x: sellX, y: btnY });
+    drawCoinIcon(this.sellBtnIcon, 20, btnH / 2);
+    this.sellBtnText = this.add.text(sellX + 34, btnY + btnH / 2, '판매', { fontSize: '11px', color: '#ffffff' }).setOrigin(0, 0.5);
     this.sellBtn.on('pointerdown', () => gameEvents.emit(Events.RequestSell));
 
-    this.infoPanel = this.add.container(0, 0, [bg, this.infoText, this.upgradeBtn, this.upgradeBtnText, this.sellBtn]);
+    this.infoPanel = this.add.container(0, 0, [
+      bg,
+      this.infoText,
+      this.upgradeBtn,
+      this.upgradeBtnIcon,
+      this.upgradeBtnText,
+      this.sellBtn,
+      this.sellBtnIcon,
+      this.sellBtnText,
+    ]);
     this.setInfoControlsVisible(false);
   }
 
   private setInfoControlsVisible(visible: boolean) {
     this.upgradeBtn.setVisible(visible);
+    this.upgradeBtnIcon.setVisible(visible);
     this.upgradeBtnText.setVisible(visible);
     this.sellBtn.setVisible(visible);
+    this.sellBtnIcon.setVisible(visible);
+    this.sellBtnText.setVisible(visible);
   }
 
   private refreshInfoPanel() {
@@ -166,19 +344,30 @@ export class UIScene extends Phaser.Scene {
       return;
     }
     const info = this.selectedInfo;
-    const upgradeLabel = info.maxLevel ? '최대 레벨' : `업그레이드 (${info.upgradeCost}G)`;
+    const upgradeLabel = info.maxLevel ? '최대 레벨' : `업그레이드\n${info.upgradeCost}G`;
     this.infoText.setText(`${info.typeName}  Lv${info.level}  |  판매가 ${info.sellValue}G`);
     this.upgradeBtnText.setText(upgradeLabel);
-    this.upgradeBtn.setFillStyle(info.maxLevel || this.gold < (info.upgradeCost ?? Infinity) ? 0x444444 : 0x3a5c8a);
+    this.sellBtnText.setText(`판매 ${info.sellValue}G`);
+    const canUpgrade = !info.maxLevel && this.gold >= (info.upgradeCost ?? Infinity);
+    paintButton(this.upgradeBtn, 100, 36, canUpgrade ? { base: 0x3a5c8a, border: 0x8ec7ff, radius: 8 } : { base: DISABLED_GREY, border: 0x55555f, radius: 8, sheenAlpha: 0.05 });
+    this.upgradeBtnIcon.setAlpha(canUpgrade ? 1 : 0.4);
     this.setInfoControlsVisible(true);
   }
 
   private buildOverlay() {
-    const bg = this.add.rectangle(0, 0, CANVAS_WIDTH, GAME_HEIGHT + 150, 0x000000, 0.75).setOrigin(0, 0);
-    const title = this.add.text(CANVAS_WIDTH / 2, GAME_HEIGHT / 2 - 40, '', { fontSize: '36px', color: '#ffffff' }).setOrigin(0.5);
+    const bg = this.add.rectangle(0, 0, CANVAS_WIDTH, GAME_HEIGHT + HUD_HEIGHT, 0x000000, 0.75).setOrigin(0, 0);
+    const title = this.add.text(CANVAS_WIDTH / 2, GAME_HEIGHT / 2 - 40, '', { fontSize: '36px', color: '#ffe9a8' }).setOrigin(0.5);
+    title.setShadow(0, 0, '#ffd166', 12);
     const subtitle = this.add.text(CANVAS_WIDTH / 2, GAME_HEIGHT / 2, '', { fontSize: '15px', color: '#cccccc' }).setOrigin(0.5);
-    const restartBtn = this.add.rectangle(CANVAS_WIDTH / 2, GAME_HEIGHT / 2 + 50, 160, 44, 0x3a5c8a).setInteractive({ useHandCursor: true });
-    const restartText = this.add.text(CANVAS_WIDTH / 2, GAME_HEIGHT / 2 + 50, '다시 시작', { fontSize: '15px', color: '#ffffff' }).setOrigin(0.5);
+
+    const btnW = 160;
+    const btnH = 44;
+    const restartBtn = this.add.graphics({ x: CANVAS_WIDTH / 2 - btnW / 2, y: GAME_HEIGHT / 2 + 50 - btnH / 2 });
+    paintButton(restartBtn, btnW, btnH, { base: GOLD, border: GOLD_LIGHT, radius: 12, sheenAlpha: 0.22 });
+    restartBtn.setInteractive(new Phaser.Geom.Rectangle(0, 0, btnW, btnH), Phaser.Geom.Rectangle.Contains);
+    const restartText = this.add.text(CANVAS_WIDTH / 2, GAME_HEIGHT / 2 + 50, '다시 시작', { fontSize: '15px', color: '#241a3d', fontStyle: 'bold' }).setOrigin(0.5);
+    restartBtn.on('pointerover', () => restartBtn.setAlpha(0.88));
+    restartBtn.on('pointerout', () => restartBtn.setAlpha(1));
     restartBtn.on('pointerdown', () => {
       this.buildType = null;
       this.selectedInfo = null;

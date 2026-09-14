@@ -46,11 +46,12 @@
 
 .game-select-icon {
   position: absolute;
-  left: 6.5%;
+  left: 20%;
   top: 50%;
-  width: 19%;
+  width: 17%;
   aspect-ratio: 1 / 1;
-  transform: translateY(-50%);
+  object-fit: contain;
+  transform: translate(-50%, -50%);
   pointer-events: none;
 }
 
@@ -71,6 +72,9 @@
 .game-select-desc {
   font-size: 13px;
   color: #b9aee0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .mode-select-list {
@@ -203,8 +207,24 @@
   padding: 24px;
 }
 
+.lobby h1 {
+  text-align: center;
+  margin-top: 8px;
+  color: #ffe9a8;
+  text-shadow: 0 0 18px rgba(255, 209, 102, 0.35);
+}
+
 .lobby-section {
   margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 209, 102, 0.18);
+}
+
+.lobby-section h2 {
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  color: #ffd166;
+  margin: 0 0 8px;
 }
 
 .hero-card {
@@ -257,9 +277,28 @@
   margin-top: 32px;
   width: 100%;
   font-size: 18px;
-  padding: 14px 24px;
-  border-radius: 8px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 16px 24px;
+  border-radius: 12px;
+  border: 2px solid #ffe9a8;
+  background: linear-gradient(135deg, #ffe9a8 0%, #ffd166 45%, #c89a3f 100%);
+  color: #241a3d;
   cursor: pointer;
+  box-shadow: 0 0 0 1px rgba(255, 209, 102, 0.25), 0 8px 24px rgba(255, 165, 60, 0.25);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+}
+
+.start-button:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.06);
+  box-shadow: 0 0 0 1px rgba(255, 209, 102, 0.4), 0 12px 28px rgba(255, 165, 60, 0.35);
+}
+
+.start-button:active {
+  transform: translateY(0);
+  filter: brightness(0.96);
+  box-shadow: 0 0 0 1px rgba(255, 209, 102, 0.25), 0 4px 12px rgba(255, 165, 60, 0.2);
 }
 
 .game-screen {
@@ -276,8 +315,25 @@
 .exit-button {
   align-self: flex-start;
   margin: 12px;
-  padding: 8px 16px;
+  padding: 8px 18px;
+  border-radius: 999px;
+  border: 1.5px solid rgba(255, 209, 102, 0.55);
+  background: rgba(36, 26, 61, 0.6);
+  color: #ffe9a8;
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.exit-button:hover {
+  background: rgba(255, 209, 102, 0.14);
+  border-color: #ffe9a8;
+  transform: translateX(-2px);
+}
+
+.exit-button:active {
+  transform: translateX(0);
 }
 
 .game-canvas-wrapper {

@@ -61,7 +61,7 @@ export function Lobby({ gameId, roundId, onSelectRound, onStart, onBack }: Lobby
             className="exit-button"
             onClick={marblesScreen === 'mode' ? onBack : () => setMarblesScreen('mode')}
           >
-            ← {marblesScreen === 'mode' ? '대시보드로' : '모드 선택으로'}
+            ← {marblesScreen === 'mode' ? '게임 허브로' : '모드 선택으로'}
           </button>
         )}
 
@@ -153,7 +153,7 @@ export function Lobby({ gameId, roundId, onSelectRound, onStart, onBack }: Lobby
   return (
     <div className="lobby">
       <button type="button" className="exit-button" onClick={onBack}>
-        ← 대시보드로
+        ← 게임 허브로
       </button>
 
       <h1>{game.title}</h1>

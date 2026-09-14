@@ -1,7 +1,7 @@
 export const TILE = 64;
 export const COLS = 14;
 export const ROWS = 8;
-export const HUD_HEIGHT = 150;
+export const HUD_HEIGHT = 176;
 
 export const GAME_WIDTH = COLS * TILE; // 896
 export const GAME_HEIGHT = ROWS * TILE; // 512

@@ -76,7 +76,7 @@ export function GameScreen({ gameId, roundId, onExit }: GameScreenProps) {
   return (
     <div className="game-screen">
       <button type="button" className="exit-button" onClick={onExit}>
-        ← 대시보드로
+        ← 게임 허브로
       </button>
       <div className="game-canvas-wrapper">
         <div ref={containerRef} className="game-canvas-container" />
