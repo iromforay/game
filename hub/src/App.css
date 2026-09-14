@@ -231,7 +231,12 @@
 .game-screen {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  /* Fixed (not min-) height: Phaser's Scale.FIT sizes the canvas against
+     this container's actual box. A min-height lets the canvas's own intrinsic
+     size grow the box instead of being scaled down to fit it - exactly what
+     broke this on short/mobile viewports. */
+  height: 100svh;
+  overflow: hidden;
 }
 
 .exit-button {
@@ -241,10 +246,58 @@
   cursor: pointer;
 }
 
+.game-canvas-wrapper {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
 .game-canvas-container {
   flex: 1;
+  min-height: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   line-height: 0;
+  overflow: hidden;
+}
+
+.rotate-prompt {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+  background: #10101a;
+}
+
+.rotate-prompt-icon {
+  font-size: 48px;
+  animation: rotate-prompt-spin 1.6s ease-in-out infinite;
+}
+
+.rotate-prompt-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.rotate-prompt-sub {
+  font-size: 13px;
+  color: var(--text-h, #888);
+  margin: 0;
+}
+
+@keyframes rotate-prompt-spin {
+  0%, 100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(-90deg);
+  }
 }

@@ -5,7 +5,14 @@ import { mountGame as mountStrategyMarbles } from 'strategy-marbles';
 import type { NetworkOptions } from 'strategy-marbles';
 import type Phaser from 'phaser';
 import { useMultiplayer } from './multiplayer/MultiplayerContext';
+import { usePortraitNarrow } from './usePortraitNarrow';
+import { RotatePrompt } from './RotatePrompt';
 import type { GameId } from './games';
+
+// These games use a fixed 14x8 landscape grid - unlike strategy-marbles'
+// near-square board, it doesn't scale down to a usable size on a narrow
+// portrait phone screen. Prompt for landscape instead of rendering it tiny.
+const LANDSCAPE_ONLY_GAMES: GameId[] = ['tower-defense', 'offense-tower'];
 
 interface GameScreenProps {
   gameId: GameId;
@@ -17,6 +24,8 @@ export function GameScreen({ gameId, roundId, onExit }: GameScreenProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
   const multiplayer = useMultiplayer();
+  const isPortraitNarrow = usePortraitNarrow();
+  const showRotatePrompt = LANDSCAPE_ONLY_GAMES.includes(gameId) && isPortraitNarrow;
 
   const networkRoom = gameId === 'strategy-marbles' && multiplayer.room?.status === 'playing' ? multiplayer.room : null;
   const socket = multiplayer.getSocket();
@@ -69,7 +78,10 @@ export function GameScreen({ gameId, roundId, onExit }: GameScreenProps) {
       <button type="button" className="exit-button" onClick={onExit}>
         ← 대시보드로
       </button>
-      <div ref={containerRef} className="game-canvas-container" />
+      <div className="game-canvas-wrapper">
+        <div ref={containerRef} className="game-canvas-container" />
+        {showRotatePrompt && <RotatePrompt />}
+      </div>
     </div>
   );
 }
