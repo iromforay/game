@@ -26,3 +26,4 @@ lerna-debug.log*
 
 # design source files (raw AI-gen assets, not part of build)
 /design
+/download
