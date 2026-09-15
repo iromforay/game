@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.bomul.game",
+      "sha256_cert_fingerprints": [
+        "52:6E:9E:E8:04:C9:25:A8:91:33:52:07:34:FE:71:39:DF:95:8F:C6:B7:81:F1:97:60:C7:15:3D:71:CC:FF:B2"
+      ]
+    }
+  }
+]
