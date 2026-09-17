@@ -1,0 +1,9 @@
+[
+  { "code": "nubi", "name": "누비", "gradeId": 1, "atkMod": 45, "defMod": 0, "apMod": 0, "hpMod": 0, "imageKey": "nubi" },
+  { "code": "bopuli", "name": "보풀이", "gradeId": 2, "atkMod": 0, "defMod": 0, "apMod": 0, "hpMod": 0, "imageKey": "bopuli" },
+  { "code": "muldeuli", "name": "물들이", "gradeId": 3, "atkMod": 0, "defMod": 0, "apMod": 0, "hpMod": 0, "imageKey": "muldeuli" },
+  { "code": "pokshini", "name": "폭신이", "gradeId": 4, "atkMod": 0, "defMod": 0, "apMod": 0, "hpMod": 0, "imageKey": "pokshini" },
+  { "code": "geumbiti", "name": "금빛이", "gradeId": 5, "atkMod": 0, "defMod": 0, "apMod": 0, "hpMod": 0, "imageKey": "geumbiti" },
+  { "code": "ganeuri", "name": "가느리", "gradeId": 6, "atkMod": 0, "defMod": 0, "apMod": 0, "hpMod": 0, "imageKey": "ganeuri" },
+  { "code": "mujigae", "name": "무지개", "gradeId": 7, "atkMod": 0, "defMod": 0, "apMod": 0, "hpMod": 0, "imageKey": "mujigae" }
+]

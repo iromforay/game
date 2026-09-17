@@ -1,0 +1,7 @@
+[
+  { "code": "forest", "name": "숲 (소파 속 먼지숲)", "order": 1, "mapWidth": 3200, "mapHeight": 2400, "imageKey": "forest" },
+  { "code": "lake", "name": "호수 (어항 속)", "order": 2, "mapWidth": 4000, "mapHeight": 3000, "imageKey": "lake" },
+  { "code": "underground", "name": "지하 (마루바닥 밑)", "order": 3, "mapWidth": 4800, "mapHeight": 3600, "imageKey": "underground" },
+  { "code": "ice", "name": "얼음 (냉장고 속)", "order": 4, "mapWidth": 5600, "mapHeight": 4200, "imageKey": "ice" },
+  { "code": "desert", "name": "사막 (보일러/라디에이터 옆)", "order": 5, "mapWidth": 6400, "mapHeight": 4800, "imageKey": "desert" }
+]

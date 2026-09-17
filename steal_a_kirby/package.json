@@ -1,0 +1,20 @@
+{
+  "name": "steal_a_kirby",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "main": "./src/game.ts",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "typescript": "~6.0.2",
+    "vite": "^8.2.2"
+  },
+  "dependencies": {
+    "phaser": "^3.90.0",
+    "socket.io-client": "^4.8.1"
+  }
+}

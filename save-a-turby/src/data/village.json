@@ -1,0 +1,10 @@
+{
+  "width": 1280,
+  "height": 720,
+  "buildings": [
+    { "id": "home", "type": "home", "name": "내 집", "x": 420, "y": 340, "w": 120, "h": 90, "color": "#8a5a2b" },
+    { "id": "market", "type": "market", "name": "장터", "x": 640, "y": 340, "w": 120, "h": 90, "color": "#5a3a8a" },
+    { "id": "exit", "type": "exit", "name": "출구 (야생으로)", "x": 640, "y": 660, "w": 200, "h": 50, "color": "#4a7a3a" }
+  ],
+  "avatarStart": { "x": 640, "y": 500 }
+}

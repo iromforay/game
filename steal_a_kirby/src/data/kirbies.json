@@ -1,0 +1,34 @@
+[
+  { "code": "rick", "name": "릭", "gradeId": 1, "weight": 100, "imageKey": "rick" },
+  { "code": "kine", "name": "카인", "gradeId": 1, "weight": 100, "imageKey": "kine" },
+  { "code": "coo", "name": "쿠우", "gradeId": 1, "weight": 100, "imageKey": "coo" },
+  { "code": "chilly", "name": "칠리", "gradeId": 1, "weight": 100, "imageKey": "chilly" },
+  { "code": "waddle-doo", "name": "웨이들 두", "gradeId": 1, "weight": 100, "imageKey": "waddle-doo" },
+  { "code": "burden", "name": "버든", "gradeId": 1, "weight": 100, "imageKey": "burden" },
+  { "code": "broom-hatter", "name": "브룸 해터", "gradeId": 1, "weight": 100, "imageKey": "broom-hatter" },
+  { "code": "rocky", "name": "록키", "gradeId": 1, "weight": 100, "imageKey": "rocky" },
+  { "code": "poppy-bros-jr", "name": "포피브라더스 Jr.", "gradeId": 1, "weight": 100, "imageKey": "poppy-bros-jr" },
+
+  { "code": "boomerang-knight", "name": "부메랑기사", "gradeId": 2, "weight": 40, "imageKey": "boomerang-knight" },
+  { "code": "biospark", "name": "바이오스파크", "gradeId": 2, "weight": 40, "imageKey": "bio-spark" },
+  { "code": "bonkers", "name": "본커스", "gradeId": 2, "weight": 40, "imageKey": "bonkers" },
+  { "code": "blade-knight", "name": "블레이드 나이트", "gradeId": 2, "weight": 40, "imageKey": "blade-knight" },
+  { "code": "nesper", "name": "네스퍼", "gradeId": 2, "weight": 40, "imageKey": "nesper" },
+  { "code": "fluk", "name": "플러그", "gradeId": 2, "weight": 40, "imageKey": "plugg" },
+  { "code": "dophan", "name": "다로치(아이스)", "gradeId": 2, "weight": 40, "imageKey": "daroach-ice" },
+
+  { "code": "gooey", "name": "구이", "gradeId": 3, "weight": 15, "imageKey": "gooey" },
+  { "code": "mabaroa", "name": "마골 마스크", "gradeId": 3, "weight": 15, "imageKey": "magolor-mask" },
+  { "code": "tangeo", "name": "탱장어", "gradeId": 3, "weight": 15, "imageKey": "tang-eel" },
+
+  { "code": "flamberge", "name": "플랑베르주", "gradeId": 4, "weight": 6, "imageKey": "flamberge" },
+  { "code": "francisca", "name": "프랑시스카", "gradeId": 4, "weight": 6, "imageKey": "francisca" },
+  { "code": "zan-partizanne", "name": "잔 파르티잔느", "gradeId": 4, "weight": 6, "imageKey": "zan-partizanne" },
+
+  { "code": "meta-knight", "name": "메타 나이트", "gradeId": 5, "weight": 2, "imageKey": "meta-knight" },
+  { "code": "bandana-waddle-dee", "name": "반다나 웨이들 디", "gradeId": 5, "weight": 2, "imageKey": "bandana-waddle-dee" },
+  { "code": "king-dedede", "name": "디디디 대왕", "gradeId": 5, "weight": 2, "imageKey": "king-dedede" },
+
+  { "code": "dark-meta-knight", "name": "다크 메타 나이트", "gradeId": 6, "weight": 1, "imageKey": "dark-meta-knight" },
+  { "code": "morpho-knight", "name": "몰포 나이트", "gradeId": 6, "weight": 1, "imageKey": "morpho-knight" }
+]
