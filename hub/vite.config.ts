@@ -24,6 +24,6 @@ export default defineConfig({
     // the cache and changes silently don't show up until node_modules/.vite
     // is deleted by hand. Excluding them keeps them live-transformed and
     // watched, so edits actually hot-reload.
-    exclude: ['tower-defense', 'offense-tower', 'strategy-marbles'],
+    exclude: ['tower-defense', 'offense-tower', 'strategy-marbles', 'save-a-turby'],
   },
 })

@@ -3,9 +3,10 @@ import type { GameId } from './games';
 
 interface DashboardProps {
   onSelectGame: (gameId: GameId) => void;
+  onOpenKirbyGuide: () => void;
 }
 
-export function Dashboard({ onSelectGame }: DashboardProps) {
+export function Dashboard({ onSelectGame, onOpenKirbyGuide }: DashboardProps) {
   return (
     <div className="dashboard">
       <h1>게임 허브</h1>
@@ -34,6 +35,13 @@ export function Dashboard({ onSelectGame }: DashboardProps) {
             </button>
           ))}
         </div>
+      </section>
+
+      <section className="dashboard-section">
+        <h2>개발 중인 게임</h2>
+        <button type="button" className="dashboard-link-button" onClick={onOpenKirbyGuide}>
+          커비 훔치기 도감 보기 (캐릭터·등급·무기 안내)
+        </button>
       </section>
     </div>
   );

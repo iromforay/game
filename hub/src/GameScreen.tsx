@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { mountGame as mountTowerDefense } from 'tower-defense';
 import { mountGame as mountOffenseTower } from 'offense-tower';
 import { mountGame as mountStrategyMarbles } from 'strategy-marbles';
+import { mountGame as mountSaveATurby } from 'save-a-turby';
 import type { NetworkOptions } from 'strategy-marbles';
 import type Phaser from 'phaser';
 import { useMultiplayer } from './multiplayer/MultiplayerContext';
@@ -46,7 +47,9 @@ export function GameScreen({ gameId, roundId, onExit }: GameScreenProps) {
         ? mountOffenseTower(containerRef.current, { roundId })
         : gameId === 'strategy-marbles'
           ? Promise.resolve(mountStrategyMarbles(containerRef.current, { roundId: effectiveRoundId, network }))
-          : Promise.resolve(mountTowerDefense(containerRef.current));
+          : gameId === 'save-a-turby'
+            ? mountSaveATurby(containerRef.current)
+            : Promise.resolve(mountTowerDefense(containerRef.current));
 
     // Real mobile browsers often report a stale/incorrect layout size right
     // at rotation (the URL bar shows/hides and animates, shifting the

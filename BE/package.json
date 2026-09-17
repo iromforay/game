@@ -7,8 +7,12 @@
   },
   "scripts": {
     "dev": "ts-node --transpile-only src/main.ts",
+    "dev:turby": "ts-node --transpile-only src/turby-main.ts",
+    "dev:kirby": "ts-node --transpile-only src/kirby-main.ts",
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/main.js"
+    "start": "node dist/main.js",
+    "start:turby": "node dist/turby-main.js",
+    "start:kirby": "node dist/kirby-main.js"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.15",
@@ -16,6 +20,7 @@
     "@nestjs/platform-express": "^10.4.15",
     "@nestjs/platform-socket.io": "^10.4.15",
     "@nestjs/websockets": "^10.4.15",
+    "@prisma/client": "^6.2.1",
     "@socket.io/redis-adapter": "^8.3.0",
     "dotenv": "^16.4.7",
     "redis": "^4.7.0",
@@ -25,6 +30,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
+    "prisma": "^6.2.1",
     "ts-node": "^10.9.2",
     "typescript": "~5.7.3"
   }

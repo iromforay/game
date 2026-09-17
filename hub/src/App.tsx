@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react';
 import { Dashboard } from './Dashboard';
 import { Lobby } from './Lobby';
 import { GameScreen } from './GameScreen';
+import { KirbyGuide } from './KirbyGuide';
 import { useMultiplayer } from './multiplayer/MultiplayerContext';
 import type { GameId } from './games';
 import './App.css';
 
-type Screen = 'dashboard' | 'lobby' | 'game';
+type Screen = 'dashboard' | 'lobby' | 'game' | 'kirby-guide';
 
 function App() {
   const [screen, setScreen] = useState<Screen>('dashboard');
@@ -28,6 +29,10 @@ function App() {
     if (multiplayer.room) multiplayer.leaveRoom();
     setScreen('dashboard');
   };
+
+  if (screen === 'kirby-guide') {
+    return <KirbyGuide onBack={() => setScreen('dashboard')} />;
+  }
 
   if (screen === 'game' && selectedGame) {
     return <GameScreen gameId={selectedGame} roundId={selectedRound} onExit={handleExitGame} />;
@@ -52,6 +57,7 @@ function App() {
         setSelectedRound(1);
         setScreen('lobby');
       }}
+      onOpenKirbyGuide={() => setScreen('kirby-guide')}
     />
   );
 }
