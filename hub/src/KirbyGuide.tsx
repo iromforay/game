@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { KIRBY_GRADES, KIRBY_CHARACTERS, KIRBY_WEAPONS } from './kirbyGuideData';
 import './KirbyGuide.css';
 
@@ -5,7 +6,19 @@ interface KirbyGuideProps {
   onBack: () => void;
 }
 
+const SCROLL_TOP_THRESHOLD = 400;
+
 export function KirbyGuide({ onBack }: KirbyGuideProps) {
+  const [showScrollTop, setShowScrollTop] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => setShowScrollTop(window.scrollY > SCROLL_TOP_THRESHOLD);
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
+
   return (
     <div className="kirby-guide">
       <header className="kirby-guide-header">
@@ -116,6 +129,12 @@ export function KirbyGuide({ onBack }: KirbyGuideProps) {
       </section>
 
       <footer className="kirby-guide-footer">내부 개발용 도감 페이지 · Steal a Kirby</footer>
+
+      {showScrollTop && (
+        <button type="button" className="kirby-guide-scroll-top" onClick={scrollToTop} aria-label="맨 위로">
+          ↑
+        </button>
+      )}
     </div>
   );
 }

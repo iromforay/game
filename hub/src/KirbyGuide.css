@@ -6,8 +6,8 @@
   --kg-muted: #b3a8d9;
   --kg-accent: #ff6fae;
 
+  position: relative;
   min-height: 100vh;
-  overflow-y: auto;
   font-family: 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
   background: radial-gradient(circle at top, #2a2150 0%, var(--kg-bg) 60%);
   color: var(--kg-text);
@@ -15,6 +15,24 @@
   box-sizing: border-box;
 }
 .kirby-guide * { box-sizing: border-box; }
+
+.kirby-guide-scroll-top {
+  position: fixed;
+  right: 20px;
+  bottom: 24px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: var(--kg-panel-2);
+  color: var(--kg-text);
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+  z-index: 20;
+}
+.kirby-guide-scroll-top:hover { background: var(--kg-accent); color: #1a1530; }
 
 .kirby-guide-header {
   text-align: center;

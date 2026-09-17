@@ -38,7 +38,7 @@ export function Dashboard({ onSelectGame, onOpenKirbyGuide }: DashboardProps) {
       </section>
 
       <section className="dashboard-section">
-        <h2>개발 중인 게임</h2>
+        <h2>도감</h2>
         <button type="button" className="dashboard-link-button" onClick={onOpenKirbyGuide}>
           커비 훔치기 도감 보기 (캐릭터·등급·무기 안내)
         </button>
