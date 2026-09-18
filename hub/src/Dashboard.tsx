@@ -1,5 +1,6 @@
 import { GAMES, CARD_FRAME_URL } from './games';
 import type { GameId } from './games';
+import kirbyGuideIconUrl from './assets/cards/icon-steal-a-kirby.png';
 
 interface DashboardProps {
   onSelectGame: (gameId: GameId) => void;
@@ -9,15 +10,13 @@ interface DashboardProps {
 export function Dashboard({ onSelectGame, onOpenKirbyGuide }: DashboardProps) {
   return (
     <div className="dashboard">
-      <h1>게임 허브</h1>
+      <div className="dashboard-header">
+        <h1>게임 허브</h1>
+        <p className="dashboard-subtitle">플레이할 게임을 선택하세요.</p>
+        <p className="dashboard-status">프로필 관리는 준비 중입니다.</p>
+      </div>
 
-      <section className="dashboard-section">
-        <h2>프로필</h2>
-        <p className="placeholder-note">프로필 관리는 아직 준비 중입니다.</p>
-      </section>
-
-      <section className="dashboard-section">
-        <h2>게임 선택</h2>
+      <section className="dashboard-section dashboard-section-games" aria-label="게임 선택">
         <div className="game-select-list">
           {GAMES.map((game) => (
             <button
@@ -37,10 +36,13 @@ export function Dashboard({ onSelectGame, onOpenKirbyGuide }: DashboardProps) {
         </div>
       </section>
 
-      <section className="dashboard-section">
-        <h2>도감</h2>
-        <button type="button" className="dashboard-link-button" onClick={onOpenKirbyGuide}>
-          커비 훔치기 도감 보기 (캐릭터·등급·무기 안내)
+      <section className="dashboard-section dashboard-section-guide" aria-label="도감">
+        <button type="button" className="dashboard-guide-button" onClick={onOpenKirbyGuide}>
+          <img className="dashboard-guide-icon" src={kirbyGuideIconUrl} alt="" />
+          <span className="dashboard-guide-text">
+            <span className="dashboard-guide-title">커비 훔치기 도감</span>
+            <span className="dashboard-guide-desc">캐릭터·등급·무기 정보 보기</span>
+          </span>
         </button>
       </section>
     </div>

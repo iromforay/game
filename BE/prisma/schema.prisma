@@ -1,0 +1,249 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider     = "mysql"
+  url          = env("DATABASE_URL")
+  relationMode = "prisma"
+}
+
+model battle_result {
+  id                                              BigInt                       @id @default(autoincrement()) @db.UnsignedBigInt
+  player_id                                       BigInt                       @db.UnsignedBigInt
+  encounter_type                                  battle_result_encounter_type
+  opponent_player_id                              BigInt?                      @db.UnsignedBigInt
+  result                                          battle_result_result
+  reward_tare                                     Int                          @default(0) @db.UnsignedInt
+  reward_exp                                      Int                          @default(0) @db.UnsignedInt
+  reward_item_json                                String?                      @db.LongText
+  captured_turby_instance_id                      BigInt?                      @db.UnsignedBigInt
+  created_at                                      DateTime                     @default(now()) @db.Timestamp(0)
+  player_battle_result_player_idToplayer          player                       @relation("battle_result_player_idToplayer", fields: [player_id], references: [id], onUpdate: Restrict, map: "battle_result_ibfk_1")
+  player_battle_result_opponent_player_idToplayer player?                      @relation("battle_result_opponent_player_idToplayer", fields: [opponent_player_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "battle_result_ibfk_2")
+  turby_instance                                  turby_instance?              @relation(fields: [captured_turby_instance_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "battle_result_ibfk_3")
+
+  @@index([captured_turby_instance_id], map: "captured_turby_instance_id")
+  @@index([opponent_player_id], map: "opponent_player_id")
+  @@index([player_id], map: "player_id")
+}
+
+model item_definition {
+  id          Int                      @id @default(autoincrement()) @db.UnsignedInt
+  code        String                   @unique(map: "code") @db.VarChar(30)
+  name        String                   @db.VarChar(50)
+  category    item_definition_category
+  description String?                  @db.Text
+  player_item player_item[]
+}
+
+model market_listing {
+  id                                             BigInt                @id @default(autoincrement()) @db.UnsignedBigInt
+  seller_player_id                               BigInt                @db.UnsignedBigInt
+  turby_instance_id                              BigInt                @unique(map: "turby_instance_id") @db.UnsignedBigInt
+  price_tare                                     Int                   @db.UnsignedInt
+  status                                         market_listing_status @default(active)
+  buyer_player_id                                BigInt?               @db.UnsignedBigInt
+  listed_at                                      DateTime              @default(now()) @db.Timestamp(0)
+  sold_at                                        DateTime?             @db.Timestamp(0)
+  player_market_listing_seller_player_idToplayer player                @relation("market_listing_seller_player_idToplayer", fields: [seller_player_id], references: [id], onUpdate: Restrict, map: "market_listing_ibfk_1")
+  player_market_listing_buyer_player_idToplayer  player?               @relation("market_listing_buyer_player_idToplayer", fields: [buyer_player_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "market_listing_ibfk_2")
+  turby_instance                                 turby_instance        @relation(fields: [turby_instance_id], references: [id], onUpdate: Restrict, map: "market_listing_ibfk_3")
+
+  @@index([buyer_player_id], map: "buyer_player_id")
+  @@index([seller_player_id], map: "seller_player_id")
+}
+
+model player {
+  id                                                     BigInt             @id @default(autoincrement()) @db.UnsignedBigInt
+  device_uuid                                            String             @unique(map: "device_uuid") @db.VarChar(64)
+  nickname                                               String             @db.VarChar(30)
+  tare_balance                                           Int                @default(0) @db.UnsignedInt
+  exp                                                    Int                @default(0) @db.UnsignedInt
+  created_at                                             DateTime           @default(now()) @db.Timestamp(0)
+  updated_at                                             DateTime           @default(now()) @db.Timestamp(0)
+  battle_result_battle_result_player_idToplayer          battle_result[]    @relation("battle_result_player_idToplayer")
+  battle_result_battle_result_opponent_player_idToplayer battle_result[]    @relation("battle_result_opponent_player_idToplayer")
+  market_listing_market_listing_seller_player_idToplayer market_listing[]   @relation("market_listing_seller_player_idToplayer")
+  market_listing_market_listing_buyer_player_idToplayer  market_listing[]   @relation("market_listing_buyer_player_idToplayer")
+  player_base_slot                                       player_base_slot[]
+  player_item                                            player_item[]
+  turby_instance                                         turby_instance[]
+}
+
+model player_base_slot {
+  id             BigInt           @id @default(autoincrement()) @db.UnsignedBigInt
+  player_id      BigInt           @db.UnsignedBigInt
+  slot_index     Int              @db.UnsignedTinyInt
+  player         player           @relation(fields: [player_id], references: [id], onUpdate: Restrict, map: "player_base_slot_ibfk_1")
+  turby_instance turby_instance[]
+
+  @@unique([player_id, slot_index], map: "uq_player_slot")
+}
+
+model player_item {
+  player_id          BigInt          @db.UnsignedBigInt
+  item_definition_id Int             @db.UnsignedInt
+  quantity           Int             @default(0) @db.UnsignedInt
+  player             player          @relation(fields: [player_id], references: [id], onUpdate: Restrict, map: "player_item_ibfk_1")
+  item_definition    item_definition @relation(fields: [item_definition_id], references: [id], onUpdate: Restrict, map: "player_item_ibfk_2")
+
+  @@id([player_id, item_definition_id])
+  @@index([item_definition_id], map: "item_definition_id")
+}
+
+model turby_character {
+  id             Int              @id @default(autoincrement()) @db.UnsignedInt
+  code           String           @unique(map: "code") @db.VarChar(30)
+  name           String           @db.VarChar(50)
+  grade_id       Int              @db.UnsignedTinyInt
+  atk_mod        Int              @default(0)
+  def_mod        Int              @default(0)
+  ap_mod         Int              @default(0)
+  hp_mod         Int              @default(0)
+  is_event       Boolean          @default(false)
+  image_key      String?          @db.VarChar(100)
+  created_at     DateTime         @default(now()) @db.Timestamp(0)
+  turby_grade    turby_grade      @relation(fields: [grade_id], references: [id], onUpdate: Restrict, map: "turby_character_ibfk_1")
+  turby_instance turby_instance[]
+
+  @@index([grade_id], map: "grade_id")
+}
+
+model turby_grade {
+  id                Int               @id @db.UnsignedTinyInt
+  name              String            @db.VarChar(20)
+  base_attack       Int?              @db.UnsignedInt
+  base_defense      Int?              @db.UnsignedInt
+  base_action_power Int?              @db.UnsignedInt
+  base_hp           Int?              @db.UnsignedInt
+  turby_character   turby_character[]
+}
+
+model turby_instance {
+  id               BigInt                      @id @default(autoincrement()) @db.UnsignedBigInt
+  owner_player_id  BigInt                      @db.UnsignedBigInt
+  character_id     Int                         @db.UnsignedInt
+  nickname         String?                     @db.VarChar(30)
+  current_hp       Int?                        @db.UnsignedInt
+  acquired_via     turby_instance_acquired_via
+  is_locked        Boolean                     @default(false)
+  base_slot_id     BigInt?                     @db.UnsignedBigInt
+  created_at       DateTime                    @default(now()) @db.Timestamp(0)
+  atk_bonus        Int                         @default(0)
+  def_bonus        Int                         @default(0)
+  ap_bonus         Int                         @default(0)
+  hp_bonus         Int                         @default(0)
+  battle_result    battle_result[]
+  market_listing   market_listing?
+  player_base_slot player_base_slot?           @relation(fields: [base_slot_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_turby_instance_base_slot")
+  player           player                      @relation(fields: [owner_player_id], references: [id], onUpdate: Restrict, map: "turby_instance_ibfk_1")
+  turby_character  turby_character             @relation(fields: [character_id], references: [id], onUpdate: Restrict, map: "turby_instance_ibfk_2")
+
+  @@index([character_id], map: "character_id")
+  @@index([base_slot_id], map: "fk_turby_instance_base_slot")
+  @@index([owner_player_id], map: "owner_player_id")
+}
+
+enum battle_result_encounter_type {
+  wild
+  raid
+}
+
+enum item_definition_category {
+  defense
+  consumable
+  upgrade
+}
+
+enum battle_result_result {
+  win
+  lose
+}
+
+enum market_listing_status {
+  active
+  sold
+  cancelled
+}
+
+enum turby_instance_acquired_via {
+  shop
+  wild_capture
+  raid_rescue
+  trade
+  starter
+}
+
+// ===== 커비 훔치기(Steal a Kirby) — docs/Steal a Kirby.md 8번 =====
+// 터비 구하기(turby_*)와는 완전히 별개 게임이라 kirby_ 접두어로 테이블 분리(같은 DB/레포는 공유, 7번 확정).
+
+model kirby_grade {
+  id              Int               @id @db.UnsignedTinyInt
+  name            String            @db.VarChar(20)
+  buy_price       Int               @db.UnsignedInt
+  income_per_tick Int               @db.UnsignedInt
+  sell_price      Int               @db.UnsignedInt
+  kirby_character kirby_character[]
+}
+
+model kirby_character {
+  id             Int              @id @default(autoincrement()) @db.UnsignedInt
+  code           String           @unique(map: "kirby_character_code") @db.VarChar(30)
+  name           String           @db.VarChar(50)
+  grade_id       Int              @db.UnsignedTinyInt
+  weight         Int              @db.UnsignedInt
+  image_key      String?          @db.VarChar(100)
+  kirby_grade    kirby_grade      @relation(fields: [grade_id], references: [id], onUpdate: Restrict, map: "kirby_character_ibfk_1")
+  kirby_instance kirby_instance[]
+
+  @@index([grade_id], map: "grade_id")
+}
+
+model kirby_player {
+  id                        BigInt                   @id @default(autoincrement()) @db.UnsignedBigInt
+  device_uuid               String                   @unique(map: "kirby_player_device_uuid") @db.VarChar(64)
+  nickname                  String                   @db.VarChar(30)
+  gold                      Int                      @default(0) @db.UnsignedInt
+  // 4.4 확정: 기지 잠금 상태(열림/잠김/조건부잠김)
+  lock_state                kirby_player_lock_state  @default(open)
+  // 4.4 조건부 잠김의 허용 유저 ID 목록 — 화이트리스트 방향으로 임시 채택(8.2-⑬ 최종 미확정), JSON 배열 문자열로 저장
+  allowed_user_ids_json     String?                  @db.Text
+  // 4.5 확정: 오프라인 기지 운영 여부
+  offline_operation_enabled Boolean                  @default(true)
+  // Codex QA 지적(2026-09-18, to_claude_v2_C.md §3-3) 반영: presence:hello가 임의 playerId를
+  // 인증 없이 등록하던 문제 — identify() 시 발급하는 세션 토큰을 소켓 연결 때 함께 검증한다.
+  session_token             String?                  @db.VarChar(64)
+  created_at                DateTime                 @default(now()) @db.Timestamp(0)
+  updated_at                DateTime                 @default(now()) @db.Timestamp(0)
+  kirby_instance            kirby_instance[]
+
+  @@index([lock_state], map: "lock_state")
+}
+
+model kirby_instance {
+  id              BigInt                @id @default(autoincrement()) @db.UnsignedBigInt
+  owner_player_id BigInt                @db.UnsignedBigInt
+  character_id    Int                   @db.UnsignedInt
+  // 5.1 확정: 도둑맞는 중(stolen_in_transit)인 개체는 원 소유자 기지에서 실시간으로 음영/표시됨(6번)
+  status          kirby_instance_status @default(idle)
+  created_at      DateTime              @default(now()) @db.Timestamp(0)
+  // 초당 발생 재화(2026-09-18 요청) 정산 기준 시각 — collectIncome()이 이 시각부터 경과 시간만큼 적립
+  last_collected_at DateTime            @default(now()) @db.Timestamp(0)
+  kirby_player    kirby_player          @relation(fields: [owner_player_id], references: [id], onUpdate: Restrict, map: "kirby_instance_ibfk_1")
+  kirby_character kirby_character       @relation(fields: [character_id], references: [id], onUpdate: Restrict, map: "kirby_instance_ibfk_2")
+
+  @@index([owner_player_id], map: "owner_player_id")
+  @@index([character_id], map: "character_id")
+}
+
+enum kirby_player_lock_state {
+  open
+  locked
+  conditional
+}
+
+enum kirby_instance_status {
+  idle
+  stolen_in_transit
+}
