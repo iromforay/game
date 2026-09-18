@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { KIRBY_GRADES, KIRBY_CHARACTERS, KIRBY_WEAPONS } from './kirbyGuideData';
+import type { KirbyCharacterInfo } from './kirbyGuideData';
 import './KirbyGuide.css';
 
 interface KirbyGuideProps {
@@ -10,6 +11,7 @@ const SCROLL_TOP_THRESHOLD = 400;
 
 export function KirbyGuide({ onBack }: KirbyGuideProps) {
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [selectedCharacter, setSelectedCharacter] = useState<KirbyCharacterInfo | null>(null);
 
   useEffect(() => {
     const handleScroll = () => setShowScrollTop(window.scrollY > SCROLL_TOP_THRESHOLD);
@@ -17,7 +19,17 @@ export function KirbyGuide({ onBack }: KirbyGuideProps) {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  useEffect(() => {
+    if (!selectedCharacter) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setSelectedCharacter(null);
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [selectedCharacter]);
+
   const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
+  const selectedGrade = selectedCharacter ? KIRBY_GRADES.find((g) => g.id === selectedCharacter.gradeId) : undefined;
 
   return (
     <div className="kirby-guide">
@@ -88,13 +100,18 @@ export function KirbyGuide({ onBack }: KirbyGuideProps) {
               </div>
               <div className="kirby-char-grid">
                 {members.map((c) => (
-                  <div className="kirby-char-card" key={c.code}>
+                  <button
+                    type="button"
+                    className="kirby-char-card"
+                    key={c.code}
+                    onClick={() => setSelectedCharacter(c)}
+                  >
                     <img src={c.image} alt={c.name} loading="lazy" />
                     <div className="kirby-char-name">{c.name}</div>
                     <span className="kirby-char-grade-tag" style={{ background: g.color }}>
                       {g.name}
                     </span>
-                  </div>
+                  </button>
                 ))}
               </div>
             </div>
@@ -134,6 +151,48 @@ export function KirbyGuide({ onBack }: KirbyGuideProps) {
         <button type="button" className="kirby-guide-scroll-top" onClick={scrollToTop} aria-label="맨 위로">
           ↑
         </button>
+      )}
+
+      {selectedCharacter && selectedGrade && (
+        <div className="kirby-char-modal-backdrop" onClick={() => setSelectedCharacter(null)}>
+          <div className="kirby-char-modal" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              className="kirby-char-modal-close"
+              onClick={() => setSelectedCharacter(null)}
+              aria-label="닫기"
+            >
+              ✕
+            </button>
+            <img src={selectedCharacter.imageLarge} alt={selectedCharacter.name} className="kirby-char-modal-image" />
+            <h3>{selectedCharacter.name}</h3>
+            <span className="kirby-grade-chip" style={{ background: selectedGrade.color }}>
+              {selectedGrade.name}
+            </span>
+            <ul className="kirby-weapon-stats">
+              <li>
+                <span>등장 확률</span>
+                <b>{selectedGrade.weightLabel}</b>
+              </li>
+              <li>
+                <span>구매가</span>
+                <b>{selectedGrade.buyPrice.toLocaleString()}</b>
+              </li>
+              <li>
+                <span>초당 수익</span>
+                <b>{selectedGrade.incomePerTick.toLocaleString()}</b>
+              </li>
+              <li>
+                <span>판매가</span>
+                <b>{selectedGrade.sellPrice.toLocaleString()}</b>
+              </li>
+              <li>
+                <span>훔치기 난이도</span>
+                <b>{selectedGrade.difficulty}</b>
+              </li>
+            </ul>
+          </div>
+        </div>
       )}
     </div>
   );

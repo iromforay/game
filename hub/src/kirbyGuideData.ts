@@ -29,6 +29,35 @@ import kingDedede from './assets/kirby-guide/characters/king-dedede.png';
 import darkMetaKnight from './assets/kirby-guide/characters/dark-meta-knight.png';
 import morphoKnight from './assets/kirby-guide/characters/morpho-knight.png';
 
+// 도감 모달 확대 이미지 — steal_a_kirby/src/assets/kirby/512(고해상도)에서 복사
+import rickLarge from './assets/kirby-guide/characters-512/rick.png';
+import kineLarge from './assets/kirby-guide/characters-512/kine.png';
+import cooLarge from './assets/kirby-guide/characters-512/coo.png';
+import chillyLarge from './assets/kirby-guide/characters-512/chilly.png';
+import waddleDooLarge from './assets/kirby-guide/characters-512/waddle-doo.png';
+import burdenLarge from './assets/kirby-guide/characters-512/burden.png';
+import broomHatterLarge from './assets/kirby-guide/characters-512/broom-hatter.png';
+import rockyLarge from './assets/kirby-guide/characters-512/rocky.png';
+import poppyBrosJrLarge from './assets/kirby-guide/characters-512/poppy-bros-jr.png';
+import boomerangKnightLarge from './assets/kirby-guide/characters-512/boomerang-knight.png';
+import bioSparkLarge from './assets/kirby-guide/characters-512/bio-spark.png';
+import bonkersLarge from './assets/kirby-guide/characters-512/bonkers.png';
+import bladeKnightLarge from './assets/kirby-guide/characters-512/blade-knight.png';
+import nesperLarge from './assets/kirby-guide/characters-512/nesper.png';
+import pluggLarge from './assets/kirby-guide/characters-512/plugg.png';
+import daroachIceLarge from './assets/kirby-guide/characters-512/daroach-ice.png';
+import gooeyLarge from './assets/kirby-guide/characters-512/gooey.png';
+import magolorMaskLarge from './assets/kirby-guide/characters-512/magolor-mask.png';
+import tangEelLarge from './assets/kirby-guide/characters-512/tang-eel.png';
+import flambergeLarge from './assets/kirby-guide/characters-512/flamberge.png';
+import franciscaLarge from './assets/kirby-guide/characters-512/francisca.png';
+import zanPartizanneLarge from './assets/kirby-guide/characters-512/zan-partizanne.png';
+import metaKnightLarge from './assets/kirby-guide/characters-512/meta-knight.png';
+import bandanaWaddleDeeLarge from './assets/kirby-guide/characters-512/bandana-waddle-dee.png';
+import kingDededeLarge from './assets/kirby-guide/characters-512/king-dedede.png';
+import darkMetaKnightLarge from './assets/kirby-guide/characters-512/dark-meta-knight.png';
+import morphoKnightLarge from './assets/kirby-guide/characters-512/morpho-knight.png';
+
 import batImg from './assets/kirby-guide/weapons/bat.png';
 import maceImg from './assets/kirby-guide/weapons/mace.png';
 import rayGunImg from './assets/kirby-guide/weapons/ray-gun.png';
@@ -49,6 +78,7 @@ export interface KirbyCharacterInfo {
   name: string;
   gradeId: number;
   image: string;
+  imageLarge: string;
 }
 
 export interface KirbyWeaponInfo {
@@ -69,38 +99,38 @@ export const KIRBY_GRADES: KirbyGradeInfo[] = [
 ];
 
 export const KIRBY_CHARACTERS: KirbyCharacterInfo[] = [
-  { code: 'rick', name: '릭', gradeId: 1, image: rick },
-  { code: 'kine', name: '카인', gradeId: 1, image: kine },
-  { code: 'coo', name: '쿠우', gradeId: 1, image: coo },
-  { code: 'chilly', name: '칠리', gradeId: 1, image: chilly },
-  { code: 'waddle-doo', name: '웨이들 두', gradeId: 1, image: waddleDoo },
-  { code: 'burden', name: '버든', gradeId: 1, image: burden },
-  { code: 'broom-hatter', name: '브룸 해터', gradeId: 1, image: broomHatter },
-  { code: 'rocky', name: '록키', gradeId: 1, image: rocky },
-  { code: 'poppy-bros-jr', name: '포피브라더스 Jr.', gradeId: 1, image: poppyBrosJr },
+  { code: 'rick', name: '릭', gradeId: 1, image: rick, imageLarge: rickLarge },
+  { code: 'kine', name: '카인', gradeId: 1, image: kine, imageLarge: kineLarge },
+  { code: 'coo', name: '쿠우', gradeId: 1, image: coo, imageLarge: cooLarge },
+  { code: 'chilly', name: '칠리', gradeId: 1, image: chilly, imageLarge: chillyLarge },
+  { code: 'waddle-doo', name: '웨이들 두', gradeId: 1, image: waddleDoo, imageLarge: waddleDooLarge },
+  { code: 'burden', name: '버든', gradeId: 1, image: burden, imageLarge: burdenLarge },
+  { code: 'broom-hatter', name: '브룸 해터', gradeId: 1, image: broomHatter, imageLarge: broomHatterLarge },
+  { code: 'rocky', name: '록키', gradeId: 1, image: rocky, imageLarge: rockyLarge },
+  { code: 'poppy-bros-jr', name: '포피브라더스 Jr.', gradeId: 1, image: poppyBrosJr, imageLarge: poppyBrosJrLarge },
 
-  { code: 'boomerang-knight', name: '부메랑기사', gradeId: 2, image: boomerangKnight },
-  { code: 'biospark', name: '바이오스파크', gradeId: 2, image: bioSpark },
-  { code: 'bonkers', name: '본커스', gradeId: 2, image: bonkers },
-  { code: 'blade-knight', name: '블레이드 나이트', gradeId: 2, image: bladeKnight },
-  { code: 'nesper', name: '네스퍼', gradeId: 2, image: nesper },
-  { code: 'fluk', name: '플러그', gradeId: 2, image: plugg },
-  { code: 'dophan', name: '다로치(아이스)', gradeId: 2, image: daroachIce },
+  { code: 'boomerang-knight', name: '부메랑기사', gradeId: 2, image: boomerangKnight, imageLarge: boomerangKnightLarge },
+  { code: 'biospark', name: '바이오스파크', gradeId: 2, image: bioSpark, imageLarge: bioSparkLarge },
+  { code: 'bonkers', name: '본커스', gradeId: 2, image: bonkers, imageLarge: bonkersLarge },
+  { code: 'blade-knight', name: '블레이드 나이트', gradeId: 2, image: bladeKnight, imageLarge: bladeKnightLarge },
+  { code: 'nesper', name: '네스퍼', gradeId: 2, image: nesper, imageLarge: nesperLarge },
+  { code: 'fluk', name: '플러그', gradeId: 2, image: plugg, imageLarge: pluggLarge },
+  { code: 'dophan', name: '다로치(아이스)', gradeId: 2, image: daroachIce, imageLarge: daroachIceLarge },
 
-  { code: 'gooey', name: '구이', gradeId: 3, image: gooey },
-  { code: 'mabaroa', name: '마골 마스크', gradeId: 3, image: magolorMask },
-  { code: 'tangeo', name: '탱장어', gradeId: 3, image: tangEel },
+  { code: 'gooey', name: '구이', gradeId: 3, image: gooey, imageLarge: gooeyLarge },
+  { code: 'mabaroa', name: '마골 마스크', gradeId: 3, image: magolorMask, imageLarge: magolorMaskLarge },
+  { code: 'tangeo', name: '탱장어', gradeId: 3, image: tangEel, imageLarge: tangEelLarge },
 
-  { code: 'flamberge', name: '플랑베르주', gradeId: 4, image: flamberge },
-  { code: 'francisca', name: '프랑시스카', gradeId: 4, image: francisca },
-  { code: 'zan-partizanne', name: '잔 파르티잔느', gradeId: 4, image: zanPartizanne },
+  { code: 'flamberge', name: '플랑베르주', gradeId: 4, image: flamberge, imageLarge: flambergeLarge },
+  { code: 'francisca', name: '프랑시스카', gradeId: 4, image: francisca, imageLarge: franciscaLarge },
+  { code: 'zan-partizanne', name: '잔 파르티잔느', gradeId: 4, image: zanPartizanne, imageLarge: zanPartizanneLarge },
 
-  { code: 'meta-knight', name: '메타 나이트', gradeId: 5, image: metaKnight },
-  { code: 'bandana-waddle-dee', name: '반다나 웨이들 디', gradeId: 5, image: bandanaWaddleDee },
-  { code: 'king-dedede', name: '디디디 대왕', gradeId: 5, image: kingDedede },
+  { code: 'meta-knight', name: '메타 나이트', gradeId: 5, image: metaKnight, imageLarge: metaKnightLarge },
+  { code: 'bandana-waddle-dee', name: '반다나 웨이들 디', gradeId: 5, image: bandanaWaddleDee, imageLarge: bandanaWaddleDeeLarge },
+  { code: 'king-dedede', name: '디디디 대왕', gradeId: 5, image: kingDedede, imageLarge: kingDededeLarge },
 
-  { code: 'dark-meta-knight', name: '다크 메타 나이트', gradeId: 6, image: darkMetaKnight },
-  { code: 'morpho-knight', name: '몰포 나이트', gradeId: 6, image: morphoKnight },
+  { code: 'dark-meta-knight', name: '다크 메타 나이트', gradeId: 6, image: darkMetaKnight, imageLarge: darkMetaKnightLarge },
+  { code: 'morpho-knight', name: '몰포 나이트', gradeId: 6, image: morphoKnight, imageLarge: morphoKnightLarge },
 ];
 
 export const KIRBY_WEAPONS: KirbyWeaponInfo[] = [

@@ -133,9 +133,13 @@
 }
 .kirby-char-card {
   background: var(--kg-panel);
+  border: none;
   border-radius: 14px;
   padding: 12px 8px 14px;
   text-align: center;
+  font-family: inherit;
+  color: inherit;
+  cursor: pointer;
   transition: transform 0.15s ease;
 }
 .kirby-char-card:hover { transform: translateY(-3px); }
@@ -229,3 +233,51 @@
   margin-top: 60px;
   padding: 0 20px;
 }
+
+.kirby-char-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 6, 24, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 30;
+}
+.kirby-char-modal {
+  position: relative;
+  background: var(--kg-panel);
+  border-radius: 20px;
+  padding: 32px 28px 24px;
+  max-width: 320px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+.kirby-char-modal h3 {
+  margin: 4px 0 10px;
+  font-size: 1.3rem;
+}
+.kirby-char-modal-image {
+  width: 220px;
+  height: 220px;
+  object-fit: contain;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 8px 12px rgba(0, 0, 0, 0.45));
+  margin-bottom: 8px;
+}
+.kirby-char-modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: var(--kg-panel-2);
+  color: var(--kg-text);
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.kirby-char-modal-close:hover { background: var(--kg-accent); color: #1a1530; }
+.kirby-char-modal .kirby-weapon-stats { margin-top: 16px; text-align: left; }

@@ -16,7 +16,8 @@
     "tower-defense": "*",
     "offense-tower": "*",
     "strategy-marbles": "*",
-    "save-a-turby": "*"
+    "save-a-turby": "*",
+    "steal_a_kirby": "*"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",

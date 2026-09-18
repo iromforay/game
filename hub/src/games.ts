@@ -3,8 +3,9 @@ import towerDefenseIconUrl from './assets/cards/icon-tower-defense.png';
 import offenseTowerIconUrl from './assets/cards/icon-offense-tower.png';
 import strategyMarblesIconUrl from './assets/cards/icon-strategy-marbles.png';
 import saveATurbyIconUrl from './assets/cards/icon-save-a-turby.png';
+import stealAKirbyIconUrl from './assets/cards/icon-steal-a-kirby.png';
 
-export type GameId = 'tower-defense' | 'offense-tower' | 'strategy-marbles' | 'save-a-turby';
+export type GameId = 'tower-defense' | 'offense-tower' | 'strategy-marbles' | 'save-a-turby' | 'steal-a-kirby';
 
 export interface GameMeta {
   id: GameId;
@@ -20,4 +21,5 @@ export const GAMES: GameMeta[] = [
   { id: 'offense-tower', title: '오펜스 타워', description: 'AI의 방어를 뚫고 돌파하라', iconUrl: offenseTowerIconUrl },
   { id: 'strategy-marbles', title: '전략 알까기', description: '무게를 숨기고 상대를 쳐내라', iconUrl: strategyMarblesIconUrl },
   { id: 'save-a-turby', title: '터비 구하기', description: '엄마의 마지막 한 타래를 찾아 떠나는 모험', iconUrl: saveATurbyIconUrl },
+  { id: 'steal-a-kirby', title: '커비 훔치기', description: '내 기지는 지키고, 남의 기지는 털어라', iconUrl: stealAKirbyIconUrl },
 ];

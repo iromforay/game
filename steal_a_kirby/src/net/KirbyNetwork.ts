@@ -57,6 +57,7 @@ class KirbyNetwork {
   state: PlayerStateDto | null = null;
   connected = false;
   private connectPromise: Promise<void> | null = null;
+  private sessionToken = ''; // Codex QA 지적(2026-09-18) 반영 — presence:hello 등록에 필요
 
   // BE가 아직 안 떠 있어도 실패로 끝나지 않고, 다음 connect() 호출(예: 재시도 버튼)에서 다시 시도할 수 있도록
   // 실패 시 connectPromise를 비워둠 — 계속 캐시된 실패 Promise를 재사용하면 영원히 재연결 불가능해짐.
@@ -71,8 +72,10 @@ class KirbyNetwork {
 
   private async doConnect() {
     const deviceUuid = getOrCreateDeviceUuid();
-    this.state = await api.identify(deviceUuid);
-    this.playerId = this.state.playerId;
+    const identified = await api.identify(deviceUuid);
+    this.state = identified;
+    this.playerId = identified.playerId;
+    this.sessionToken = identified.sessionToken;
     this.emit('stateChanged', this.state);
 
     this.socket = io(URL, { transports: ['websocket'] });
@@ -134,7 +137,7 @@ class KirbyNetwork {
   }
 
   private async afterSocketConnected() {
-    await this.emitAsync('presence:hello', { playerId: this.playerId });
+    await this.emitAsync('presence:hello', { playerId: this.playerId, sessionToken: this.sessionToken });
     await this.emitAsync('base:enter', { viewerPlayerId: this.playerId, targetPlayerId: this.playerId });
   }
 
@@ -173,6 +176,14 @@ class KirbyNetwork {
   async sell(instanceId: string) {
     this.state = await api.sell(this.playerId, instanceId);
     this.emit('stateChanged', this.state);
+  }
+
+  // 초당 발생 재화(2026-09-18 요청) — 캐릭터 터치 시 정산된 골드를 수금
+  async collect(instanceId: string) {
+    const res = await api.collect(this.playerId, instanceId);
+    this.state = res.player;
+    this.emit('stateChanged', this.state);
+    return res.collected;
   }
 
   // ----- 기지 잠금/오프라인 운영(4.4/4.5) -----

@@ -2,15 +2,58 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>커비 훔치기</title>
     <style>
-      html, body { margin: 0; padding: 0; background: #10101a; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
-      #app { line-height: 0; }
+      /* 사용자 지적(2026-09-18, to_claude_v7 P0): 세로 화면에서 캔버스가 뷰포트보다 커서
+         좌우로 잘리고 body가 스크롤되던 문제 — html/body를 뷰포트 크기에 고정하고 overflow를 막음 */
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #10101a;
+      }
+      body { display: flex; align-items: center; justify-content: center; }
+      #app { line-height: 0; max-width: 100vw; max-height: 100vh; }
+      #app canvas { max-width: 100vw; max-height: 100vh; }
+
+      /* 이 게임은 가로(landscape) 전용(1280x720 고정 필드) — 세로로 들고 있으면 플레이 불가능한
+         수준으로 캔버스가 작아지므로, 회전 안내 화면으로 덮어서 입력 자체를 차단함 */
+      #rotate-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        background: #10101a;
+        color: #ffe082;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 24px;
+        font-family: -apple-system, 'Malgun Gothic', sans-serif;
+      }
+      #rotate-overlay .icon { font-size: 48px; margin-bottom: 16px; animation: rotate-hint 1.6s ease-in-out infinite; }
+      #rotate-overlay p { font-size: 16px; margin: 4px 0; }
+      @keyframes rotate-hint {
+        0%, 100% { transform: rotate(0deg); }
+        50% { transform: rotate(-90deg); }
+      }
+      @media (orientation: portrait) {
+        #rotate-overlay { display: flex; }
+        #app { display: none; }
+      }
     </style>
   </head>
   <body>
     <div id="app"></div>
+    <div id="rotate-overlay">
+      <div class="icon">📱</div>
+      <p>이 게임은 가로 화면 전용입니다</p>
+      <p>기기를 가로로 돌려주세요</p>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

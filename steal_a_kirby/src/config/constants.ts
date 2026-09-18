@@ -17,3 +17,19 @@ export const JOYSTICK_THUMB_RADIUS = 26;
 export const BAT_HITS_REQUIRED = 3; // 누적 3회 명중해야 붙잡힘 처리
 export const BAT_STUN_MS = 5000; // 명중 1회당 침입자 기절(행동불능) 시간
 export const BAT_HIT_RADIUS_PX = 48; // 임시값 — 실측/밸런싱 전
+
+// 2026-09-18 확정(docs/Steal a Kirby_asset.md 7.1, image_generation_plan): 이미지 1단계가 오면
+// 배경/건물/캐릭터/전경을 레이어별 이미지로 교체할 예정이라, 지금부터 이 depth 체계로 맞춰둠 —
+// 나중에 텍스처만 바꿔 끼우면 되고 씬 구조를 다시 짤 필요가 없게 하기 위함.
+export const DEPTH = {
+  GROUND: 0,
+  DECOR: 10, // 뒤쪽 나무/장식(1단계: lobby-front-foliage 등)
+  BUILDINGS: 20, // 집/분수/시장무대/벽/계단/문(1단계 S1-L03~L09, S1-B05~B08)
+  DOOR_GLOW: 30, // 문 활성화 표시(2단계 S2-O01, base-exit-glow)
+  ACTOR_BASE: 100, // 실제 플레이어/방문자 — 여기에 y좌표를 더해서 위아래 겹침 순서를 만듦
+  FOREGROUND: 700, // 앞쪽 식물/난간(1단계 S1-L10, S1-B09)
+  WORLD_LABEL: 800, // 이름표/가격표 등 월드에 붙는 라벨
+  HUD: 1000, // 코인/접속인원/명중카운터 등
+  CONTROLS: 1100, // 조이스틱/액션버튼
+  MODAL: 1200, // 메시지/모달
+} as const;
