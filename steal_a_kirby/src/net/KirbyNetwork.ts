@@ -1,7 +1,8 @@
 import { io, type Socket } from 'socket.io-client';
 import { api, getOrCreateDeviceUuid, type PlayerStateDto, type KirbyInstanceDto } from '../api/client';
 
-const URL = 'http://localhost:3003';
+// 사용자 지적(2026-09-18): api/client.ts와 동일한 이유로 .env(VITE_KIRBY_SERVER_URL)에서 읽어옴.
+const URL = import.meta.env.VITE_KIRBY_SERVER_URL ?? 'http://localhost:3003';
 
 export interface InvasionStartedEvent {
   instanceId: string;
@@ -24,6 +25,14 @@ export interface InvasionPositionEvent {
   x: number;
   y: number;
 }
+export interface LobbyPositionEvent {
+  playerId: string;
+  x: number;
+  y: number;
+}
+export interface LobbyLeftEvent {
+  playerId: string;
+}
 
 type Handlers = {
   stateChanged: (state: PlayerStateDto) => void;
@@ -31,6 +40,8 @@ type Handlers = {
   invasionHit: (e: InvasionHitEvent) => void;
   invasionResolved: (e: InvasionResolvedEvent) => void;
   invasionPosition: (e: InvasionPositionEvent) => void;
+  lobbyPosition: (e: LobbyPositionEvent) => void;
+  lobbyLeft: (e: LobbyLeftEvent) => void;
   connectionChanged: (connected: boolean) => void;
 };
 
@@ -50,6 +61,8 @@ class KirbyNetwork {
     invasionHit: new Set(),
     invasionResolved: new Set(),
     invasionPosition: new Set(),
+    lobbyPosition: new Set(),
+    lobbyLeft: new Set(),
     connectionChanged: new Set(),
   };
 
@@ -121,6 +134,8 @@ class KirbyNetwork {
       this.emit('stateChanged', this.state);
     });
     this.socket.on('invasion:position', (p: InvasionPositionEvent) => this.emit('invasionPosition', p));
+    this.socket.on('lobby:position', (p: LobbyPositionEvent) => this.emit('lobbyPosition', p));
+    this.socket.on('lobby:left', (p: LobbyLeftEvent) => this.emit('lobbyLeft', p));
 
     // 최초 연결이 실제로 될 때까지만 기다림(이후 재연결은 위 상시 'connect' 핸들러가 알아서 처리) —
     // socket.io 기본 옵션은 자동 재연결을 시도하므로, 여기서 타임아웃/실패해도 백그라운드에서 계속 재시도함.
@@ -195,6 +210,19 @@ class KirbyNetwork {
   // 화면 재설계 후 "다른 기지 목록" UI에서 바로 쓸 수 있도록 준비해둔 조회(현재는 접속 중인 playerId만)
   listOnlinePlayers() {
     return this.emitAsync<{ ok: boolean; playerIds: string[] }>('base:listOnline', { excludingPlayerId: this.playerId });
+  }
+
+  // ----- 마을(로비) 앰비언트 프레즌스 — 사용자 지적(2026-09-18): 로비에서 다른 접속자 캐릭터가 안 보이던 문제 -----
+  enterLobby() {
+    return this.emitAsync<{ ok: boolean; players?: { playerId: string; x: number; y: number }[] }>('lobby:enter', {});
+  }
+
+  leaveLobby() {
+    return this.emitAsync<{ ok: boolean }>('lobby:leave', {});
+  }
+
+  reportLobbyMove(x: number, y: number) {
+    return this.emitAsync('lobby:move', { x, y });
   }
 
   // ----- 침입(5/6번) -----

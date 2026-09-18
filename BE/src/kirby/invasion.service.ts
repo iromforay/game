@@ -31,6 +31,24 @@ export class InvasionService {
   // instanceId -> 진행 중인 침입 정보
   private activeInvasions = new Map<string, ActiveInvasion>();
 
+  // 마을(로비) 앰비언트 위치 — 사용자 지적(2026-09-18): "마을에서 상대가 안 보인다"는 애초에
+  // 구현이 없던 기능. playerId -> 로비 안에서의 마지막 좌표(로비를 나가면 삭제).
+  private lobbyPositions = new Map<string, { x: number; y: number }>();
+
+  setLobbyPosition(playerId: string, x: number, y: number) {
+    this.lobbyPositions.set(playerId, { x, y });
+  }
+
+  removeLobbyPosition(playerId: string) {
+    this.lobbyPositions.delete(playerId);
+  }
+
+  listLobbyPositions(excludingPlayerId?: string): { playerId: string; x: number; y: number }[] {
+    return [...this.lobbyPositions.entries()]
+      .filter(([playerId]) => playerId !== excludingPlayerId)
+      .map(([playerId, pos]) => ({ playerId, ...pos }));
+  }
+
   registerSocket(playerId: string, socketId: string) {
     this.socketToPlayer.set(socketId, playerId);
     if (!this.onlineSockets.has(playerId)) this.onlineSockets.set(playerId, new Set());

@@ -8,6 +8,10 @@ function baseRoom(targetPlayerId: string) {
   return `kirby-base:${targetPlayerId}`;
 }
 
+// 마을(로비) 앰비언트 프레즌스 — 사용자 지적(2026-09-18) 반영: 로비에 같이 있는 다른 접속자의
+// 캐릭터가 실시간으로 안 보이던 것(기존엔 아예 구현이 없었음)을 위한 전용 room.
+const LOBBY_ROOM = 'kirby-lobby';
+
 @WebSocketGateway({ cors: { origin: '*' } })
 export class InvasionGateway implements OnGatewayDisconnect {
   @WebSocketServer()
@@ -22,6 +26,10 @@ export class InvasionGateway implements OnGatewayDisconnect {
     const result = this.invasions.unregisterSocket(client.id);
     if (!result) return;
     const { playerId } = result;
+
+    // 로비에 있던 상태로 연결이 끊기면 다른 사람 화면에서도 캐릭터가 사라져야 함
+    this.invasions.removeLobbyPosition(playerId);
+    this.server.to(LOBBY_ROOM).emit('lobby:left', { playerId });
 
     // 이 플레이어가 침입자(viewer)로 진행 중이던 침입은 연결 종료로 실패 처리(붙잡을 사람이 사라졌으므로 안전하게 반환)
     for (const invasion of this.invasions.findInvasionsInvolving(playerId)) {
@@ -60,6 +68,40 @@ export class InvasionGateway implements OnGatewayDisconnect {
   @SubscribeMessage('base:listOnline')
   handleListOnline(@MessageBody() body: { excludingPlayerId?: string }) {
     return { ok: true, playerIds: this.invasions.listOnlinePlayerIds(body?.excludingPlayerId) };
+  }
+
+  // 마을(로비) 앰비언트 프레즌스 — 사용자 지적(2026-09-18): 로비에서 다른 접속자의 캐릭터가
+  // 안 보이던 문제. LobbyScene 진입 시 호출 — room에 join하고, 이미 로비에 있던 사람들 좌표를 즉시 돌려줌.
+  @SubscribeMessage('lobby:enter')
+  handleLobbyEnter(@ConnectedSocket() client: Socket) {
+    const actorId = this.requireSocketIdentity(client);
+    if (!actorId) return { ok: false, reason: 'identity-mismatch' };
+    client.join(LOBBY_ROOM);
+    return { ok: true, players: this.invasions.listLobbyPositions(actorId) };
+  }
+
+  // LobbyScene이 다른 씬으로 전환될 때(shutdown) 호출 — 다른 사람 화면에서 캐릭터를 지워줌
+  @SubscribeMessage('lobby:leave')
+  handleLobbyLeave(@ConnectedSocket() client: Socket) {
+    const actorId = this.requireSocketIdentity(client);
+    if (!actorId) return { ok: false, reason: 'identity-mismatch' };
+    this.invasions.removeLobbyPosition(actorId);
+    client.leave(LOBBY_ROOM);
+    client.to(LOBBY_ROOM).emit('lobby:left', { playerId: actorId });
+    return { ok: true };
+  }
+
+  // 로비 이동 브로드캐스트 — 침입 중 위치(invasion:move)와 달리 순수 연출용이라 속도/범위 검증은
+  // 최소한(유한수인지)만 하고, 명중판정처럼 서버 권위가 필요한 값이 아니므로 그대로 중계한다.
+  @SubscribeMessage('lobby:move')
+  handleLobbyMove(@ConnectedSocket() client: Socket, @MessageBody() body: { x: number; y: number }) {
+    const actorId = this.requireSocketIdentity(client);
+    if (!actorId) return { ok: false, reason: 'identity-mismatch' };
+    if (!Number.isFinite(body.x) || !Number.isFinite(body.y)) return { ok: false, reason: 'invalid-position' };
+
+    this.invasions.setLobbyPosition(actorId, body.x, body.y);
+    client.to(LOBBY_ROOM).emit('lobby:position', { playerId: actorId, x: body.x, y: body.y });
+    return { ok: true };
   }
 
   // Codex QA 지적(2026-09-18) 반영: 요청 본문이 자기 자신이라고 주장하는 값이 아니라, 이 소켓이

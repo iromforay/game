@@ -1,4 +1,7 @@
-const BASE_URL = 'http://localhost:3003';
+// 사용자 지적(2026-09-18): "localhost" 하드코딩은 BE와 같은 기기에서만 동작하고, 배포 환경(리버스
+// 프록시 등)에서는 포트 직접 노출이 아예 안 될 수도 있음 — hub의 VITE_MULTIPLAYER_SERVER_URL과
+// 동일한 패턴으로 .env에서 읽어오게 해서, 로컬/배포 환경별로 값만 바꾸면 되게 함.
+const BASE_URL = import.meta.env.VITE_KIRBY_SERVER_URL ?? 'http://localhost:3003';
 
 export interface KirbyInstanceDto {
   instanceId: string;

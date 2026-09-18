@@ -3,6 +3,7 @@ import { CANVAS_WIDTH, CANVAS_HEIGHT, AVATAR_SPEED, JOYSTICK_BASE_RADIUS, JOYSTI
 import { GRADE_COLORS } from '../config/gradeColors';
 import { kirbyGrade, pickWeightedRandomKirby, type KirbyDef } from '../data/kirbyData';
 import { kirbyNetwork } from '../net/KirbyNetwork';
+import type { LobbyLeftEvent, LobbyPositionEvent } from '../net/KirbyNetwork';
 import type { PlayerStateDto } from '../api/client';
 import { allKirbyImageKeys, getKirbyImageUrl, getLobbyAssetUrl, getUiAssetUrl, PLAYER_AVATAR_URL, UI_COIN_URL } from '../assets/registry';
 import { PlayerAvatar, ensurePlayerAvatarAnims, preloadPlayerAvatarAssets } from '../objects/PlayerAvatar';
@@ -42,6 +43,12 @@ const SPOT_POS = [
 ];
 
 const JOYSTICK_CENTER = { x: 115, y: 650 };
+const LOBBY_MOVE_BROADCAST_MS = 150; // 침입 중 위치 브로드캐스트(reportMove)와 동일 주기
+
+interface RemotePlayer {
+  avatar: PlayerAvatar;
+  pos: { x: number; y: number };
+}
 
 // 3단계(HUD·모바일 컨트롤, DELIVERED 2026-09-18) — 미니맵 위젯 배치(우측 하단 온라인 패널 아래)
 const MINIMAP_CENTER = { x: 1210, y: 150 };
@@ -87,6 +94,10 @@ export class LobbyScene extends Phaser.Scene {
   private joyThumb!: Phaser.GameObjects.Image;
   private joyPointerId: number | null = null;
   private joyVector = { x: 0, y: 0 };
+
+  // 마을(로비) 앰비언트 프레즌스 — 사용자 지적(2026-09-18): 로비에서 다른 접속자 캐릭터가 안 보이던 문제
+  private remotePlayers = new Map<string, RemotePlayer>();
+  private lastLobbyBroadcast = 0;
 
   private onStateChanged = (state: PlayerStateDto) => this.refreshFromState(state);
 
@@ -235,9 +246,23 @@ export class LobbyScene extends Phaser.Scene {
 
     kirbyNetwork.on('stateChanged', this.onStateChanged);
     kirbyNetwork.on('invasionStarted', this.onInvasionStarted);
+    kirbyNetwork.on('lobbyPosition', this.onLobbyPosition);
+    kirbyNetwork.on('lobbyLeft', this.onLobbyLeft);
     this.events.once('shutdown', () => {
       kirbyNetwork.off('stateChanged', this.onStateChanged);
       kirbyNetwork.off('invasionStarted', this.onInvasionStarted);
+      kirbyNetwork.off('lobbyPosition', this.onLobbyPosition);
+      kirbyNetwork.off('lobbyLeft', this.onLobbyLeft);
+      void kirbyNetwork.leaveLobby(); // 다른 사람 화면에서 내 캐릭터를 지워줌(BaseScene 등으로 전환 시)
+      for (const remote of this.remotePlayers.values()) remote.avatar.destroy();
+      this.remotePlayers.clear();
+    });
+
+    // 로비 입장 — 이미 로비에 있던 다른 접속자들의 좌표를 즉시 받아서 스폰
+    this.remotePlayers.clear();
+    void kirbyNetwork.enterLobby().then((res) => {
+      if (!res.ok || !res.players) return;
+      for (const p of res.players) this.onLobbyPosition(p);
     });
 
     if (kirbyNetwork.state) this.refreshFromState(kirbyNetwork.state);
@@ -245,7 +270,31 @@ export class LobbyScene extends Phaser.Scene {
     this.time.addEvent({ delay: 4000, loop: true, callback: () => this.refreshOnlinePlayers() });
   }
 
-  update(_time: number, delta: number) {
+  // 다른 접속자의 로비 내 위치 갱신 — 처음 보는 playerId면 아바타를 새로 만들고, 아니면 이동 애니메이션과 함께 위치만 갱신
+  private onLobbyPosition = (p: LobbyPositionEvent) => {
+    let remote = this.remotePlayers.get(p.playerId);
+    if (!remote) {
+      const avatar = new PlayerAvatar(this, p.x, p.y, 76);
+      avatar.setTint(0x7ec8ff); // 다른 플레이어는 청록 틴트로 구분(침입 화면의 침입자 색상과 통일)
+      remote = { avatar, pos: { x: p.x, y: p.y } };
+      this.remotePlayers.set(p.playerId, remote);
+      return;
+    }
+    const dx = p.x - remote.pos.x;
+    const dy = p.y - remote.pos.y;
+    remote.avatar.setPosition(p.x, p.y);
+    remote.avatar.updateMovement(dx, dy);
+    remote.pos = { x: p.x, y: p.y };
+  };
+
+  private onLobbyLeft = (p: LobbyLeftEvent) => {
+    const remote = this.remotePlayers.get(p.playerId);
+    if (!remote) return;
+    remote.avatar.destroy();
+    this.remotePlayers.delete(p.playerId);
+  };
+
+  update(time: number, delta: number) {
     const speed = (AVATAR_SPEED * delta) / 1000;
     let dx = this.joyVector.x;
     let dy = this.joyVector.y;
@@ -277,6 +326,12 @@ export class LobbyScene extends Phaser.Scene {
     }
     const mm = this.worldToMinimap(this.pos.x, this.pos.y);
     this.minimapArrow.setPosition(mm.x, mm.y);
+
+    // 마을 앰비언트 프레즌스 — 침입 중 위치 브로드캐스트(reportMove)와 동일 주기로 내 위치를 알림
+    if (time - this.lastLobbyBroadcast > LOBBY_MOVE_BROADCAST_MS) {
+      this.lastLobbyBroadcast = time;
+      void kirbyNetwork.reportLobbyMove(this.pos.x, this.pos.y);
+    }
 
     for (const slot of this.houseSlots) {
       const door = HOUSE_DOORS[slot.key];
