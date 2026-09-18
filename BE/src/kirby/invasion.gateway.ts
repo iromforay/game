@@ -46,6 +46,12 @@ export class InvasionGateway implements OnGatewayDisconnect {
     const valid = await this.players.verifySessionToken(body.playerId, body.sessionToken);
     if (!valid) return { ok: false, reason: 'invalid-session' };
     this.invasions.registerSocket(body.playerId, client.id);
+    // 버그 수정(2026-09-18, 사용자 지적): 지금까지 "자기 기지 room"에 join하는 곳이 base:enter(=남의
+    // 기지에 들어갈 때)뿐이라, 정작 소유자 본인은 자기 기지 room에 한 번도 들어가지 않는 상태였음.
+    // 그 결과 invasion:started/position/hit/resolved가 전부 baseRoom(ownerPlayerId)로 브로드캐스트
+    // 되는데 소유자 소켓이 그 room 멤버가 아니라서 하나도 못 받고 있었음(침입자 움직임이 전혀 안 보이고,
+    // 명중해도 카운터가 안 올라가는 문제의 원인). 접속하는 순간 항상 자기 기지 room에 상주하도록 수정.
+    await client.join(baseRoom(body.playerId));
     return { ok: true };
   }
 
