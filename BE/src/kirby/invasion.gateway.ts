@@ -25,7 +25,12 @@ export class InvasionGateway implements OnGatewayDisconnect {
   async handleDisconnect(client: Socket) {
     const result = this.invasions.unregisterSocket(client.id);
     if (!result) return;
-    const { playerId } = result;
+    const { playerId, wentOffline } = result;
+    // 코덱스 지적(2026-09-21): 같은 플레이어가 다른 탭/기기로 소켓을 여러 개 열어둔 상태에서 그중
+    // 하나만 닫혀도 이 핸들러가 호출됨 — wentOffline(모든 소켓이 닫혔을 때만 true)을 무시하고 무조건
+    // 오프라인 처리하면, 다른 탭은 계속 켜져 있는데 로비 아바타가 지워지거나 진행 중이던 침입이
+    // "뷰어가 끊겼다"고 오판되어 잘못 실패 처리되는 문제가 있었음.
+    if (!wentOffline) return;
 
     // 로비에 있던 상태로 연결이 끊기면 다른 사람 화면에서도 캐릭터가 사라져야 함
     this.invasions.removeLobbyPosition(playerId);
