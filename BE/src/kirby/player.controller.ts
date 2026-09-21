@@ -26,6 +26,11 @@ export class PlayerController {
     return this.playerService.sell(playerId, instanceId);
   }
 
+  @Post(':playerId/collect-all')
+  collectAll(@Param('playerId') playerId: string) {
+    return this.playerService.collectAllIncome(playerId);
+  }
+
   @Post(':playerId/collect/:instanceId')
   collect(@Param('playerId') playerId: string, @Param('instanceId') instanceId: string) {
     return this.playerService.collectIncome(playerId, instanceId);

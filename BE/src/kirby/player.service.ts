@@ -97,6 +97,38 @@ export class PlayerService {
     return { player: this.toStateDto(updated, await this.getInventory(player.id)), collected };
   }
 
+  // 자동 수익(사용자 지적 2026-09-21: 진열만 해서는 전혀 못 번다) — 내 idle 커비 전부를 한 번에 정산.
+  // 서버가 경과시간×초당수익으로 재계산(24시간 캡). 정산 시각은 지급한 만큼만 앞으로 밀어 소수점 잔여분을 잃지 않음.
+  async collectAllIncome(playerIdStr: string) {
+    const player = await this.requirePlayer(playerIdStr);
+    const instances = await this.prisma.kirby_instance.findMany({
+      where: { owner_player_id: player.id, status: 'idle' },
+      include: { kirby_character: { include: { kirby_grade: true } } },
+    });
+    const nowMs = Date.now();
+    let total = 0;
+    const updates: ReturnType<PrismaService['kirby_instance']['update']>[] = [];
+    for (const inst of instances) {
+      const rate = inst.kirby_character.kirby_grade.income_per_tick;
+      if (rate <= 0) continue;
+      const elapsedSec = Math.min(MAX_COLLECT_SECONDS, Math.max(0, (nowMs - inst.last_collected_at.getTime()) / 1000));
+      const earned = Math.floor(elapsedSec * rate);
+      if (earned <= 0) continue;
+      total += earned;
+      updates.push(
+        this.prisma.kirby_instance.update({
+          where: { id: inst.id },
+          data: { last_collected_at: new Date(inst.last_collected_at.getTime() + (earned / rate) * 1000) },
+        }),
+      );
+    }
+    if (total > 0) {
+      await this.prisma.$transaction([this.prisma.kirby_player.update({ where: { id: player.id }, data: { gold: { increment: total } } }), ...updates]);
+    }
+    const updated = await this.requirePlayerById(player.id);
+    return { player: this.toStateDto(updated, await this.getInventory(player.id)), collected: total };
+  }
+
   // 2.2 확정: 등장 확률은 자연수 weight 기반 — 서버가 직접 가중치 추첨해서 구매 처리(클라이언트가 결과를 정하지 않음)
   async buy(playerIdStr: string) {
     const player = await this.requirePlayer(playerIdStr);

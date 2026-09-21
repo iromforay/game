@@ -51,6 +51,7 @@ export const api = {
   getState: (playerId: string) => getJson<PlayerStateDto>(`/kirby/player/${playerId}`),
   buy: (playerId: string) => postJson<{ player: PlayerStateDto; bought: KirbyInstanceDto }>(`/kirby/player/${playerId}/buy`),
   sell: (playerId: string, instanceId: string) => postJson<PlayerStateDto>(`/kirby/player/${playerId}/sell/${instanceId}`),
+  collectAll: (playerId: string) => postJson<{ player: PlayerStateDto; collected: number }>(`/kirby/player/${playerId}/collect-all`),
   collect: (playerId: string, instanceId: string) =>
     postJson<{ player: PlayerStateDto; collected: number }>(`/kirby/player/${playerId}/collect/${instanceId}`),
   updateSettings: (

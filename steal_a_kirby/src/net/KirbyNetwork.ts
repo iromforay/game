@@ -2,6 +2,7 @@ import { io, type Socket } from 'socket.io-client';
 import { api, getOrCreateDeviceUuid, type PlayerStateDto, type KirbyInstanceDto } from '../api/client';
 
 // 사용자 지적(2026-09-18): api/client.ts와 동일한 이유로 .env(VITE_KIRBY_SERVER_URL)에서 읽어옴.
+const AUTO_INCOME_INTERVAL_MS = 5000;
 const URL = import.meta.env.VITE_KIRBY_SERVER_URL ?? 'http://localhost:3003';
 
 export interface InvasionStartedEvent {
@@ -48,6 +49,7 @@ type Handlers = {
   lobbyLeft: (e: LobbyLeftEvent) => void;
   lobbyEmote: (e: LobbyEmoteEvent) => void;
   connectionChanged: (connected: boolean) => void;
+  incomeCollected: (amount: number) => void;
 };
 
 /**
@@ -70,6 +72,7 @@ class KirbyNetwork {
     lobbyLeft: new Set(),
     lobbyEmote: new Set(),
     connectionChanged: new Set(),
+    incomeCollected: new Set(),
   };
 
   playerId = '';
@@ -144,6 +147,8 @@ class KirbyNetwork {
     this.socket.on('lobby:left', (p: LobbyLeftEvent) => this.emit('lobbyLeft', p));
     this.socket.on('lobby:emote', (p: LobbyEmoteEvent) => this.emit('lobbyEmote', p));
 
+    this.startAutoIncome();
+
     // 최초 연결이 실제로 될 때까지만 기다림(이후 재연결은 위 상시 'connect' 핸들러가 알아서 처리) —
     // socket.io 기본 옵션은 자동 재연결을 시도하므로, 여기서 타임아웃/실패해도 백그라운드에서 계속 재시도함.
     await new Promise<void>((resolve, reject) => {
@@ -198,6 +203,34 @@ class KirbyNetwork {
   async sell(instanceId: string) {
     this.state = await api.sell(this.playerId, instanceId);
     this.emit('stateChanged', this.state);
+  }
+
+  // 자동 수익(사용자 지적 2026-09-21: 진열해도 재화를 전혀 못 번다) — 접속 중이면 일정 주기로 서버가 내 idle 커비 전부를 정산.
+  // 캐릭터 터치 수금은 즉시 수금용으로 그대로 유지. 화면이 안 보이는 동안(백그라운드 탭)은 멈추고, 돌아오면 서버가 경과시간만큼 한꺼번에 정산.
+  private incomeTimer: ReturnType<typeof setInterval> | null = null;
+  private incomeBusy = false;
+
+  private startAutoIncome() {
+    if (this.incomeTimer) return;
+    this.incomeTimer = setInterval(() => void this.autoCollect(), AUTO_INCOME_INTERVAL_MS);
+  }
+
+  private async autoCollect() {
+    if (this.incomeBusy || !this.connected || !this.state || this.state.kirbies.length === 0) return;
+    if (typeof document !== 'undefined' && document.hidden) return;
+    this.incomeBusy = true;
+    try {
+      const res = await api.collectAll(this.playerId);
+      if (res.collected > 0) {
+        this.state = res.player;
+        this.emit('incomeCollected', res.collected);
+        this.emit('stateChanged', this.state);
+      }
+    } catch {
+      /* 다음 주기에 재시도 */
+    } finally {
+      this.incomeBusy = false;
+    }
   }
 
   // 초당 발생 재화(2026-09-18 요청) — 캐릭터 터치 시 정산된 골드를 수금

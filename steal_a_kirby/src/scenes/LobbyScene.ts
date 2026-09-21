@@ -298,9 +298,11 @@ export class LobbyScene extends Phaser.Scene {
     kirbyNetwork.on('lobbyPosition', this.onLobbyPosition);
     kirbyNetwork.on('lobbyLeft', this.onLobbyLeft);
     kirbyNetwork.on('lobbyEmote', this.onLobbyEmote);
+    kirbyNetwork.on('incomeCollected', this.onIncomeCollected);
     this.createEmoteButton();
     this.events.once('shutdown', () => {
       kirbyNetwork.off('lobbyEmote', this.onLobbyEmote);
+      kirbyNetwork.off('incomeCollected', this.onIncomeCollected);
       for (const key of [...this.emotes.keys()]) this.hideEmote(key); // 장면 퇴장 시 타이머·오브젝트 정리
       kirbyNetwork.off('stateChanged', this.onStateChanged);
       kirbyNetwork.off('invasionStarted', this.onInvasionStarted);
@@ -345,6 +347,12 @@ export class LobbyScene extends Phaser.Scene {
     remote.avatar.setPosition(p.x, p.y);
     remote.avatar.updateMovement(dx, dy);
     remote.pos = { x: p.x, y: p.y };
+  };
+
+  // 자동 수익이 들어올 때 골드 HUD 옆에 +N 표시(실제로 골드가 오른 값)
+  private onIncomeCollected = (amount: number) => {
+    const t = this.add.text(270, 42, `+${amount} G`, { fontSize: '18px', color: '#50fa7b', fontStyle: 'bold', stroke: '#000000', strokeThickness: 3 }).setOrigin(0, 0.5).setDepth(DEPTH.HUD + 3);
+    this.tweens.add({ targets: t, y: t.y - 16, alpha: 0, duration: 1400, onComplete: () => t.destroy() });
   };
 
   private onLobbyLeft = (p: LobbyLeftEvent) => {

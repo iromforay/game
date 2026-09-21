@@ -344,10 +344,12 @@ export class BaseScene extends Phaser.Scene {
       kirbyNetwork.on('stateChanged', this.onStateChanged);
       kirbyNetwork.on('invasionStarted', this.onInvasionStartedWhileManaging);
       kirbyNetwork.on('invasionResolved', this.onManageInvasionResolved);
+      kirbyNetwork.on('incomeCollected', this.onIncomeCollected);
       this.events.once('shutdown', () => {
         kirbyNetwork.off('stateChanged', this.onStateChanged);
         kirbyNetwork.off('invasionStarted', this.onInvasionStartedWhileManaging);
         kirbyNetwork.off('invasionResolved', this.onManageInvasionResolved);
+        kirbyNetwork.off('incomeCollected', this.onIncomeCollected);
         this.hideInvasionAlert();
       });
 
@@ -380,6 +382,12 @@ export class BaseScene extends Phaser.Scene {
 
   private onInvasionStartedWhileManaging = (e: InvasionStartedEvent) => {
     this.showInvasionAlert(e.instanceId, e.characterName);
+  };
+
+  // 자동 수익이 들어올 때 골드 HUD 옆에 +N 표시(실제로 골드가 오른 값)
+  private onIncomeCollected = (amount: number) => {
+    const t = this.add.text(270, 42, `+${amount} G`, { fontSize: '18px', color: '#50fa7b', fontStyle: 'bold', stroke: '#000000', strokeThickness: 3 }).setOrigin(0, 0.5).setDepth(DEPTH.HUD + 3);
+    this.tweens.add({ targets: t, y: t.y - 16, alpha: 0, duration: 1400, onComplete: () => t.destroy() });
   };
 
   private onManageInvasionResolved = (p: InvasionResolvedEvent) => {
