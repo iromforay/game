@@ -625,14 +625,15 @@ export class LobbyScene extends Phaser.Scene {
       .setAlpha(0)
       .setDepth(DEPTH.ACTOR_BASE + pos.y);
     // 이미지 3단계(DELIVERED, to_claude_v7 P1) — 이름 최대 2줄(말줄임)+가격은 항상 같은 y(고정 기준선)
-    const tagBg = this.add.image(pos.x, pos.y + 44, 'ui-shop-price-tag').setDisplaySize(96, 31).setAlpha(0).setDepth(DEPTH.WORLD_LABEL - 1);
+    const tagBg = this.add.image(pos.x, pos.y + 40, 'ui-shop-price-tag').setDisplaySize(100, 32).setAlpha(0).setDepth(DEPTH.WORLD_LABEL - 1);
     const nameText = this.add
-      .text(pos.x, pos.y + 27, truncateKirbyName(kirby.name), { fontSize: '11px', color: '#ffffff', align: 'center', wordWrap: { width: 90 } })
+      // 사용자 지적(2026-09-21): 이름이 작고 가격표와 겹쳐 읽기 어려움 — 가격표 아래로 내리고 14px 굵게+검정 외곽선+반투명 배경판(가격은 고정 행 유지, 이름은 최대 2줄)
+      .text(pos.x, pos.y + 62, truncateKirbyName(kirby.name), { fontSize: '16px', color: '#ffffff', fontStyle: 'bold', align: 'center', wordWrap: { width: 122 }, stroke: '#000000', strokeThickness: 3, backgroundColor: '#000000b3', padding: { x: 6, y: 3 } }) // 코덱스 제한: 16px 굵게·어두운 반투명 배경·최대 2줄
       .setOrigin(0.5, 0)
       .setAlpha(0)
       .setDepth(DEPTH.WORLD_LABEL);
     const priceText = this.add
-      .text(pos.x, pos.y + 44, `${grade.buyPrice}G`, { fontSize: '12px', color: '#ffe082', fontStyle: 'bold' })
+      .text(pos.x, pos.y + 40, `${grade.buyPrice}G`, { fontSize: '18px', color: '#ffe082', fontStyle: 'bold', stroke: '#3a1d00', strokeThickness: 3 })
       .setOrigin(0.5)
       .setAlpha(0)
       .setDepth(DEPTH.WORLD_LABEL);
