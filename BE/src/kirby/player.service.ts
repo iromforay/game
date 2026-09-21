@@ -195,7 +195,8 @@ export class PlayerService {
 
   // 실패(붙잡힘/탈출 게이트 막힘) — 원 소유자에게 그대로, 상태만 복구
   async resetStolenStatus(instanceIdStr: string) {
-    await this.prisma.kirby_instance.update({ where: { id: BigInt(instanceIdStr) }, data: { status: 'idle' } });
+    // update()는 대상이 이미 삭제됐으면 예외를 던져 연결 종료 처리 중 프로세스가 죽을 수 있음(2026-09-21 실검증 중 발생) — updateMany는 없으면 0건 처리
+    await this.prisma.kirby_instance.updateMany({ where: { id: BigInt(instanceIdStr) }, data: { status: 'idle' } });
   }
 
   async findInstance(instanceIdStr: string) {

@@ -84,6 +84,9 @@ export class BaseScene extends Phaser.Scene {
   private goldText!: Phaser.GameObjects.Text;
   private lockText!: Phaser.GameObjects.Text;
   private offlineText!: Phaser.GameObjects.Text;
+  // 도난 알림 배너(관리 화면) — 침입이 끝날 때까지 남고, 배너나 도난 슬롯을 누르면 방어 화면 진입
+  private invasionAlert?: Phaser.GameObjects.Text;
+  private alertInstance: { instanceId: string; characterName: string } | null = null;
   private lockIcon!: Phaser.GameObjects.Image; // 이미지 3단계 status-lock (열림 상태일 땐 숨김)
   private offlineIcon!: Phaser.GameObjects.Image; // 이미지 3단계 status-offline (오프라인 운영 ON이면 숨김)
   private messageText!: Phaser.GameObjects.Text;
@@ -340,13 +343,20 @@ export class BaseScene extends Phaser.Scene {
 
       kirbyNetwork.on('stateChanged', this.onStateChanged);
       kirbyNetwork.on('invasionStarted', this.onInvasionStartedWhileManaging);
+      kirbyNetwork.on('invasionResolved', this.onManageInvasionResolved);
       this.events.once('shutdown', () => {
         kirbyNetwork.off('stateChanged', this.onStateChanged);
         kirbyNetwork.off('invasionStarted', this.onInvasionStartedWhileManaging);
+        kirbyNetwork.off('invasionResolved', this.onManageInvasionResolved);
+        this.hideInvasionAlert();
       });
 
       const state = kirbyNetwork.state;
       if (state) this.onStateChanged(state);
+      this.invasionAlert = undefined;
+      this.alertInstance = null;
+      const stolenNow = state?.kirbies.find((k) => k.status === 'stolen_in_transit');
+      if (stolenNow) this.showInvasionAlert(stolenNow.instanceId, stolenNow.name);
     } else {
       this.myKirbies = this.sceneData.kirbies ?? [];
       this.goldText.setText('');
@@ -369,9 +379,46 @@ export class BaseScene extends Phaser.Scene {
   };
 
   private onInvasionStartedWhileManaging = (e: InvasionStartedEvent) => {
-    // 침입 안내는 일반 안내보다 눈에 띄고 오래 남아야 함(사용자 지적 2026-09-18)
-    this.showMessage(`🚨 [${e.characterName}]를 도둑맞는 중! 슬롯을 클릭해 방어하세요`, 3200, '#ff1744', '18px');
+    this.showInvasionAlert(e.instanceId, e.characterName);
   };
+
+  private onManageInvasionResolved = (p: InvasionResolvedEvent) => {
+    if (this.alertInstance?.instanceId === p.instanceId) this.hideInvasionAlert();
+  };
+
+  private showInvasionAlert(instanceId: string, characterName: string) {
+    this.hideInvasionAlert();
+    this.alertInstance = { instanceId, characterName };
+    const alert = this.add
+      .text(CANVAS_WIDTH / 2, 92, `🚨 [${characterName}]를 도둑맞는 중!  터치해서 방어하러 가기`, {
+        fontSize: '18px',
+        color: '#ffffff',
+        fontStyle: 'bold',
+        backgroundColor: '#c62828',
+        padding: { x: 14, y: 8 },
+      })
+      .setOrigin(0.5)
+      .setDepth(DEPTH.MODAL)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.enterDefenseFromAlert());
+    this.tweens.add({ targets: alert, alpha: 0.65, duration: 600, yoyo: true, repeat: -1 });
+    this.invasionAlert = alert;
+  }
+
+  private hideInvasionAlert() {
+    if (this.invasionAlert) {
+      this.tweens.killTweensOf(this.invasionAlert);
+      this.invasionAlert.destroy();
+    }
+    this.invasionAlert = undefined;
+    this.alertInstance = null;
+  }
+
+  private enterDefenseFromAlert() {
+    const target = this.alertInstance;
+    if (!target) return;
+    this.scene.restart({ mode: 'defend', targetPlayerId: this.sceneData.targetPlayerId, instanceId: target.instanceId, characterName: target.characterName });
+  }
 
   private renderSlots() {
     const start = this.floor * SLOTS_PER_FLOOR;
@@ -789,6 +836,9 @@ export class BaseScene extends Phaser.Scene {
 
   // S4-B03 3회 명중 완료 배지 — 마지막 타격 스파크·기절 별과 함께 화면 중앙에 팝업(붙잡힘 = 훔친 커비 원위치)
   private showCaptureFinish(iAmIntruder: boolean) {
+    // 3번째 명중은 서버가 hit가 아니라 resolved(captured)로 보내므로 카운터가 2/3에서 멈추지 않게 여기서 3/3으로 채움
+    this.hitText.setText(`${BAT_HITS_REQUIRED} / ${BAT_HITS_REQUIRED} 명중`);
+    for (const socket of this.hitSockets) socket.setFillStyle(0xff5555, 1);
     const target = iAmIntruder ? this.me : this.opponent;
     this.playHitSpark(target.x, target.y - 10);
     this.showStunStars(iAmIntruder ? 'me' : 'opponent');
@@ -806,6 +856,15 @@ export class BaseScene extends Phaser.Scene {
   private updateChase(delta: number) {
     if (this.resolved) return;
     const stunned = this.sceneData.mode === 'steal' && this.time.now < this.stunnedUntil;
+    // 기절 시각효과(반투명·별·링)를 이동 잠금과 같은 기준(stunnedUntil)으로 끝냄 — 별도 타이머와 최대 1초 어긋나던 문제(2026-09-21 실검증에서 발견)
+    if (this.sceneData.mode === 'steal' && !stunned && this.stunRing) {
+      this.me.setAlpha(1);
+      this.stunRing.destroy();
+      this.stunRing = undefined;
+      this.stunProgress?.destroy();
+      this.stunProgress = undefined;
+      this.hideStunStars();
+    }
     const speed = stunned ? 0 : (AVATAR_SPEED * delta) / 1000;
     let dx = stunned ? 0 : this.joyVector.x * speed;
     let dy = stunned ? 0 : this.joyVector.y * speed;

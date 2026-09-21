@@ -19,9 +19,9 @@ const EXIT_ZONE = { x: 605, y: 635, radius: 90 };
 // Codex QA 지적(2026-09-18, to_claude_v2_C.md §3-1/2) 반영: 침입 시작 시 최초 위치를 클라이언트
 // 자기신고에 맡기지 않고 서버가 직접 스폰 좌표로 고정한다 — 그래야 "첫 이동 보고를 곧장 출입문
 // 좌표로 보내는" 우회를 속도검증(updatePosition)이 처음부터 막을 수 있다.
-// FE(BaseScene.ts createChaseUi)의 시작 좌표 계산과 동일한 값으로 맞춰뒀다.
-const OWNER_SPAWN = { x: 169, y: 409 };
-const VIEWER_SPAWN = { x: 640, y: 198 };
+// FE(BaseScene.ts createChaseUi)의 시작 좌표 계산과 동일해야 한다(MOVE_BOUNDS 변경 시 함께 갱신 — 2026-09-21 재정렬).
+const OWNER_SPAWN = { x: 190, y: 450 }; // FE createChaseUi: (MOVE_BOUNDS.minX+100, 세로 중앙)
+const VIEWER_SPAWN = { x: 640, y: 280 }; // FE createChaseUi: (캔버스 중앙, MOVE_BOUNDS.minY+60)
 
 @Injectable()
 export class InvasionService {

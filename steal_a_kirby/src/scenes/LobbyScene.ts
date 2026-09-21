@@ -3,7 +3,7 @@ import { CANVAS_WIDTH, CANVAS_HEIGHT, AVATAR_SPEED, JOYSTICK_BASE_RADIUS, JOYSTI
 import { GRADE_COLORS } from '../config/gradeColors';
 import { kirbyGrade, pickWeightedRandomKirby, type KirbyDef } from '../data/kirbyData';
 import { kirbyNetwork } from '../net/KirbyNetwork';
-import type { LobbyEmoteEvent, LobbyLeftEvent, LobbyPositionEvent } from '../net/KirbyNetwork';
+import type { InvasionResolvedEvent, InvasionStartedEvent, LobbyEmoteEvent, LobbyLeftEvent, LobbyPositionEvent } from '../net/KirbyNetwork';
 import type { PlayerStateDto } from '../api/client';
 import { allKirbyImageKeys, getCharacterAssetUrl, getKirbyImageUrl, getLobbyAssetUrl, getUiAssetUrl, PLAYER_AVATAR_URL, UI_COIN_URL } from '../assets/registry';
 import { PlayerAvatar, ensurePlayerAvatarAnims, preloadPlayerAvatarAssets } from '../objects/PlayerAvatar';
@@ -113,6 +113,9 @@ export class LobbyScene extends Phaser.Scene {
   // key: 'me' 또는 원격 playerId — 머리 위 이모트 말풍선(bubble+icon)과 종료 타이머
   private emotes = new Map<string, { bubble: Phaser.GameObjects.Image; icon: Phaser.GameObjects.Image; timer: Phaser.Time.TimerEvent }>();
   private emoteReadyAt = 0;
+  // 도난 알림 배너 — 침입이 끝날 때까지 남아 있고, 눌러서 방어 화면으로 진입(사용자 결정 2026-09-21: 슬롯/메시지 클릭 시 방어 화면 진입)
+  private invasionAlert?: Phaser.GameObjects.Text;
+  private alertInstance: { instanceId: string; characterName: string } | null = null;
   private emoteButton!: Phaser.GameObjects.Image;
   private emoteButtonIcon!: Phaser.GameObjects.Image;
 
@@ -291,6 +294,7 @@ export class LobbyScene extends Phaser.Scene {
 
     kirbyNetwork.on('stateChanged', this.onStateChanged);
     kirbyNetwork.on('invasionStarted', this.onInvasionStarted);
+    kirbyNetwork.on('invasionResolved', this.onInvasionResolved);
     kirbyNetwork.on('lobbyPosition', this.onLobbyPosition);
     kirbyNetwork.on('lobbyLeft', this.onLobbyLeft);
     kirbyNetwork.on('lobbyEmote', this.onLobbyEmote);
@@ -300,6 +304,8 @@ export class LobbyScene extends Phaser.Scene {
       for (const key of [...this.emotes.keys()]) this.hideEmote(key); // 장면 퇴장 시 타이머·오브젝트 정리
       kirbyNetwork.off('stateChanged', this.onStateChanged);
       kirbyNetwork.off('invasionStarted', this.onInvasionStarted);
+      kirbyNetwork.off('invasionResolved', this.onInvasionResolved);
+      this.hideInvasionAlert();
       kirbyNetwork.off('lobbyPosition', this.onLobbyPosition);
       kirbyNetwork.off('lobbyLeft', this.onLobbyLeft);
       void kirbyNetwork.leaveLobby(); // 다른 사람 화면에서 내 캐릭터를 지워줌(BaseScene 등으로 전환 시)
@@ -314,7 +320,12 @@ export class LobbyScene extends Phaser.Scene {
       for (const p of res.players) this.onLobbyPosition(p);
     });
 
+    this.invasionAlert = undefined;
+    this.alertInstance = null;
     if (kirbyNetwork.state) this.refreshFromState(kirbyNetwork.state);
+    // 로비에 들어온 시점에 이미 도난 진행 중인 커비가 있으면 바로 알림 표시
+    const stolenNow = kirbyNetwork.state?.kirbies.find((k) => k.status === 'stolen_in_transit');
+    if (stolenNow) this.showInvasionAlert(stolenNow.instanceId, stolenNow.name);
     this.refreshOnlinePlayers();
     this.time.addEvent({ delay: 4000, loop: true, callback: () => this.refreshOnlinePlayers() });
   }
@@ -550,10 +561,48 @@ export class LobbyScene extends Phaser.Scene {
     }
   }
 
-  private onInvasionStarted = () => {
-    // 침입 안내는 일반 안내(showMessage, 1.4초)보다 눈에 띄고 오래 남아야 함 — 별도로 더 크고 길게 표시
-    this.showMessage('🚨 도둑이 들었습니다! 내 기지로 가서 막으세요', 3200, '#ff1744', '20px');
+  private onInvasionStarted = (e: InvasionStartedEvent) => {
+    this.showInvasionAlert(e.instanceId, e.characterName);
   };
+
+  private onInvasionResolved = (p: InvasionResolvedEvent) => {
+    if (this.alertInstance?.instanceId === p.instanceId) this.hideInvasionAlert();
+  };
+
+  // 침입이 끝날 때까지 남는 배너 — 누르면 소유자가 방어 화면(defend)으로 진입. 일반 안내(showMessage)는 몇 초 뒤 사라져서 못 누르는 문제가 있었음.
+  private showInvasionAlert(instanceId: string, characterName: string) {
+    this.hideInvasionAlert();
+    this.alertInstance = { instanceId, characterName };
+    const alert = this.add
+      .text(CANVAS_WIDTH / 2, 178, `🚨 [${characterName}]를 도둑맞는 중!  터치해서 방어하러 가기`, {
+        fontSize: '20px',
+        color: '#ffffff',
+        fontStyle: 'bold',
+        backgroundColor: '#c62828',
+        padding: { x: 16, y: 10 },
+      })
+      .setOrigin(0.5)
+      .setDepth(DEPTH.MODAL)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.enterDefense());
+    this.tweens.add({ targets: alert, alpha: 0.65, duration: 600, yoyo: true, repeat: -1 });
+    this.invasionAlert = alert;
+  }
+
+  private hideInvasionAlert() {
+    if (this.invasionAlert) {
+      this.tweens.killTweensOf(this.invasionAlert);
+      this.invasionAlert.destroy();
+    }
+    this.invasionAlert = undefined;
+    this.alertInstance = null;
+  }
+
+  private enterDefense() {
+    const target = this.alertInstance;
+    if (!target) return;
+    this.scene.start('BaseScene', { mode: 'defend', targetPlayerId: kirbyNetwork.playerId, instanceId: target.instanceId, characterName: target.characterName });
+  }
 
   // 2026-09-18 로직 변경: 좌대 index 하나에 캐릭터 하나를 스폰, 7초 후 사라지고 잠깐 간격을 둔 뒤 재스폰.
   // 사용자 지적(2026-09-18): 등장/퇴장이 즉시 나타났다 사라지면 깜빡이는 것처럼 보여서 페이드인/아웃으로 처리.

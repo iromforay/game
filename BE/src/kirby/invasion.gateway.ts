@@ -40,7 +40,8 @@ export class InvasionGateway implements OnGatewayDisconnect {
     // 이 플레이어가 침입자(viewer)로 진행 중이던 침입은 연결 종료로 실패 처리(붙잡을 사람이 사라졌으므로 안전하게 반환)
     for (const invasion of this.invasions.findInvasionsInvolving(playerId)) {
       if (invasion.viewerPlayerId === playerId) {
-        await this.players.resetStolenStatus(invasion.instanceId);
+        // 후처리 실패가 게이트웨이 전체(프로세스)를 죽이지 않도록 방어 — 침입 정리는 반드시 끝까지 진행
+        await this.players.resetStolenStatus(invasion.instanceId).catch(() => undefined);
         this.invasions.endInvasion(invasion.instanceId);
         this.server.to(baseRoom(invasion.ownerPlayerId)).emit('invasion:resolved', {
           instanceId: invasion.instanceId,
