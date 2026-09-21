@@ -34,6 +34,7 @@ export class InvasionGateway implements OnGatewayDisconnect {
 
     // 로비에 있던 상태로 연결이 끊기면 다른 사람 화면에서도 캐릭터가 사라져야 함
     this.invasions.removeLobbyPosition(playerId);
+    this.invasions.clearEmoteState(playerId);
     this.server.to(LOBBY_ROOM).emit('lobby:left', { playerId });
 
     // 이 플레이어가 침입자(viewer)로 진행 중이던 침입은 연결 종료로 실패 처리(붙잡을 사람이 사라졌으므로 안전하게 반환)
@@ -106,6 +107,20 @@ export class InvasionGateway implements OnGatewayDisconnect {
 
     this.invasions.setLobbyPosition(actorId, body.x, body.y);
     client.to(LOBBY_ROOM).emit('lobby:position', { playerId: actorId, x: body.x, y: body.y });
+    return { ok: true };
+  }
+
+  // 로비 이모트 — 발신자는 소켓 신원으로만 확정(본문 playerId 불신), 로비 room 소속일 때만 허용, 종류는 화이트리스트, 빈도 제한.
+  // 저장·과거 재생 없이 현재 로비에 있는 다른 접속자에게만 1회 전달한다.
+  @SubscribeMessage('lobby:emote')
+  handleLobbyEmote(@ConnectedSocket() client: Socket, @MessageBody() body: { emote?: string }) {
+    const actorId = this.requireSocketIdentity(client);
+    if (!actorId) return { ok: false, reason: 'identity-mismatch' };
+    if (!client.rooms.has(LOBBY_ROOM)) return { ok: false, reason: 'not-in-lobby' };
+    if (body?.emote !== 'happy') return { ok: false, reason: 'invalid-emote' };
+    if (!this.invasions.tryEmote(actorId)) return { ok: false, reason: 'rate-limited' };
+
+    client.to(LOBBY_ROOM).emit('lobby:emote', { playerId: actorId, emote: 'happy' });
     return { ok: true };
   }
 

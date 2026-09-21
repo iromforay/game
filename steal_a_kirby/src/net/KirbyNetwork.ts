@@ -33,6 +33,10 @@ export interface LobbyPositionEvent {
 export interface LobbyLeftEvent {
   playerId: string;
 }
+export interface LobbyEmoteEvent {
+  playerId: string;
+  emote: 'happy';
+}
 
 type Handlers = {
   stateChanged: (state: PlayerStateDto) => void;
@@ -42,6 +46,7 @@ type Handlers = {
   invasionPosition: (e: InvasionPositionEvent) => void;
   lobbyPosition: (e: LobbyPositionEvent) => void;
   lobbyLeft: (e: LobbyLeftEvent) => void;
+  lobbyEmote: (e: LobbyEmoteEvent) => void;
   connectionChanged: (connected: boolean) => void;
 };
 
@@ -63,6 +68,7 @@ class KirbyNetwork {
     invasionPosition: new Set(),
     lobbyPosition: new Set(),
     lobbyLeft: new Set(),
+    lobbyEmote: new Set(),
     connectionChanged: new Set(),
   };
 
@@ -136,6 +142,7 @@ class KirbyNetwork {
     this.socket.on('invasion:position', (p: InvasionPositionEvent) => this.emit('invasionPosition', p));
     this.socket.on('lobby:position', (p: LobbyPositionEvent) => this.emit('lobbyPosition', p));
     this.socket.on('lobby:left', (p: LobbyLeftEvent) => this.emit('lobbyLeft', p));
+    this.socket.on('lobby:emote', (p: LobbyEmoteEvent) => this.emit('lobbyEmote', p));
 
     // 최초 연결이 실제로 될 때까지만 기다림(이후 재연결은 위 상시 'connect' 핸들러가 알아서 처리) —
     // socket.io 기본 옵션은 자동 재연결을 시도하므로, 여기서 타임아웃/실패해도 백그라운드에서 계속 재시도함.
@@ -219,6 +226,11 @@ class KirbyNetwork {
 
   leaveLobby() {
     return this.emitAsync<{ ok: boolean }>('lobby:leave', {});
+  }
+
+  // 로비 이모트(코덱스 to_claude_v3_C) — 종류만 보내고 발신자는 서버가 소켓 신원으로 확정
+  sendLobbyEmote(emote: 'happy') {
+    return this.emitAsync<{ ok: boolean; reason?: string }>('lobby:emote', { emote });
   }
 
   reportLobbyMove(x: number, y: number) {

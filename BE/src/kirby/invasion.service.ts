@@ -8,6 +8,7 @@ const BAT_HIT_RADIUS_PX = 48;
 // Codex QA 지적(2026-09-18) 반영: 좌표 위조/순간이동 방지용 검증 상수.
 // AVATAR_SPEED(FE config/constants.ts, 200px/s)에 네트워크 지연 여유를 곱한 값 — 이보다 빠른 이동은 거부.
 const MAX_SPEED_PX_PER_MS = (200 * 3) / 1000;
+const EMOTE_MIN_INTERVAL_MS = 4500;
 const WORLD_BOUNDS = { minX: 0, minY: 0, maxX: 1280, maxY: 720 };
 
 // Codex QA 지적(2026-09-17, noti_v1_C.md) 반영: exit()이 좌표를 전혀 검증하지 않아 조작된
@@ -41,6 +42,22 @@ export class InvasionService {
 
   removeLobbyPosition(playerId: string) {
     this.lobbyPositions.delete(playerId);
+  }
+
+  // 로비를 나갔다 들어와도 빈도 제한을 우회하지 못하도록 완전 오프라인일 때만 정리
+  clearEmoteState(playerId: string) {
+    this.lastEmoteAt.delete(playerId);
+  }
+
+  // 로비 이모트(코덱스 to_claude_v3_C, 2026-09-21) — 표시 2초+쿨다운 3초=5초 주기, 네트워크 지연 여유 0.5초를 둔 서버측 빈도 제한
+  private lastEmoteAt = new Map<string, number>();
+
+  tryEmote(playerId: string): boolean {
+    const now = Date.now();
+    const last = this.lastEmoteAt.get(playerId) ?? 0;
+    if (now - last < EMOTE_MIN_INTERVAL_MS) return false;
+    this.lastEmoteAt.set(playerId, now);
+    return true;
   }
 
   listLobbyPositions(excludingPlayerId?: string): { playerId: string; x: number; y: number }[] {

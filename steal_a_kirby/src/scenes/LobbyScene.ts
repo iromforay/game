@@ -3,9 +3,9 @@ import { CANVAS_WIDTH, CANVAS_HEIGHT, AVATAR_SPEED, JOYSTICK_BASE_RADIUS, JOYSTI
 import { GRADE_COLORS } from '../config/gradeColors';
 import { kirbyGrade, pickWeightedRandomKirby, type KirbyDef } from '../data/kirbyData';
 import { kirbyNetwork } from '../net/KirbyNetwork';
-import type { LobbyLeftEvent, LobbyPositionEvent } from '../net/KirbyNetwork';
+import type { LobbyEmoteEvent, LobbyLeftEvent, LobbyPositionEvent } from '../net/KirbyNetwork';
 import type { PlayerStateDto } from '../api/client';
-import { allKirbyImageKeys, getKirbyImageUrl, getLobbyAssetUrl, getUiAssetUrl, PLAYER_AVATAR_URL, UI_COIN_URL } from '../assets/registry';
+import { allKirbyImageKeys, getCharacterAssetUrl, getKirbyImageUrl, getLobbyAssetUrl, getUiAssetUrl, PLAYER_AVATAR_URL, UI_COIN_URL } from '../assets/registry';
 import { PlayerAvatar, ensurePlayerAvatarAnims, preloadPlayerAvatarAssets } from '../objects/PlayerAvatar';
 
 const kirbyTextureKey = (imageKey: string) => `kirby-${imageKey}`;
@@ -26,6 +26,8 @@ const HOUSE_DOORS = {
   bottomRight: { x: 1115, y: 430, texture: 'house-orange' },
 } as const;
 const HOUSE_DISPLAY_SIZE = 220;
+const FOUNTAIN_WATER_OFFSET_Y = 20; // 분수대 물 애니메이션 시트 배치 보정(실화면 확인값)
+const FOUNTAIN_WATER_SIZE = 210;
 const DOOR_ENTER_RADIUS = 110;
 
 // 2026-09-18 로직 변경: 카펫이 흐르는 방식 대신, market-stage.png의 좌대 4곳에 각자 스폿(스폰
@@ -43,6 +45,14 @@ const SPOT_POS = [
 ];
 
 const JOYSTICK_CENTER = { x: 115, y: 650 };
+const LAMP_POS = [
+  { x: 527, y: 16 },
+  { x: 753, y: 16 },
+]; // lobby-ground.png 상단 게이트 양쪽 기둥 램프 위치(배경 이미지 기준 눈대중)
+// 로비 이모트(코덱스 to_claude_v3_C, 2026-09-21): 표시 2초 + 종료 후 쿨다운 3초. 버튼은 조이스틱/좌대/기지 문과 안 겹치는 우하단.
+const EMOTE_DURATION_MS = 2000;
+const EMOTE_COOLDOWN_MS = 3000;
+const EMOTE_BUTTON_POS = { x: 1195, y: 650 };
 const LOBBY_MOVE_BROADCAST_MS = 150; // 침입 중 위치 브로드캐스트(reportMove)와 동일 주기
 
 interface RemotePlayer {
@@ -63,6 +73,7 @@ interface SpotKirby {
   kirby: KirbyDef;
   glow: Phaser.GameObjects.Arc;
   tagBg: Phaser.GameObjects.Image;
+  rarity: Phaser.GameObjects.Image;
   sprite: Phaser.GameObjects.Image;
   nameText: Phaser.GameObjects.Text;
   priceText: Phaser.GameObjects.Text;
@@ -74,7 +85,7 @@ interface HouseSlotView {
   key: keyof typeof HOUSE_DOORS;
   zone: Phaser.GameObjects.Zone;
   nameTag: Phaser.GameObjects.Text;
-  doorGlow: Phaser.GameObjects.Image;
+  doorGlow: Phaser.GameObjects.Sprite;
   targetPlayerId: string | null; // null = 내 기지
   wasNear: boolean; // 근접 진입 이벤트를 "들어온 순간"에만 1회 발동시키기 위한 엣지 감지용
 }
@@ -85,6 +96,7 @@ export class LobbyScene extends Phaser.Scene {
   private messageText!: Phaser.GameObjects.Text;
   private avatar!: PlayerAvatar;
   private minimapArrow!: Phaser.GameObjects.Image;
+  private localRing!: Phaser.GameObjects.Image; // S4-U03 로컬 플레이어 식별 링
   private myBaseStatusIcon!: Phaser.GameObjects.Image;
   private spots: (SpotKirby | null)[] = [null, null, null, null];
   private houseSlots: HouseSlotView[] = [];
@@ -98,6 +110,11 @@ export class LobbyScene extends Phaser.Scene {
   // 마을(로비) 앰비언트 프레즌스 — 사용자 지적(2026-09-18): 로비에서 다른 접속자 캐릭터가 안 보이던 문제
   private remotePlayers = new Map<string, RemotePlayer>();
   private lastLobbyBroadcast = 0;
+  // key: 'me' 또는 원격 playerId — 머리 위 이모트 말풍선(bubble+icon)과 종료 타이머
+  private emotes = new Map<string, { bubble: Phaser.GameObjects.Image; icon: Phaser.GameObjects.Image; timer: Phaser.Time.TimerEvent }>();
+  private emoteReadyAt = 0;
+  private emoteButton!: Phaser.GameObjects.Image;
+  private emoteButtonIcon!: Phaser.GameObjects.Image;
 
   private onStateChanged = (state: PlayerStateDto) => this.refreshFromState(state);
 
@@ -118,6 +135,18 @@ export class LobbyScene extends Phaser.Scene {
     this.load.image('market-sign', lobbyAsset('landmarks/market-sign'));
     this.load.image('lobby-front-foliage', lobbyAsset('foreground/lobby-front-foliage'));
     this.load.image('door-glow', lobbyAsset('buildings/base-door-glow'));
+
+    // 이미지 4단계(DELIVERED, to_claude_v1_C 2026-09-21) — 로비 FX
+    this.load.spritesheet('fx-fountain-water', lobbyAsset('landmarks/fountain-water-sheet'), { frameWidth: 256, frameHeight: 256 });
+    this.load.spritesheet('fx-fountain-sparkle', lobbyAsset('fx/fountain-sparkle-sheet'), { frameWidth: 128, frameHeight: 128 });
+    this.load.spritesheet('fx-door-glow', lobbyAsset('fx/door-glow-sheet'), { frameWidth: 96, frameHeight: 96 });
+    this.load.spritesheet('fx-purchase-burst', lobbyAsset('fx/purchase-burst-sheet'), { frameWidth: 128, frameHeight: 128 });
+    this.load.image('fx-lamp-glow', lobbyAsset('fx/lamp-glow'));
+    this.load.image('fx-ground-detail', lobbyAsset('background/ground-detail-overlay'));
+    this.load.image('fx-rarity-common', lobbyAsset('fx/rarity-glow-common'));
+    this.load.image('fx-rarity-rare', lobbyAsset('fx/rarity-glow-rare'));
+    this.load.image('fx-rarity-epic', lobbyAsset('fx/rarity-glow-epic'));
+    this.load.image('fx-local-ring', getCharacterAssetUrl('player/player-local-ring')!);
 
     this.load.image('player-avatar', PLAYER_AVATAR_URL); // 레드카펫 텍스처 로딩 실패 시 폴백용으로만 유지
     preloadPlayerAvatarAssets(this);
@@ -140,8 +169,10 @@ export class LobbyScene extends Phaser.Scene {
     this.load.image('ui-minimap-ground', uiAsset('minimap/minimap-ground'));
     this.load.image('ui-player-arrow', uiAsset('minimap/player-arrow'));
     this.load.image('ui-base-dot', uiAsset('minimap/base-dot'));
-    this.load.image('ui-joystick-base', uiAsset('controls/joystick-base'));
+    this.load.image('ui-joystick-base', uiAsset('controls/joystick-base-v2')); // S4-U04 고대비 조이스틱 v2
     this.load.image('ui-joystick-thumb', uiAsset('controls/joystick-thumb'));
+    this.load.image('ui-emote-bubble', uiAsset('hud/emote-bubble'));
+    this.load.image('ui-emote-happy', uiAsset('hud/emote-happy'));
   }
 
   create() {
@@ -152,7 +183,18 @@ export class LobbyScene extends Phaser.Scene {
     // depth 레이어 체계(2026-09-18): Ground→Buildings→DoorGlow→Actors(100+y)→Foreground→WorldLabel→HUD→Controls→Modal
     this.add.image(0, 0, 'lobby-ground').setOrigin(0, 0).setDisplaySize(CANVAS_WIDTH, CANVAS_HEIGHT).setDepth(DEPTH.GROUND);
 
+    this.createLobbyFxAnims();
+    // S4-L06 지면 디테일(저대비 낙엽·꽃잎) — 지면 바로 위, 건물 아래
+    this.add.image(0, 0, 'fx-ground-detail').setOrigin(0, 0).setDisplaySize(CANVAS_WIDTH, CANVAS_HEIGHT).setDepth(DEPTH.GROUND + 1);
     this.add.image(FOUNTAIN_BLOCK.x, FOUNTAIN_BLOCK.y, 'fountain-base').setDepth(DEPTH.BUILDINGS);
+    // S4-L01 분수 물 애니메이션 + S4-L02 반짝임 (가산 블렌드)
+    this.add.sprite(FOUNTAIN_BLOCK.x, FOUNTAIN_BLOCK.y + FOUNTAIN_WATER_OFFSET_Y, 'fx-fountain-water').setDisplaySize(FOUNTAIN_WATER_SIZE, FOUNTAIN_WATER_SIZE).setDepth(DEPTH.BUILDINGS + 1).play('fx-fountain-water');
+    this.add
+      .sprite(FOUNTAIN_BLOCK.x, FOUNTAIN_BLOCK.y + FOUNTAIN_WATER_OFFSET_Y - 20, 'fx-fountain-sparkle')
+      .setDisplaySize(170, 170)
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setDepth(DEPTH.BUILDINGS + 2)
+      .play('fx-fountain-sparkle');
     this.add.image(CANVAS_WIDTH / 2, 380, 'market-sign').setDepth(DEPTH.BUILDINGS);
     // 사용자 지적(2026-09-18, to_claude_v7 P1): 시장 명패가 항상 비어있었음 — 기본 지역명 표기
     this.add.text(CANVAS_WIDTH / 2, 380, '커비 마을 시장', { fontSize: '16px', color: '#3d2410', fontStyle: 'bold' }).setOrigin(0.5).setDepth(DEPTH.BUILDINGS + 1);
@@ -173,7 +215,8 @@ export class LobbyScene extends Phaser.Scene {
       const isMine = key === 'bottomLeft';
       // 버그성 지적(2026-09-18) 반영: 내 기지는 "어디가 내 것인지" 한눈에 알아보게 근접 여부와
       // 무관하게 항상 은은한 후광 + 왕관 아이콘 + 금색 강조 라벨로 표시(다른 집은 근접 시에만 표시).
-      const doorGlow = this.add.image(door.x, door.y, 'door-glow').setDisplaySize(140, 140).setAlpha(isMine ? 0.4 : 0).setDepth(DEPTH.DOOR_GLOW);
+      const doorGlow = this.add.sprite(door.x, door.y, 'fx-door-glow').setDisplaySize(140, 140).setAlpha(isMine ? 0.4 : 0).setDepth(DEPTH.DOOR_GLOW);
+      doorGlow.play('fx-door-glow'); // S4-L03 문빛 8fps 반복
       if (isMine) {
         doorGlow.setTint(0xffd700);
         this.add
@@ -230,7 +273,9 @@ export class LobbyScene extends Phaser.Scene {
 
     ensurePlayerAvatarAnims(this);
     // 사용자 지적(2026-09-18, to_claude_v7 P1) — 로컬 플레이어 시인성 확보를 위해 약 20% 확대(64→76)
+    this.localRing = this.add.image(this.pos.x, this.pos.y, 'fx-local-ring').setDisplaySize(96, 48).setDepth(DEPTH.ACTOR_BASE);
     this.avatar = new PlayerAvatar(this, this.pos.x, this.pos.y, 76);
+    this.addLampGlows();
 
     // 마켓 가챠(2026-09-18 로직 변경) — market-stage.png 좌대 4곳에 각자 캐릭터가 스폰되어 7초간
     // 전시되다 사라지고 다른 캐릭터로 재스폰. 동시에 다 같이 바뀌지 않도록 초기 스폰을 살짝 어긋나게 시작.
@@ -248,7 +293,11 @@ export class LobbyScene extends Phaser.Scene {
     kirbyNetwork.on('invasionStarted', this.onInvasionStarted);
     kirbyNetwork.on('lobbyPosition', this.onLobbyPosition);
     kirbyNetwork.on('lobbyLeft', this.onLobbyLeft);
+    kirbyNetwork.on('lobbyEmote', this.onLobbyEmote);
+    this.createEmoteButton();
     this.events.once('shutdown', () => {
+      kirbyNetwork.off('lobbyEmote', this.onLobbyEmote);
+      for (const key of [...this.emotes.keys()]) this.hideEmote(key); // 장면 퇴장 시 타이머·오브젝트 정리
       kirbyNetwork.off('stateChanged', this.onStateChanged);
       kirbyNetwork.off('invasionStarted', this.onInvasionStarted);
       kirbyNetwork.off('lobbyPosition', this.onLobbyPosition);
@@ -292,7 +341,72 @@ export class LobbyScene extends Phaser.Scene {
     if (!remote) return;
     remote.avatar.destroy();
     this.remotePlayers.delete(p.playerId);
+    this.hideEmote(p.playerId); // 플레이어 퇴장 시 이모트 정리
   };
+
+  // ----- 로비 이모트 -----
+
+  private createEmoteButton() {
+    this.emoteReadyAt = 0;
+    this.emotes.clear();
+    this.emoteButton = this.add
+      .image(EMOTE_BUTTON_POS.x, EMOTE_BUTTON_POS.y, 'ui-emote-bubble')
+      .setDisplaySize(76, 76)
+      .setInteractive({ useHandCursor: true })
+      .setDepth(DEPTH.CONTROLS)
+      .on('pointerdown', () => this.pressEmote());
+    this.emoteButtonIcon = this.add.image(EMOTE_BUTTON_POS.x, EMOTE_BUTTON_POS.y, 'ui-emote-happy').setDisplaySize(44, 44).setDepth(DEPTH.CONTROLS + 1);
+  }
+
+  // 표시 중 재입력 무시 + 종료 후 3초 쿨다운(=입력 후 5초). 이동·구매·침입 판정과 무관한 순수 연출.
+  private pressEmote() {
+    if (this.time.now < this.emoteReadyAt) return;
+    this.emoteReadyAt = this.time.now + EMOTE_DURATION_MS + EMOTE_COOLDOWN_MS;
+    this.showEmote('me');
+    void kirbyNetwork.sendLobbyEmote('happy');
+    this.emoteButton.setAlpha(0.45);
+    this.emoteButtonIcon.setAlpha(0.45);
+    this.time.delayedCall(EMOTE_DURATION_MS + EMOTE_COOLDOWN_MS, () => {
+      this.emoteButton?.setAlpha(1);
+      this.emoteButtonIcon?.setAlpha(1);
+    });
+  }
+
+  private onLobbyEmote = (p: LobbyEmoteEvent) => {
+    if (!this.remotePlayers.has(p.playerId)) return; // 현재 로비 아바타가 있는 사람만
+    this.showEmote(p.playerId);
+  };
+
+  private showEmote(key: string) {
+    this.hideEmote(key);
+    const bubble = this.add.image(-100, -100, 'ui-emote-bubble').setDisplaySize(64, 64).setDepth(DEPTH.WORLD_LABEL);
+    const icon = this.add.image(-100, -100, 'ui-emote-happy').setDisplaySize(38, 38).setDepth(DEPTH.WORLD_LABEL + 1);
+    const timer = this.time.delayedCall(EMOTE_DURATION_MS, () => this.hideEmote(key));
+    this.emotes.set(key, { bubble, icon, timer });
+    this.updateEmotePositions();
+  }
+
+  private hideEmote(key: string) {
+    const e = this.emotes.get(key);
+    if (!e) return;
+    e.timer.remove();
+    e.bubble.destroy();
+    e.icon.destroy();
+    this.emotes.delete(key);
+  }
+
+  // 현재 아바타 위치 위에 표시(이동 중에도 따라감)
+  private updateEmotePositions() {
+    for (const [key, e] of this.emotes) {
+      const at = key === 'me' ? this.pos : this.remotePlayers.get(key)?.pos;
+      if (!at) {
+        this.hideEmote(key);
+        continue;
+      }
+      e.bubble.setPosition(at.x, at.y - 74);
+      e.icon.setPosition(at.x, at.y - 76);
+    }
+  }
 
   update(time: number, delta: number) {
     const speed = (AVATAR_SPEED * delta) / 1000;
@@ -326,6 +440,8 @@ export class LobbyScene extends Phaser.Scene {
     }
     const mm = this.worldToMinimap(this.pos.x, this.pos.y);
     this.minimapArrow.setPosition(mm.x, mm.y);
+    this.localRing.setPosition(this.pos.x, this.pos.y + 30).setDepth(DEPTH.ACTOR_BASE + this.pos.y - 2);
+    this.updateEmotePositions();
 
     // 마을 앰비언트 프레즌스 — 침입 중 위치 브로드캐스트(reportMove)와 동일 주기로 내 위치를 알림
     if (time - this.lastLobbyBroadcast > LOBBY_MOVE_BROADCAST_MS) {
@@ -449,6 +565,9 @@ export class LobbyScene extends Phaser.Scene {
     const color = GRADE_COLORS[grade.id] ?? 0xffffff;
     // 7.5(에셋 가이드) 확정: 등급색은 사각형 대신 후광 용도로 — 실제 캐릭터는 kirby/128 이미지 사용
     const glow = this.add.circle(pos.x, pos.y, 30, color, 0.35).setStrokeStyle(2, color, 0.9).setAlpha(0).setDepth(DEPTH.ACTOR_BASE + pos.y - 1);
+    // S4-R01~03 등급 후광 — 데이터 등급색(glow 원)을 보조하며 캐릭터 원화를 덮지 않도록 뒤에 깔음(1~2=일반, 3~4=희귀, 5~6=고급)
+    const rarityKey = grade.id <= 2 ? 'fx-rarity-common' : grade.id <= 4 ? 'fx-rarity-rare' : 'fx-rarity-epic';
+    const rarity = this.add.image(pos.x, pos.y, rarityKey).setDisplaySize(96, 96).setAlpha(0).setDepth(DEPTH.ACTOR_BASE + pos.y - 2);
     const textureKey = kirby.imageKey ? kirbyTextureKey(kirby.imageKey) : null;
     const sprite = this.add
       .image(pos.x, pos.y, textureKey && this.textures.exists(textureKey) ? textureKey : 'player-avatar')
@@ -468,9 +587,9 @@ export class LobbyScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setAlpha(0)
       .setDepth(DEPTH.WORLD_LABEL);
-    this.tweens.add({ targets: [glow, sprite, tagBg, nameText, priceText], alpha: 1, duration: SPOT_FADE_MS });
+    this.tweens.add({ targets: [glow, rarity, sprite, tagBg, nameText, priceText], alpha: 1, duration: SPOT_FADE_MS });
     const timer = this.time.delayedCall(SPOT_LIFETIME_MS, () => this.despawnSpot(index));
-    const item: SpotKirby = { kirby, glow, tagBg, sprite, nameText, priceText, timer };
+    const item: SpotKirby = { kirby, glow, tagBg, rarity, sprite, nameText, priceText, timer };
     this.spots[index] = item;
     sprite.on('pointerdown', () => void this.tryBuy(index));
   }
@@ -481,11 +600,12 @@ export class LobbyScene extends Phaser.Scene {
     item.timer.remove();
     this.spots[index] = null; // 즉시 점유 해제 — 페이드 아웃 중 중복 despawn/구매 방지
     this.tweens.add({
-      targets: [item.glow, item.sprite, item.tagBg, item.nameText, item.priceText],
+      targets: [item.glow, item.rarity, item.sprite, item.tagBg, item.nameText, item.priceText],
       alpha: 0,
       duration: SPOT_FADE_MS,
       onComplete: () => {
         item.glow.destroy();
+        item.rarity.destroy();
         item.sprite.destroy();
         item.tagBg.destroy();
         item.nameText.destroy();
@@ -501,10 +621,38 @@ export class LobbyScene extends Phaser.Scene {
     item.purchasing = true;
     try {
       await kirbyNetwork.buy();
+      this.playPurchaseBurst(SPOT_POS[index].x, SPOT_POS[index].y); // S4-L04 구매 성공 버스트(응답 성공 후에만 — 실패 시 상품 유지)
       this.despawnSpot(index); // 구매 성공 시 즉시 사라지고 새 캐릭터로 교체
     } catch {
       this.showMessage('돈이 부족합니다');
       item.purchasing = false;
+    }
+  }
+
+  // ----- 이미지 4단계 로비 FX (to_claude_v1_C, 2026-09-21) -----
+
+  private createLobbyFxAnims() {
+    const make = (key: string, tex: string, frameRate: number, repeat: number) => {
+      if (this.anims.exists(key)) return;
+      this.anims.create({ key, frames: this.anims.generateFrameNumbers(tex, { start: 0, end: key === 'fx-purchase-burst' ? 5 : 3 }), frameRate, repeat });
+    };
+    make('fx-fountain-water', 'fx-fountain-water', 6, -1);
+    make('fx-fountain-sparkle', 'fx-fountain-sparkle', 8, -1);
+    make('fx-door-glow', 'fx-door-glow', 8, -1);
+    make('fx-purchase-burst', 'fx-purchase-burst', 12, 0); // 구매 12fps 1회
+  }
+
+  private playPurchaseBurst(x: number, y: number) {
+    const burst = this.add.sprite(x, y - 10, 'fx-purchase-burst').setDisplaySize(140, 140).setBlendMode(Phaser.BlendModes.ADD).setDepth(DEPTH.WORLD_LABEL);
+    burst.play('fx-purchase-burst');
+    burst.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => burst.destroy());
+  }
+
+  // S4-L05 램프 글로우 — 가산 블렌드, 느린 알파 펄스. 위치는 lobby-ground의 가로등/램프 위치(실화면 확인값)
+  private addLampGlows() {
+    for (const lamp of LAMP_POS) {
+      const glow = this.add.image(lamp.x, lamp.y, 'fx-lamp-glow').setDisplaySize(96, 96).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.7).setDepth(DEPTH.WORLD_LABEL - 1);
+      this.tweens.add({ targets: glow, alpha: 0.35, duration: 1400 + lamp.x, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
     }
   }
 

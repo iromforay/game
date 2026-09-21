@@ -13,9 +13,10 @@ import { kirbyGrade, type KirbyDef } from '../data/kirbyData';
 import { kirbyNetwork } from '../net/KirbyNetwork';
 import type { KirbyInstanceDto, PlayerStateDto } from '../api/client';
 import type { InvasionHitEvent, InvasionPositionEvent, InvasionResolvedEvent, InvasionStartedEvent } from '../net/KirbyNetwork';
-import { getBaseAssetUrl, getKirbyImageUrl, getUiAssetUrl, PLAYER_AVATAR_URL, WEAPON_BAT_URL } from '../assets/registry';
+import { getBaseAssetUrl, getCharacterAssetUrl, getKirbyImageUrl, getUiAssetUrl, PLAYER_AVATAR_URL, WEAPON_BAT_URL } from '../assets/registry';
 import { PlayerAvatar, ensurePlayerAvatarAnims, preloadPlayerAvatarAssets } from '../objects/PlayerAvatar';
 import kirbiesData from '../data/kirbies.json';
+import { FLOOR_STAIRS, STAIR_INPUT_LOCK_MS, STAIR_MARKER_OFFSET_Y, STAIR_MARKER_RADIUS, STAIR_PIVOT_Y, STAIR_TRIGGER_RADIUS, type StairDef } from '../config/stairs';
 
 const kirbyTextureKey = (imageKey: string) => `kirby-${imageKey}`;
 const IMAGE_KEY_BY_CODE: Record<string, string | null> = Object.fromEntries(
@@ -25,27 +26,23 @@ const IMAGE_KEY_BY_CODE: Record<string, string | null> = Object.fromEntries(
 // 2026-09-18: 이미지 1단계(DELIVERED) 반영 — base-ground-floor-1.png에 이미 그려진 4자리 슬롯
 // 윤곽선 좌표를 그대로 사용(전부 네이티브 1280x720 기준이라 px()/py() 변환 불필요).
 const SLOTS_PER_FLOOR = 4;
-const TOTAL_FLOORS = 3; // 2026-09-17 확정(docs/to_codex.md 7절): 층당 4개 × 3층 = 총 12개
 const SLOT_POS = [
   { x: 261, y: 238 },
   { x: 261, y: 431 },
   { x: 1023, y: 238 },
   { x: 1023, y: 431 },
 ];
-const STAIRS_POS = { x: 1150, y: 150 };
+const FLOOR_INFO_POS = { x: 1150, y: 210 }; // 층 정보(N층·보유수) 명판 — 계단 재설계로 우측 상단 계단이 없어져 고정 위치로 분리
 // 잠금/오프라인 라벨이 2줄로 늘어나면서(2026-09-18) 계단 아이콘(x:1150 기준 220px 폭)과 겹쳐서
 // x를 왼쪽으로 옮김 — 계단 이미지 바운딩박스(x:1040~1260, y:60~240) 밖에 위치하도록 조정.
-const LOCK_PLAQUE_POS = { x: 940, y: 45 };
-const HAND_ICON_POS = { x: 940, y: 100 };
+const LOCK_PLAQUE_POS = { x: 1080, y: 45 }; // 계단 재설계(우측 A계단 x:710~930)와 안 겹치게 더 오른쪽으로
+const HAND_ICON_POS = { x: 1080, y: 100 };
 // 서버(BE/src/kirby/invasion.service.ts의 EXIT_ZONE)와 반드시 동일한 1280x720 월드 좌표를 써야
 // exit() 호출이 서버의 좌표 재검증(QA 지적, 2026-09-17)을 통과함.
 const EXIT_DOOR = { x: 605, y: 635, radius: 90 };
 // base-collision-mask.png(S1-B04) 기준 방 전체 경계 눈대중값 — 가구 개별 충돌은 아직 없음.
 const MOVE_BOUNDS = { minX: 90, maxX: 1180, minY: 220, maxY: 680 };
 const JOYSTICK_CENTER = { x: 110, y: CANVAS_HEIGHT - 110 };
-// 버그성 지적(2026-09-18): 층 이동은 클릭이 아니라 캐릭터와 계단/숨겨진 통로 아이콘이 "만날 때" 발동
-const STAIRS_ENTER_RADIUS = 90;
-const FLOOR_CHANGE_COOLDOWN_MS = 1200; // 계단 위에 서 있는 동안 계속 재발동되지 않도록
 // 초당 발생 재화(2026-09-18 요청) — 표시 주기. 실제 정산은 collect() 호출 시 서버가 재계산.
 // QA 지적(to_claude_v7 P2): 매초 4칸이 동시에 뜨면 너무 산만함 — 2.5초 간격으로 완화.
 const INCOME_TICK_MS = 2500;
@@ -67,15 +64,18 @@ export class BaseScene extends Phaser.Scene {
     icon: Phaser.GameObjects.Image;
     overlay: Phaser.GameObjects.Image;
     label: Phaser.GameObjects.Text;
+    pulse: Phaser.GameObjects.Sprite;
+    statusIcon: Phaser.GameObjects.Image; // 기지 전체 상태(잠금/오프라인)·도난을 점유 슬롯 모서리에 표시(코덱스 to_claude_v3)
   }[] = [];
   private floorOverlay?: Phaser.GameObjects.Image;
-  private floorTransitionIcon?: Phaser.GameObjects.Image;
+  // 계단 재설계(to_claude_v2_C) — 모든 층의 계단을 만들어두고 현재 층 것만 표시. 계단별 inside 상태로 엣지 진입 판정
+  private stairViews: { def: StairDef; floor: number; img: Phaser.GameObjects.Image; marker: Phaser.GameObjects.Image; label: Phaser.GameObjects.Text; inside: boolean }[] = [];
   private exitGlow!: Phaser.GameObjects.Image;
   // 기지 열람(관리/선택) 모드용 아바타 — 버그성 지적(2026-09-18): 클릭 대신 캐릭터가 실제로 걸어다니며
   // 계단/숨겨진 통로와 "만나면" 층 이동, 집 캐릭터를 터치하면 수금(재화 획득) 하도록 필요해짐.
   private browseAvatar?: PlayerAvatar;
   private browsePos = { x: 0, y: 0 };
-  private floorChangeCooldownUntil = 0;
+  private stairLockUntil = 0;
   private leavingToLobby = false; // 출입문 근접 시 로비 이탈을 1회만 트리거하기 위한 가드
   private wasNearExit = false; // 캐릭터 스폰 위치가 이미 출입문 반경 안이라 즉시 트리거되는 걸 막는 엣지 감지
   private floorText!: Phaser.GameObjects.Text;
@@ -107,6 +107,10 @@ export class BaseScene extends Phaser.Scene {
   private stunnedUntil = 0; // steal 모드 로컬 전용 — 명중당 5초 이동입력 차단(코덱스 확정)
   // 이미지 3단계(DELIVERED) stun-timer-ring — 기절 중 남은 시간을 링 진행량으로 표시
   private stunRing?: Phaser.GameObjects.Image;
+  // 이미지 4단계(DELIVERED) 전투 FX — stun-stars: 기절 대상 머리 위 반복 재생(침입자 본인/방어자 화면의 상대 모두)
+  private stunStars?: Phaser.GameObjects.Sprite;
+  private stunStarsTarget: 'me' | 'opponent' = 'me';
+  private localRing?: Phaser.GameObjects.Image; // S4-U03 로컬 플레이어 식별 링(침입 화면에서는 기존 흰 원 링을 대체)
   private stunProgress?: Phaser.GameObjects.Graphics;
 
   // 가상 조이스틱(멀티터치) — 공격 버튼과 서로 다른 포인터 ID로 분리해서 동시 입력 가능(코덱스 확정)
@@ -125,8 +129,8 @@ export class BaseScene extends Phaser.Scene {
     this.load.image('base-floor-2-overlay', baseAsset('background/base-floor-2-overlay'));
     this.load.image('base-floor-3-overlay', baseAsset('background/base-floor-3-overlay'));
     this.load.image('base-back-wall', baseAsset('structures/base-back-wall'));
-    this.load.image('base-stairs', baseAsset('structures/base-stairs'));
-    this.load.image('base-hidden-passage', baseAsset('structures/base-hidden-passage'));
+    this.load.image('base-stairs-up', baseAsset('structures/base-stairs-up'));
+    this.load.image('base-stairs-down', baseAsset('structures/base-stairs-down'));
     this.load.image('base-exit-door', baseAsset('structures/base-exit-door'));
     this.load.image('base-exit-glow', baseAsset('structures/base-exit-glow'));
     this.load.image('base-front-wall', baseAsset('foreground/base-front-wall'));
@@ -152,11 +156,24 @@ export class BaseScene extends Phaser.Scene {
     this.load.image('ui-role-intruder-icon', uiAsset('hud/role-intruder-icon'));
     this.load.image('ui-status-lock', uiAsset('hud/status-lock'));
     this.load.image('ui-status-offline', uiAsset('hud/status-offline'));
-    if (!this.textures.exists('ui-joystick-base')) this.load.image('ui-joystick-base', uiAsset('controls/joystick-base'));
+    this.load.image('ui-status-stealing', uiAsset('hud/status-stealing'));
+    if (!this.textures.exists('ui-joystick-base')) this.load.image('ui-joystick-base', uiAsset('controls/joystick-base-v2')); // S4-U04 고대비 조이스틱 v2
     if (!this.textures.exists('ui-joystick-thumb')) this.load.image('ui-joystick-thumb', uiAsset('controls/joystick-thumb'));
     this.load.image('ui-action-button', uiAsset('controls/action-button'));
     this.load.image('ui-action-hand-icon', uiAsset('controls/action-hand-icon'));
     this.load.image('ui-attack-button', uiAsset('controls/attack-button'));
+    this.load.image('ui-stair-up-marker', uiAsset('hud/stair-up-marker'));
+    this.load.image('ui-stair-down-marker', uiAsset('hud/stair-down-marker'));
+
+    // 이미지 4단계(DELIVERED, to_claude_v1_C 2026-09-21) — 전투 FX
+    const fxAsset = (key: string) => getBaseAssetUrl(key)!;
+    this.load.spritesheet('fx-hit-spark', fxAsset('fx/hit-spark-sheet'), { frameWidth: 128, frameHeight: 128 });
+    this.load.spritesheet('fx-stun-stars', fxAsset('fx/stun-stars-sheet'), { frameWidth: 128, frameHeight: 128 });
+    this.load.spritesheet('fx-stealing-pulse', fxAsset('fx/stealing-pulse-sheet'), { frameWidth: 128, frameHeight: 128 });
+    this.load.spritesheet('fx-exit-arrow', fxAsset('fx/exit-arrow-sheet'), { frameWidth: 96, frameHeight: 96 });
+    this.load.image('fx-capture-badge', fxAsset('fx/capture-badge'));
+    this.load.spritesheet('fx-collect-burst', fxAsset('fx/collect-burst-sheet'), { frameWidth: 128, frameHeight: 128 });
+    this.load.image('fx-local-ring', getCharacterAssetUrl('player/player-local-ring')!);
     for (const imageKey of Object.values(IMAGE_KEY_BY_CODE)) {
       if (!imageKey) continue;
       const key = kirbyTextureKey(imageKey);
@@ -175,6 +192,10 @@ export class BaseScene extends Phaser.Scene {
 
   create() {
     this.slotViews = [];
+    this.stunStars = undefined;
+    this.localRing = undefined;
+    this.createFxAnims();
+    this.createStairs();
     // 이미지 1단계(DELIVERED, 2026-09-18) — 층 공통 골격(base-ground-floor-1) 위에 층별 오버레이를
     // 얹는 방식. 벽/문/출입구 구조물을 depth 레이어에 맞춰 배치.
     this.add.image(0, 0, 'base-ground-floor-1').setOrigin(0, 0).setDisplaySize(CANVAS_WIDTH, CANVAS_HEIGHT).setDepth(DEPTH.GROUND);
@@ -229,22 +250,14 @@ export class BaseScene extends Phaser.Scene {
   private createBrowseUi() {
     const isMine = this.sceneData.mode === 'manage';
     // 이미지 3단계(DELIVERED) — base-nameplate로 배경 교체
-    this.add.image(STAIRS_POS.x, STAIRS_POS.y + 60, 'ui-base-nameplate').setDisplaySize(150, 44).setDepth(DEPTH.HUD - 1);
-    this.floorText = this.add.text(STAIRS_POS.x, STAIRS_POS.y + 60, '1층', { fontSize: '13px', color: '#3d2410' }).setOrigin(0.5).setDepth(DEPTH.HUD);
+    this.add.image(FLOOR_INFO_POS.x, FLOOR_INFO_POS.y, 'ui-base-nameplate').setDisplaySize(150, 44).setDepth(DEPTH.HUD - 1);
+    this.floorText = this.add.text(FLOOR_INFO_POS.x, FLOOR_INFO_POS.y, '1층', { fontSize: '13px', color: '#3d2410' }).setOrigin(0.5).setDepth(DEPTH.HUD);
     // 이미지 3단계 interaction-prompt — 새로 생긴 근접 이동 방식 온보딩 힌트(사용자 지적 2026-09-18: 로비 나가는 법이 안 보임 등)
     this.add.image(CANVAS_WIDTH / 2, CANVAS_HEIGHT - 34, 'ui-interaction-prompt').setDisplaySize(360, 44).setDepth(DEPTH.CONTROLS - 1);
     this.add
-      .text(CANVAS_WIDTH / 2, CANVAS_HEIGHT - 34, '계단·출입문에 닿으면 자동 이동', { fontSize: '13px', color: '#3d2410' })
+      .text(CANVAS_WIDTH / 2, CANVAS_HEIGHT - 34, '계단·출입문에 닿으면 이동', { fontSize: '13px', color: '#3d2410' })
       .setOrigin(0.5)
       .setDepth(DEPTH.CONTROLS);
-    // 코덱스 확정(2026-09-17): 페이지네이션 없이 층 전환 시 슬롯 데이터만 교체 — 1→2층은 계단
-    // (base-stairs.png), 2→3층은 숨겨진 통로(base-hidden-passage.png) 아이콘으로 구분, 3층까지 순환(1→2→3→1)
-    // 버그성 지적(2026-09-18): 클릭도 보조 입력으로 유지하되, 실제 트리거는 캐릭터가 근접했을 때(updateBrowse)
-    this.floorTransitionIcon = this.add
-      .image(STAIRS_POS.x, STAIRS_POS.y, 'base-stairs')
-      .setInteractive({ useHandCursor: true })
-      .setDepth(DEPTH.BUILDINGS + 1)
-      .on('pointerdown', () => this.changeFloor());
 
     // 이미지 2단계(DELIVERED) — base-slot-pedestal(기본)+selected/locked/stealing(상태 오버레이,
     // 같은 중심 좌표에 겹침). 우선순위: stealing > locked > selected > base(to_claude_v4_C.md 규칙8/9)
@@ -264,7 +277,10 @@ export class BaseScene extends Phaser.Scene {
         .setDepth(DEPTH.WORLD_LABEL);
       zone.on('pointerdown', () => void this.onSlotClick(zone));
       if (isMine) label.setInteractive({ useHandCursor: true }).on('pointerdown', () => void this.onSlotSell(zone));
-      this.slotViews.push({ zone, pedestal, icon, overlay, label });
+      const pulse = this.add.sprite(pos.x, pos.y - 15, 'fx-stealing-pulse').setDisplaySize(120, 120).setVisible(false).setDepth(DEPTH.BUILDINGS + 2);
+      // 캐릭터 원화·이름·가격표·터치 영역을 가리지 않도록 좌대 오른쪽 위 모서리에 작게, 비상호작용 이미지
+      const statusIcon = this.add.image(pos.x + 84, pos.y - 62, 'ui-status-lock').setDisplaySize(26, 26).setVisible(false).setDepth(DEPTH.BUILDINGS + 4);
+      this.slotViews.push({ zone, pedestal, icon, overlay, label, pulse, statusIcon });
     }
 
     // 관리/선택 화면도 실제로 캐릭터가 걸어다니게(버그성 지적 2026-09-18) — 조이스틱 1차 조작
@@ -273,6 +289,7 @@ export class BaseScene extends Phaser.Scene {
     this.browsePos = { x: (MOVE_BOUNDS.minX + MOVE_BOUNDS.maxX) / 2, y: (MOVE_BOUNDS.minY + MOVE_BOUNDS.maxY) / 2 };
     // 혹시라도 스폰 위치가 출입문 반경 안이면 "이미 안에 있던 것"으로 취급해서 즉시 트리거되지 않게 함
     this.wasNearExit = Phaser.Math.Distance.Between(this.browsePos.x, this.browsePos.y, EXIT_DOOR.x, EXIT_DOOR.y) <= EXIT_DOOR.radius;
+    this.localRing = this.add.image(this.browsePos.x, this.browsePos.y + 24, 'fx-local-ring').setDisplaySize(80, 40).setDepth(DEPTH.ACTOR_BASE);
     this.browseAvatar = new PlayerAvatar(this, this.browsePos.x, this.browsePos.y, 56);
     this.cursors = this.input.keyboard!.createCursorKeys();
     // 이미지 3단계(DELIVERED) — 도형 대신 실제 조이스틱 에셋
@@ -315,6 +332,10 @@ export class BaseScene extends Phaser.Scene {
         .setStroke('#ffffff', 1)
         .setDepth(DEPTH.HUD)
         .on('pointerdown', () => void this.toggleOfflineOperation());
+      this.add
+        .text(HAND_ICON_POS.x, HAND_ICON_POS.y + 40, '※ 잠금·오프라인은 기지 전체 설정', { fontSize: '11px', color: '#ffffff', backgroundColor: '#00000099', padding: { x: 5, y: 2 } })
+        .setOrigin(0.5)
+        .setDepth(DEPTH.HUD);
       this.offlineIcon = this.add.image(HAND_ICON_POS.x - 55, HAND_ICON_POS.y, 'ui-status-offline').setDisplaySize(20, 20).setVisible(false).setDepth(DEPTH.HUD);
 
       kirbyNetwork.on('stateChanged', this.onStateChanged);
@@ -359,7 +380,7 @@ export class BaseScene extends Phaser.Scene {
     this.floorBadge.setText(`${this.floor + 1}층`);
     // 층별 오버레이(base-floor-2/3-overlay)와 전환 아이콘(계단/숨겨진통로) 갱신
     this.floorOverlay?.setVisible(this.floor > 0).setTexture(this.floor === 2 ? 'base-floor-3-overlay' : 'base-floor-2-overlay');
-    this.floorTransitionIcon?.setTexture(this.floor === 1 ? 'base-hidden-passage' : 'base-stairs');
+    this.refreshStairs();
     for (let i = 0; i < this.slotViews.length; i++) {
       const view = this.slotViews[i];
       const kirby = page[i];
@@ -367,6 +388,8 @@ export class BaseScene extends Phaser.Scene {
         view.label.setText('');
         view.icon.setVisible(false);
         view.overlay.setVisible(false);
+        view.pulse.setVisible(false).stop();
+        view.statusIcon.setVisible(false); // 빈 슬롯에는 상태 아이콘을 붙이지 않음
         continue;
       }
       const grade = kirbyGrade({ gradeId: kirby.gradeId } as KirbyDef);
@@ -375,19 +398,39 @@ export class BaseScene extends Phaser.Scene {
       if (textureKey && this.textures.exists(textureKey)) view.icon.setTexture(textureKey).setDisplaySize(64, 64).setVisible(true);
       else view.icon.setVisible(false);
 
+      this.applySlotStatusIcon(view.statusIcon, kirby.status === 'stolen_in_transit');
+
       // 상태 우선순위(to_claude_v4_C.md 규칙9): stealing > locked > selected > base — 동시에 여러 주효과 표시 안 함
       if (kirby.status === 'stolen_in_transit') {
         view.overlay.setTexture('base-slot-stealing').setVisible(true);
+        view.pulse.setVisible(true).play('fx-stealing-pulse', true); // S4-B05 도난 중 붉은 펄스
         view.label.setText(`${kirby.name}\n도둑맞는 중!\n(클릭해서 방어)`);
       } else if (this.sceneData.mode === 'select') {
+        view.pulse.setVisible(false).stop();
         view.overlay.setTexture('base-slot-selected').setVisible(true);
         view.label.setText(`${kirby.name}\n(클릭해서 훔치기)`);
       } else {
+        view.pulse.setVisible(false).stop();
         view.overlay.setVisible(false);
         // 상호작용 분리(2026-09-18): 캐릭터 터치=수금, 가격표(이 라벨) 터치=판매
         view.label.setText(`${kirby.name}\n판매가 ${grade.sellPrice}G\n(가격표 클릭시 판매)`);
       }
     }
+  }
+
+  // 코덱스 to_claude_v3 §2 — 기지 전체 상태를 소유자 관리 화면의 점유 슬롯에 알려주는 표시 전용 아이콘(슬롯별 설정 아님).
+  // 우선순위: 도난 중 > 잠김/조건부잠김 > 오프라인 운영 꺼짐 > 없음(둘 다 해당하면 자물쇠만). 서버 응답(kirbyNetwork.state)을 최종값으로 사용.
+  private applySlotStatusIcon(icon: Phaser.GameObjects.Image, stolen: boolean) {
+    if (this.sceneData.mode !== 'manage') {
+      icon.setVisible(false); // 타인 기지 선택/침입 화면에서는 슬롯별 기능처럼 복제하지 않음
+      return;
+    }
+    const base = kirbyNetwork.state;
+    if (stolen) icon.setTexture('ui-status-stealing').setVisible(true);
+    else if (base && base.lockState !== 'open') icon.setTexture('ui-status-lock').setVisible(true);
+    else if (base && !base.offlineOperationEnabled) icon.setTexture('ui-status-offline').setVisible(true);
+    else icon.setVisible(false);
+    icon.setDisplaySize(26, 26); // setTexture 직후 이전 텍스처 scale이 남는 문제 방지
   }
 
   private async onSlotClick(zone: Phaser.GameObjects.Zone) {
@@ -404,7 +447,10 @@ export class BaseScene extends Phaser.Scene {
       // 상호작용 분리(2026-09-18 요청): 캐릭터(zone) 터치 = 수금, 가격표(label) 터치 = 판매(onSlotSell)
       try {
         const collected = await kirbyNetwork.collect(kirby.instanceId);
-        if (collected > 0) this.showCollectPopup(this.slotViews[index].pedestal.x, this.slotViews[index].pedestal.y, collected);
+        if (collected > 0) {
+          this.playCollectBurst(this.slotViews[index].pedestal.x, this.slotViews[index].pedestal.y - 20); // S4-B06 수금 성공
+          this.showCollectPopup(this.slotViews[index].pedestal.x, this.slotViews[index].pedestal.y, collected);
+        }
       } catch {
         this.showMessage('수금할 수 없습니다');
       }
@@ -430,14 +476,89 @@ export class BaseScene extends Phaser.Scene {
     }
   }
 
-  // 버그성 지적(2026-09-18): 층 이동은 캐릭터가 계단/숨겨진 통로와 만날 때 발동(클릭은 보조 입력으로 유지)
-  private changeFloor() {
-    this.floor = (this.floor + 1) % TOTAL_FLOORS;
-    this.renderSlots();
-    this.floorChangeCooldownUntil = this.time.now + FLOOR_CHANGE_COOLDOWN_MS;
-    // 층 전환 순간을 눈에 띄게(사용자 지적 2026-09-18: 층 표시가 있어도 바뀐 순간을 놓치기 쉬움)
+  // ----- 계단(to_claude_v2_C, 2026-09-21) -----
+
+  private createStairs() {
+    this.stairViews = [];
+    const browse = this.sceneData.mode === 'manage' || this.sceneData.mode === 'select';
+    for (const [floorStr, defs] of Object.entries(FLOOR_STAIRS)) {
+      const floor = Number(floorStr) - 1;
+      if (!browse && floor !== 0) continue; // 침입/방어 화면은 층 개념이 없어 1층 배치만 보여줌(같은 정의 공유)
+      for (const def of defs) {
+        const img = this.add
+          .image(def.x, def.y, def.type === 'up' ? 'base-stairs-up' : 'base-stairs-down')
+          .setOrigin(0.5, STAIR_PIVOT_Y)
+          .setDepth(DEPTH.BUILDINGS + 2);
+        const marker = this.add
+          .image(def.x, def.y + STAIR_MARKER_OFFSET_Y, def.type === 'up' ? 'ui-stair-up-marker' : 'ui-stair-down-marker')
+          .setVisible(false)
+          .setDepth(DEPTH.WORLD_LABEL);
+        const label = this.add
+          .text(def.x, def.y + STAIR_MARKER_OFFSET_Y + 42, `${def.targetFloor}층으로`, { fontSize: '13px', color: '#ffffff', fontStyle: 'bold', backgroundColor: '#000000aa', padding: { x: 6, y: 2 } })
+          .setOrigin(0.5)
+          .setVisible(false)
+          .setDepth(DEPTH.WORLD_LABEL);
+        const view = { def, floor, img, marker, label, inside: false };
+        if (browse) img.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.useStair(view)); // 클릭은 데스크톱 보조 입력
+        this.stairViews.push(view);
+      }
+    }
+    this.refreshStairs();
+  }
+
+  // 현재 층의 계단만 표시하고, 계단별 진입 상태를 초기화(도착 직후 재발동 방지)
+  private refreshStairs() {
+    for (const v of this.stairViews) {
+      const here = v.floor === this.floor;
+      v.img.setVisible(here);
+      if (!here) {
+        v.marker.setVisible(false);
+        v.label.setVisible(false);
+        v.inside = false;
+      } else {
+        v.inside = this.isInsideStair(v.def);
+      }
+    }
+  }
+
+  private footPos() {
+    // 발 중심 = 아바타 스프라이트 중심에서 아래쪽(그림자 위치)
+    return { x: this.browsePos.x, y: this.browsePos.y + 20 };
+  }
+
+  private isInsideStair(def: StairDef) {
+    const foot = this.footPos();
+    return Phaser.Math.Distance.Between(foot.x, foot.y, def.x, def.y) <= STAIR_TRIGGER_RADIUS;
+  }
+
+  private useStair(view: { def: StairDef; floor: number }) {
+    if (this.time.now < this.stairLockUntil) return; // 전환 직후 입력 잠금/전환 진행 중에는 무시
+    if (view.floor !== this.floor) return;
+    const target = view.def.targetFloor - 1;
+    if (target < 0 || target > 2 || Math.abs(target - this.floor) !== 1) return; // 현재 상태와 대조: 인접 층만 이동 가능
+    this.stairLockUntil = this.time.now + STAIR_INPUT_LOCK_MS;
+    this.floor = target;
+    this.browsePos = { x: view.def.arrivalX, y: view.def.arrivalY }; // 도착 위치는 트리거 반경 밖
+    this.browseAvatar?.setPosition(this.browsePos.x, this.browsePos.y);
+    this.renderSlots(); // 내부에서 refreshStairs()로 계단별 진입 상태 초기화
+    // 층 전환 순간을 눈에 띄게(사용자 지적 2026-09-18)
     this.floorBadge.setScale(1.4);
     this.tweens.add({ targets: this.floorBadge, scale: 1, duration: 300, ease: 'Back.Out' });
+  }
+
+  private updateStairs() {
+    for (const v of this.stairViews) {
+      if (v.floor !== this.floor) continue;
+      const foot = this.footPos();
+      const dist = Phaser.Math.Distance.Between(foot.x, foot.y, v.def.x, v.def.y);
+      const near = dist <= STAIR_MARKER_RADIUS;
+      v.marker.setVisible(near);
+      v.label.setVisible(near);
+      if (near) v.marker.setAlpha(0.925 + 0.075 * Math.sin(this.time.now / 250)); // 알파 0.85~1.0 천천히 펄스
+      const inside = dist <= STAIR_TRIGGER_RADIUS;
+      if (inside && !v.inside) this.useStair(v); // inside → outside → inside 엣지 진입만 발동
+      v.inside = inside;
+    }
   }
 
   // 초당 발생 재화(2026-09-18 요청) 시각 표시 — 실제 골드는 캐릭터 터치(collect) 시에만 반영됨
@@ -508,6 +629,10 @@ export class BaseScene extends Phaser.Scene {
       .text(EXIT_DOOR.x, EXIT_DOOR.y - EXIT_DOOR.radius - 16, '출입문(탈출)', { fontSize: '12px', color: '#50fa7b' })
       .setOrigin(0.5)
       .setDepth(DEPTH.WORLD_LABEL);
+    // S4-B04 탈출 방향 화살표 — 침입자에게만 출입문 위에서 반복 재생
+    if (role === 'viewer') {
+      this.add.sprite(EXIT_DOOR.x, EXIT_DOOR.y - EXIT_DOOR.radius + 10, 'fx-exit-arrow').setDisplaySize(72, 72).setAngle(180).setDepth(DEPTH.WORLD_LABEL).play('fx-exit-arrow');
+    }
 
     ensurePlayerAvatarAnims(this);
     const startX = role === 'owner' ? MOVE_BOUNDS.minX + 100 : CANVAS_WIDTH / 2;
@@ -515,6 +640,8 @@ export class BaseScene extends Phaser.Scene {
     this.myPos = { x: startX, y: startY };
     // 코덱스 확정(2026-09-17) 역할 링 색상: 소유자/방어자=금색·주황, 침입자=청록·파랑. 로컬 플레이어는 발밑 흰색 굵은 링 추가.
     this.meRing = this.add.circle(startX, startY, 22, 0x000000, 0).setStrokeStyle(4, 0xffffff, 1).setDepth(DEPTH.ACTOR_BASE + startY - 1);
+    this.meRing.setVisible(false); // 기존 흰 원 링은 실제 에셋(player-local-ring)으로 대체
+    this.localRing = this.add.image(startX, startY + 24, 'fx-local-ring').setDisplaySize(80, 40).setDepth(DEPTH.ACTOR_BASE + startY - 2);
     this.me = new PlayerAvatar(this, startX, startY, 56);
     this.me.setTint(role === 'owner' ? 0xffb84d : 0x7ec8ff);
     this.opponentRing = this.add.circle(-100, -100, 20, 0x000000, 0).setStrokeStyle(3, role === 'owner' ? 0x22d3ee : 0xffb300, 1).setDepth(DEPTH.ACTOR_BASE - 1);
@@ -575,6 +702,8 @@ export class BaseScene extends Phaser.Scene {
     const hitAvatar = this.sceneData.mode === 'steal' ? this.me : this.opponent;
     hitAvatar.flashWhite(this, 80);
     this.cameras.main.shake(120, 0.006);
+    this.playHitSpark(hitAvatar.x, hitAvatar.y - 10); // S4-B01 타격 스파크
+    this.showStunStars(this.sceneData.mode === 'steal' ? 'me' : 'opponent'); // S4-B02 기절 별(양쪽 화면 모두)
 
     // 명중당 5초 기절(4.2 확정) — 침입자 로컬 클라이언트만 이동 입력을 잠그고 채도를 낮춤(서버는 명중/포획만 권위 판정)
     if (this.sceneData.mode === 'steal') {
@@ -587,6 +716,7 @@ export class BaseScene extends Phaser.Scene {
       this.stunProgress = this.add.graphics().setDepth(DEPTH.WORLD_LABEL);
       this.time.delayedCall(BAT_STUN_MS, () => {
         if (this.time.now >= this.stunnedUntil) hitAvatar.setAlpha(1);
+        this.hideStunStars();
         this.stunRing?.destroy();
         this.stunRing = undefined;
         this.stunProgress?.destroy();
@@ -608,8 +738,70 @@ export class BaseScene extends Phaser.Scene {
           ? '실패했습니다 — 붙잡혔거나 기지가 잠겼습니다.'
           : '방어 성공! 침입자를 붙잡았습니다.';
     this.showMessage(message);
-    this.time.delayedCall(1800, () => this.scene.start('LobbyScene'));
+    if (p.result === 'failed' && p.reason === 'captured') this.showCaptureFinish(iAmIntruder);
+    this.time.delayedCall(p.reason === 'captured' ? 2600 : 1800, () => this.scene.start('LobbyScene'));
   };
+
+  // ----- 이미지 4단계 전투 FX (to_claude_v1_C, 2026-09-21) -----
+
+  private createFxAnims() {
+    const make = (key: string, tex: string, frameRate: number, repeat: number, end = 3) => {
+      if (this.anims.exists(key)) return;
+      this.anims.create({ key, frames: this.anims.generateFrameNumbers(tex, { start: 0, end }), frameRate, repeat });
+    };
+    make('fx-hit-spark', 'fx-hit-spark', 14, 0); // 타격 14fps 1회
+    make('fx-stun-stars', 'fx-stun-stars', 8, -1); // 기절 8fps 반복
+    make('fx-stealing-pulse', 'fx-stealing-pulse', 8, -1); // 도난 8fps 반복
+    make('fx-exit-arrow', 'fx-exit-arrow', 8, -1); // 탈출 8fps 반복
+    if (!this.anims.exists('fx-collect-burst')) {
+      this.anims.create({ key: 'fx-collect-burst', frames: this.anims.generateFrameNumbers('fx-collect-burst', { start: 0, end: 5 }), frameRate: 12, repeat: 0 }); // 수금 12fps 1회
+    }
+  }
+
+  private playCollectBurst(x: number, y: number) {
+    const burst = this.add.sprite(x, y, 'fx-collect-burst').setDisplaySize(150, 150).setBlendMode(Phaser.BlendModes.ADD).setDepth(DEPTH.WORLD_LABEL);
+    burst.play('fx-collect-burst');
+    burst.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => burst.destroy());
+  }
+
+  private playHitSpark(x: number, y: number) {
+    const spark = this.add.sprite(x, y, 'fx-hit-spark').setDisplaySize(110, 110).setBlendMode(Phaser.BlendModes.ADD).setDepth(DEPTH.WORLD_LABEL);
+    spark.play('fx-hit-spark');
+    spark.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => spark.destroy());
+  }
+
+  private showStunStars(target: 'me' | 'opponent') {
+    this.stunStars?.destroy();
+    this.stunStarsTarget = target;
+    const at = target === 'me' ? this.myPos : this.opponentPos ?? this.opponent;
+    this.stunStars = this.add.sprite(at.x, at.y - 46, 'fx-stun-stars').setDisplaySize(90, 90).setDepth(DEPTH.WORLD_LABEL);
+    this.stunStars.play('fx-stun-stars');
+    this.time.delayedCall(BAT_STUN_MS, () => {
+      if (this.time.now >= this.stunnedUntil) this.hideStunStars();
+    });
+    if (target === 'opponent') this.stunnedUntil = this.time.now + BAT_STUN_MS; // 방어자 화면은 별 표시 수명 기준으로만 사용(이동 입력엔 영향 없음)
+  }
+
+  private hideStunStars() {
+    this.stunStars?.destroy();
+    this.stunStars = undefined;
+  }
+
+  // S4-B03 3회 명중 완료 배지 — 마지막 타격 스파크·기절 별과 함께 화면 중앙에 팝업(붙잡힘 = 훔친 커비 원위치)
+  private showCaptureFinish(iAmIntruder: boolean) {
+    const target = iAmIntruder ? this.me : this.opponent;
+    this.playHitSpark(target.x, target.y - 10);
+    this.showStunStars(iAmIntruder ? 'me' : 'opponent');
+    const cx = CANVAS_WIDTH / 2;
+    const cy = CANVAS_HEIGHT / 2 - 40;
+    const badge = this.add.image(cx, cy, 'fx-capture-badge').setDisplaySize(40, 40).setAlpha(0).setDepth(DEPTH.MODAL);
+    this.tweens.add({ targets: badge, alpha: 1, displayWidth: 180, displayHeight: 180, duration: 450, ease: 'Back.Out' });
+    const label = this.add
+      .text(cx, cy + 118, iAmIntruder ? '붙잡혔다! 커비는 원래 주인에게' : '3회 명중! 커비를 되찾았다', { fontSize: '20px', color: '#ffe082', fontStyle: 'bold', backgroundColor: '#000000aa', padding: { x: 12, y: 6 } })
+      .setOrigin(0.5)
+      .setDepth(DEPTH.MODAL);
+    this.tweens.add({ targets: [badge, label], alpha: 0, delay: 1700, duration: 500 });
+  }
 
   private updateChase(delta: number) {
     if (this.resolved) return;
@@ -628,6 +820,7 @@ export class BaseScene extends Phaser.Scene {
     this.me.setPosition(this.myPos.x, this.myPos.y);
     this.me.updateMovement(this.myPos.x - prevX, this.myPos.y - prevY);
     this.meRing.setPosition(this.myPos.x, this.myPos.y).setDepth(DEPTH.ACTOR_BASE + this.myPos.y - 1);
+    this.localRing?.setPosition(this.myPos.x, this.myPos.y + 24).setDepth(DEPTH.ACTOR_BASE + this.myPos.y - 2);
 
     if (stunned && this.stunRing && this.stunProgress) {
       this.stunRing.setPosition(this.myPos.x, this.myPos.y - 50);
@@ -637,6 +830,10 @@ export class BaseScene extends Phaser.Scene {
       this.stunProgress.beginPath();
       this.stunProgress.arc(this.myPos.x, this.myPos.y - 50, 14, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * remaining, false);
       this.stunProgress.strokePath();
+    }
+    if (this.stunStars) {
+      const t = this.stunStarsTarget === 'me' ? this.myPos : this.opponentPos;
+      if (t) this.stunStars.setPosition(t.x, t.y - 46);
     }
     if (this.opponentPos) {
       const prevOpp = this.opponentPrevPos;
@@ -667,7 +864,7 @@ export class BaseScene extends Phaser.Scene {
   }
 
   // 기지 열람(관리/선택) 모드 이동 — 조이스틱 1차, 방향키는 데스크톱 테스트용 보조 입력.
-  // 계단/숨겨진 통로 아이콘과 만나면(근접) 자동으로 층 이동(클릭도 보조 입력으로 유지).
+  // 층별 상행/하행 계단에 근접(엣지 진입)하면 자동으로 층 이동(클릭은 보조 입력).
   private updateBrowse(delta: number) {
     if (!this.browseAvatar) return;
     const speed = (AVATAR_SPEED * delta) / 1000;
@@ -683,11 +880,9 @@ export class BaseScene extends Phaser.Scene {
     this.browsePos.y = Phaser.Math.Clamp(this.browsePos.y + dy, MOVE_BOUNDS.minY, MOVE_BOUNDS.maxY);
     this.browseAvatar.setPosition(this.browsePos.x, this.browsePos.y);
     this.browseAvatar.updateMovement(this.browsePos.x - prevX, this.browsePos.y - prevY);
+    this.localRing?.setPosition(this.browsePos.x, this.browsePos.y + 24).setDepth(DEPTH.ACTOR_BASE + this.browsePos.y - 2);
 
-    if (this.time.now >= this.floorChangeCooldownUntil) {
-      const nearStairs = Phaser.Math.Distance.Between(this.browsePos.x, this.browsePos.y, STAIRS_POS.x, STAIRS_POS.y) <= STAIRS_ENTER_RADIUS;
-      if (nearStairs) this.changeFloor();
-    }
+    this.updateStairs();
 
     // 사용자 지적(2026-09-18): 로비로 나가는 방법이 텍스트 링크뿐이라 발견하기 어려움 — 출입문에
     // 캐릭터가 닿으면(1층에서만, 침입 화면의 EXIT_DOOR와 동일 지점) 자동으로 로비 복귀. 근접 "진입
