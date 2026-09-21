@@ -8,6 +8,11 @@ function generateId(): string {
 }
 
 export function getPlayerId(): string {
+  // 개발 전용: 같은 브라우저의 여러 탭이 서로 다른 테스트 계정을 쓰도록 ?device=이름 으로 강제(저장하지 않음)
+  if (import.meta.env.DEV) {
+    const forced = new URLSearchParams(location.search).get('device');
+    if (forced) return `dev-device-${forced}-account`;
+  }
   try {
     const existing = localStorage.getItem(STORAGE_KEY);
     if (existing) return existing;

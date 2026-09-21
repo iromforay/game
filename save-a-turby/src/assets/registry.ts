@@ -13,8 +13,6 @@ import lakeTileUrl from './backgrounds/lake-tile.png';
 import undergroundTileUrl from './backgrounds/underground-tile.png';
 import iceTileUrl from './backgrounds/ice-tile.png';
 import desertTileUrl from './backgrounds/desert-tile.png';
-import villageHomeUrl from './village/home.png';
-import villageMarketUrl from './village/market.png';
 
 // 3.1.1: 이미지 리소스는 원화 완성 전까지 여기서만 교체하면 되도록 키로 분리해둠.
 // characters.json/backgrounds.json의 imageKey와 대응 — 7종 캐릭터 전부 원화 반영 완료(2026-09-17).
@@ -40,8 +38,22 @@ export const BACKGROUND_TILES: Record<string, string> = {
 
 export const AVATAR_IMAGE = childUrl;
 
-// 4.1: 마을 건물(타일이 아닌 실제 건물 형태) — VillageScene이 이 키로 이미지 로드
-export const VILLAGE_BUILDING_IMAGES: Record<string, string> = {
-  home: villageHomeUrl,
-  market: villageMarketUrl,
+// docs/save_a_turby_asset.md §3 구조(world/·sprites/·ui/)의 파일을 파일명(확장자 제외)을 키로 자동 등록.
+// 에셋이 폴더에 들어오는 즉시 코드 수정 없이 로드되고, 없으면 씬이 임시 도형으로 대체한다.
+function buildKeyMap(globResult: Record<string, string>): Record<string, string> {
+  const map: Record<string, string> = {};
+  for (const [path, url] of Object.entries(globResult)) {
+    map[path.split('/').pop()!.replace(/\.png$/, '')] = url;
+  }
+  return map;
+}
+
+export const WORLD_IMAGES: Record<string, string> = {
+  ...buildKeyMap(import.meta.glob('./world/**/*.png', { eager: true, query: '?url', import: 'default' }) as Record<string, string>),
+  ...buildKeyMap(import.meta.glob('./sprites/**/*.png', { eager: true, query: '?url', import: 'default' }) as Record<string, string>),
+  ...buildKeyMap(import.meta.glob('./ui/**/*.png', { eager: true, query: '?url', import: 'default' }) as Record<string, string>),
 };
+
+// 스프라이트시트(96x96 프레임) 키 — 나머지는 일반 이미지로 로드
+export const SPRITESHEET_KEYS = ['child-walk', 'child-idle', 'villager-a-walk', 'villager-b-walk', 'merchant-idle', 'nubi-field'];
+

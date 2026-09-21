@@ -1,7 +1,9 @@
 import Phaser from 'phaser';
+import { loadWorldImages } from '../assets/loader';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../config/constants';
 import { CHARACTER_IMAGES, BACKGROUND_TILES } from '../assets/registry';
 import { inventory } from '../state/inventory';
+import { EquipPanel } from '../ui/EquipPanel';
 import type { OwnedTurby } from '../state/inventory';
 
 const SHELF_SLOT_COUNT = 40; // 4.4: 8열x5행 제안
@@ -9,12 +11,14 @@ const SHELF_SLOT_COUNT = 40; // 4.4: 8열x5행 제안
 // 4.4 기지(집) — 마을(Village) 안 "내 집"에서 진입. 가방(소지)/선반(전시) 구분 표시, 클릭으로 서로 이동 가능.
 export class HomeScene extends Phaser.Scene {
   private busy = false;
+  private equipPanel!: EquipPanel;
 
   constructor() {
     super('Home');
   }
 
   preload() {
+    loadWorldImages(this);
     this.load.image('bg-home', BACKGROUND_TILES.home);
     for (const [code, url] of Object.entries(CHARACTER_IMAGES)) {
       if (!this.textures.exists(`turby-${code}`)) this.load.image(`turby-${code}`, url);
@@ -23,6 +27,7 @@ export class HomeScene extends Phaser.Scene {
 
   create() {
     this.busy = false;
+    this.equipPanel = new EquipPanel(this);
     this.add.tileSprite(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT, 'bg-home').setOrigin(0, 0);
 
     this.add.text(CANVAS_WIDTH / 2, 30, '터비 구하기 — 기지', { fontSize: '26px', color: '#ffe9a8' }).setOrigin(0.5);
@@ -71,6 +76,11 @@ export class HomeScene extends Phaser.Scene {
         .setOrigin(0.5, 0)
         .setInteractive({ useHandCursor: true })
         .on('pointerdown', () => onAction(item.id));
+      this.add
+        .text(x, y + 64, '장비', { fontSize: '10px', color: '#9be59b', backgroundColor: '#00000080', padding: { x: 4, y: 2 } })
+        .setOrigin(0.5, 0)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => this.equipPanel.open(item.id));
     });
   }
 

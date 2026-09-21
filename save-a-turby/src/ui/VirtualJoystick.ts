@@ -30,7 +30,8 @@ export class VirtualJoystick {
     if (!enabled) this.onPointerUp({ id: this.pointerId } as Phaser.Input.Pointer);
   }
 
-  private onPointerDown(pointer: Phaser.Input.Pointer) {
+  private onPointerDown(pointer: Phaser.Input.Pointer, currentlyOver: Phaser.GameObjects.GameObject[]) {
+    if (currentlyOver.length > 0) return; // 미니맵·프롬프트 같은 UI를 누를 때는 이동 입력으로 취급하지 않음
     if (!this.enabled || this.pointerId !== null) return; // 이미 다른 손가락으로 조작 중
     this.pointerId = pointer.id;
     this.baseX = pointer.x;

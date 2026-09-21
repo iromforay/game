@@ -1,10 +1,39 @@
 {
   "width": 1280,
   "height": 720,
-  "buildings": [
-    { "id": "home", "type": "home", "name": "내 집", "x": 420, "y": 340, "w": 120, "h": 90, "color": "#8a5a2b" },
-    { "id": "market", "type": "market", "name": "장터", "x": 640, "y": 340, "w": 120, "h": 90, "color": "#5a3a8a" },
-    { "id": "exit", "type": "exit", "name": "출구 (야생으로)", "x": 640, "y": 660, "w": 200, "h": 50, "color": "#4a7a3a" }
+  "avatarStart": { "x": 640, "y": 560 },
+  "walkBounds": { "x": 40, "y": 150, "w": 1200, "h": 540 },
+  "defaultDestinationId": "exit",
+  "blockers": [
+    { "x": 256, "y": 120, "w": 256, "h": 30 },
+    { "x": 768, "y": 120, "w": 256, "h": 30 },
+    { "x": 424, "y": 536, "w": 96, "h": 100 },
+    { "x": 760, "y": 536, "w": 96, "h": 100 },
+    { "x": 216, "y": 470, "w": 312, "h": 52 },
+    { "x": 752, "y": 470, "w": 368, "h": 52 },
+    { "x": 0, "y": 376, "w": 160, "h": 80 },
+    { "x": 1120, "y": 376, "w": 160, "h": 88 },
+    { "x": 0, "y": 640, "w": 432, "h": 80 },
+    { "x": 856, "y": 640, "w": 424, "h": 80 }
   ],
-  "avatarStart": { "x": 640, "y": 500 }
+  "objects": [
+    { "id": "fence-top-0", "key": "fence-horizontal", "x": 128, "y": 150, "origin": [0.5, 0.9], "colliders": [{ "dx": -128, "dy": -30, "w": 256, "h": 30 }] },
+    { "id": "fence-top-2", "key": "fence-horizontal", "x": 640, "y": 150, "origin": [0.5, 0.9], "colliders": [{ "dx": -128, "dy": -30, "w": 256, "h": 30 }] },
+    { "id": "fence-top-4", "key": "fence-horizontal", "x": 1152, "y": 150, "origin": [0.5, 0.9], "colliders": [{ "dx": -128, "dy": -30, "w": 256, "h": 30 }] },
+    { "id": "home", "key": "home-field", "x": 270, "y": 430, "scale": 0.6, "origin": [0.5, 0.88], "shadow": { "w": 230, "h": 50 }, "colliders": [{ "dx": -105, "dy": -85, "w": 210, "h": 70 }] },
+    { "id": "market", "key": "market-field", "x": 1000, "y": 430, "scale": 0.6, "origin": [0.5, 0.88], "shadow": { "w": 340, "h": 50 }, "colliders": [{ "dx": -160, "dy": -80, "w": 320, "h": 65 }] },
+    { "id": "fountain", "key": "village-fountain", "x": 640, "y": 330, "scale": 0.6, "origin": [0.5, 0.78], "shadow": { "w": 190, "h": 40 }, "colliders": [{ "dx": -75, "dy": -55, "w": 150, "h": 65 }] },
+    { "id": "gate", "key": "village-gate", "x": 640, "y": 700, "scale": 0.5, "origin": [0.5, 0.88], "colliders": [{ "dx": -125, "dy": -60, "w": 45, "h": 60 }, { "dx": 80, "dy": -60, "w": 45, "h": 60 }] },
+    { "id": "tree-a-0", "key": "tree-a", "x": 90, "y": 300, "scale": 0.6, "origin": [0.5, 0.95], "shadow": { "w": 40, "h": 12, "alpha": 0.1 }, "colliders": [{ "dx": -15, "dy": -24, "w": 30, "h": 24 }] },
+    { "id": "tree-b-0", "key": "tree-b", "x": 1210, "y": 520, "scale": 0.6, "origin": [0.5, 0.95], "shadow": { "w": 40, "h": 12, "alpha": 0.1 }, "colliders": [{ "dx": -15, "dy": -24, "w": 30, "h": 24 }] },
+    { "id": "tree-b-1", "key": "tree-b", "x": 100, "y": 640, "scale": 0.6, "origin": [0.5, 0.95], "shadow": { "w": 40, "h": 12, "alpha": 0.1 }, "colliders": [{ "dx": -15, "dy": -24, "w": 30, "h": 24 }] },
+    { "id": "tree-a-1", "key": "tree-a", "x": 1180, "y": 640, "scale": 0.6, "origin": [0.5, 0.95], "shadow": { "w": 40, "h": 12, "alpha": 0.1 }, "colliders": [{ "dx": -15, "dy": -24, "w": 30, "h": 24 }] },
+    { "id": "lamp-0", "key": "lamp-post", "x": 470, "y": 520, "scale": 0.8, "origin": [0.5, 0.95], "colliders": [{ "dx": -10, "dy": -16, "w": 20, "h": 16 }] },
+    { "id": "lamp-1", "key": "lamp-post", "x": 810, "y": 520, "scale": 0.8, "origin": [0.5, 0.95], "colliders": [{ "dx": -10, "dy": -16, "w": 20, "h": 16 }] }
+  ],
+  "interactions": [
+    { "id": "home", "type": "home", "name": "내 집", "prompt": "입장", "hint": "내 집에서 터비를 가방과 선반으로 옮길 수 있어요.", "zone": { "x": 215, "y": 428, "w": 110, "h": 62 } },
+    { "id": "market", "type": "market", "name": "장터", "prompt": "입장", "hint": "장터에서 터비와 장비 아이템을 살 수 있어요.", "zone": { "x": 905, "y": 428, "w": 120, "h": 58 } },
+    { "id": "exit", "type": "exit", "name": "야생 출구", "prompt": "야생으로", "hint": "출구로 나가 야생 맵에서 터비를 찾아보세요.", "zone": { "x": 580, "y": 630, "w": 120, "h": 60 } }
+  ]
 }

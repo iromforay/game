@@ -5,6 +5,7 @@ let gameInstance: Phaser.Game | null = null;
 
 async function start() {
   gameInstance = await mountGame('app');
+  if (import.meta.env.DEV) (window as unknown as { __game?: Phaser.Game }).__game = gameInstance; // 헤드리스 프리뷰 검증용
 }
 start();
 

@@ -4,6 +4,18 @@ import { getStage } from '../config/stages';
 import type { WildSpawn } from '../config/stages';
 import { VirtualJoystick } from '../ui/VirtualJoystick';
 import { InventoryPanel } from '../ui/InventoryPanel';
+import { MiniMap } from '../ui/MiniMap';
+import type { MapMarker, MapView } from '../ui/MiniMap';
+import { loadWorldImages } from '../assets/loader';
+import { ensureUiPlaceholders } from '../assets/placeholders';
+import { getStoryChapters, getChapterStatuses, getCurrentChapter } from '../config/story';
+import { inventory } from '../state/inventory';
+import { roomClient, RoomApiError } from '../net/roomClient';
+import { battleClient } from '../net/battleClient';
+import type { BattleSnapshot, BattleUpdate, WildState } from '../net/battleTypes';
+import { showToast, feltPanel, pillButton, PAL, TEXT } from '../ui/kit';
+import coopSlots from '../data/coop-slots.json';
+import type { Facing, MapPlayer } from '../net/roomClient';
 import charactersData from '../data/characters.json';
 import { AVATAR_IMAGE, CHARACTER_IMAGES, BACKGROUND_TILES } from '../assets/registry';
 
@@ -12,14 +24,19 @@ interface WildMarker {
   index: number;
   gfx: Phaser.GameObjects.Container;
   encountered: boolean;
+  retryAt?: number; // 조우 시작에 실패한 뒤 다시 시도하기까지의 대기(ms 시각)
+  state: WildState; // 서버가 소유한 상태(free/engaged/captured/removed)
+  ring: Phaser.GameObjects.Arc | Phaser.GameObjects.Image;
+  badge: Phaser.GameObjects.Text;
+  pulse?: Phaser.Tweens.Tween;
 }
 
 interface MapInitData {
+  stageCode?: string;
   capturedIndices?: number[];
   removedIndices?: number[];
+  invite?: BattleSnapshot; // 새로고침·재접속으로 돌아와 응답하지 않은 참전 초대가 남아 있는 경우
 }
-
-const STAGE_CODE = 'forest';
 
 // 3.5.1 맵(탐험) 자유이동 프로토타입(7-5) — 아바타 이동 + 카메라 추적 + 조우 시 배틀그리드(7-6) 진입까지.
 // 아트는 최소 플레이스홀더(assets/registry.ts) — 원화 완성되면 이미지만 교체(3.1.1).
@@ -34,33 +51,58 @@ export class MapScene extends Phaser.Scene {
   private capturedIndices: number[] = [];
   private removedIndices: number[] = [];
   private encounterLocked = false;
+  private stageCode = 'forest';
+  private miniMap!: MiniMap;
+  private moveAngle = 0;
+  private ready = false;
+  private facing: Facing = 'down';
+  private inRoomMap = false;
+  private peers = new Map<string, { container: Phaser.GameObjects.Container; tx: number; ty: number }>();
+  private roomUnsubs: (() => void)[] = [];
+  private lastSentAt = 0;
+  private lastSent = { x: -1, y: -1 };
+  private roomLabel?: Phaser.GameObjects.Text;
+  private pendingInvite: BattleSnapshot | null = null;
+  private inviteLayer: Phaser.GameObjects.Container | null = null;
+  private inviteTimer: Phaser.Time.TimerEvent | null = null;
+  private inviteBattleId: string | null = null;
+  private selfRing?: Phaser.GameObjects.Ellipse | Phaser.GameObjects.Image;
 
   constructor() {
     super('Map');
   }
 
   init(data: MapInitData) {
+    this.stageCode = data.stageCode ?? 'forest';
+    this.ready = false;
     this.capturedIndices = data.capturedIndices ?? [];
     this.removedIndices = data.removedIndices ?? [];
     this.encounterLocked = false;
+    this.pendingInvite = data.invite ?? null;
+    this.inviteLayer = null;
+    this.inviteTimer = null;
+    this.inviteBattleId = null;
   }
 
   preload() {
     // WebGL은 <img> 소스로 직접 SVG를 텍스처 업로드하면 검게 나오는 경우가 있어(래스터화 안 됨),
     // load.image 대신 load.svg로 명시적 크기를 줘서 내부적으로 캔버스에 먼저 그려서 텍스처화함.
-    this.load.image('avatar', AVATAR_IMAGE);
-    this.load.image(`bg-${STAGE_CODE}`, BACKGROUND_TILES[STAGE_CODE]);
+    if (!this.textures.exists('avatar')) this.load.image('avatar', AVATAR_IMAGE);
+    if (!this.textures.exists(`bg-${this.stageCode}`)) this.load.image(`bg-${this.stageCode}`, BACKGROUND_TILES[this.stageCode]);
     for (const [code, url] of Object.entries(CHARACTER_IMAGES)) {
-      this.load.image(`turby-${code}`, url);
+      if (!this.textures.exists(`turby-${code}`)) this.load.image(`turby-${code}`, url);
     }
+    loadWorldImages(this);
   }
 
-  create() {
+  async create() {
     // Phaser는 scene.start()로 재진입해도 같은 씬 인스턴스를 재사용하므로, 여기서 초기화 안 하면
     // 맵 복귀할 때마다(전투 후 등) 마커가 중복 누적됨(실제로 겪은 버그) — 매번 새로 채움
     this.markers = [];
 
-    const stage = getStage(STAGE_CODE);
+    const stage = getStage(this.stageCode);
+    const current = getCurrentChapter(getChapterStatuses(await getStoryChapters(), inventory.getAll()));
+    ensureUiPlaceholders(this);
     this.stageWidth = stage.width;
     this.stageHeight = stage.height;
 
@@ -72,12 +114,24 @@ export class MapScene extends Phaser.Scene {
     this.avatar = this.add.image(stage.width / 2, stage.height / 2, 'avatar').setDisplaySize(44, 44);
     this.cameras.main.startFollow(this.avatar, true, 0.1, 0.1);
 
-    stage.wildSpawns.forEach((spawn, index) => {
-      if (this.removedIndices.includes(index)) return; // 3.4: 포획 성공/야생 도주(패배)한 개체는 재등장하지 않음
-      this.markers.push(this.createMarker(spawn, index));
-    });
+    // 3.4/4-C: 포획됨·도망(패배)한 개체는 재등장하지 않는다 — 상태는 서버가 소유하고 같은 방 모두에게 공유된다(roomClient.wilds)
+    stage.wildSpawns.forEach((spawn, index) => this.markers.push(this.createMarker(spawn, index)));
+    this.markers.forEach((m) => this.applyWildState(m.index, roomClient.wilds.get(m.index) ?? 'free')); // 마지막으로 알려진 서버 상태로 먼저 그린다
 
     this.joystick = new VirtualJoystick(this);
+
+    // 스토리 목적지(docs/Turby_story.md 3.4): 지금 열린 장이 이 맵이면 대표 터비 스폰 위치를 별로 표시
+    const targets: MapMarker[] = [];
+    if (current && current.chapter.stageCode === stage.code) {
+      stage.wildSpawns.forEach((spawn, index) => {
+        if (spawn.characterCode !== current.chapter.clearCharacterCode || ['captured', 'removed'].includes(roomClient.wilds.get(index) ?? 'free')) return;
+        targets.push({ id: `target-${index}`, type: 'target', name: `대표 터비 ${current.clearCharacterName}`, x: spawn.x, y: spawn.y, hint: `${current.chapter.titleKo}: '${current.clearCharacterName}'를 조우해 직접 포획하면 다음 지역이 열려요.` });
+      });
+    }
+    const view: MapView = { title: stage.name, width: stage.width, height: stage.height, bounds: { x: 0, y: 0, w: stage.width, h: stage.height } };
+    this.miniMap = new MiniMap(this, view, targets, '', (open) => {
+      this.joystick.setEnabled(!open);
+    });
 
     this.add
       .text(16, 16, `포획: ${this.capturedIndices.length}`, { fontSize: '18px', color: '#ffffff', backgroundColor: '#00000080', padding: { x: 8, y: 4 } })
@@ -90,11 +144,14 @@ export class MapScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(2000)
       .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => this.scene.start('Village'));
+      .on('pointerdown', () => {
+        // 4.1/방: 마을로 나가는 것은 방 퇴장 — 서버 연결이 안 돼도 마을로는 돌아간다
+        roomClient.leaveRoom().catch(() => undefined).finally(() => this.scene.start('Village'));
+      });
 
     this.inventoryPanel = new InventoryPanel(this, () => this.joystick.setEnabled(true));
     this.add
-      .text(CANVAS_WIDTH - 16, 16, '인벤토리', { fontSize: '16px', color: '#ffffff', backgroundColor: '#5a3a8a', padding: { x: 10, y: 6 } })
+      .text(CANVAS_WIDTH - 16, 192, '인벤토리', { fontSize: '16px', color: '#ffffff', backgroundColor: '#5a3a8a', padding: { x: 10, y: 6 } })
       .setOrigin(1, 0)
       .setScrollFactor(0)
       .setDepth(2000)
@@ -104,6 +161,150 @@ export class MapScene extends Phaser.Scene {
         this.inventoryPanel.toggle();
         if (opening) this.joystick.setEnabled(false); // 닫을 때는 InventoryPanel의 onClose 콜백이 다시 켜줌
       });
+    this.ready = true;
+    this.setupRoom();
+  }
+
+  // ----- 4-A: 같은 방 플레이어 위치 동기화(개발용 표시 — 최종 표현은 코덱스 디자인 확정 후 교체) -----
+
+  private setupRoom() {
+    const room = roomClient.room;
+    if (!room || room.stageCode !== this.stageCode) return;
+    this.roomLabel = this.add.text(16, 84, '', { fontSize: '12px', color: '#ffffff', backgroundColor: '#00000080', padding: { x: 6, y: 3 } }).setScrollFactor(0).setDepth(2000);
+    this.refreshRoomLabel();
+
+    this.roomUnsubs.push(
+      roomClient.on('state', (r) => {
+        this.refreshRoomLabel();
+        this.refreshPeerStatus();
+        if (r && r.phase === 'playing' && !this.inRoomMap) void this.enterRoomMap();
+      }),
+      roomClient.on('joined', (p) => this.upsertPeer(p)),
+      roomClient.on('moved', (p) => {
+        const peer = this.peers.get(p.playerId);
+        if (peer) {
+          peer.tx = p.x;
+          peer.ty = p.y;
+        }
+      }),
+      roomClient.on('left', ({ playerId }) => this.removePeer(playerId)),
+      roomClient.on('correct', ({ x, y }) => this.avatar.setPosition(x, y)),
+      roomClient.on('wildChanged', (w) => this.applyWildState(w.index, w.state)),
+      roomClient.on('battleInvite', (i) => this.showInvite(i.snapshot)),
+      roomClient.on('battleUpdate', (u) => this.onBattleUpdate(u)),
+    );
+    // Phaser는 씬을 재사용하므로 다른 씬으로 넘어갈 때 반드시 리스너·표시를 정리한다
+    this.events.once('shutdown', () => this.teardownRoom());
+
+    if (room.phase === 'playing') void this.enterRoomMap();
+    if (this.pendingInvite) this.showInvite(this.pendingInvite);
+  }
+
+  private async enterRoomMap() {
+    if (this.inRoomMap) return;
+    this.inRoomMap = true;
+    try {
+      const players = await roomClient.enterMap(this.avatar.x, this.avatar.y, this.facing);
+      if (!this.inRoomMap) return; // 입장 응답을 기다리는 사이 씬이 끝남
+      players.forEach((p) => this.upsertPeer(p));
+      this.markers.forEach((m) => this.applyWildState(m.index, roomClient.wilds.get(m.index) ?? 'free'));
+      if (!this.selfRing) this.selfRing = this.makeRing(this.slotColor(roomClient.slotOf(roomClient.playerId ?? ''))).setDepth(5);
+    } catch (err) {
+      this.inRoomMap = false;
+      console.warn('[room] 맵 입장 실패:', err);
+    }
+  }
+
+  // 발밑 슬롯색 링(전달받은 avatar-ring.png를 슬롯색으로 tint, 없으면 도형)
+  private makeRing(color: number) {
+    if (this.textures.exists('avatar-ring')) return this.add.image(0, 0, 'avatar-ring').setDisplaySize(86, 44).setTint(color);
+    return this.add.ellipse(0, 0, 86, 44).setStrokeStyle(4, color, 1);
+  }
+
+  private slotColor(slot: number) {
+    const c = coopSlots.find((x) => x.slot === slot) ?? coopSlots[0];
+    return Phaser.Display.Color.HexStringToColor(c.main).color;
+  }
+
+  // 다른 플레이어: 발밑 슬롯색 링 + 머리 위 닉네임 명패(슬롯색 점, 방장은 왕관), 접속이 끊기면(away) 알파 0.55
+  private upsertPeer(p: MapPlayer) {
+    if (p.playerId === roomClient.playerId) return;
+    const existing = this.peers.get(p.playerId);
+    if (existing) {
+      existing.tx = p.x;
+      existing.ty = p.y;
+      return;
+    }
+    const slot = roomClient.slotOf(p.playerId);
+    const color = this.slotColor(slot);
+    const ring = this.makeRing(color).setPosition(0, 18);
+    const body = this.add.image(0, 0, 'avatar').setDisplaySize(44, 44);
+    const plate = this.add.graphics();
+    const nick = p.nickname.length > 10 ? `${p.nickname.slice(0, 9)}…` : p.nickname;
+    const label = this.add.text(8, -34, nick, { fontSize: '13px', color: TEXT.body }).setOrigin(0.5, 1);
+    const w = Math.min(140, label.width + 34);
+    plate.fillStyle(PAL.cream, 1).fillRoundedRect(-w / 2 + 8, -34 - 26, w, 26, 12);
+    plate.fillStyle(color, 1).fillCircle(-w / 2 + 22, -34 - 13, 5);
+    label.setX(8 + 6);
+    const crown = (this.textures.exists('badge-host') ? this.add.image(w / 2 + 12, -34 - 13, 'badge-host').setDisplaySize(24, 24) : this.add.text(w / 2 + 12, -34 - 26, '♛', { fontSize: '18px', color: '#9276D2' }).setOrigin(0.5)).setVisible(roomClient.room?.hostPlayerId === p.playerId);
+    const away = (this.textures.exists('status-away') ? this.add.image(-w / 2 + 8, -34 - 13, 'status-away').setDisplaySize(24, 24) : this.add.text(-w / 2 + 8, -34 - 13, '☁', { fontSize: '16px', color: '#8B7C86' }).setOrigin(0.5)).setVisible(false);
+    const container = this.add.container(p.x, p.y, [ring, body, plate, label, crown, away]).setDepth(900);
+    this.peers.set(p.playerId, { container, tx: p.x, ty: p.y });
+    this.refreshPeerStatus();
+  }
+
+  private refreshPeerStatus() {
+    const room = roomClient.room;
+    if (!room) return;
+    for (const [id, peer] of this.peers) {
+      const member = room.members.find((m) => m.playerId === id);
+      peer.container.setAlpha(member && !member.connected ? 0.55 : 1);
+      (peer.container.list[4] as Phaser.GameObjects.Image).setVisible(room.hostPlayerId === id);
+      (peer.container.list[5] as Phaser.GameObjects.Image).setVisible(!!member && !member.connected); // away: 회색 실구름
+    }
+  }
+
+  private removePeer(playerId: string) {
+    this.peers.get(playerId)?.container.destroy();
+    this.peers.delete(playerId);
+  }
+
+  private refreshRoomLabel() {
+    const room = roomClient.room;
+    if (!room) return;
+    const away = room.members.filter((m) => !m.connected).length;
+    this.roomLabel?.setText(`방 ${room.code} · ${room.members.length}/${room.maxPlayers}명${away ? ` (접속 끊김 ${away})` : ''}`);
+  }
+
+  private syncRoom(delta: number) {
+    if (!this.inRoomMap) return;
+    // 이동 보고: 120ms 주기(docs 3.5.4), 위치가 바뀐 경우만
+    this.lastSentAt += delta;
+    if (this.lastSentAt >= 120 && (Math.abs(this.avatar.x - this.lastSent.x) > 0.5 || Math.abs(this.avatar.y - this.lastSent.y) > 0.5)) {
+      roomClient.sendMove(this.avatar.x, this.avatar.y, this.facing);
+      this.lastSent = { x: this.avatar.x, y: this.avatar.y };
+      this.lastSentAt = 0;
+    }
+    // 다른 사람은 받은 좌표로 부드럽게 보간해서 표시
+    for (const peer of this.peers.values()) {
+      peer.container.x += (peer.tx - peer.container.x) * 0.3;
+      peer.container.y += (peer.ty - peer.container.y) * 0.3;
+    }
+    this.selfRing?.setPosition(this.avatar.x, this.avatar.y + 18);
+    this.miniMap.setPeers([...this.peers].map(([id, p]) => ({ id, x: p.container.x, y: p.container.y, slot: roomClient.slotOf(id), color: this.slotColor(roomClient.slotOf(id)) })));
+  }
+
+  private teardownRoom() {
+    this.roomUnsubs.forEach((off) => off());
+    this.roomUnsubs = [];
+    this.peers.forEach((p) => p.container.destroy());
+    this.peers.clear();
+    this.selfRing?.destroy();
+    this.selfRing = undefined;
+    this.closeInvite();
+    this.inRoomMap = false;
+    this.lastSent = { x: -1, y: -1 };
+    this.lastSentAt = 0;
   }
 
   private createMarker(spawn: WildSpawn, index: number): WildMarker {
@@ -114,12 +315,113 @@ export class MapScene extends Phaser.Scene {
       ? this.add.image(0, 0, `turby-${spawn.characterCode}`).setDisplaySize(40, 40)
       : this.add.circle(0, 0, 18, 0x7fc8ff).setStrokeStyle(2, 0x2d6fa3);
     const label = this.add.text(0, -34, character?.name ?? spawn.characterCode, { fontSize: '13px', color: '#eaf6ff' }).setOrigin(0.5, 1);
-    container.add([sprite, label]);
-    return { spawn, index, gfx: container, encountered: false };
+    // 교전 중 표시: 라벤더 펄스 링 + 명패(다른 사람이 이미 싸우는 중이라 재조우할 수 없다)
+    const ring = (this.textures.exists('engaged-ring') ? this.add.image(0, 0, 'engaged-ring').setDisplaySize(84, 84) : this.add.circle(0, 0, 30).setStrokeStyle(4, 0xb9a6ee, 1)).setVisible(false);
+    const badge = this.add.text(0, 30, '교전 중', { fontSize: '12px', color: '#695B67', backgroundColor: '#FFF4DF', padding: { x: 6, y: 2 } }).setOrigin(0.5, 0).setVisible(false);
+    container.add([ring, sprite, label, badge]);
+    return { spawn, index, gfx: container, encountered: false, state: 'free', ring, badge };
+  }
+
+  // 서버가 알려준 야생 상태를 마커에 반영: 포획·도망은 사라지고, 교전 중은 흐리게 + 링, free는 원래대로(무승부·취소로 되돌아옴)
+  private applyWildState(index: number, state: WildState) {
+    const m = this.markers.find((x) => x.index === index);
+    if (!m) return;
+    m.state = state;
+    m.pulse?.stop();
+    m.pulse = undefined;
+    m.gfx.setVisible(state === 'free' || state === 'engaged');
+    m.gfx.setAlpha(state === 'engaged' ? 0.65 : 1);
+    m.ring.setVisible(state === 'engaged');
+    m.badge.setVisible(state === 'engaged');
+    // 교전 중에는 링이 맥동한다. 끝나면 원래 크기로 되돌린다.
+    if (m.ring instanceof Phaser.GameObjects.Image) m.ring.setDisplaySize(84, 84);
+    else m.ring.setScale(1);
+    m.ring.setAlpha(1);
+    if (state === 'engaged') m.pulse = this.tweens.add({ targets: m.ring, scale: m.ring.scale * 1.2, alpha: 0.5, duration: 800, yoyo: true, repeat: -1 });
+    // 스토리 목적지 별: 다른 참가자가 대표 터비를 포획·도망시켰거나(사라짐) 다시 만날 수 있게 되면(free) 즉시 갱신한다
+    this.miniMap?.setMarkerVisible(`target-${index}`, state === 'free' || state === 'engaged');
+    if (state === 'free') m.encountered = false;
+  }
+
+  // ----- 4-C: 참전 초대 팝업(화면 4, 임시 도형) -----
+
+  private showInvite(snap: BattleSnapshot) {
+    const me = snap.participants.find((p) => p.playerId === roomClient.playerId);
+    if (this.inviteLayer || !me?.invitePending || snap.phase !== 'inviting') return;
+    this.pendingInvite = null;
+    this.inviteBattleId = snap.battleId;
+    this.encounterLocked = true;
+    this.joystick.setEnabled(false);
+
+    const cx = CANVAS_WIDTH / 2;
+    const cy = 360;
+    const objs: Phaser.GameObjects.GameObject[] = [];
+    objs.push(this.add.rectangle(cx, cy, CANVAS_WIDTH, 720, 0x4a3a44, 0.55).setInteractive());
+    objs.push(feltPanel(this, cx - 310, cy - 180, 620, 360, { radius: 28, strokeW: 6, image: 'invite-panel' }));
+    const encounterer = snap.participants.find((p) => p.playerId === snap.encounterPlayerId);
+    objs.push(this.add.text(cx, cy - 86, `${encounterer?.nickname ?? '동료'}님이 야생 터비와 조우했어요!`, { fontSize: '17px', color: TEXT.body }).setOrigin(0.5));
+    if (this.textures.exists(`turby-${snap.wildCharacterCode}`)) objs.push(this.add.image(cx - 150, cy + 14, `turby-${snap.wildCharacterCode}`).setDisplaySize(112, 112));
+    objs.push(this.add.text(cx - 60, cy - 52, snap.wildName, { fontSize: '26px', color: TEXT.body }));
+    const stage = getStage(snap.stageCode);
+    objs.push(this.add.text(cx - 60, cy - 18, stage.name, { fontSize: '15px', color: TEXT.sub, wordWrap: { width: 260 } }));
+    // 남은 시간: 실타래 타이머 이미지 위에 숫자(서버 시각 기준으로 보정해 표시)
+    if (this.textures.exists('invite-timer')) objs.push(this.add.image(cx + 220, cy - 4, 'invite-timer').setDisplaySize(104, 104));
+    const countdown = this.add.text(cx + 220, cy - 4, '', { fontSize: '34px', color: TEXT.body }).setOrigin(0.5);
+    objs.push(countdown);
+    objs.push(this.add.text(cx - 60, cy + 34, '시간이 지나면 불참으로 처리돼요', { fontSize: '14px', color: TEXT.sub }));
+    const respond = async (join: boolean) => {
+      try {
+        const res = await battleClient.respond(snap.battleId, join);
+        this.closeInvite();
+        if (join) this.goPartySelect(res.snapshot);
+      } catch (err) {
+        this.closeInvite();
+        showToast(this, err instanceof RoomApiError ? err.message : '서버에 연결할 수 없습니다.', { y: 620, error: true, fixed: true });
+      }
+    };
+    objs.push(pillButton(this, cx - 120, cy + 120, 220, 64, '참전', 'primary', () => void respond(true)));
+    objs.push(pillButton(this, cx + 130, cy + 122, 180, 60, '불참', 'secondary', () => void respond(false)));
+    this.inviteLayer = this.add.container(0, 0, objs).setDepth(3000).setScrollFactor(0);
+    for (const o of objs) (o as Phaser.GameObjects.Text).setScrollFactor?.(0);
+    for (const o of objs) if (o instanceof Phaser.GameObjects.Container) o.list.forEach((c) => (c as Phaser.GameObjects.Text).setScrollFactor?.(0));
+
+    const tick = () => countdown.setText(String(Math.max(0, Math.ceil(((snap.expiresAt ?? 0) - roomClient.now()) / 1000))));
+    tick();
+    this.inviteTimer = this.time.addEvent({ delay: 250, loop: true, callback: tick });
+  }
+
+  private closeInvite() {
+    this.inviteTimer?.remove(false);
+    this.inviteTimer = null;
+    this.inviteLayer?.destroy();
+    this.inviteLayer = null;
+    if (this.inviteBattleId) {
+      this.inviteBattleId = null;
+      this.encounterLocked = false;
+      this.joystick?.setEnabled(true);
+    }
+  }
+
+  // 초대가 열려 있는 동안 서버가 대신 처리한 변화(시간 초과로 불참 처리, 전투 종료 등)를 반영한다
+  private onBattleUpdate(u: BattleUpdate) {
+    if (u.battleId !== this.inviteBattleId) return;
+    const me = u.snapshot.participants.find((p) => p.playerId === roomClient.playerId);
+    if (!me || !me.invitePending) {
+      this.closeInvite();
+      if (me && !me.active) showToast(this, '참전 시간이 지나 불참 처리되었어요.', { y: 620, fixed: true });
+    }
+  }
+
+  private goPartySelect(snapshot: BattleSnapshot) {
+    this.scene.start('PartySelect', { stageCode: this.stageCode, wildCharacterCode: snapshot.wildCharacterCode, spawnIndex: snapshot.spawnIndex, capturedIndices: this.capturedIndices, removedIndices: this.removedIndices, snapshot });
   }
 
   update(_time: number, delta: number) {
-    if (this.encounterLocked || this.inventoryPanel.isVisible) return;
+    if (!this.ready || this.encounterLocked || this.inventoryPanel.isVisible) return;
+    if (this.miniMap.isOpen) {
+      this.miniMap.update(this.avatar.x, this.avatar.y, this.moveAngle);
+      return;
+    }
 
     const { x, y, magnitude } = this.joystick.getVector();
     if (magnitude > 0) {
@@ -127,10 +429,14 @@ export class MapScene extends Phaser.Scene {
       const nextX = Phaser.Math.Clamp(this.avatar.x + x * AVATAR_SPEED * magnitude * dt, 0, this.stageWidth);
       const nextY = Phaser.Math.Clamp(this.avatar.y + y * AVATAR_SPEED * magnitude * dt, 0, this.stageHeight);
       this.avatar.setPosition(nextX, nextY);
+      this.moveAngle = Math.atan2(y, x);
+      this.facing = Math.abs(x) > Math.abs(y) ? (x < 0 ? 'left' : 'right') : y < 0 ? 'up' : 'down';
     }
+    this.syncRoom(delta);
+    this.miniMap.update(this.avatar.x, this.avatar.y, this.moveAngle);
 
     for (const marker of this.markers) {
-      if (marker.encountered) continue;
+      if (marker.encountered || marker.state !== 'free' || (marker.retryAt ?? 0) > Date.now()) continue;
       const dist = Phaser.Math.Distance.Between(this.avatar.x, this.avatar.y, marker.spawn.x, marker.spawn.y);
       if (dist <= ENCOUNTER_RADIUS) {
         this.triggerEncounter(marker);
@@ -139,16 +445,21 @@ export class MapScene extends Phaser.Scene {
     }
   }
 
-  private triggerEncounter(marker: WildMarker) {
+  // 3.2/3.3/4-B: 조우는 서버가 확인한다 — 서버가 (지역, 마커 번호)의 야생 종류를 정하고 전투를 만든 뒤에야 파티 선택으로 넘어간다.
+  // 서버에 닿지 않으면 전투를 시작하지 않고 잠시 뒤 다시 시도할 수 있다(전투는 서버에서만 진행됨).
+  private async triggerEncounter(marker: WildMarker) {
     marker.encountered = true;
     this.encounterLocked = true;
-
-    // 3.2/3.3: 조우 시 파티 선택(3.3)을 먼저 거쳐 배틀그리드(7-6)로 전환 — 승패 결과는 BattleScene이 처리 후 이 씬으로 복귀
-    this.scene.start('PartySelect', {
-      wildCharacterCode: marker.spawn.characterCode,
-      spawnIndex: marker.index,
-      capturedIndices: this.capturedIndices,
-      removedIndices: this.removedIndices,
-    });
+    try {
+      const snapshot = await battleClient.start(marker.index);
+      this.goPartySelect(snapshot);
+    } catch (err) {
+      marker.encountered = false;
+      marker.retryAt = Date.now() + 4000;
+      this.encounterLocked = false;
+      const message = err instanceof RoomApiError ? err.message : '서버에 연결할 수 없어 전투를 시작할 수 없습니다.';
+      if (err instanceof RoomApiError && ['WILD_ENGAGED', 'WILD_GONE'].includes(err.code)) marker.retryAt = Date.now() + 1500; // 이미 누가 선점한 야생 — 곧 상태 방송이 표시를 바꾼다
+      showToast(this, message, { y: 620, error: true, width: 640, fixed: true });
+    }
   }
 }

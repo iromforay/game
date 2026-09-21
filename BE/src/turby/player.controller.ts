@@ -15,11 +15,6 @@ export class PlayerController {
     return this.playerService.getInventory(BigInt(playerId));
   }
 
-  @Post(':playerId/capture')
-  capture(@Param('playerId') playerId: string, @Body('characterCode') characterCode: string) {
-    return this.playerService.capture(playerId, characterCode);
-  }
-
   @Post(':playerId/turby/:turbyId/shelf')
   moveToShelf(@Param('playerId') playerId: string, @Param('turbyId') turbyId: string, @Body('slotIndex') slotIndex: number) {
     return this.playerService.moveToShelf(playerId, turbyId, slotIndex);
