@@ -1,0 +1,7 @@
+[
+  { "order": 1, "stageCode": "forest", "clearCharacterCode": "nubi", "titleKo": "1장 — 숲" },
+  { "order": 2, "stageCode": "lake", "clearCharacterCode": "muldeuli", "titleKo": "2장 — 호수" },
+  { "order": 3, "stageCode": "underground", "clearCharacterCode": "pokshini", "titleKo": "3장 — 지하" },
+  { "order": 4, "stageCode": "ice", "clearCharacterCode": "ganeuri", "titleKo": "4장 — 얼음" },
+  { "order": 5, "stageCode": "desert", "clearCharacterCode": "geumbiti", "titleKo": "5장 — 사막" }
+]

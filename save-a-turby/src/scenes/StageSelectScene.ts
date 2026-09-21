@@ -1,0 +1,222 @@
+import Phaser from 'phaser';
+import { CANVAS_WIDTH } from '../config/constants';
+import { CHARACTER_IMAGES, BACKGROUND_TILES } from '../assets/registry';
+import { loadWorldImages } from '../assets/loader';
+import { getStoryChapters, getChapterStatuses } from '../config/story';
+import type { ChapterStatus } from '../config/story';
+import { inventory } from '../state/inventory';
+import { roomClient, RoomApiError } from '../net/roomClient';
+import { PAL, TEXT, feltPanel, pillButton, creamOverlay, showToast, ellipsize } from '../ui/kit';
+
+// docs/save_a_turby_ui_spec.md 2절 좌표
+const CARD_W = 216;
+const CARD_H = 452;
+const GAP = 16;
+const CARD_Y = 104;
+
+const STATE_STYLE = {
+  cleared: { badge: '완료', badgeFill: PAL.lavender, badgeText: TEXT.body },
+  current: { badge: '진행 중', badgeFill: PAL.mint, badgeText: TEXT.onMint },
+  locked: { badge: '잠김', badgeFill: PAL.cream2, badgeText: TEXT.disabled },
+} as const;
+
+// docs/Turby_story.md: 마을 출구에서 들어오는 지역 선택 — 이전 장의 대표 터비를 직접 포획해야 다음 지역이 열린다.
+// 도형 UI(에셋 적용 전). 잠금 판정은 config/story.ts 순수 함수가 하고 이 화면은 결과만 그린다.
+export class StageSelectScene extends Phaser.Scene {
+  private busy = false;
+
+  constructor() {
+    super('StageSelect');
+  }
+
+  preload() {
+    loadWorldImages(this);
+    for (const [code, url] of Object.entries(BACKGROUND_TILES)) {
+      if (!this.textures.exists(`bg-${code}`)) this.load.image(`bg-${code}`, url);
+    }
+    for (const [code, url] of Object.entries(CHARACTER_IMAGES)) {
+      if (!this.textures.exists(`turby-${code}`)) this.load.image(`turby-${code}`, url);
+    }
+  }
+
+  async create() {
+    this.busy = false;
+    this.cameras.main.setBackgroundColor('#F7E9D2');
+    if (this.textures.exists('bg-village')) this.add.tileSprite(0, 0, CANVAS_WIDTH, 720, 'bg-village').setOrigin(0, 0);
+    creamOverlay(this, 0.78);
+
+    feltPanel(this, CANVAS_WIDTH / 2 - 220, 10, 440, 72, { radius: 28 });
+    this.add.text(CANVAS_WIDTH / 2, 46, '어디로 갈까요?', { fontSize: '30px', color: TEXT.body }).setOrigin(0.5);
+
+    pillButton(this, CANVAS_WIDTH / 2, 670, 240, 64, '마을로 돌아가기', 'back', () => this.scene.start('Village'));
+    this.input.keyboard?.on('keydown-ESC', () => this.scene.start('Village'));
+
+    const statuses = getChapterStatuses(await getStoryChapters(), inventory.getAll());
+    const startX = (CANVAS_WIDTH - (statuses.length * CARD_W + (statuses.length - 1) * GAP)) / 2;
+    statuses.forEach((st, i) => this.renderCard(st, startX + i * (CARD_W + GAP), CARD_Y));
+  }
+
+  // 카드 정보 순서: 장 제목 → 지역 미리보기 → 지역명(2줄) → 대표 터비 → 직접 포획 조건 → 상태 배지 → 잠금 이유
+  private renderCard(st: ChapterStatus, x: number, y: number) {
+    const style = STATE_STYLE[st.state];
+    const locked = st.state === 'locked';
+    const current = st.state === 'current';
+    const code = st.chapter.stageCode;
+    const cx = x + CARD_W / 2;
+
+    feltPanel(this, x, y, CARD_W, CARD_H, { fill: current ? PAL.mint : PAL.cream, stroke: PAL.lavender, strokeW: current ? 6 : 4, radius: 26, alpha: locked ? 0.92 : 1, image: 'stage-card-frame', tint: current ? PAL.mint : undefined });
+    this.add.text(cx, y + 30, st.chapter.titleKo, { fontSize: '20px', color: locked ? TEXT.disabled : TEXT.body }).setOrigin(0.5);
+
+    // 미리보기 196x126
+    const previewY = y + 58;
+    if (this.textures.exists(`bg-${code}`)) {
+      const img = this.add.image(cx, previewY + 63, `bg-${code}`).setDisplaySize(196, 126);
+      if (locked) img.setAlpha(0.45).setTint(0xd8d0d5);
+      else img.setAlpha(st.state === 'cleared' ? 0.88 : 1);
+    } else {
+      this.add.rectangle(cx, previewY + 63, 196, 126, PAL.cream2);
+    }
+
+    this.add
+      .text(cx, y + 198, st.stageName, { fontSize: '17px', color: locked ? TEXT.sub : TEXT.body, align: 'center', wordWrap: { width: CARD_W - 28 } })
+      .setOrigin(0.5, 0);
+
+    // 대표 터비 64x64 + 이름
+    const tx = x + 16 + 32;
+    const ty = y + 274;
+    if (this.textures.exists(`turby-${st.chapter.clearCharacterCode}`)) {
+      const t = this.add.image(tx, ty, `turby-${st.chapter.clearCharacterCode}`).setDisplaySize(64, 64);
+      if (locked) t.setAlpha(0.5);
+    }
+    this.add.text(x + 96, ty - 14, '대표 터비', { fontSize: '12px', color: TEXT.sub });
+    this.add.text(x + 96, ty + 2, ellipsize(st.clearCharacterName, 8), { fontSize: '16px', color: locked ? TEXT.sub : TEXT.body });
+    this.add.text(x + 16, y + 318, '직접 포획하면 장 완료', { fontSize: '13px', color: TEXT.sub });
+
+    // 잠금 이유는 읽을 수 있게 유지한다
+    if (locked && st.unlockHint) {
+      this.add.text(x + 16, y + 342, st.unlockHint, { fontSize: '12px', color: TEXT.sub, wordWrap: { width: CARD_W - 32 }, lineSpacing: 2 });
+    }
+
+    // 상태 배지
+    const badgeY = y + CARD_H - 38;
+    const badgeKey = `badge-${st.state}`;
+    if (this.textures.exists(badgeKey)) {
+      this.add.image(cx, badgeY, badgeKey).setDisplaySize(130, 46);
+    } else {
+      const g = this.add.graphics();
+      g.fillStyle(style.badgeFill, 1);
+      g.fillRoundedRect(cx - 65, badgeY - 20, 130, 40, 18);
+      g.lineStyle(3, PAL.lavender, 1);
+      g.strokeRoundedRect(cx - 65, badgeY - 20, 130, 40, 18);
+    }
+    this.add.text(cx, badgeY, style.badge, { fontSize: '16px', color: style.badgeText }).setOrigin(0.5);
+
+    if (current) this.addStrandPulse(x + CARD_W - 40, y + 30);
+    if (st.state === 'cleared') this.addClearedKnot(x + CARD_W - 32, y + 32);
+    if (locked) this.addLockIcon(x + CARD_W - 32, y + 32);
+
+    this.add
+      .rectangle(x, y, CARD_W, CARD_H, 0xffffff, 0)
+      .setOrigin(0, 0)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        if (locked) showToast(this, st.unlockHint ?? '아직 열리지 않았습니다.', { y: 600 });
+        else this.openModeModal(st);
+      });
+  }
+
+  // ----- 화면 1: 지역을 고른 뒤 협동 방식 선택(혼자 가기 / 방 만들기 / 방 참가는 동등한 선택) -----
+
+  private modal: Phaser.GameObjects.GameObject[] = [];
+
+  private openModeModal(st: ChapterStatus) {
+    if (this.modal.length > 0 || this.busy) return;
+    const cx = CANVAS_WIDTH / 2;
+    const cy = 360;
+    const track = <T extends Phaser.GameObjects.GameObject>(o: T) => {
+      this.modal.push(o);
+      return o;
+    };
+    track(this.add.rectangle(cx, cy, CANVAS_WIDTH, 720, 0x4a3a44, 0.55).setDepth(500).setInteractive());
+    (track(feltPanel(this, cx - 380, cy - 215, 760, 430, { radius: 30, strokeW: 6, image: 'room-panel' })) as Phaser.GameObjects.Image).setDepth(501);
+    track(this.add.text(cx - 330, cy - 168, st.stageName, { fontSize: '26px', color: TEXT.body }).setDepth(502));
+    if (this.textures.exists(`turby-${st.chapter.clearCharacterCode}`)) track(this.add.image(cx + 322, cy - 150, `turby-${st.chapter.clearCharacterCode}`).setDisplaySize(48, 48).setDepth(502));
+    track(this.add.text(cx + 290, cy - 150, `대표 터비\n${st.clearCharacterName}`, { fontSize: '13px', color: TEXT.sub, align: 'right' }).setOrigin(1, 0.5).setDepth(502));
+
+    const modes = [
+      { title: '혼자 가기', desc: '혼자서 조용히\n탐험해요.', run: () => void this.enterStage(st.chapter.stageCode) },
+      { title: '방 만들기', desc: '함께할 사람을\n부를 방을 만들어요.', run: () => this.scene.start('Coop', { mode: 'create', stageCode: st.chapter.stageCode, stageName: st.stageName }) },
+      { title: '방 참가', desc: '공개 방 목록이나\n방 코드로 참가해요.', run: () => this.scene.start('Coop', { mode: 'join', stageCode: st.chapter.stageCode, stageName: st.stageName }) },
+    ];
+    const startX = cx - (3 * 232 + 2 * 24) / 2;
+    modes.forEach((m, i) => {
+      const x = startX + i * (232 + 24);
+      const y = cy - 126;
+      (track(feltPanel(this, x, y, 232, 248, { radius: 26, image: 'mode-card' })) as Phaser.GameObjects.Image).setDepth(502);
+      track(this.add.text(x + 116, y + 70, m.title, { fontSize: '26px', color: TEXT.body }).setOrigin(0.5).setDepth(503));
+      track(this.add.text(x + 116, y + 140, m.desc, { fontSize: '16px', color: TEXT.sub, align: 'center', lineSpacing: 6 }).setOrigin(0.5).setDepth(503));
+      track(this.add.rectangle(x, y, 232, 248, 0xffffff, 0).setOrigin(0, 0).setDepth(504).setInteractive({ useHandCursor: true }).on('pointerdown', m.run));
+    });
+    const back = pillButton(this, cx, cy + 148, 180, 48, '뒤로', 'secondary', () => this.closeModeModal());
+    back.setDepth(504);
+    track(back);
+  }
+
+  private closeModeModal() {
+    this.modal.forEach((o) => o.destroy());
+    this.modal = [];
+  }
+
+  // 진행 중: 작은 실가닥이 천천히 맥동한다
+  private addStrandPulse(x: number, y: number) {
+    const dot = this.add.circle(x, y, 8, PAL.pink).setStrokeStyle(3, PAL.lavender);
+    this.tweens.add({ targets: dot, scale: 1.35, alpha: 0.7, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+  }
+
+  private addClearedKnot(x: number, y: number) {
+    if (this.textures.exists('icon-cleared-knot')) {
+      this.add.image(x, y, 'icon-cleared-knot').setDisplaySize(40, 40);
+      return;
+    }
+    this.add.circle(x, y, 18, PAL.cream).setStrokeStyle(4, PAL.lavender);
+    this.add.text(x, y, '✓', { fontSize: '20px', color: TEXT.body }).setOrigin(0.5);
+  }
+
+  private addLockIcon(x: number, y: number) {
+    if (this.textures.exists('icon-locked')) {
+      this.add.image(x, y, 'icon-locked').setDisplaySize(40, 40);
+      return;
+    }
+    const g = this.add.graphics();
+    g.lineStyle(4, PAL.disabled, 1);
+    g.strokeCircle(x, y - 6, 8);
+    g.fillStyle(PAL.disabled, 1);
+    g.fillRoundedRect(x - 12, y - 4, 24, 18, 5);
+  }
+
+  // 지역을 고르면 방이 만들어진다(혼자 가기 = 1인 방). 개발 중에는 ?join=코드로 다른 사람의 방에 들어갈 수 있다.
+  // 서버에 연결할 수 없으면(오프라인) 기존처럼 혼자 탐험만 계속한다.
+  private async enterStage(stageCode: string) {
+    if (this.busy) return;
+    this.busy = true;
+    let stage = stageCode;
+    try {
+      const joinCode = import.meta.env.DEV ? new URLSearchParams(location.search).get('join') : null;
+      if (joinCode) {
+        await roomClient.connect();
+        await roomClient.leaveRoom();
+        stage = (await roomClient.joinRoom(joinCode)).stageCode;
+      } else {
+        await roomClient.startSolo(stageCode);
+      }
+    } catch (err) {
+      if (err instanceof RoomApiError) {
+        this.busy = false;
+        showToast(this, err.message, { y: 600, error: true });
+        return;
+      }
+      console.warn('[room] 서버에 연결할 수 없어 혼자 탐험합니다:', err);
+    }
+    this.scene.start('Map', { stageCode: stage, capturedIndices: [], removedIndices: [] });
+  }
+}

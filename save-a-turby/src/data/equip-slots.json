@@ -1,0 +1,5 @@
+[
+  { "key": "weapon", "label": "무기", "iconKey": "slot-weapon" },
+  { "key": "armor", "label": "방어구", "iconKey": "slot-armor" },
+  { "key": "accessory", "label": "장신구", "iconKey": "slot-accessory" }
+]
