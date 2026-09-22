@@ -1,7 +1,7 @@
 import { io, type Socket } from 'socket.io-client';
 import { api, getOrCreateDeviceUuid, type PlayerStateDto, type KirbyInstanceDto } from '../api/client';
 
-// 사용자 지적(2026-09-18): api/client.ts와 동일한 이유로 .env(VITE_KIRBY_SERVER_URL)에서 읽어옴.
+// 서버 주소는 api/client.ts와 동일하게 hub/.env의 VITE_KIRBY_SERVER_URL에서 읽어옴.
 const AUTO_INCOME_INTERVAL_MS = 5000;
 const URL = import.meta.env.VITE_KIRBY_SERVER_URL ?? 'http://localhost:3003';
 

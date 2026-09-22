@@ -1,6 +1,6 @@
 // 터비 전용 BE(3.5.3, 포트 3002)와 통신하는 최소 REST 클라이언트.
-// TODO: 배포 환경별 URL 분기는 아직 없음 — 지금은 로컬 개발 서버만 가정.
-export const BASE_URL = 'http://localhost:3002';
+// 접속 주소는 .env(VITE_TURBY_SERVER_URL)에서 읽음. 배포는 hub에서 빌드하므로 hub/.env에 설정.
+export const BASE_URL: string = import.meta.env.VITE_TURBY_SERVER_URL ?? 'http://localhost:3002';
 
 export interface ServerTurbyStats {
   attack: number;
