@@ -525,6 +525,12 @@ export class LobbyScene extends Phaser.Scene {
       this.avatar.setPosition(this.pos.x, this.pos.y);
       this.avatar.updateMovement(movedX, movedY);
       this.minimapArrow.setRotation(Math.atan2(dy, dx) + Math.PI / 2);
+      // 사용자 지적(2026-09-23): 가만히 서 있어도 같은 좌표를 계속 쏘고 있었음 —
+      // 실제로 움직였을 때만(len > 0) 주기 체크 후 브로드캐스트하도록 이동.
+      if (time - this.lastLobbyBroadcast > LOBBY_MOVE_BROADCAST_MS) {
+        this.lastLobbyBroadcast = time;
+        void kirbyNetwork.reportLobbyMove(this.pos.x, this.pos.y);
+      }
     } else {
       this.avatar.updateMovement(0, 0);
     }
@@ -532,12 +538,6 @@ export class LobbyScene extends Phaser.Scene {
     this.minimapArrow.setPosition(mm.x, mm.y);
     this.localRing.setPosition(this.pos.x, this.pos.y + 30).setDepth(DEPTH.ACTOR_BASE + this.pos.y - 2);
     this.updateEmotePositions();
-
-    // 마을 앰비언트 프레즌스 — 침입 중 위치 브로드캐스트(reportMove)와 동일 주기로 내 위치를 알림
-    if (time - this.lastLobbyBroadcast > LOBBY_MOVE_BROADCAST_MS) {
-      this.lastLobbyBroadcast = time;
-      void kirbyNetwork.reportLobbyMove(this.pos.x, this.pos.y);
-    }
 
     for (const slot of this.houseSlots) {
       const door = HOUSE_DOORS[slot.key];
