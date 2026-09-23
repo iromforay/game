@@ -81,16 +81,22 @@ export class InvasionGateway implements OnGatewayDisconnect {
   // 안 보이던 문제. LobbyScene 진입 시 호출 — room에 join하고, 이미 로비에 있던 사람들 좌표를 즉시 돌려줌.
   @SubscribeMessage('lobby:enter')
   async handleLobbyEnter(@ConnectedSocket() client: Socket, @MessageBody() body: { x?: number; y?: number }) {
-    const actorId = this.requireSocketIdentity(client);
-    if (!actorId) return { ok: false, reason: 'identity-mismatch' };
-    const x = Number.isFinite(body?.x) ? body.x! : 640;
-    const y = Number.isFinite(body?.y) ? body.y! : 620;
-    const players = this.invasions.listLobbyPositions(actorId);
-    await client.join(LOBBY_ROOM);
-    this.invasions.setLobbyPosition(actorId, x, y);
-    // 기존 접속자는 후발 접속자가 움직이기 전에도 즉시 생성한다.
-    client.to(LOBBY_ROOM).emit('lobby:position', { playerId: actorId, x, y });
-    return { ok: true, players };
+    try {
+      const actorId = this.requireSocketIdentity(client);
+      if (!actorId) return { ok: false, reason: 'identity-mismatch' };
+      const x = Number.isFinite(body?.x) ? body.x! : 640;
+      const y = Number.isFinite(body?.y) ? body.y! : 620;
+      const players = this.invasions.listLobbyPositions(actorId);
+      await client.join(LOBBY_ROOM);
+      this.invasions.setLobbyPosition(actorId, x, y);
+      // 기존 접속자는 후발 접속자가 움직이기 전에도 즉시 생성한다.
+      client.to(LOBBY_ROOM).emit('lobby:position', { playerId: actorId, x, y });
+      return { ok: true, players };
+    } catch (err) {
+      // 사용자 지적(2026-09-23): 실제 브라우저 클라이언트에서 이 이벤트의 ack가 전혀 안 오는
+      // 현상 진단용 — 원인 불문 항상 ack는 나가게 하고 에러 내용을 그대로 클라이언트에 노출한다.
+      return { ok: false, reason: 'exception', message: err instanceof Error ? err.message : String(err) };
+    }
   }
 
   // LobbyScene이 다른 씬으로 전환될 때(shutdown) 호출 — 다른 사람 화면에서 캐릭터를 지워줌

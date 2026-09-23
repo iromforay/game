@@ -49,6 +49,8 @@ type Handlers = {
   lobbyLeft: (e: LobbyLeftEvent) => void;
   lobbyEmote: (e: LobbyEmoteEvent) => void;
   connectionChanged: (connected: boolean) => void;
+  // 재연결 후 presence:hello/base:enter(신원 재등록)까지 끝난 시점 — 이 뒤라야 lobby:enter 등이 서버에서 거부되지 않음
+  reconnected: () => void;
   incomeCollected: (amount: number) => void;
 };
 
@@ -72,6 +74,7 @@ class KirbyNetwork {
     lobbyLeft: new Set(),
     lobbyEmote: new Set(),
     connectionChanged: new Set(),
+    reconnected: new Set(),
     incomeCollected: new Set(),
   };
 
@@ -110,7 +113,7 @@ class KirbyNetwork {
       this.emit('connectionChanged', true);
       // 최초 연결은 아래 Promise가 인증/room 복구까지 기다린 뒤 connect()를
       // 완료한다. 이후 재연결만 이 상시 핸들러에서 복구한다.
-      if (!initialConnectionPending) void this.afterSocketConnected();
+      if (!initialConnectionPending) void this.afterSocketConnected().then(() => this.emit('reconnected', undefined as never));
     });
     this.socket.on('disconnect', () => {
       this.connected = false;

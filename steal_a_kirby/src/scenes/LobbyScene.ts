@@ -112,6 +112,7 @@ export class LobbyScene extends Phaser.Scene {
   // 마을(로비) 앰비언트 프레즌스 — 사용자 지적(2026-09-18): 로비에서 다른 접속자 캐릭터가 안 보이던 문제
   private remotePlayers = new Map<string, RemotePlayer>();
   private lastLobbyBroadcast = 0;
+  private lastSentLobbyPos = { x: PLAYER_START.x, y: PLAYER_START.y };
   // key: 'me' 또는 원격 playerId — 머리 위 이모트 말풍선(bubble+icon)과 종료 타이머
   private emotes = new Map<string, { bubble: Phaser.GameObjects.Image; icon: Phaser.GameObjects.Image; timer: Phaser.Time.TimerEvent }>();
   private emoteReadyAt = 0;
@@ -123,6 +124,26 @@ export class LobbyScene extends Phaser.Scene {
   private uiCamera?: Phaser.Cameras.Scene2D.Camera;
 
   private onStateChanged = (state: PlayerStateDto) => this.refreshFromState(state);
+
+  // 재연결(신원 재등록 완료) 시 로비 room 멤버십과 원격 아바타 목록을 다시 동기화(사용자 지적 2026-09-23 참고).
+  // connectionChanged(true)는 presence:hello보다 먼저 발생해 lobby:enter가 identity-mismatch로 거부되므로 쓰면 안 됨.
+  private onReconnected = () => this.resyncLobbyRoster();
+
+  private broadcastLobbyPos(time: number) {
+    this.lastLobbyBroadcast = time;
+    this.lastSentLobbyPos = { x: this.pos.x, y: this.pos.y };
+    void kirbyNetwork.reportLobbyMove(this.pos.x, this.pos.y).catch(() => undefined); // 끊긴 동안은 재연결 시 lobby:enter가 좌표를 복구
+  }
+
+  private resyncLobbyRoster() {
+    for (const remote of this.remotePlayers.values()) remote.avatar.destroy();
+    this.remotePlayers.clear();
+    this.lastSentLobbyPos = { x: this.pos.x, y: this.pos.y };
+    void kirbyNetwork.enterLobby(this.pos.x, this.pos.y).then((res) => {
+      if (!res.ok || !res.players) return;
+      for (const p of res.players) this.onLobbyPosition(p);
+    });
+  }
 
   constructor() {
     super('LobbyScene');
@@ -323,6 +344,12 @@ export class LobbyScene extends Phaser.Scene {
     kirbyNetwork.on('lobbyLeft', this.onLobbyLeft);
     kirbyNetwork.on('lobbyEmote', this.onLobbyEmote);
     kirbyNetwork.on('incomeCollected', this.onIncomeCollected);
+    // 사용자 지적(2026-09-23): "서로 안 보인다" 재현 — 소켓이 재연결되면 KirbyNetwork는
+    // presence:hello/base:enter만 다시 보내고 lobby:enter는 다시 보내지 않아서, 재연결된
+    // 소켓이 서버의 로비 room(LOBBY_ROOM)에서 조용히 빠진 채로 남는다. 그 뒤로는 서버가
+    // lobby:position을 브로드캐스트해도 이 소켓엔 다시는 안 오고, 남에게도 내가 안 보인다.
+    // 재연결마다 로비 재입장을 다시 호출해 room 멤버십과 원격 아바타 목록을 복구한다.
+    kirbyNetwork.on('reconnected', this.onReconnected);
     this.createEmoteButton();
     this.setupMobileCamera();
     this.events.once('shutdown', () => {
@@ -335,17 +362,14 @@ export class LobbyScene extends Phaser.Scene {
       this.hideInvasionAlert();
       kirbyNetwork.off('lobbyPosition', this.onLobbyPosition);
       kirbyNetwork.off('lobbyLeft', this.onLobbyLeft);
+      kirbyNetwork.off('reconnected', this.onReconnected);
       void kirbyNetwork.leaveLobby(); // 다른 사람 화면에서 내 캐릭터를 지워줌(BaseScene 등으로 전환 시)
       for (const remote of this.remotePlayers.values()) remote.avatar.destroy();
       this.remotePlayers.clear();
     });
 
     // 로비 입장 — 이미 로비에 있던 다른 접속자들의 좌표를 즉시 받아서 스폰
-    this.remotePlayers.clear();
-    void kirbyNetwork.enterLobby(this.pos.x, this.pos.y).then((res) => {
-      if (!res.ok || !res.players) return;
-      for (const p of res.players) this.onLobbyPosition(p);
-    });
+    this.resyncLobbyRoster();
 
     this.invasionAlert = undefined;
     this.alertInstance = null;
@@ -527,12 +551,12 @@ export class LobbyScene extends Phaser.Scene {
       this.minimapArrow.setRotation(Math.atan2(dy, dx) + Math.PI / 2);
       // 사용자 지적(2026-09-23): 가만히 서 있어도 같은 좌표를 계속 쏘고 있었음 —
       // 실제로 움직였을 때만(len > 0) 주기 체크 후 브로드캐스트하도록 이동.
-      if (time - this.lastLobbyBroadcast > LOBBY_MOVE_BROADCAST_MS) {
-        this.lastLobbyBroadcast = time;
-        void kirbyNetwork.reportLobbyMove(this.pos.x, this.pos.y);
-      }
+      if (time - this.lastLobbyBroadcast > LOBBY_MOVE_BROADCAST_MS) this.broadcastLobbyPos(time);
     } else {
       this.avatar.updateMovement(0, 0);
+      // 멈춘 순간 마지막 주기 이후 이동분(최대 150ms)이 전송되지 않아 상대 화면에서 위치가 어긋나던 문제 —
+      // 정지 시 최종 좌표가 마지막 전송값과 다르면 한 번만 보낸다(가만히 있으면 추가 전송 없음).
+      if (this.lastSentLobbyPos.x !== this.pos.x || this.lastSentLobbyPos.y !== this.pos.y) this.broadcastLobbyPos(time);
     }
     const mm = this.worldToMinimap(this.pos.x, this.pos.y);
     this.minimapArrow.setPosition(mm.x, mm.y);
