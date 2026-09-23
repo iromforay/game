@@ -7,7 +7,6 @@ import { StageSelectScene } from './scenes/StageSelectScene';
 import { MapScene } from './scenes/MapScene';
 import { PartySelectScene } from './scenes/PartySelectScene';
 import { BattleScene } from './scenes/BattleScene';
-import { CoopScene } from './scenes/CoopScene';
 import { inventory } from './state/inventory';
 
 export async function mountGame(parent: HTMLElement | string): Promise<Phaser.Game> {
@@ -30,7 +29,7 @@ export async function mountGame(parent: HTMLElement | string): Promise<Phaser.Ga
       // body도 동일하게 flex 중앙정렬이라 문제없음).
       autoCenter: Phaser.Scale.NO_CENTER,
     },
-    scene: [VillageScene, HomeScene, MarketScene, StageSelectScene, CoopScene, MapScene, PartySelectScene, BattleScene],
+    scene: [VillageScene, HomeScene, MarketScene, StageSelectScene, MapScene, PartySelectScene, BattleScene],
   };
 
   return new Phaser.Game(config);

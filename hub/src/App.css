@@ -492,3 +492,46 @@
   overflow: hidden;
 }
 
+/* A phone in landscape has very little usable height once the browser chrome
+   is visible. Keeping the hub button in normal flow used to take another
+   68-80px from Phaser, so Scale.FIT shrank the entire 1280x720 scene (and the
+   characters/joystick with it). Float the navigation over the game on short
+   landscape viewports and give the canvas the full available height. */
+/* Use the viewport's actual shape instead of `orientation`. Desktop device
+   emulation can keep reporting portrait orientation after its dimensions are
+   swapped, which made this optimization fail in DevTools. */
+@media (max-height: 600px) and (min-aspect-ratio: 4 / 3) {
+  .game-screen {
+    position: relative;
+  }
+
+  .game-screen > .exit-button {
+    position: absolute;
+    z-index: 10;
+    top: max(8px, env(safe-area-inset-top));
+    left: max(8px, env(safe-area-inset-left));
+    width: 44px;
+    height: 44px;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-indent: -9999px;
+    background: rgba(19, 13, 36, 0.78);
+    border-color: rgba(255, 233, 168, 0.75);
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(4px);
+  }
+
+  .game-screen > .exit-button::after {
+    content: '←';
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    color: #ffe9a8;
+    font-size: 24px;
+    line-height: 1;
+    text-indent: 0;
+  }
+}

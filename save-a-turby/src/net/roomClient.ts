@@ -21,20 +21,10 @@ export interface RoomState {
   name: string;
   stageCode: string;
   maxPlayers: number;
-  visibility: 'public' | 'private';
+  visibility: 'private';
   phase: 'lobby' | 'playing';
   hostPlayerId: string;
   members: MemberInfo[];
-}
-
-export interface RoomSummary {
-  code: string;
-  name: string;
-  stageCode: string;
-  maxPlayers: number;
-  memberCount: number;
-  phase: 'lobby' | 'playing';
-  hostNickname: string;
 }
 
 export interface MapPlayer {
@@ -212,19 +202,9 @@ class RoomClient {
     return this.room !== null;
   }
 
-  async listRooms(stageCode?: string): Promise<RoomSummary[]> {
-    return (await this.request<{ rooms: RoomSummary[] }>('room:list', { stageCode })).rooms;
-  }
-
-  async createRoom(body: { name: string; maxPlayers: number; visibility: 'public' | 'private'; stageCode: string }): Promise<RoomState> {
-    this.room = (await this.request<{ room: RoomState }>('room:create', body)).room;
+  async createRoom(stageCode: string): Promise<RoomState> {
+    this.room = (await this.request<{ room: RoomState }>('room:create', { stageCode })).room;
     this.others.clear();
-    this.emitLocal('state', this.room);
-    return this.room;
-  }
-
-  async joinRoom(code: string): Promise<RoomState> {
-    this.room = (await this.request<{ room: RoomState }>('room:join', { code })).room;
     this.emitLocal('state', this.room);
     return this.room;
   }
@@ -248,11 +228,11 @@ class RoomClient {
     }
   }
 
-  // 혼자 가기(1인 비공개 방 자동 생성+시작) — 이미 방에 있으면 먼저 나간다
+  // 1인 방 자동 생성+시작 — 이미 방에 있으면 먼저 나간다
   async startSolo(stageCode: string): Promise<RoomState> {
     await this.connect();
     await this.leaveRoom();
-    await this.createRoom({ name: '혼자 탐험', maxPlayers: 1, visibility: 'private', stageCode });
+    await this.createRoom(stageCode);
     return this.startRoom();
   }
 

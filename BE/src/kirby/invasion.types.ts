@@ -3,5 +3,6 @@ export interface ActiveInvasion {
   ownerPlayerId: string;
   viewerPlayerId: string;
   hitCount: number;
+  exitEnteredAt?: number;
   positions: Map<string, { x: number; y: number; t: number }>; // playerId -> last known position + timestamp(ms)
 }

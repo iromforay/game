@@ -121,50 +121,8 @@ export class StageSelectScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => {
         if (locked) showToast(this, st.unlockHint ?? '아직 열리지 않았습니다.', { y: 600 });
-        else this.openModeModal(st);
+        else void this.enterStage(st.chapter.stageCode);
       });
-  }
-
-  // ----- 화면 1: 지역을 고른 뒤 협동 방식 선택(혼자 가기 / 방 만들기 / 방 참가는 동등한 선택) -----
-
-  private modal: Phaser.GameObjects.GameObject[] = [];
-
-  private openModeModal(st: ChapterStatus) {
-    if (this.modal.length > 0 || this.busy) return;
-    const cx = CANVAS_WIDTH / 2;
-    const cy = 360;
-    const track = <T extends Phaser.GameObjects.GameObject>(o: T) => {
-      this.modal.push(o);
-      return o;
-    };
-    track(this.add.rectangle(cx, cy, CANVAS_WIDTH, 720, 0x4a3a44, 0.55).setDepth(500).setInteractive());
-    (track(feltPanel(this, cx - 380, cy - 215, 760, 430, { radius: 30, strokeW: 6, image: 'room-panel' })) as Phaser.GameObjects.Image).setDepth(501);
-    track(this.add.text(cx - 330, cy - 168, st.stageName, { fontSize: '26px', color: TEXT.body }).setDepth(502));
-    if (this.textures.exists(`turby-${st.chapter.clearCharacterCode}`)) track(this.add.image(cx + 322, cy - 150, `turby-${st.chapter.clearCharacterCode}`).setDisplaySize(48, 48).setDepth(502));
-    track(this.add.text(cx + 290, cy - 150, `대표 터비\n${st.clearCharacterName}`, { fontSize: '13px', color: TEXT.sub, align: 'right' }).setOrigin(1, 0.5).setDepth(502));
-
-    const modes = [
-      { title: '혼자 가기', desc: '혼자서 조용히\n탐험해요.', run: () => void this.enterStage(st.chapter.stageCode) },
-      { title: '방 만들기', desc: '함께할 사람을\n부를 방을 만들어요.', run: () => this.scene.start('Coop', { mode: 'create', stageCode: st.chapter.stageCode, stageName: st.stageName }) },
-      { title: '방 참가', desc: '공개 방 목록이나\n방 코드로 참가해요.', run: () => this.scene.start('Coop', { mode: 'join', stageCode: st.chapter.stageCode, stageName: st.stageName }) },
-    ];
-    const startX = cx - (3 * 232 + 2 * 24) / 2;
-    modes.forEach((m, i) => {
-      const x = startX + i * (232 + 24);
-      const y = cy - 126;
-      (track(feltPanel(this, x, y, 232, 248, { radius: 26, image: 'mode-card' })) as Phaser.GameObjects.Image).setDepth(502);
-      track(this.add.text(x + 116, y + 70, m.title, { fontSize: '26px', color: TEXT.body }).setOrigin(0.5).setDepth(503));
-      track(this.add.text(x + 116, y + 140, m.desc, { fontSize: '16px', color: TEXT.sub, align: 'center', lineSpacing: 6 }).setOrigin(0.5).setDepth(503));
-      track(this.add.rectangle(x, y, 232, 248, 0xffffff, 0).setOrigin(0, 0).setDepth(504).setInteractive({ useHandCursor: true }).on('pointerdown', m.run));
-    });
-    const back = pillButton(this, cx, cy + 148, 180, 48, '뒤로', 'secondary', () => this.closeModeModal());
-    back.setDepth(504);
-    track(back);
-  }
-
-  private closeModeModal() {
-    this.modal.forEach((o) => o.destroy());
-    this.modal = [];
   }
 
   // 진행 중: 작은 실가닥이 천천히 맥동한다
@@ -194,21 +152,13 @@ export class StageSelectScene extends Phaser.Scene {
     g.fillRoundedRect(x - 12, y - 4, 24, 18, 5);
   }
 
-  // 지역을 고르면 방이 만들어진다(혼자 가기 = 1인 방). 개발 중에는 ?join=코드로 다른 사람의 방에 들어갈 수 있다.
-  // 서버에 연결할 수 없으면(오프라인) 기존처럼 혼자 탐험만 계속한다.
+  // 지역을 고르면 1인 방이 만들어진다. 서버에 연결할 수 없으면(오프라인) 기존처럼 혼자 탐험만 계속한다.
   private async enterStage(stageCode: string) {
     if (this.busy) return;
     this.busy = true;
-    let stage = stageCode;
+    const stage = stageCode;
     try {
-      const joinCode = import.meta.env.DEV ? new URLSearchParams(location.search).get('join') : null;
-      if (joinCode) {
-        await roomClient.connect();
-        await roomClient.leaveRoom();
-        stage = (await roomClient.joinRoom(joinCode)).stageCode;
-      } else {
-        await roomClient.startSolo(stageCode);
-      }
+      await roomClient.startSolo(stageCode);
     } catch (err) {
       if (err instanceof RoomApiError) {
         this.busy = false;

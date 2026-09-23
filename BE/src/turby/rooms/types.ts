@@ -1,11 +1,9 @@
 export type Facing = 'down' | 'left' | 'right' | 'up';
-export type RoomVisibility = 'public' | 'private';
+export type RoomVisibility = 'private'; // 멀티 제거: 방은 항상 플레이어 1인 전용(공개 목록·참가 없음)
 export type RoomPhase = 'lobby' | 'playing';
 
 export const FACINGS: Facing[] = ['down', 'left', 'right', 'up'];
-export const MIN_PLAYERS = 1; // docs/Save a Turby.md 3.6: 방 인원 1~5명
-export const MAX_PLAYERS = 5;
-export const ROOM_NAME_MAX = 20;
+export const MAX_PLAYERS = 1;
 export const ROOM_CODE_LENGTH = 5;
 
 export interface RoomMember {
@@ -67,16 +65,6 @@ export interface RoomStateDto {
   phase: RoomPhase;
   hostPlayerId: string;
   members: MemberDto[];
-}
-
-export interface RoomSummaryDto {
-  code: string;
-  name: string;
-  stageCode: string;
-  maxPlayers: number;
-  memberCount: number;
-  phase: RoomPhase;
-  hostNickname: string;
 }
 
 export interface MapPlayerDto {

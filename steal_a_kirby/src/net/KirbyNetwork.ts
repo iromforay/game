@@ -104,10 +104,13 @@ class KirbyNetwork {
 
     // 'connect'는 재연결마다 다시 발생하는 상시 리스너 하나만 둠 — 최초 연결과 재연결을 같은 경로로 처리
     // (끊겼다 살아나도 presence/room 상태가 자동으로 복구됨).
+    let initialConnectionPending = true;
     this.socket.on('connect', () => {
       this.connected = true;
       this.emit('connectionChanged', true);
-      void this.afterSocketConnected();
+      // 최초 연결은 아래 Promise가 인증/room 복구까지 기다린 뒤 connect()를
+      // 완료한다. 이후 재연결만 이 상시 핸들러에서 복구한다.
+      if (!initialConnectionPending) void this.afterSocketConnected();
     });
     this.socket.on('disconnect', () => {
       this.connected = false;
@@ -152,7 +155,14 @@ class KirbyNetwork {
     // 최초 연결이 실제로 될 때까지만 기다림(이후 재연결은 위 상시 'connect' 핸들러가 알아서 처리) —
     // socket.io 기본 옵션은 자동 재연결을 시도하므로, 여기서 타임아웃/실패해도 백그라운드에서 계속 재시도함.
     await new Promise<void>((resolve, reject) => {
-      this.socket!.once('connect', () => resolve());
+      this.socket!.once('connect', () => {
+        void this.afterSocketConnected()
+          .then(() => {
+            initialConnectionPending = false;
+            resolve();
+          })
+          .catch(reject);
+      });
       this.socket!.once('connect_error', (err) => {
         // 최초 연결 실패 시엔 백그라운드 재시도 루프를 남겨두지 않고 정리 — 나중에 connect()를
         // 다시 부르면(예: 재시도 버튼) 깨끗한 새 소켓으로 다시 시작함.
@@ -253,8 +263,8 @@ class KirbyNetwork {
   }
 
   // ----- 마을(로비) 앰비언트 프레즌스 — 사용자 지적(2026-09-18): 로비에서 다른 접속자 캐릭터가 안 보이던 문제 -----
-  enterLobby() {
-    return this.emitAsync<{ ok: boolean; players?: { playerId: string; x: number; y: number }[] }>('lobby:enter', {});
+  enterLobby(x: number, y: number) {
+    return this.emitAsync<{ ok: boolean; players?: { playerId: string; x: number; y: number }[] }>('lobby:enter', { x, y });
   }
 
   leaveLobby() {
@@ -296,6 +306,14 @@ class KirbyNetwork {
 
   exit(targetPlayerId: string, instanceId: string) {
     return this.emitAsync<{ ok: boolean; result?: 'success' | 'failed' }>('invasion:exit', {
+      viewerPlayerId: this.playerId,
+      targetPlayerId,
+      instanceId,
+    });
+  }
+
+  cancelInvasion(targetPlayerId: string, instanceId: string) {
+    return this.emitAsync<{ ok: boolean; reason?: string }>('invasion:cancel', {
       viewerPlayerId: this.playerId,
       targetPlayerId,
       instanceId,

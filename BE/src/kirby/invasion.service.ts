@@ -15,6 +15,7 @@ const WORLD_BOUNDS = { minX: 0, minY: 0, maxX: 1280, maxY: 720 };
 // 클라이언트가 문까지 이동하지 않고도 invasion:exit만 호출해서 탈출할 수 있던 문제 수정.
 // 1280x720 월드 좌표 기준 — FE(steal_a_kirby/src/scenes/BaseScene.ts)의 EXIT_ZONE과 반드시 동일해야 함.
 const EXIT_ZONE = { x: 605, y: 635, radius: 90 };
+const ESCAPE_HOLD_MS = 2500;
 
 // Codex QA 지적(2026-09-18, to_claude_v2_C.md §3-1/2) 반영: 침입 시작 시 최초 위치를 클라이언트
 // 자기신고에 맡기지 않고 서버가 직접 스폰 좌표로 고정한다 — 그래야 "첫 이동 보고를 곧장 출입문
@@ -131,6 +132,11 @@ export class InvasionService {
     }
 
     invasion.positions.set(playerId, { x, y, t: now });
+    if (playerId === invasion.viewerPlayerId) {
+      const inExit = Math.hypot(x - EXIT_ZONE.x, y - EXIT_ZONE.y) <= EXIT_ZONE.radius;
+      if (inExit) invasion.exitEnteredAt ??= now;
+      else invasion.exitEnteredAt = undefined;
+    }
     return true;
   }
 
@@ -155,12 +161,13 @@ export class InvasionService {
   }
 
   // 서버 권위 탈출 판정 — 침입자의 마지막 보고 좌표가 출입문 Zone 반경 안에 있는지 검증
-  isNearExit(instanceId: string, playerId: string): boolean {
-    const pos = this.activeInvasions.get(instanceId)?.positions.get(playerId);
-    if (!pos) return false;
+  isEscapeReady(instanceId: string, playerId: string): boolean {
+    const invasion = this.activeInvasions.get(instanceId);
+    const pos = invasion?.positions.get(playerId);
+    if (!invasion || !pos || !invasion.exitEnteredAt) return false;
     const dx = pos.x - EXIT_ZONE.x;
     const dy = pos.y - EXIT_ZONE.y;
-    return Math.sqrt(dx * dx + dy * dy) <= EXIT_ZONE.radius;
+    return Math.sqrt(dx * dx + dy * dy) <= EXIT_ZONE.radius && Date.now() - invasion.exitEnteredAt >= ESCAPE_HOLD_MS;
   }
 
   endInvasion(instanceId: string) {

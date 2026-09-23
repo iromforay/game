@@ -5,7 +5,8 @@ import { kirbyGrade, pickWeightedRandomKirby, type KirbyDef } from '../data/kirb
 import { kirbyNetwork } from '../net/KirbyNetwork';
 import type { InvasionResolvedEvent, InvasionStartedEvent, LobbyEmoteEvent, LobbyLeftEvent, LobbyPositionEvent } from '../net/KirbyNetwork';
 import type { PlayerStateDto } from '../api/client';
-import { allKirbyImageKeys, getCharacterAssetUrl, getKirbyImageUrl, getLobbyAssetUrl, getUiAssetUrl, PLAYER_AVATAR_URL, UI_COIN_URL } from '../assets/registry';
+import { allKirbyImageKeys, getBaseAssetUrl, getCharacterAssetUrl, getKirbyImageUrl, getLobbyAssetUrl, getUiAssetUrl, PLAYER_AVATAR_URL, UI_COIN_URL } from '../assets/registry';
+import marketStageNoPedestalsUrl from '../assets/lobby/landmarks/market-stage-no-pedestals.png';
 import { PlayerAvatar, ensurePlayerAvatarAnims, preloadPlayerAvatarAssets } from '../objects/PlayerAvatar';
 
 const kirbyTextureKey = (imageKey: string) => `kirby-${imageKey}`;
@@ -54,6 +55,7 @@ const EMOTE_DURATION_MS = 2000;
 const EMOTE_COOLDOWN_MS = 3000;
 const EMOTE_BUTTON_POS = { x: 1195, y: 650 };
 const LOBBY_MOVE_BROADCAST_MS = 150; // 침입 중 위치 브로드캐스트(reportMove)와 동일 주기
+const MOBILE_CAMERA_ZOOM = 1.5;
 
 interface RemotePlayer {
   avatar: PlayerAvatar;
@@ -118,6 +120,7 @@ export class LobbyScene extends Phaser.Scene {
   private alertInstance: { instanceId: string; characterName: string } | null = null;
   private emoteButton!: Phaser.GameObjects.Image;
   private emoteButtonIcon!: Phaser.GameObjects.Image;
+  private uiCamera?: Phaser.Cameras.Scene2D.Camera;
 
   private onStateChanged = (state: PlayerStateDto) => this.refreshFromState(state);
 
@@ -134,7 +137,10 @@ export class LobbyScene extends Phaser.Scene {
     this.load.image('house-green', lobbyAsset('buildings/base-house-green'));
     this.load.image('house-orange', lobbyAsset('buildings/base-house-orange'));
     this.load.image('fountain-base', lobbyAsset('landmarks/fountain-base'));
-    this.load.image('market-stage', lobbyAsset('landmarks/market-stage'));
+    // 신규 파일은 실행 중인 Vite의 import.meta.glob 목록이 갱신되기 전까지 누락될 수
+    // 있으므로 정적 URL로 직접 연결한다(누락 시 Phaser의 검정/초록 사각형이 표시됨).
+    this.load.image('market-stage', marketStageNoPedestalsUrl);
+    this.load.image('market-shop-pedestal', getBaseAssetUrl('slots/base-slot-pedestal')!);
     this.load.image('market-sign', lobbyAsset('landmarks/market-sign'));
     this.load.image('lobby-front-foliage', lobbyAsset('foreground/lobby-front-foliage'));
     this.load.image('door-glow', lobbyAsset('buildings/base-door-glow'));
@@ -200,14 +206,22 @@ export class LobbyScene extends Phaser.Scene {
       .play('fx-fountain-sparkle');
     this.add.image(CANVAS_WIDTH / 2, 380, 'market-sign').setDepth(DEPTH.BUILDINGS);
     // 사용자 지적(2026-09-18, to_claude_v7 P1): 시장 명패가 항상 비어있었음 — 기본 지역명 표기
-    this.add.text(CANVAS_WIDTH / 2, 380, '커비 마을 시장', { fontSize: '16px', color: '#3d2410', fontStyle: 'bold' }).setOrigin(0.5).setDepth(DEPTH.BUILDINGS + 1);
+    this.add
+      .text(CANVAS_WIDTH / 2, 380, '커비 마을 시장', { fontSize: '24px', color: '#ffffff', fontStyle: 'bold', stroke: '#3d2410', strokeThickness: 4 })
+      .setOrigin(0.5)
+      .setDepth(DEPTH.BUILDINGS + 1);
     // 이미지 3단계(DELIVERED) — 상단 로비 타이틀 패널(빈 장식판 대신 지역명 상시 표기)
     this.add.image(CANVAS_WIDTH / 2, 105, 'ui-lobby-title-panel').setDisplaySize(300, 72).setDepth(DEPTH.HUD - 1);
-    this.add.text(CANVAS_WIDTH / 2, 105, '커비 마을', { fontSize: '20px', color: '#3d2410', fontStyle: 'bold' }).setOrigin(0.5).setDepth(DEPTH.HUD);
+    this.add
+      .text(CANVAS_WIDTH / 2, 105, '커비 마을', { fontSize: '28px', color: '#ffffff', fontStyle: 'bold', stroke: '#3d2410', strokeThickness: 4 })
+      .setOrigin(0.5)
+      .setDepth(DEPTH.HUD);
     this.add.image(CANVAS_WIDTH / 2, CARPET_Y + 40, 'market-stage').setDepth(DEPTH.BUILDINGS);
-    // 이미지 3단계(DELIVERED) — 좌대 4곳에 상시 표시되는 상점 슬롯 프레임(스폰/재스폰과 무관하게 고정)
+    // 배경 좌대를 제거하고 실제 판매 좌대를 생성 좌표와 같은 오브젝트로 배치한다.
+    // 캐릭터 위치/크기가 바뀌어도 좌대가 함께 움직여 배경과 어긋나지 않는다.
     for (const spot of SPOT_POS) {
-      this.add.image(spot.x, spot.y, 'ui-shop-slot-glow').setDisplaySize(90, 90).setDepth(DEPTH.BUILDINGS + 1);
+      this.add.image(spot.x, spot.y + 16, 'market-shop-pedestal').setDisplaySize(112, 82).setDepth(DEPTH.BUILDINGS + 1);
+      this.add.image(spot.x, spot.y, 'ui-shop-slot-glow').setDisplaySize(90, 90).setDepth(DEPTH.BUILDINGS + 2);
     }
 
     for (const key of Object.keys(HOUSE_DOORS) as (keyof typeof HOUSE_DOORS)[]) {
@@ -223,8 +237,10 @@ export class LobbyScene extends Phaser.Scene {
       if (isMine) {
         doorGlow.setTint(0xffd700);
         this.add
-          .text(door.x, door.y - HOUSE_DISPLAY_SIZE / 2 - 8, '★ 내 기지 ★', { fontSize: '15px', color: '#ffd700', fontStyle: 'bold', backgroundColor: '#00000099', padding: { x: 8, y: 4 } })
-          .setOrigin(0.5, 1)
+          // 지붕 위 바깥 공간은 모바일 크롭 시 상단 HUD와 겹치므로,
+          // 라벨을 집 이미지의 상단 영역 안으로 내려서 배치한다.
+          .text(door.x, door.y - HOUSE_DISPLAY_SIZE / 2 + 42, '★ 내 기지 ★', { fontSize: '15px', color: '#ffd700', fontStyle: 'bold', backgroundColor: '#00000099', padding: { x: 8, y: 4 } })
+          .setOrigin(0.5)
           .setDepth(DEPTH.WORLD_LABEL);
       }
       const nameTag = this.add
@@ -256,11 +272,19 @@ export class LobbyScene extends Phaser.Scene {
 
     // 이미지 3단계(DELIVERED) — 골드 배경을 반투명 사각형 대신 실제 코인 패널로 교체
     // (사용자 지적 2026-09-18: 연한 노란 글씨가 황금색 배경에 묻히던 문제도 진한 목재색 패널로 해결)
-    this.add.image(75, 42, 'ui-coin-panel').setDisplaySize(190, 58).setOrigin(0, 0.5).setDepth(DEPTH.HUD - 1);
+    this.add.image(75, 42, 'ui-coin-panel').setDisplaySize(240, 64).setOrigin(0, 0.5).setDepth(DEPTH.HUD - 1);
     this.add.image(95, 42, 'ui-coin').setDisplaySize(28, 28).setDepth(DEPTH.HUD);
-    this.goldText = this.add.text(115, 42, '연결 중...', { fontSize: '20px', color: '#ffe082', fontStyle: 'bold' }).setOrigin(0, 0.5).setDepth(DEPTH.HUD);
-    this.add.image(1190, 20, 'ui-online-panel').setDisplaySize(150, 46).setOrigin(0, 0).setDepth(DEPTH.HUD - 1);
-    this.onlineText = this.add.text(1265, 43, '', { fontSize: '13px', color: '#ffffff', align: 'center' }).setOrigin(0.5).setDepth(DEPTH.HUD);
+    this.goldText = this.add
+      .text(285, 42, '연결 중...', { fontSize: '20px', color: '#ffe082', fontStyle: 'bold', align: 'right' })
+      .setOrigin(1, 0.5)
+      .setDepth(DEPTH.HUD);
+    // 우측 끝을 기준으로 고정해 패널이 캔버스 밖으로 잘리지 않게 하고,
+    // 좌측 상태 아이콘 영역 뒤에 충분한 텍스트 여백을 둔다.
+    this.add.image(CANVAS_WIDTH - 10, 8, 'ui-online-panel').setDisplaySize(220, 68).setOrigin(1, 0).setDepth(DEPTH.HUD - 1);
+    this.onlineText = this.add
+      .text(CANVAS_WIDTH - 148, 42, '', { fontSize: '18px', color: '#ffffff', fontStyle: 'bold', align: 'left' })
+      .setOrigin(0, 0.5)
+      .setDepth(DEPTH.HUD);
     // 이미지 3단계 — 미니맵(온라인 패널 아래): 배경(지형)+틀+내 위치 화살표+내 기지 점
     this.add.image(MINIMAP_CENTER.x, MINIMAP_CENTER.y, 'ui-minimap-ground').setDisplaySize(MINIMAP_DISPLAY, MINIMAP_DISPLAY).setDepth(DEPTH.HUD - 1);
     for (const key of Object.keys(HOUSE_DOORS) as (keyof typeof HOUSE_DOORS)[]) {
@@ -300,6 +324,7 @@ export class LobbyScene extends Phaser.Scene {
     kirbyNetwork.on('lobbyEmote', this.onLobbyEmote);
     kirbyNetwork.on('incomeCollected', this.onIncomeCollected);
     this.createEmoteButton();
+    this.setupMobileCamera();
     this.events.once('shutdown', () => {
       kirbyNetwork.off('lobbyEmote', this.onLobbyEmote);
       kirbyNetwork.off('incomeCollected', this.onIncomeCollected);
@@ -317,7 +342,7 @@ export class LobbyScene extends Phaser.Scene {
 
     // 로비 입장 — 이미 로비에 있던 다른 접속자들의 좌표를 즉시 받아서 스폰
     this.remotePlayers.clear();
-    void kirbyNetwork.enterLobby().then((res) => {
+    void kirbyNetwork.enterLobby(this.pos.x, this.pos.y).then((res) => {
       if (!res.ok || !res.players) return;
       for (const p of res.players) this.onLobbyPosition(p);
     });
@@ -338,6 +363,7 @@ export class LobbyScene extends Phaser.Scene {
     if (!remote) {
       const avatar = new PlayerAvatar(this, p.x, p.y, 76);
       avatar.setTint(0x7ec8ff); // 다른 플레이어는 청록 틴트로 구분(침입 화면의 침입자 색상과 통일)
+      this.markWorld(avatar.sprite, avatar.shadow);
       remote = { avatar, pos: { x: p.x, y: p.y } };
       this.remotePlayers.set(p.playerId, remote);
       return;
@@ -351,8 +377,21 @@ export class LobbyScene extends Phaser.Scene {
 
   // 자동 수익이 들어올 때 골드 HUD 옆에 +N 표시(실제로 골드가 오른 값)
   private onIncomeCollected = (amount: number) => {
-    const t = this.add.text(270, 42, `+${amount} G`, { fontSize: '18px', color: '#50fa7b', fontStyle: 'bold', stroke: '#000000', strokeThickness: 3 }).setOrigin(0, 0.5).setDepth(DEPTH.HUD + 3);
-    this.tweens.add({ targets: t, y: t.y - 16, alpha: 0, duration: 1400, onComplete: () => t.destroy() });
+    // 코인 패널 밖으로 밀려나면 모바일 크롭 화면에서 월드 라벨(예: '내 기지')과
+    // 겹쳐 보인다. 패널 우측 하단 안에 고정해 HUD끼리만 한 덩어리로 보이게 한다.
+    const t = this.add
+      .text(285, 62, `+${amount.toLocaleString()} G`, {
+        fontSize: '14px',
+        color: '#50fa7b',
+        fontStyle: 'bold',
+        stroke: '#000000',
+        strokeThickness: 3,
+        align: 'right',
+      })
+      .setOrigin(1, 0.5)
+      .setDepth(DEPTH.HUD + 3);
+    this.markUi(t);
+    this.tweens.add({ targets: t, alpha: 0, delay: 350, duration: 1050, onComplete: () => t.destroy() });
   };
 
   private onLobbyLeft = (p: LobbyLeftEvent) => {
@@ -402,7 +441,39 @@ export class LobbyScene extends Phaser.Scene {
     const icon = this.add.image(-100, -100, 'ui-emote-happy').setDisplaySize(38, 38).setDepth(DEPTH.WORLD_LABEL + 1);
     const timer = this.time.delayedCall(EMOTE_DURATION_MS, () => this.hideEmote(key));
     this.emotes.set(key, { bubble, icon, timer });
+    this.markWorld(bubble, icon);
     this.updateEmotePositions();
+  }
+
+  /**
+   * A 1280x720 lobby fitted in a wide desktop browser makes shop characters and
+   * house doors small relative to a phone viewing distance. 사용자 결정(2026-09-23):
+   * 플랫폼 조건부 크롭 대신 전체 플랫폼에 1.5배 줌을 통일 적용 — 월드를 로컬 플레이어
+   * 중심으로 항상 확대해서 보여주고, 터치 컨트롤·HUD는 별도 카메라로 화면에 고정한다.
+   */
+  private setupMobileCamera() {
+    const uiCutoff = DEPTH.HUD - 1;
+    const depthOf = (child: Phaser.GameObjects.GameObject) => (child as Phaser.GameObjects.GameObject & { depth?: number }).depth ?? 0;
+    const uiObjects = this.children.list.filter((child) => depthOf(child) >= uiCutoff);
+    const worldObjects = this.children.list.filter((child) => depthOf(child) < uiCutoff);
+
+    this.uiCamera = this.cameras.add(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT, false, 'lobby-ui');
+    this.uiCamera.setBackgroundColor('rgba(0,0,0,0)');
+    this.uiCamera.ignore(worldObjects);
+    this.cameras.main.ignore(uiObjects);
+
+    this.cameras.main.setBounds(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    this.cameras.main.setZoom(MOBILE_CAMERA_ZOOM);
+    this.cameras.main.startFollow(this.avatar.sprite, true, 0.12, 0.12);
+    this.cameras.main.setRoundPixels(true);
+  }
+
+  private markWorld(...objects: Phaser.GameObjects.GameObject[]) {
+    this.uiCamera?.ignore(objects);
+  }
+
+  private markUi(...objects: Phaser.GameObjects.GameObject[]) {
+    if (this.uiCamera) this.cameras.main.ignore(objects);
   }
 
   private hideEmote(key: string) {
@@ -595,6 +666,7 @@ export class LobbyScene extends Phaser.Scene {
       .on('pointerdown', () => this.enterDefense());
     this.tweens.add({ targets: alert, alpha: 0.65, duration: 600, yoyo: true, repeat: -1 });
     this.invasionAlert = alert;
+    this.markUi(alert);
   }
 
   private hideInvasionAlert() {
@@ -621,14 +693,14 @@ export class LobbyScene extends Phaser.Scene {
     const grade = kirbyGrade(kirby);
     const color = GRADE_COLORS[grade.id] ?? 0xffffff;
     // 7.5(에셋 가이드) 확정: 등급색은 사각형 대신 후광 용도로 — 실제 캐릭터는 kirby/128 이미지 사용
-    const glow = this.add.circle(pos.x, pos.y, 30, color, 0.35).setStrokeStyle(2, color, 0.9).setAlpha(0).setDepth(DEPTH.ACTOR_BASE + pos.y - 1);
+    const glow = this.add.circle(pos.x, pos.y, 40, color, 0.35).setStrokeStyle(2, color, 0.9).setAlpha(0).setDepth(DEPTH.ACTOR_BASE + pos.y - 1);
     // S4-R01~03 등급 후광 — 데이터 등급색(glow 원)을 보조하며 캐릭터 원화를 덮지 않도록 뒤에 깔음(1~2=일반, 3~4=희귀, 5~6=고급)
     const rarityKey = grade.id <= 2 ? 'fx-rarity-common' : grade.id <= 4 ? 'fx-rarity-rare' : 'fx-rarity-epic';
-    const rarity = this.add.image(pos.x, pos.y, rarityKey).setDisplaySize(96, 96).setAlpha(0).setDepth(DEPTH.ACTOR_BASE + pos.y - 2);
+    const rarity = this.add.image(pos.x, pos.y, rarityKey).setDisplaySize(116, 116).setAlpha(0).setDepth(DEPTH.ACTOR_BASE + pos.y - 2);
     const textureKey = kirby.imageKey ? kirbyTextureKey(kirby.imageKey) : null;
     const sprite = this.add
       .image(pos.x, pos.y, textureKey && this.textures.exists(textureKey) ? textureKey : 'player-avatar')
-      .setDisplaySize(48, 48)
+      .setDisplaySize(72, 72)
       .setInteractive({ useHandCursor: true })
       .setAlpha(0)
       .setDepth(DEPTH.ACTOR_BASE + pos.y);
@@ -636,7 +708,7 @@ export class LobbyScene extends Phaser.Scene {
     const tagBg = this.add.image(pos.x, pos.y + 40, 'ui-shop-price-tag').setDisplaySize(100, 32).setAlpha(0).setDepth(DEPTH.WORLD_LABEL - 1);
     const nameText = this.add
       // 사용자 지적(2026-09-21): 이름이 작고 가격표와 겹쳐 읽기 어려움 — 가격표 아래로 내리고 14px 굵게+검정 외곽선+반투명 배경판(가격은 고정 행 유지, 이름은 최대 2줄)
-      .text(pos.x, pos.y + 62, truncateKirbyName(kirby.name), { fontSize: '16px', color: '#ffffff', fontStyle: 'bold', align: 'center', wordWrap: { width: 122 }, stroke: '#000000', strokeThickness: 3, backgroundColor: '#000000b3', padding: { x: 6, y: 3 } }) // 코덱스 제한: 16px 굵게·어두운 반투명 배경·최대 2줄
+      .text(pos.x, pos.y + 62, truncateKirbyName(kirby.name), { fontSize: '16px', color: '#ffffff', fontStyle: 'bold', align: 'center', wordWrap: { width: 122 }, stroke: '#000000', strokeThickness: 3, backgroundColor: '#000000c7', padding: { x: 5, y: 3 } })
       .setOrigin(0.5, 0)
       .setAlpha(0)
       .setDepth(DEPTH.WORLD_LABEL);
@@ -649,6 +721,7 @@ export class LobbyScene extends Phaser.Scene {
     const timer = this.time.delayedCall(SPOT_LIFETIME_MS, () => this.despawnSpot(index));
     const item: SpotKirby = { kirby, glow, tagBg, rarity, sprite, nameText, priceText, timer };
     this.spots[index] = item;
+    this.markWorld(glow, rarity, sprite, tagBg, nameText, priceText);
     sprite.on('pointerdown', () => void this.tryBuy(index));
   }
 
@@ -702,6 +775,7 @@ export class LobbyScene extends Phaser.Scene {
 
   private playPurchaseBurst(x: number, y: number) {
     const burst = this.add.sprite(x, y - 10, 'fx-purchase-burst').setDisplaySize(140, 140).setBlendMode(Phaser.BlendModes.ADD).setDepth(DEPTH.WORLD_LABEL);
+    this.markWorld(burst);
     burst.play('fx-purchase-burst');
     burst.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => burst.destroy());
   }

@@ -46,6 +46,9 @@ const JOYSTICK_CENTER = { x: 110, y: CANVAS_HEIGHT - 110 };
 // 초당 발생 재화(2026-09-18 요청) — 표시 주기. 실제 정산은 collect() 호출 시 서버가 재계산.
 // QA 지적(to_claude_v7 P2): 매초 4칸이 동시에 뜨면 너무 산만함 — 2.5초 간격으로 완화.
 const INCOME_TICK_MS = 2500;
+const MOBILE_CAMERA_ZOOM = 1.5;
+const THIEF_CARRY_SPEED_MULTIPLIER = 0.65;
+const ESCAPE_HOLD_MS = 2500;
 
 export interface BaseSceneData {
   mode: 'manage' | 'select' | 'defend' | 'steal';
@@ -115,11 +118,16 @@ export class BaseScene extends Phaser.Scene {
   private stunStarsTarget: 'me' | 'opponent' = 'me';
   private localRing?: Phaser.GameObjects.Image; // S4-U03 로컬 플레이어 식별 링(침입 화면에서는 기존 흰 원 링을 대체)
   private stunProgress?: Phaser.GameObjects.Graphics;
+  private carriedKirby?: Phaser.GameObjects.Image;
+  private carriedKirbyLabel?: Phaser.GameObjects.Text;
+  private escapeHoldStartedAt: number | null = null;
+  private escapeHoldText?: Phaser.GameObjects.Text;
 
   // 가상 조이스틱(멀티터치) — 공격 버튼과 서로 다른 포인터 ID로 분리해서 동시 입력 가능(코덱스 확정)
   private joyThumb?: Phaser.GameObjects.Image;
   private joyVector = { x: 0, y: 0 };
   private joyPointerId: number | null = null;
+  private uiCamera?: Phaser.Cameras.Scene2D.Camera;
 
   constructor() {
     super('BaseScene');
@@ -190,13 +198,24 @@ export class BaseScene extends Phaser.Scene {
     this.floor = 0;
     this.resolved = false;
     this.opponentPos = null;
+    this.opponentPrevPos = null;
+    // 같은 BaseScene을 select → steal로 재시작하면 이전 탐색 아바타 참조가 클래스에
+    // 남아 모바일 카메라가 이미 제거된 객체를 계속 따라갈 수 있다.
+    this.browseAvatar = undefined;
     this.leavingToLobby = false;
+    this.uiCamera = undefined;
+    this.joyPointerId = null;
+    this.joyVector = { x: 0, y: 0 };
   }
 
   create() {
     this.slotViews = [];
     this.stunStars = undefined;
     this.localRing = undefined;
+    this.carriedKirby = undefined;
+    this.carriedKirbyLabel = undefined;
+    this.escapeHoldStartedAt = null;
+    this.escapeHoldText = undefined;
     this.createFxAnims();
     this.createStairs();
     // 이미지 1단계(DELIVERED, 2026-09-18) — 층 공통 골격(base-ground-floor-1) 위에 층별 오버레이를
@@ -220,19 +239,22 @@ export class BaseScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(DEPTH.MODAL);
     // 이미지 3단계(DELIVERED) — 골드 배경을 반투명 사각형 대신 실제 코인 패널로 교체
-    this.add.image(75, 42, 'ui-coin-panel').setDisplaySize(190, 58).setOrigin(0, 0.5).setDepth(DEPTH.HUD - 1);
-    this.goldText = this.add.text(115, 42, '', { fontSize: '18px', color: '#ffe082', fontStyle: 'bold' }).setOrigin(0, 0.5).setDepth(DEPTH.HUD);
+    this.add.image(75, 42, 'ui-coin-panel').setDisplaySize(240, 64).setOrigin(0, 0.5).setDepth(DEPTH.HUD - 1);
+    this.goldText = this.add
+      .text(285, 42, '', { fontSize: '18px', color: '#ffffff', fontStyle: 'bold', align: 'right' })
+      .setOrigin(1, 0.5)
+      .setDepth(DEPTH.HUD);
 
     // 사용자 지적(2026-09-18): 층 이동 후 지금 몇 층인지 화면 중앙에서 바로 보여야 함(계단 옆 작은
     // 표시만으로는 부족) — 층 전환 시 renderSlots()에서 갱신. 이미지 3단계 floor-panel로 배경 교체.
     this.floorBadgeBg = this.add.image(CANVAS_WIDTH / 2, 34, 'ui-floor-panel').setDisplaySize(160, 50).setDepth(DEPTH.HUD - 1);
-    this.floorBadge = this.add.text(CANVAS_WIDTH / 2, 34, '1층', { fontSize: '20px', color: '#3d2410', fontStyle: 'bold' }).setOrigin(0.5).setDepth(DEPTH.HUD);
+    this.floorBadge = this.add.text(CANVAS_WIDTH / 2, 34, '1층', { fontSize: '20px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5).setDepth(DEPTH.HUD);
 
     this.add
       .text(20, CANVAS_HEIGHT - 26, '[로비로 나가기]', { fontSize: '13px', color: '#8be9fd', backgroundColor: '#00000099', padding: { x: 6, y: 3 } })
       .setInteractive({ useHandCursor: true })
       .setDepth(DEPTH.CONTROLS)
-      .on('pointerdown', () => this.scene.start('LobbyScene'));
+      .on('pointerdown', () => void this.leaveToLobby());
 
     if (this.sceneData.mode === 'manage' || this.sceneData.mode === 'select') {
       this.createBrowseUi();
@@ -241,6 +263,7 @@ export class BaseScene extends Phaser.Scene {
       this.floorBadgeBg.setVisible(false);
       this.createChaseUi();
     }
+    this.setupMobileCamera();
   }
 
   update(_time: number, delta: number) {
@@ -254,11 +277,11 @@ export class BaseScene extends Phaser.Scene {
     const isMine = this.sceneData.mode === 'manage';
     // 이미지 3단계(DELIVERED) — base-nameplate로 배경 교체
     this.add.image(FLOOR_INFO_POS.x, FLOOR_INFO_POS.y, 'ui-base-nameplate').setDisplaySize(150, 44).setDepth(DEPTH.HUD - 1);
-    this.floorText = this.add.text(FLOOR_INFO_POS.x, FLOOR_INFO_POS.y, '1층', { fontSize: '13px', color: '#3d2410' }).setOrigin(0.5).setDepth(DEPTH.HUD);
+    this.floorText = this.add.text(FLOOR_INFO_POS.x, FLOOR_INFO_POS.y, '1층', { fontSize: '13px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5).setDepth(DEPTH.HUD);
     // 이미지 3단계 interaction-prompt — 새로 생긴 근접 이동 방식 온보딩 힌트(사용자 지적 2026-09-18: 로비 나가는 법이 안 보임 등)
     this.add.image(CANVAS_WIDTH / 2, CANVAS_HEIGHT - 34, 'ui-interaction-prompt').setDisplaySize(360, 44).setDepth(DEPTH.CONTROLS - 1);
     this.add
-      .text(CANVAS_WIDTH / 2, CANVAS_HEIGHT - 34, '계단·출입문에 닿으면 이동', { fontSize: '13px', color: '#3d2410' })
+      .text(CANVAS_WIDTH / 2, CANVAS_HEIGHT - 34, '계단·출입문에 닿으면 이동', { fontSize: '13px', color: '#ffffff', fontStyle: 'bold' })
       .setOrigin(0.5)
       .setDepth(DEPTH.CONTROLS);
 
@@ -306,7 +329,7 @@ export class BaseScene extends Phaser.Scene {
       .setDisplaySize(76, 76)
       .setInteractive({ useHandCursor: true })
       .setDepth(DEPTH.CONTROLS)
-      .on('pointerdown', () => this.scene.start('LobbyScene'));
+      .on('pointerdown', () => void this.leaveToLobby());
     this.add.image(CANVAS_WIDTH - 90, CANVAS_HEIGHT - 90, 'ui-action-hand-icon').setDisplaySize(40, 40).setDepth(DEPTH.CONTROLS + 1);
     this.add.text(CANVAS_WIDTH - 90, CANVAS_HEIGHT - 46, '나가기', { fontSize: '12px', color: '#ffffff', backgroundColor: '#00000099', padding: { x: 6, y: 2 } }).setOrigin(0.5).setDepth(DEPTH.CONTROLS);
 
@@ -387,6 +410,7 @@ export class BaseScene extends Phaser.Scene {
   // 자동 수익이 들어올 때 골드 HUD 옆에 +N 표시(실제로 골드가 오른 값)
   private onIncomeCollected = (amount: number) => {
     const t = this.add.text(270, 42, `+${amount} G`, { fontSize: '18px', color: '#50fa7b', fontStyle: 'bold', stroke: '#000000', strokeThickness: 3 }).setOrigin(0, 0.5).setDepth(DEPTH.HUD + 3);
+    this.markUi(t);
     this.tweens.add({ targets: t, y: t.y - 16, alpha: 0, duration: 1400, onComplete: () => t.destroy() });
   };
 
@@ -411,6 +435,7 @@ export class BaseScene extends Phaser.Scene {
       .on('pointerdown', () => this.enterDefenseFromAlert());
     this.tweens.add({ targets: alert, alpha: 0.65, duration: 600, yoyo: true, repeat: -1 });
     this.invasionAlert = alert;
+    this.markUi(alert);
   }
 
   private hideInvasionAlert() {
@@ -554,7 +579,7 @@ export class BaseScene extends Phaser.Scene {
           .setVisible(false)
           .setDepth(DEPTH.WORLD_LABEL);
         const view = { def, floor, img, marker, label, inside: false };
-        if (browse) img.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.useStair(view)); // 클릭은 데스크톱 보조 입력
+        if (browse) img.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.useStair(view)); // 데스크톱 보조 입력
         this.stairViews.push(view);
       }
     }
@@ -628,12 +653,14 @@ export class BaseScene extends Phaser.Scene {
         .text(view.pedestal.x, view.pedestal.y - 40, `+${kirby.incomePerTick}`, { fontSize: '14px', color: '#ffe082', fontStyle: 'bold' })
         .setOrigin(0.5)
         .setDepth(DEPTH.WORLD_LABEL + 1);
+      this.markWorld(text);
       this.tweens.add({ targets: text, y: text.y - 30, alpha: 0, duration: 900, onComplete: () => text.destroy() });
     }
   }
 
   private showCollectPopup(x: number, y: number, amount: number) {
     const text = this.add.text(x, y - 60, `+${amount} G 획득!`, { fontSize: '16px', color: '#50fa7b', fontStyle: 'bold' }).setOrigin(0.5).setDepth(DEPTH.MODAL);
+    this.markWorld(text);
     this.tweens.add({ targets: text, y: text.y - 34, alpha: 0, duration: 1100, onComplete: () => text.destroy() });
   }
 
@@ -647,6 +674,19 @@ export class BaseScene extends Phaser.Scene {
   private async toggleOfflineOperation() {
     if (!kirbyNetwork.state) return;
     await kirbyNetwork.updateSettings({ offlineOperationEnabled: !kirbyNetwork.state.offlineOperationEnabled });
+  }
+
+  private async leaveToLobby() {
+    if (this.sceneData.mode === 'steal' && this.sceneData.instanceId && !this.resolved) {
+      // 중복 클릭과 서버의 invasion:resolved 이벤트에 의한 이중 장면 전환을 막는다.
+      this.resolved = true;
+      try {
+        await kirbyNetwork.cancelInvasion(this.sceneData.targetPlayerId, this.sceneData.instanceId);
+      } catch {
+        // 연결이 끊긴 경우 서버 disconnect 정리에서도 원소유자에게 자동 반환된다.
+      }
+    }
+    this.scene.start('LobbyScene');
   }
 
   // ----- 실시간 침입(방어/도주) -----
@@ -703,6 +743,36 @@ export class BaseScene extends Phaser.Scene {
     this.opponent = new PlayerAvatar(this, -100, -100, 56);
     this.opponent.setTint(role === 'owner' ? 0x7ec8ff : 0xffb84d);
     this.opponent.setAlpha(0.9);
+
+    // 침입자는 선택한 커비를 머리 위에 들고 도주한다. 로컬 침입자 화면과
+    // 방어자 화면의 원격 침입자 모두 같은 표현을 사용해 훔치기 장면임을 즉시 알린다.
+    const carriedDef = (kirbiesData as { name: string; imageKey: string | null }[]).find((k) => k.name === this.sceneData.characterName);
+    if (carriedDef?.imageKey) {
+      const carrier = role === 'viewer' ? this.myPos : { x: -100, y: -100 };
+      this.carriedKirby = this.add
+        .image(carrier.x, carrier.y - 72, kirbyTextureKey(carriedDef.imageKey))
+        .setDisplaySize(54, 54)
+        .setDepth(DEPTH.WORLD_LABEL + 1);
+      this.carriedKirbyLabel = this.add
+        .text(carrier.x, carrier.y - 108, '훔친 커비', {
+          fontSize: '13px',
+          color: '#ffffff',
+          fontStyle: 'bold',
+          backgroundColor: '#c62828dd',
+          padding: { x: 7, y: 3 },
+        })
+        .setOrigin(0.5)
+        .setDepth(DEPTH.WORLD_LABEL + 2);
+      this.markWorld(this.carriedKirby, this.carriedKirbyLabel);
+    }
+
+    if (role === 'viewer') {
+      this.escapeHoldText = this.add
+        .text(CANVAS_WIDTH / 2, 112, '', { fontSize: '18px', color: '#ffffff', fontStyle: 'bold', backgroundColor: '#000000bb', padding: { x: 10, y: 6 } })
+        .setOrigin(0.5)
+        .setDepth(DEPTH.HUD)
+        .setVisible(false);
+    }
 
     this.cursors = this.input.keyboard!.createCursorKeys();
     this.spaceKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
@@ -769,6 +839,7 @@ export class BaseScene extends Phaser.Scene {
       this.stunProgress?.destroy();
       this.stunRing = this.add.image(this.myPos.x, this.myPos.y - 50, 'ui-stun-timer-ring').setDisplaySize(36, 36).setDepth(DEPTH.WORLD_LABEL);
       this.stunProgress = this.add.graphics().setDepth(DEPTH.WORLD_LABEL);
+      this.markWorld(this.stunRing, this.stunProgress);
       this.time.delayedCall(BAT_STUN_MS, () => {
         if (this.time.now >= this.stunnedUntil) hitAvatar.setAlpha(1);
         this.hideStunStars();
@@ -815,12 +886,14 @@ export class BaseScene extends Phaser.Scene {
 
   private playCollectBurst(x: number, y: number) {
     const burst = this.add.sprite(x, y, 'fx-collect-burst').setDisplaySize(150, 150).setBlendMode(Phaser.BlendModes.ADD).setDepth(DEPTH.WORLD_LABEL);
+    this.markWorld(burst);
     burst.play('fx-collect-burst');
     burst.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => burst.destroy());
   }
 
   private playHitSpark(x: number, y: number) {
     const spark = this.add.sprite(x, y, 'fx-hit-spark').setDisplaySize(110, 110).setBlendMode(Phaser.BlendModes.ADD).setDepth(DEPTH.WORLD_LABEL);
+    this.markWorld(spark);
     spark.play('fx-hit-spark');
     spark.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => spark.destroy());
   }
@@ -830,6 +903,7 @@ export class BaseScene extends Phaser.Scene {
     this.stunStarsTarget = target;
     const at = target === 'me' ? this.myPos : this.opponentPos ?? this.opponent;
     this.stunStars = this.add.sprite(at.x, at.y - 46, 'fx-stun-stars').setDisplaySize(90, 90).setDepth(DEPTH.WORLD_LABEL);
+    this.markWorld(this.stunStars);
     this.stunStars.play('fx-stun-stars');
     this.time.delayedCall(BAT_STUN_MS, () => {
       if (this.time.now >= this.stunnedUntil) this.hideStunStars();
@@ -858,6 +932,7 @@ export class BaseScene extends Phaser.Scene {
       .text(cx, cy + 118, iAmIntruder ? '붙잡혔다! 커비는 원래 주인에게' : '3회 명중! 커비를 되찾았다', { fontSize: '20px', color: '#ffe082', fontStyle: 'bold', backgroundColor: '#000000aa', padding: { x: 12, y: 6 } })
       .setOrigin(0.5)
       .setDepth(DEPTH.MODAL);
+    this.markUi(badge, label);
     this.tweens.add({ targets: [badge, label], alpha: 0, delay: 1700, duration: 500 });
   }
 
@@ -873,7 +948,8 @@ export class BaseScene extends Phaser.Scene {
       this.stunProgress = undefined;
       this.hideStunStars();
     }
-    const speed = stunned ? 0 : (AVATAR_SPEED * delta) / 1000;
+    const carryMultiplier = this.sceneData.mode === 'steal' ? THIEF_CARRY_SPEED_MULTIPLIER : 1;
+    const speed = stunned ? 0 : (AVATAR_SPEED * carryMultiplier * delta) / 1000;
     let dx = stunned ? 0 : this.joyVector.x * speed;
     let dy = stunned ? 0 : this.joyVector.y * speed;
     if (this.cursors.left?.isDown) dx -= speed;
@@ -909,6 +985,11 @@ export class BaseScene extends Phaser.Scene {
       this.opponentPrevPos = { ...this.opponentPos };
       this.opponentRing.setPosition(this.opponentPos.x, this.opponentPos.y).setDepth(DEPTH.ACTOR_BASE + this.opponentPos.y - 1);
     }
+    const thiefPos = this.sceneData.mode === 'steal' ? this.myPos : this.opponentPos;
+    if (thiefPos) {
+      this.carriedKirby?.setPosition(thiefPos.x, thiefPos.y - 72);
+      this.carriedKirbyLabel?.setPosition(thiefPos.x, thiefPos.y - 108);
+    }
     // 탈출 가능 여부와 무관하게 항상 보이던 정적 원을 대신해, 실제 이미지(2단계)는 항상 표시하되
     // 확보 여부에 따라 강조만 다르게(현재는 select 트리거=확보로 취급하는 기존 설계 유지)
     this.exitGlow.setAlpha(this.sceneData.mode === 'steal' ? 1 : 0.6);
@@ -925,7 +1006,14 @@ export class BaseScene extends Phaser.Scene {
     if (this.sceneData.mode === 'steal') {
       const dist = Phaser.Math.Distance.Between(this.myPos.x, this.myPos.y, EXIT_DOOR.x, EXIT_DOOR.y);
       if (dist <= EXIT_DOOR.radius) {
-        void kirbyNetwork.exit(this.sceneData.targetPlayerId, this.sceneData.instanceId!);
+        if (this.escapeHoldStartedAt === null) this.escapeHoldStartedAt = now;
+        const elapsed = now - this.escapeHoldStartedAt;
+        const remaining = Math.max(0, ESCAPE_HOLD_MS - elapsed);
+        this.escapeHoldText?.setText(remaining > 0 ? `탈출 확보 중… ${(remaining / 1000).toFixed(1)}초` : '탈출!').setVisible(true);
+        if (remaining <= 0) void kirbyNetwork.exit(this.sceneData.targetPlayerId, this.sceneData.instanceId!);
+      } else {
+        this.escapeHoldStartedAt = null;
+        this.escapeHoldText?.setVisible(false);
       }
     }
   }
@@ -1000,5 +1088,37 @@ export class BaseScene extends Phaser.Scene {
     this.tweens.killTweensOf(this.messageText);
     this.messageText.setAlpha(1);
     this.tweens.add({ targets: this.messageText, alpha: 0, delay: delayMs, duration: 400 });
+  }
+
+  /** 사용자 결정(2026-09-23): 플랫폼 조건부 크롭 대신 전체 플랫폼에 1.5배 줌을 통일 적용 —
+   1280x720 월드를 로컬 플레이어 중심으로 항상 확대해서 보여주고, 터치 컨트롤·상태 패널·
+   알림·모달 피드백은 별도 카메라로 화면에 고정한다. */
+  private setupMobileCamera() {
+    const uiCutoff = DEPTH.HUD - 1;
+    const depthOf = (child: Phaser.GameObjects.GameObject) => (child as Phaser.GameObjects.GameObject & { depth?: number }).depth ?? 0;
+    const uiObjects = this.children.list.filter((child) => depthOf(child) >= uiCutoff);
+    const worldObjects = this.children.list.filter((child) => depthOf(child) < uiCutoff);
+
+    this.uiCamera = this.cameras.add(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT, false, 'base-ui');
+    this.uiCamera.setBackgroundColor('rgba(0,0,0,0)');
+    this.uiCamera.ignore(worldObjects);
+    this.cameras.main.ignore(uiObjects);
+
+    // 재시작 전 객체의 잔존 여부가 아니라 현재 모드를 기준으로 추적 대상을 고른다.
+    // 훔치기/방어 화면에서는 반드시 새로 생성된 전투 아바타를 따라가야 한다.
+    const browsing = this.sceneData.mode === 'manage' || this.sceneData.mode === 'select';
+    const target = browsing ? this.browseAvatar?.sprite : this.me?.sprite;
+    this.cameras.main.setBounds(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    this.cameras.main.setZoom(MOBILE_CAMERA_ZOOM);
+    if (target) this.cameras.main.startFollow(target, true, 0.12, 0.12);
+    this.cameras.main.setRoundPixels(true);
+  }
+
+  private markWorld(...objects: Phaser.GameObjects.GameObject[]) {
+    this.uiCamera?.ignore(objects);
+  }
+
+  private markUi(...objects: Phaser.GameObjects.GameObject[]) {
+    if (this.uiCamera) this.cameras.main.ignore(objects);
   }
 }

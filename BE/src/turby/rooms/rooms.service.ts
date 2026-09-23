@@ -2,8 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { EventEmitter } from 'events';
 import { PrismaService } from '../prisma.service';
 import { SettingsService } from './settings.service';
-import { FACINGS, MAX_PLAYERS, MIN_PLAYERS, ROOM_CODE_LENGTH, ROOM_NAME_MAX, RoomError } from './types';
-import type { Facing, MapPlayerDto, Room, RoomMember, RoomStateDto, RoomSummaryDto, RoomVisibility, WildDto, WildRuntime, WildState } from './types';
+import { FACINGS, MAX_PLAYERS, ROOM_CODE_LENGTH, RoomError } from './types';
+import type { Facing, MapPlayerDto, Room, RoomMember, RoomStateDto, WildDto, WildRuntime, WildState } from './types';
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 헷갈리는 0/O/1/I 제외
 
@@ -84,14 +84,11 @@ export class RoomsService {
 
   // ---------- 방 ----------
 
-  async createRoom(playerId: string, body: { name?: unknown; maxPlayers?: unknown; visibility?: unknown; stageCode?: unknown }) {
+  // 멀티 제거: 방은 언제나 플레이어 1인 전용 세션이다(join·공개 목록 없음). stageCode별 진행 상태와
+  // 야생 터비 상태를 담는 컨테이너로만 쓴다.
+  async createRoom(playerId: string, stageCodeRaw: unknown) {
     if (this.roomOf(playerId)) throw new RoomError('ALREADY_IN_ROOM', '이미 방에 참여 중입니다.');
-    const name = typeof body.name === 'string' ? body.name.trim() : '';
-    if (name.length < 1 || name.length > ROOM_NAME_MAX) throw new RoomError('INVALID_PAYLOAD', `방 이름은 1~${ROOM_NAME_MAX}자여야 합니다.`);
-    const maxPlayers = body.maxPlayers;
-    if (typeof maxPlayers !== 'number' || !Number.isInteger(maxPlayers) || maxPlayers < MIN_PLAYERS || maxPlayers > MAX_PLAYERS) throw new RoomError('INVALID_PAYLOAD', `인원은 ${MIN_PLAYERS}~${MAX_PLAYERS}명이어야 합니다.`);
-    if (body.visibility !== 'public' && body.visibility !== 'private') throw new RoomError('INVALID_PAYLOAD', '공개 여부가 올바르지 않습니다.');
-    const stage = await this.requireStage(body.stageCode);
+    const stage = await this.requireStage(stageCodeRaw);
     await this.requireUnlocked(playerId, stage.chapter_order);
 
     const player = await this.prisma.player.findUnique({ where: { id: BigInt(playerId) } });
@@ -100,12 +97,12 @@ export class RoomsService {
 
     const room: Room = {
       code: this.newCode(),
-      name,
+      name: '혼자 탐험',
       stageCode: stage.stage_code,
       mapWidth: stage.map_width,
       mapHeight: stage.map_height,
-      maxPlayers,
-      visibility: body.visibility as RoomVisibility,
+      maxPlayers: MAX_PLAYERS,
+      visibility: 'private',
       phase: 'lobby',
       members: [],
       wilds: await this.loadWilds(stage.stage_code),
@@ -113,32 +110,6 @@ export class RoomsService {
     room.members.push(this.newMember(playerId, player.nickname));
     this.rooms.set(room.code, room);
     this.roomOfPlayer.set(playerId, room.code);
-    return room;
-  }
-
-  async joinRoom(playerId: string, codeRaw: unknown) {
-    const code = typeof codeRaw === 'string' ? codeRaw.trim().toUpperCase() : '';
-    const room = this.rooms.get(code);
-    if (!room) throw new RoomError('ROOM_NOT_FOUND', '방을 찾을 수 없습니다.');
-
-    const current = this.roomOfPlayer.get(playerId);
-    if (current === code) return room; // 같은 방 재입장은 그대로 이어서
-    if (current) throw new RoomError('ALREADY_IN_ROOM', '이미 다른 방에 참여 중입니다.');
-    if (room.members.length >= room.maxPlayers) throw new RoomError('ROOM_FULL', '방이 가득 찼습니다.');
-
-    const stage = await this.requireStage(room.stageCode);
-    await this.requireUnlocked(playerId, stage.chapter_order);
-    const player = await this.prisma.player.findUnique({ where: { id: BigInt(playerId) } });
-    if (!player) throw new RoomError('PLAYER_NOT_FOUND', '등록되지 않은 플레이어입니다.');
-
-    // await 사이에 정원이 찼거나 방이 사라졌을 수 있어 다시 확인
-    if (!this.rooms.has(code)) throw new RoomError('ROOM_NOT_FOUND', '방을 찾을 수 없습니다.');
-    if (this.roomOfPlayer.get(playerId)) throw new RoomError('ALREADY_IN_ROOM', '이미 방에 참여 중입니다.');
-    if (room.members.length >= room.maxPlayers) throw new RoomError('ROOM_FULL', '방이 가득 찼습니다.');
-
-    room.members.push(this.newMember(playerId, player.nickname));
-    this.roomOfPlayer.set(playerId, code);
-    this.events.emit('room:state', room);
     return room;
   }
 
@@ -156,20 +127,6 @@ export class RoomsService {
       this.events.emit('room:state', room);
     }
     return room;
-  }
-
-  listPublicRooms(stageCode?: unknown): RoomSummaryDto[] {
-    return [...this.rooms.values()]
-      .filter((r) => r.visibility === 'public' && (typeof stageCode !== 'string' || r.stageCode === stageCode))
-      .map((r) => ({
-        code: r.code,
-        name: r.name,
-        stageCode: r.stageCode,
-        maxPlayers: r.maxPlayers,
-        memberCount: r.members.length,
-        phase: r.phase,
-        hostNickname: r.members[0].nickname,
-      }));
   }
 
   // ---------- 맵 위치 ----------

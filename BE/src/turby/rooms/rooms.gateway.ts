@@ -66,29 +66,11 @@ export class RoomsGateway implements OnGatewayDisconnect, OnModuleInit {
     });
   }
 
-  @SubscribeMessage('room:list')
-  list(@ConnectedSocket() client: Socket, @MessageBody() body: { stageCode?: unknown }) {
-    return this.guard(async () => {
-      this.rooms.playerOf(client.id);
-      return { ok: true as const, rooms: this.rooms.listPublicRooms(body?.stageCode) };
-    });
-  }
-
   @SubscribeMessage('room:create')
-  create(@ConnectedSocket() client: Socket, @MessageBody() body: { name?: unknown; maxPlayers?: unknown; visibility?: unknown; stageCode?: unknown }) {
+  create(@ConnectedSocket() client: Socket, @MessageBody() body: { stageCode?: unknown }) {
     return this.guard(async () => {
       const playerId = this.rooms.playerOf(client.id);
-      const room = await this.rooms.createRoom(playerId, body ?? {});
-      await client.join(this.rooms.roomChannel(room.code));
-      return { ok: true as const, room: this.rooms.toState(room) };
-    });
-  }
-
-  @SubscribeMessage('room:join')
-  join(@ConnectedSocket() client: Socket, @MessageBody() body: { code?: unknown }) {
-    return this.guard(async () => {
-      const playerId = this.rooms.playerOf(client.id);
-      const room = await this.rooms.joinRoom(playerId, body?.code);
+      const room = await this.rooms.createRoom(playerId, body?.stageCode);
       await client.join(this.rooms.roomChannel(room.code));
       return { ok: true as const, room: this.rooms.toState(room) };
     });

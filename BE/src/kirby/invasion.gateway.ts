@@ -80,11 +80,17 @@ export class InvasionGateway implements OnGatewayDisconnect {
   // 마을(로비) 앰비언트 프레즌스 — 사용자 지적(2026-09-18): 로비에서 다른 접속자의 캐릭터가
   // 안 보이던 문제. LobbyScene 진입 시 호출 — room에 join하고, 이미 로비에 있던 사람들 좌표를 즉시 돌려줌.
   @SubscribeMessage('lobby:enter')
-  handleLobbyEnter(@ConnectedSocket() client: Socket) {
+  async handleLobbyEnter(@ConnectedSocket() client: Socket, @MessageBody() body: { x?: number; y?: number }) {
     const actorId = this.requireSocketIdentity(client);
     if (!actorId) return { ok: false, reason: 'identity-mismatch' };
-    client.join(LOBBY_ROOM);
-    return { ok: true, players: this.invasions.listLobbyPositions(actorId) };
+    const x = Number.isFinite(body?.x) ? body.x! : 640;
+    const y = Number.isFinite(body?.y) ? body.y! : 620;
+    const players = this.invasions.listLobbyPositions(actorId);
+    await client.join(LOBBY_ROOM);
+    this.invasions.setLobbyPosition(actorId, x, y);
+    // 기존 접속자는 후발 접속자가 움직이기 전에도 즉시 생성한다.
+    client.to(LOBBY_ROOM).emit('lobby:position', { playerId: actorId, x, y });
+    return { ok: true, players };
   }
 
   // LobbyScene이 다른 씬으로 전환될 때(shutdown) 호출 — 다른 사람 화면에서 캐릭터를 지워줌
@@ -247,8 +253,8 @@ export class InvasionGateway implements OnGatewayDisconnect {
 
     // 서버 권위 탈출 판정(QA 지적 반영) — 출입문 Zone에 실제로 도달했는지 좌표로 재검증.
     // 아직 도달 전이면 침입 상태를 끝내지 않고 그대로 두어 계속 이동해서 재시도할 수 있게 함.
-    if (!this.invasions.isNearExit(body.instanceId, actorId)) {
-      return { ok: false, reason: 'not-at-exit' };
+    if (!this.invasions.isEscapeReady(body.instanceId, actorId)) {
+      return { ok: false, reason: 'escape-not-ready' };
     }
 
     // Codex QA 지적(2026-09-18, §3-5) 반영: 잠금상태를 조회할 기지는 요청 본문의 targetPlayerId가
@@ -279,5 +285,29 @@ export class InvasionGateway implements OnGatewayDisconnect {
       reason: 'exit-blocked',
     });
     return { ok: true, result: 'failed', reason: 'exit-blocked' };
+  }
+
+  // 도주 중 로비 이동을 선택하면 훔치기를 포기한 것으로 처리한다. 클라이언트 화면만
+  // 바꾸지 않고 서버의 운반 상태까지 끝내 원소유자의 커비가 즉시 복구되게 한다.
+  @SubscribeMessage('invasion:cancel')
+  async handleCancel(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: { viewerPlayerId: string; targetPlayerId: string; instanceId: string },
+  ) {
+    const actorId = this.requireSocketIdentity(client);
+    const invasion = this.invasions.getInvasion(body.instanceId);
+    if (!actorId || !invasion || actorId !== invasion.viewerPlayerId) {
+      return { ok: false, reason: 'not-authorized' };
+    }
+
+    await this.players.resetStolenStatus(body.instanceId);
+    this.invasions.endInvasion(body.instanceId);
+    this.server.to(baseRoom(invasion.ownerPlayerId)).emit('invasion:resolved', {
+      instanceId: body.instanceId,
+      result: 'failed',
+      reason: 'abandoned',
+    });
+    client.leave(baseRoom(invasion.ownerPlayerId));
+    return { ok: true };
   }
 }
