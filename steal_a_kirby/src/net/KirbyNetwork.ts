@@ -310,6 +310,11 @@ class KirbyNetwork {
     return this.emitAsync('invasion:move', { instanceId, targetPlayerId, playerId: this.playerId, x, y });
   }
 
+  // 방어 카운트다운(2026-09-28) — 서버 기준 남은 방어 시간(ms). 0이면 방어가 풀린 상태
+  invasionStatus(instanceId: string) {
+    return this.emitAsync<{ ok: boolean; defenseRemainingMs?: number | null }>('invasion:status', { instanceId });
+  }
+
   attack(targetPlayerId: string, instanceId: string) {
     return this.emitAsync<{ ok: boolean; hit?: boolean; hitCount?: number }>('invasion:attack', { instanceId, targetPlayerId });
   }

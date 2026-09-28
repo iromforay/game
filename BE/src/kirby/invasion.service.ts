@@ -16,6 +16,9 @@ const WORLD_BOUNDS = { minX: 0, minY: 0, maxX: 1280, maxY: 720 };
 // 1280x720 월드 좌표 기준 — FE(steal_a_kirby/src/scenes/BaseScene.ts)의 EXIT_ZONE과 반드시 동일해야 함.
 const EXIT_ZONE = { x: 605, y: 635, radius: 90 };
 const ESCAPE_HOLD_MS = 2500;
+// 사용자 결정(2026-09-28): 침입이 시작되면 1분 방어 시간. 방어 시간 중에는 출입문에서 버텨도 탈출 불가,
+// 방어가 풀린 뒤에는 방어자 공격 불가 + 출입문에서 2.5초 버티면 탈출 성공(미리 서 있었다면 풀린 시점부터 셈).
+export const DEFENSE_MS = 60_000;
 
 // Codex QA 지적(2026-09-18, to_claude_v2_C.md §3-1/2) 반영: 침입 시작 시 최초 위치를 클라이언트
 // 자기신고에 맡기지 않고 서버가 직접 스폰 좌표로 고정한다 — 그래야 "첫 이동 보고를 곧장 출입문
@@ -106,7 +109,7 @@ export class InvasionService {
       [ownerPlayerId, { ...OWNER_SPAWN, t: now }],
       [viewerPlayerId, { ...VIEWER_SPAWN, t: now }],
     ]);
-    const invasion: ActiveInvasion = { instanceId, ownerPlayerId, viewerPlayerId, hitCount: 0, positions };
+    const invasion: ActiveInvasion = { instanceId, ownerPlayerId, viewerPlayerId, hitCount: 0, startedAt: now, positions };
     this.activeInvasions.set(instanceId, invasion);
     return invasion;
   }
@@ -165,9 +168,20 @@ export class InvasionService {
     const invasion = this.activeInvasions.get(instanceId);
     const pos = invasion?.positions.get(playerId);
     if (!invasion || !pos || !invasion.exitEnteredAt) return false;
+    const now = Date.now();
+    const defenseEndsAt = invasion.startedAt + DEFENSE_MS;
+    if (now < defenseEndsAt) return false; // 방어 시간 중에는 탈출 불가
     const dx = pos.x - EXIT_ZONE.x;
     const dy = pos.y - EXIT_ZONE.y;
-    return Math.sqrt(dx * dx + dy * dy) <= EXIT_ZONE.radius && Date.now() - invasion.exitEnteredAt >= ESCAPE_HOLD_MS;
+    const holdStartedAt = Math.max(invasion.exitEnteredAt, defenseEndsAt); // 미리 서 있었다면 방어가 풀린 시점부터 2.5초
+    return Math.sqrt(dx * dx + dy * dy) <= EXIT_ZONE.radius && now - holdStartedAt >= ESCAPE_HOLD_MS;
+  }
+
+  // 남은 방어 시간(ms) — 0이면 방어가 풀린 상태. 진행 중인 침입이 없으면 null
+  defenseRemainingMs(instanceId: string): number | null {
+    const invasion = this.activeInvasions.get(instanceId);
+    if (!invasion) return null;
+    return Math.max(0, invasion.startedAt + DEFENSE_MS - Date.now());
   }
 
   endInvasion(instanceId: string) {

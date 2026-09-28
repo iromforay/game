@@ -3,13 +3,14 @@ import { Dashboard } from './Dashboard';
 import { Lobby } from './Lobby';
 import { GameScreen } from './GameScreen';
 import { KirbyGuide } from './KirbyGuide';
+import { TurbyGuide } from './TurbyGuide';
 import { Leaderboard } from './scoreboard/Leaderboard';
 import type { RankingGame } from './scoreboard/scoreboardClient';
 import { useMultiplayer } from './multiplayer/MultiplayerContext';
 import type { GameId } from './games';
 import './App.css';
 
-type Screen = 'dashboard' | 'lobby' | 'game' | 'kirby-guide' | 'ranking';
+type Screen = 'dashboard' | 'lobby' | 'game' | 'kirby-guide' | 'turby-guide' | 'ranking';
 
 function App() {
   const [screen, setScreen] = useState<Screen>('dashboard');
@@ -47,6 +48,10 @@ function App() {
     return <KirbyGuide onBack={() => setScreen('dashboard')} />;
   }
 
+  if (screen === 'turby-guide') {
+    return <TurbyGuide onBack={() => setScreen('dashboard')} />;
+  }
+
   if (screen === 'game' && selectedGame) {
     return <GameScreen gameId={selectedGame} roundId={selectedRound} onExit={handleExitGame} onOpenRanking={openRanking} />;
   }
@@ -71,6 +76,7 @@ function App() {
         setScreen('lobby');
       }}
       onOpenKirbyGuide={() => setScreen('kirby-guide')}
+      onOpenTurbyGuide={() => setScreen('turby-guide')}
       onOpenRanking={() => openRanking()}
     />
   );

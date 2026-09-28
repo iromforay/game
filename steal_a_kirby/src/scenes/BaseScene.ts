@@ -122,6 +122,11 @@ export class BaseScene extends Phaser.Scene {
   private carriedKirbyLabel?: Phaser.GameObjects.Text;
   private escapeHoldStartedAt: number | null = null;
   private escapeHoldText?: Phaser.GameObjects.Text;
+  // 방어 카운트다운(사용자 결정 2026-09-28): 침입 시작 후 1분. 방어 중엔 탈출 불가, 풀린 뒤엔 공격 불가.
+  // defenseEndsAt은 이 씬의 시계(this.time.now) 기준 — 서버가 준 "남은 ms"로 계산해 기기 간 시계 차이 영향 없음
+  private defenseEndsAt: number | null = null;
+  private defenseText?: Phaser.GameObjects.Text;
+  private defenseOverApplied = false;
 
   // 가상 조이스틱(멀티터치) — 공격 버튼과 서로 다른 포인터 ID로 분리해서 동시 입력 가능(코덱스 확정)
   private joyThumb?: Phaser.GameObjects.Image;
@@ -216,6 +221,9 @@ export class BaseScene extends Phaser.Scene {
     this.carriedKirbyLabel = undefined;
     this.escapeHoldStartedAt = null;
     this.escapeHoldText = undefined;
+    this.defenseEndsAt = null;
+    this.defenseText = undefined;
+    this.defenseOverApplied = false;
     this.createFxAnims();
     this.createStairs();
     // 이미지 1단계(DELIVERED, 2026-09-18) — 층 공통 골격(base-ground-floor-1) 위에 층별 오버레이를
@@ -703,7 +711,9 @@ export class BaseScene extends Phaser.Scene {
       .text(
         20,
         46,
-        role === 'owner' ? '이동해서 도둑에게 접근 후 SPACE로 타격(3회 명중시 방어 성공)' : '이동해서 아래쪽 출입문까지 도달하면 성공!',
+        role === 'owner'
+          ? '방어 시간(1분) 안에 도둑에게 접근해 SPACE로 3회 타격하면 방어 성공'
+          : '방어 시간(1분)이 끝난 뒤 아래쪽 출입문에서 2.5초 버티면 성공!',
         { fontSize: '13px', color: '#8be9fd', backgroundColor: '#00000099', padding: { x: 6, y: 4 } },
       )
       .setDepth(DEPTH.HUD);
@@ -795,11 +805,20 @@ export class BaseScene extends Phaser.Scene {
         .setDepth(DEPTH.CONTROLS);
       this.add.image(CANVAS_WIDTH - 90, CANVAS_HEIGHT - 90, 'weapon-bat').setDisplaySize(44, 44).setAngle(-45).setScrollFactor(0).setDepth(DEPTH.CONTROLS + 1);
       // 조이스틱(방향키)과 공격 버튼을 서로 다른 입력 경로로 분리해서 동시 입력(멀티터치) 가능
-      this.attackButton.on('pointerdown', () => {
-        this.me.playAttack();
-        void kirbyNetwork.attack(this.sceneData.targetPlayerId, this.sceneData.instanceId!);
-      });
+      this.attackButton.on('pointerdown', () => this.tryAttack());
     }
+
+    // 방어 카운트다운 — 층 표시가 없는 추격 화면이라 그 자리(상단 중앙)에 표시
+    this.defenseText = this.add
+      .text(CANVAS_WIDTH / 2, 34, '방어 시간 확인 중…', { fontSize: '20px', color: '#ffffff', fontStyle: 'bold', backgroundColor: '#000000bb', padding: { x: 12, y: 6 } })
+      .setOrigin(0.5)
+      .setDepth(DEPTH.HUD);
+    void kirbyNetwork
+      .invasionStatus(this.sceneData.instanceId!)
+      .then((res) => {
+        if (res.ok && typeof res.defenseRemainingMs === 'number') this.defenseEndsAt = this.time.now + res.defenseRemainingMs;
+      })
+      .catch(() => undefined);
 
     kirbyNetwork.on('invasionPosition', this.onPosition);
     kirbyNetwork.on('invasionHit', this.onHit);
@@ -999,13 +1018,15 @@ export class BaseScene extends Phaser.Scene {
       this.lastBroadcast = now;
       void kirbyNetwork.reportMove(this.sceneData.targetPlayerId, this.sceneData.instanceId!, this.myPos.x, this.myPos.y);
     }
-    if (this.sceneData.mode === 'defend' && Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
-      this.me.playAttack();
-      void kirbyNetwork.attack(this.sceneData.targetPlayerId, this.sceneData.instanceId!);
-    }
+    if (this.sceneData.mode === 'defend' && Phaser.Input.Keyboard.JustDown(this.spaceKey)) this.tryAttack();
+    const defenseLeft = this.updateDefenseCountdown();
     if (this.sceneData.mode === 'steal') {
       const dist = Phaser.Math.Distance.Between(this.myPos.x, this.myPos.y, EXIT_DOOR.x, EXIT_DOOR.y);
-      if (dist <= EXIT_DOOR.radius) {
+      if (dist <= EXIT_DOOR.radius && (defenseLeft === null || defenseLeft > 0)) {
+        // 방어 시간 중에는 출입문에서 버텨도 탈출 불가 — 풀린 시점부터 2.5초를 새로 셈(서버 판정과 동일)
+        this.escapeHoldStartedAt = null;
+        this.escapeHoldText?.setText(`방어 시간 중에는 탈출할 수 없습니다${defenseLeft ? ` (${Math.ceil(defenseLeft / 1000)}초)` : ''}`).setVisible(true);
+      } else if (dist <= EXIT_DOOR.radius) {
         if (this.escapeHoldStartedAt === null) this.escapeHoldStartedAt = now;
         const elapsed = now - this.escapeHoldStartedAt;
         const remaining = Math.max(0, ESCAPE_HOLD_MS - elapsed);
@@ -1081,6 +1102,34 @@ export class BaseScene extends Phaser.Scene {
     this.joyPointerId = null;
     this.joyVector = { x: 0, y: 0 };
     this.joyThumb?.setPosition(JOYSTICK_CENTER.x, JOYSTICK_CENTER.y);
+  }
+
+  // 남은 방어 시간(ms, 모르면 null)을 돌려주고 상단 카운트다운 표시를 갱신. 방어가 풀리는 순간 1회 화면 전환.
+  private updateDefenseCountdown(): number | null {
+    if (!this.defenseText || this.defenseEndsAt === null) return null;
+    const left = Math.max(0, this.defenseEndsAt - this.time.now);
+    if (left > 0) {
+      const sec = Math.ceil(left / 1000);
+      this.defenseText.setText(`방어 시간 ${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`).setColor(sec <= 10 ? '#ff5252' : '#ffffff');
+      return left;
+    }
+    if (!this.defenseOverApplied) {
+      this.defenseOverApplied = true;
+      const isOwner = this.sceneData.mode === 'defend';
+      this.defenseText.setText(isOwner ? '방어 종료 — 더 이상 공격할 수 없습니다' : '방어 풀림! 출입문으로 탈출하세요').setColor(isOwner ? '#ffb74d' : '#50fa7b');
+      this.attackButton?.disableInteractive().setAlpha(0.35);
+    }
+    return 0;
+  }
+
+  private tryAttack() {
+    const left = this.defenseEndsAt === null ? null : Math.max(0, this.defenseEndsAt - this.time.now);
+    if (left === 0) {
+      this.showMessage('방어 시간이 끝나 공격할 수 없습니다');
+      return;
+    }
+    this.me.playAttack();
+    void kirbyNetwork.attack(this.sceneData.targetPlayerId, this.sceneData.instanceId!);
   }
 
   private showMessage(text: string, delayMs = 1600, color = '#ff5252', fontSize = '16px') {

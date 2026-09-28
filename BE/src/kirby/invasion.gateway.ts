@@ -1,6 +1,6 @@
 import { ConnectedSocket, MessageBody, OnGatewayDisconnect, SubscribeMessage, WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
 import type { Server, Socket } from 'socket.io';
-import { InvasionService } from './invasion.service';
+import { DEFENSE_MS, InvasionService } from './invasion.service';
 import { PlayerService } from './player.service';
 import { canInvade } from './baseAccess';
 
@@ -191,8 +191,21 @@ export class InvasionGateway implements OnGatewayDisconnect {
       instanceId: body.instanceId,
       viewerPlayerId: actorId,
       characterName: instance.kirby_character.name,
+      defenseRemainingMs: DEFENSE_MS,
     });
-    return { ok: true };
+    return { ok: true, defenseRemainingMs: DEFENSE_MS };
+  }
+
+  // 방어 카운트다운(2026-09-28) — 방어/도주 화면이 열릴 때 남은 방어 시간을 묻는다(방어자가 나중에 들어와도 맞게).
+  // 서버 기준 남은 ms를 돌려주고 클라이언트는 자기 시계로 카운트다운(시계 차이 영향 없음). 이 침입의 당사자만 조회 가능.
+  @SubscribeMessage('invasion:status')
+  handleStatus(@ConnectedSocket() client: Socket, @MessageBody() body: { instanceId: string }) {
+    const actorId = this.requireSocketIdentity(client);
+    const invasion = this.invasions.getInvasion(body?.instanceId);
+    if (!actorId || !invasion || (actorId !== invasion.ownerPlayerId && actorId !== invasion.viewerPlayerId)) {
+      return { ok: false, reason: 'not-authorized' };
+    }
+    return { ok: true, defenseRemainingMs: this.invasions.defenseRemainingMs(body.instanceId) };
   }
 
   // 3.5.4류 위치 브로드캐스트 — 서버는 그대로 중계하되, 명중 판정(attack)에서는 이 값을 서버가 직접 사용해 재검증함.
@@ -228,6 +241,8 @@ export class InvasionGateway implements OnGatewayDisconnect {
     if (!actorId || !invasion || actorId !== invasion.ownerPlayerId) {
       return { ok: false, reason: 'not-authorized' };
     }
+    // 방어가 풀린 뒤에는 공격 불가(사용자 결정 2026-09-28)
+    if (this.invasions.defenseRemainingMs(body.instanceId) === 0) return { ok: false, reason: 'defense-over' };
 
     const result = this.invasions.tryAttack(body.instanceId);
     if (!result) return { ok: false, reason: 'no-active-invasion' };

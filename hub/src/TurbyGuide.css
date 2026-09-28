@@ -1,0 +1,297 @@
+.turby-guide {
+  --tg-bg: #1f1830;
+  --tg-bg-2: #2e2446;
+  --tg-felt: #f6efe2;
+  --tg-felt-edge: #e4d6bf;
+  --tg-stitch: #c9b39a;
+  --tg-ink: #4a3b33;
+  --tg-ink-soft: #85746a;
+  --tg-text: #f4eefb;
+  --tg-muted: #bfb2d6;
+  --tg-accent: #f2a7bd;
+  --tg-lavender: #c9b0dc;
+
+  position: relative;
+  min-height: 100vh;
+  font-family: 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+  word-break: keep-all;
+  background: radial-gradient(circle at top, var(--tg-bg-2) 0%, var(--tg-bg) 62%);
+  color: var(--tg-text);
+  padding-bottom: 60px;
+  box-sizing: border-box;
+}
+.turby-guide * { box-sizing: border-box; }
+
+.turby-guide-header {
+  position: relative;
+  text-align: center;
+  padding: 32px 16px 20px;
+}
+.turby-guide-header h1 {
+  margin: 0 0 8px;
+  font-size: 1.9rem;
+  letter-spacing: 0.5px;
+}
+.turby-guide-header p {
+  margin: 0;
+  color: var(--tg-muted);
+  font-size: 0.95rem;
+}
+.turby-guide-back {
+  position: absolute;
+  left: 16px;
+  top: 16px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--tg-text);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-size: 0.85rem;
+  font-family: inherit;
+  cursor: pointer;
+}
+.turby-guide-back:hover { background: var(--tg-accent); color: #2a1f33; }
+
+.turby-guide-body {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 8px 16px 0;
+}
+
+.turby-guide-loading {
+  text-align: center;
+  color: var(--tg-muted);
+  padding: 60px 0;
+}
+
+.turby-guide-notice {
+  background: rgba(201, 176, 220, 0.14);
+  border: 1px dashed rgba(201, 176, 220, 0.5);
+  border-radius: 14px;
+  padding: 14px 18px;
+  color: var(--tg-text);
+  font-size: 0.9rem;
+  line-height: 1.6;
+  margin: 0 0 20px;
+  text-align: center;
+}
+.turby-guide-notice p { margin: 0 0 10px; }
+.turby-guide-retry {
+  background: var(--tg-lavender);
+  color: #2a1f33;
+  border: none;
+  border-radius: 999px;
+  padding: 8px 18px;
+  font-family: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.turby-guide-progress { margin: 4px 0 22px; }
+.turby-guide-progress-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  color: var(--tg-muted);
+  font-size: 0.88rem;
+  margin-bottom: 8px;
+}
+.turby-guide-progress-label b { color: var(--tg-text); font-size: 1.1rem; }
+.turby-guide-progress-track {
+  height: 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+.turby-guide-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--tg-lavender), var(--tg-accent));
+  transition: width 0.4s ease;
+}
+
+.turby-guide-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 16px;
+}
+.turby-card-slot { display: flex; }
+
+/* 펠트 천 카드 — 바깥 천과 안쪽 바느질 점선 */
+.turby-card {
+  position: relative;
+  width: 100%;
+  background: var(--tg-felt);
+  border: 3px solid var(--tg-felt-edge);
+  border-radius: 18px;
+  outline: 2px dashed var(--tg-stitch);
+  outline-offset: -9px;
+  padding: 26px 10px 16px;
+  text-align: center;
+  font-family: inherit;
+  color: var(--tg-ink);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.28);
+}
+button.turby-card {
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+button.turby-card:hover { transform: translateY(-3px); box-shadow: 0 12px 22px rgba(0, 0, 0, 0.34); }
+button.turby-card:focus-visible { box-shadow: 0 0 0 3px var(--tg-accent); }
+
+.turby-card-no {
+  position: absolute;
+  top: 12px;
+  left: 14px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--tg-ink-soft);
+  letter-spacing: 0.5px;
+}
+.turby-card-art {
+  width: 96px;
+  height: 96px;
+  margin: 0 auto 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.turby-card-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 5px rgba(74, 59, 51, 0.22));
+}
+.turby-card-name {
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.turby-card-sub {
+  margin-top: 6px;
+  font-size: 0.72rem;
+  color: var(--tg-ink-soft);
+}
+
+/* 미획득: 색을 지운 실루엣, 이름·등급 없음 */
+.turby-card.unknown {
+  background: #ebe4d8;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.22);
+}
+.turby-card.unknown .turby-card-art img {
+  filter: brightness(0) opacity(0.28);
+  user-select: none;
+  pointer-events: none;
+}
+.turby-card.unknown .turby-card-name { color: var(--tg-ink-soft); letter-spacing: 2px; }
+
+.turby-grade-chip {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 3px 12px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--tg-ink);
+}
+
+.turby-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 14, 30, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 30;
+}
+.turby-modal {
+  position: relative;
+  width: 100%;
+  max-width: 360px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  background: var(--tg-felt);
+  border: 3px solid var(--tg-felt-edge);
+  border-radius: 22px;
+  outline: 2px dashed var(--tg-stitch);
+  outline-offset: -10px;
+  padding: 30px 26px 22px;
+  text-align: center;
+  color: var(--tg-ink);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+.turby-modal .turby-card-no { top: 16px; left: 20px; }
+.turby-modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: var(--tg-felt-edge);
+  color: var(--tg-ink);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.turby-modal-close:hover { background: var(--tg-accent); }
+.turby-modal-image {
+  width: 200px;
+  height: 200px;
+  object-fit: contain;
+  margin: 6px auto 4px;
+  display: block;
+  filter: drop-shadow(0 8px 10px rgba(74, 59, 51, 0.25));
+}
+.turby-modal h2 {
+  margin: 4px 0 2px;
+  font-size: 1.35rem;
+  color: var(--tg-ink);
+}
+.turby-modal-desc {
+  margin: 14px 0 0;
+  font-size: 0.88rem;
+  line-height: 1.65;
+  text-align: left;
+  color: var(--tg-ink);
+}
+.turby-modal-stats {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 16px;
+  font-size: 0.85rem;
+}
+.turby-modal-stats li {
+  display: flex;
+  justify-content: space-between;
+  padding: 5px 0;
+  border-bottom: 1px dashed var(--tg-stitch);
+  color: var(--tg-ink-soft);
+}
+.turby-modal-stats li b { color: var(--tg-ink); }
+.turby-modal-meta {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 14px;
+  font-size: 0.8rem;
+  color: var(--tg-ink-soft);
+}
+.turby-modal-note {
+  margin: 10px 0 0;
+  font-size: 0.72rem;
+  color: var(--tg-ink-soft);
+}
+
+@media (max-width: 480px) {
+  .turby-guide-header { padding-top: 60px; }
+  .turby-guide-header h1 { font-size: 1.45rem; }
+  .turby-guide-grid { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 12px; }
+  .turby-card-art { width: 80px; height: 80px; }
+}

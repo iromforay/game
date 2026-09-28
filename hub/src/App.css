@@ -157,6 +157,10 @@
   transition: transform 0.15s ease, background 0.15s ease;
 }
 
+.dashboard-guide-button + .dashboard-guide-button {
+  margin-top: 12px;
+}
+
 .dashboard-guide-button:hover {
   transform: translateY(-2px);
   background: rgba(48, 35, 80, 0.94);

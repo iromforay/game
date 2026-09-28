@@ -1,15 +1,17 @@
 import { GAMES, CARD_FRAME_URL } from './games';
 import type { GameId } from './games';
 import kirbyGuideIconUrl from './assets/cards/icon-steal-a-kirby.png';
+import turbyGuideIconUrl from './assets/cards/icon-save-a-turby.png';
 import { AccountPanel } from './account/AccountPanel';
 
 interface DashboardProps {
   onSelectGame: (gameId: GameId) => void;
   onOpenKirbyGuide: () => void;
+  onOpenTurbyGuide: () => void;
   onOpenRanking: () => void;
 }
 
-export function Dashboard({ onSelectGame, onOpenKirbyGuide, onOpenRanking }: DashboardProps) {
+export function Dashboard({ onSelectGame, onOpenKirbyGuide, onOpenTurbyGuide, onOpenRanking }: DashboardProps) {
   return (
     <div className="dashboard">
       <div className="dashboard-header">
@@ -54,6 +56,13 @@ export function Dashboard({ onSelectGame, onOpenKirbyGuide, onOpenRanking }: Das
           <span className="dashboard-guide-text">
             <span className="dashboard-guide-title">커비 훔치기 도감</span>
             <span className="dashboard-guide-desc">캐릭터·등급·무기 정보 보기</span>
+          </span>
+        </button>
+        <button type="button" className="dashboard-guide-button" onClick={onOpenTurbyGuide}>
+          <img className="dashboard-guide-icon" src={turbyGuideIconUrl} alt="" />
+          <span className="dashboard-guide-text">
+            <span className="dashboard-guide-title">터비 구하기 캐릭터 도감</span>
+            <span className="dashboard-guide-desc">내가 만난 터비 기록 보기</span>
           </span>
         </button>
       </section>
