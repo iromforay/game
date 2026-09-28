@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from './prisma.service';
 import type { BaseAccessState, LockState } from './baseAccess';
 import { AccountService } from '../account/account.service';
@@ -12,6 +13,13 @@ const STARTING_GOLD = 100;
 
 // 2026-09-17 확정(docs/to_codex.md 7절): 기지 보관 용량 = 층당 4개 × 3층
 const MAX_KIRBY_CAPACITY = 12;
+
+// 동시성(2026-09-28, 운영 로그 MariaDB 1020 "Record has changed since last read"): 통합 로그인으로 한 플레이어를
+// 여러 기기가 쓰면서 자동 수익·구매·판매가 같은 행을 동시에 건드림. 골드를 움직이는 트랜잭션은 모두
+// "조건이 맞는 행만 수정하고, 실제로 수정된 만큼만 골드를 반영"하는 방식 + READ COMMITTED(스냅샷 충돌 에러 없음)로 처리.
+// 조건부 수정은 원시 SQL로 한 문장에 한다 — relationMode="prisma"에서는 updateMany/deleteMany가 "조회 후 id로 수정"
+// 두 단계로 실행돼 수정 시점에 조건이 다시 확인되지 않음(동시성 테스트에서 자동 수익 이중 지급으로 확인).
+const TX_OPTIONS = { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted };
 
 // 2026-09-18 요청: 초당 발생 재화 — 오프라인 방치 악용 방지용 최대 정산 구간(24시간)
 const MAX_COLLECT_SECONDS = 24 * 60 * 60;
@@ -158,13 +166,17 @@ export class PlayerService {
       return { player: this.toStateDto(player, await this.getInventory(player.id)), collected: 0 };
     }
 
-    await this.prisma.$transaction([
-      this.prisma.kirby_player.update({ where: { id: player.id }, data: { gold: { increment: collected } } }),
-      this.prisma.kirby_instance.update({ where: { id: instanceId }, data: { last_collected_at: now } }),
-    ]);
+    // 읽은 뒤 다른 요청(다른 기기의 자동 수익 등)이 먼저 정산했으면 정산 시각이 달라져 수정되지 않음 → 이중 지급 없음
+    const credited = await this.prisma.$transaction(async (tx) => {
+      const moved = await tx.$executeRaw`UPDATE kirby_instance SET last_collected_at = ${now}
+        WHERE id = ${instanceId} AND owner_player_id = ${player.id} AND status = 'idle' AND last_collected_at = ${instance.last_collected_at}`;
+      if (moved === 0) return 0;
+      await tx.kirby_player.update({ where: { id: player.id }, data: { gold: { increment: collected } } });
+      return collected;
+    }, TX_OPTIONS);
 
     const updated = await this.requirePlayerById(player.id);
-    return { player: this.toStateDto(updated, await this.getInventory(player.id)), collected };
+    return { player: this.toStateDto(updated, await this.getInventory(player.id)), collected: credited };
   }
 
   // 자동 수익(사용자 지적 2026-09-21: 진열만 해서는 전혀 못 번다) — 내 idle 커비 전부를 한 번에 정산.
@@ -176,24 +188,29 @@ export class PlayerService {
       include: { kirby_character: { include: { kirby_grade: true } } },
     });
     const nowMs = Date.now();
-    let total = 0;
-    const updates: ReturnType<PrismaService['kirby_instance']['update']>[] = [];
+    const pending: { id: bigint; readAt: Date; nextAt: Date; earned: number }[] = [];
     for (const inst of instances) {
       const rate = inst.kirby_character.kirby_grade.income_per_tick;
       if (rate <= 0) continue;
       const elapsedSec = Math.min(MAX_COLLECT_SECONDS, Math.max(0, (nowMs - inst.last_collected_at.getTime()) / 1000));
       const earned = Math.floor(elapsedSec * rate);
       if (earned <= 0) continue;
-      total += earned;
-      updates.push(
-        this.prisma.kirby_instance.update({
-          where: { id: inst.id },
-          data: { last_collected_at: new Date(inst.last_collected_at.getTime() + (earned / rate) * 1000) },
-        }),
-      );
+      pending.push({ id: inst.id, readAt: inst.last_collected_at, nextAt: new Date(inst.last_collected_at.getTime() + (earned / rate) * 1000), earned });
     }
-    if (total > 0) {
-      await this.prisma.$transaction([this.prisma.kirby_player.update({ where: { id: player.id }, data: { gold: { increment: total } } }), ...updates]);
+    // 커비마다 "내가 읽은 정산 시각 그대로일 때만" 시각을 밀고, 실제로 민 커비의 수익만 합산해 지급
+    // (다른 기기의 자동 수익이 먼저 정산한 커비는 건너뜀 → 이중 지급 없음)
+    let total = 0;
+    if (pending.length > 0) {
+      total = await this.prisma.$transaction(async (tx) => {
+        let sum = 0;
+        for (const p of pending) {
+          const moved = await tx.$executeRaw`UPDATE kirby_instance SET last_collected_at = ${p.nextAt}
+            WHERE id = ${p.id} AND owner_player_id = ${player.id} AND status = 'idle' AND last_collected_at = ${p.readAt}`;
+          if (moved > 0) sum += p.earned;
+        }
+        if (sum > 0) await tx.kirby_player.update({ where: { id: player.id }, data: { gold: { increment: sum } } });
+        return sum;
+      }, TX_OPTIONS);
     }
     const updated = await this.requirePlayerById(player.id);
     return { player: this.toStateDto(updated, await this.getInventory(player.id)), collected: total };
@@ -251,13 +268,17 @@ export class PlayerService {
 
     offer.used = true; // 연타·중복 요청으로 같은 판매권을 두 번 쓰지 못하게 트랜잭션 전에 먼저 소진
     try {
-      const [, instance] = await this.prisma.$transaction([
-        this.prisma.kirby_player.update({ where: { id: player.id }, data: { gold: { decrement: offer.price } } }),
-        this.prisma.kirby_instance.create({
+      // 잔액 확인과 차감을 한 번에(골드가 가격 이상일 때만 차감) — 두 기기에서 동시에 사도 잔액을 넘겨 빠지지 않음
+      const instance = await this.prisma.$transaction(async (tx) => {
+        const paid = await tx.$executeRaw`UPDATE kirby_player SET gold = gold - ${offer.price} WHERE id = ${player.id} AND gold >= ${offer.price}`;
+        if (paid === 0) throw new BadRequestException({ message: '돈이 부족합니다', code: 'NOT_ENOUGH_GOLD' });
+        const owned = await tx.kirby_instance.count({ where: { owner_player_id: player.id } });
+        if (owned >= MAX_KIRBY_CAPACITY) throw new BadRequestException({ message: '기지 보관 공간이 가득 찼습니다', code: 'BASE_FULL' });
+        return tx.kirby_instance.create({
           data: { owner_player_id: player.id, character_id: offer.characterId },
           include: { kirby_character: true },
-        }),
-      ]);
+        });
+      }, TX_OPTIONS);
       const updated = await this.requirePlayerById(player.id);
       return { player: this.toStateDto(updated, await this.getInventory(player.id)), bought: this.toInstanceDto(instance) };
     } catch (err) {
@@ -282,10 +303,12 @@ export class PlayerService {
     if (instance.status !== 'idle') throw new BadRequestException('지금 도둑맞는 중인 커비는 팔 수 없습니다');
 
     const sellPrice = instance.kirby_character.kirby_grade.sell_price;
-    await this.prisma.$transaction([
-      this.prisma.kirby_instance.delete({ where: { id: instanceId } }),
-      this.prisma.kirby_player.update({ where: { id: player.id }, data: { gold: { increment: sellPrice } } }),
-    ]);
+    // 내 소유·대기 중인 커비일 때만 삭제하고, 실제로 삭제됐을 때만 판매 대금 지급(동시 두 번 판매해도 1회만)
+    await this.prisma.$transaction(async (tx) => {
+      const removed = await tx.$executeRaw`DELETE FROM kirby_instance WHERE id = ${instanceId} AND owner_player_id = ${player.id} AND status = 'idle'`;
+      if (removed === 0) throw new BadRequestException('이미 판매했거나 판매할 수 없는 커비입니다');
+      await tx.kirby_player.update({ where: { id: player.id }, data: { gold: { increment: sellPrice } } });
+    }, TX_OPTIONS);
 
     const updated = await this.requirePlayerById(player.id);
     return this.toStateDto(updated, await this.getInventory(player.id));
