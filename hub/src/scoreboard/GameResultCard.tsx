@@ -3,6 +3,7 @@ import { GAME_RESULT_EVENT } from 'tower-defense';
 import type { GameResultDetail } from 'tower-defense';
 import { submitGameResult } from './scoreboardClient';
 import type { RankingGame, SubmitResult } from './scoreboardClient';
+import { hasStoredToken } from '../account/accountClient';
 import './Scoreboard.css';
 
 const GAME_TITLES: Record<GameResultDetail['game'], string> = {
@@ -24,6 +25,11 @@ export function GameResultCard({ onOpenRanking }: Props) {
   useEffect(() => {
     const onResult = (e: Event) => {
       const d = (e as CustomEvent<GameResultDetail>).detail;
+      // 진행 중 기록(웨이브·돌파마다)은 카드 없이 조용히 갱신만 한다. 게스트는 저장되지 않으니 보내지 않는다.
+      if (d.final === false) {
+        if (hasStoredToken()) submitGameResult(d).catch(() => undefined);
+        return;
+      }
       setDetail(d);
       setResult(null);
       setError('');

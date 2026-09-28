@@ -24,7 +24,7 @@ export function mountGame(parent: HTMLElement | string): Phaser.Game {
 // pivot) can reuse the core simulation pieces instead of duplicating them.
 export * from './config/constants';
 export { setupBoardCamera, BOARD_ZOOM } from './boardCamera';
-export { reportGameResult, GAME_RESULT_EVENT } from './gameResult';
+export { reportGameResult, GAME_RESULT_EVENT, newRunId } from './gameResult';
 export type { GameResultDetail } from './gameResult';
 export type { BoardCamera } from './boardCamera';
 export * from './config/towers';

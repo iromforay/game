@@ -24,6 +24,7 @@ import {
   addCoins,
   setupBoardCamera,
   reportGameResult,
+  newRunId,
 } from 'tower-defense';
 import type { TowerType } from 'tower-defense';
 import { UNIT_DEFS, damageMultiplier } from '../config/units';
@@ -38,8 +39,8 @@ import { gameEvents, Events } from '../events';
 
 const TOWER_ORDER: TowerType[] = ['basic', 'splash', 'slow', 'storm'];
 
-// 러시 대응(2026-09-28): 시드 스플래시(90) + 기본 타워(50) = 타워 2개로 시작
-const AI_STARTING_GOLD = 140;
+// 시드 스플래시 타워(90) 하나만 지을 수 있는 금액. 초반 러시는 유닛 소환 대기시간으로 막는다.
+const AI_STARTING_GOLD = 90;
 const AI_PLACEMENT_INTERVAL = 2600; // ms between AI build attempts
 
 // Unlike normal mode, AI towers here are destructible (roughly cost-scaled).
@@ -58,6 +59,8 @@ export class GameScene extends Phaser.Scene {
   unitBreakthroughs = 0; // excludes the hero - this is what the clear goal counts
   gameCleared = false;
   private startedAt = 0; // 스코어보드용 클리어 시간 측정(this.time.now는 씬 시작 기준이 아님)
+  private runId = '';
+  private reportedBreakthroughs = 0;
 
   aiPlacementTimer = 0;
   aiTowerOrderIndex = 0;
@@ -121,6 +124,8 @@ export class GameScene extends Phaser.Scene {
     this.unitBreakthroughs = 0;
     this.gameCleared = false;
     this.startedAt = this.time.now;
+    this.runId = newRunId();
+    this.reportedBreakthroughs = 0;
     this.aiPlacementTimer = AI_PLACEMENT_INTERVAL;
     this.aiTowerOrderIndex = 0;
     this.spawnCooldownUntil = { swarm: 0, tank: 0, speed: 0 };
@@ -137,7 +142,6 @@ export class GameScene extends Phaser.Scene {
     setupBoardCamera(this);
     this.buildAiCandidateTiles();
     this.placeSeedTower();
-    this.aiTryBuild(); // 남은 시작 골드로 즉시 두 번째 타워(순서상 basic — 스피드형 약점) 건설
 
     gameEvents.on(Events.RequestSpawn, (type: UnitType) => this.trySpawnUnit(type));
     gameEvents.on(Events.RequestSpawnHero, () => this.trySpawnHero());
@@ -381,6 +385,9 @@ export class GameScene extends Phaser.Scene {
 
     if (!this.gameCleared && this.unitBreakthroughs >= this.stage.goalBreakthroughs) {
       this.triggerClear();
+    } else if (!this.gameCleared && this.unitBreakthroughs > this.reportedBreakthroughs) {
+      this.reportedBreakthroughs = this.unitBreakthroughs;
+      this.reportProgress(false);
     }
 
     this.emitScore();
@@ -393,10 +400,23 @@ export class GameScene extends Phaser.Scene {
     const totalCoins = addCoins(CLEAR_REWARD_COINS);
     logEvent('offense-tower', 'game_clear', { roundId: this.stage.id, unitBreakthroughs: this.unitBreakthroughs, reward: CLEAR_REWARD_COINS });
     gameEvents.emit(Events.GameCleared, { reward: CLEAR_REWARD_COINS, totalCoins });
-    // 스코어보드(2026-09-28): 결과 수치를 허브에 알림 — kills는 AI 타워에 잃은 내 유닛 수(영웅 포함)
+    this.reportProgress(true);
+  }
+
+  // 스코어보드: 돌파할 때마다 같은 판 기록을 갱신(중간에 나가거나 꺼져도 남음), 클리어 때 최종 기록.
+  // unitsLost는 AI 타워에 잃은 내 유닛 수(영웅 포함)
+  private reportProgress(cleared: boolean) {
     reportGameResult({
       game: 'offense_tower',
-      stats: { roundId: this.stage.id, clearSeconds: Math.round((this.time.now - this.startedAt) / 1000), unitsLost: this.kills },
+      runId: this.runId,
+      final: cleared,
+      stats: {
+        roundId: this.stage.id,
+        cleared,
+        breakthroughs: this.unitBreakthroughs,
+        clearSeconds: Math.round((this.time.now - this.startedAt) / 1000),
+        unitsLost: this.kills,
+      },
     });
   }
 

@@ -388,6 +388,8 @@ model score_record {
   round_id    Int               @default(0) @db.UnsignedInt
   score       Int
   detail_json String?           @db.Text
+  // 진행 중 갱신되는 판(디펜스 타워·오펜스 타워)의 판 식별자 — 판당 한 행
+  run_key     String?           @unique(map: "uq_score_run") @db.VarChar(64)
   created_at  DateTime          @default(now()) @db.Timestamp(0)
 
   @@index([game, round_id, score], map: "idx_score_rank")

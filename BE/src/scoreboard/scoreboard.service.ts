@@ -11,6 +11,11 @@ const RANKING_LIMIT = 50;
 const TD_WAVES = 10;
 const TD_MAX_LIVES = 20;
 const KIRBY_STARTING_GOLD = 100; // BE/src/kirby/player.service.ts STARTING_GOLD와 같아야 함
+// 오펜스 타워 미클리어 판: 돌파 1마리당 점수, 상한은 클리어 최소 점수보다 낮게 두어 클리어가 항상 위에 오게 한다.
+const OT_PARTIAL_PER_BREAKTHROUGH = 500;
+const OT_PARTIAL_MAX = 4500;
+const OT_CLEAR_MIN = 5000;
+const RUN_ID_PATTERN = /^[A-Za-z0-9-]{8,64}$/;
 
 interface BreakdownItem {
   label: string;
@@ -64,6 +69,18 @@ export class ScoreboardService {
       const roundId = int(stats.roundId, 1, 1000, 'roundId');
       const clearSeconds = int(stats.clearSeconds, 0, 86_400, 'clearSeconds');
       const unitsLost = int(stats.unitsLost, 0, 1_000_000, 'unitsLost');
+      // cleared가 없는 제출은 예전 클라이언트(클리어 때만 보냄)이므로 클리어로 본다.
+      const cleared = stats.cleared !== false;
+      if (!cleared) {
+        const breakthroughs = int(stats.breakthroughs, 0, 1000, 'breakthroughs');
+        const points = Math.min(breakthroughs * OT_PARTIAL_PER_BREAKTHROUGH, OT_PARTIAL_MAX);
+        return {
+          score: points,
+          roundId,
+          breakdown: [{ label: '돌파(미클리어)', value: breakthroughs, points }],
+          detail: { roundId, cleared: false, breakthroughs, clearSeconds, unitsLost },
+        };
+      }
       const timeBonus = Math.max(0, 300 - clearSeconds) * 20;
       const breakdown: BreakdownItem[] = [
         { label: '클리어', value: `라운드 ${roundId}`, points: 10000 },
@@ -71,7 +88,7 @@ export class ScoreboardService {
         { label: '잃은 유닛', value: unitsLost, points: -unitsLost * 50 },
       ];
       const raw = breakdown.reduce((s, b) => s + b.points, 0);
-      return { score: Math.max(1000, raw), roundId, breakdown, detail: { roundId, clearSeconds, unitsLost } };
+      return { score: Math.max(OT_CLEAR_MIN, raw), roundId, breakdown, detail: { roundId, cleared: true, clearSeconds, unitsLost } };
     }
     if (game === 'marbles') {
       const result = stats.result;
@@ -86,16 +103,30 @@ export class ScoreboardService {
   }
 
   // 판 결과 제출 — 로그인 상태면 기록 + 최고 기록/순위, 게스트면 점수 계산 결과만
-  async submit(token: string | undefined, game: unknown, stats: unknown) {
+  async submit(token: string | undefined, game: unknown, stats: unknown, runIdRaw?: unknown) {
     const computed = this.compute(game, (stats && typeof stats === 'object' ? stats : {}) as Record<string, unknown>);
     const scoreGame = game as ScoreGame;
     const accountId = await this.accounts.resolveAccountId(token);
     if (!accountId) return { score: computed.score, breakdown: computed.breakdown, registered: false };
 
-    const previousBest = await this.bestOf(accountId, scoreGame, computed.roundId);
-    await this.prisma.score_record.create({
-      data: { account_id: accountId, game: scoreGame, round_id: computed.roundId, score: computed.score, detail_json: JSON.stringify(computed.detail) },
-    });
+    // 알까기는 판 도중 갱신이 없어 runId를 쓰지 않는다(판마다 새 행).
+    const runId = scoreGame !== 'marbles' && typeof runIdRaw === 'string' && RUN_ID_PATTERN.test(runIdRaw) ? runIdRaw : null;
+    const previousBest = await this.bestOf(accountId, scoreGame, computed.roundId, runId);
+    const detailJson = JSON.stringify(computed.detail);
+    if (runId) {
+      // 같은 판은 한 행만 유지하고, 점수는 올라가는 방향으로만 갱신한다(요청 순서가 뒤바뀌어도 되돌아가지 않음).
+      // 다른 계정·게임·라운드의 runId와 겹치면 기존 행을 건드리지 않는다. detail_json을 score보다 먼저 비교해야 한다.
+      await this.prisma.$executeRaw`
+        INSERT INTO score_record (account_id, game, round_id, score, detail_json, run_key)
+        VALUES (${accountId}, ${scoreGame}, ${computed.roundId}, ${computed.score}, ${detailJson}, ${runId})
+        ON DUPLICATE KEY UPDATE
+          detail_json = IF(account_id = VALUES(account_id) AND game = VALUES(game) AND round_id = VALUES(round_id) AND VALUES(score) >= score, VALUES(detail_json), detail_json),
+          score = IF(account_id = VALUES(account_id) AND game = VALUES(game) AND round_id = VALUES(round_id) AND VALUES(score) >= score, VALUES(score), score)`;
+    } else {
+      await this.prisma.score_record.create({
+        data: { account_id: accountId, game: scoreGame, round_id: computed.roundId, score: computed.score, detail_json: detailJson },
+      });
+    }
     const me = await this.myRank(accountId, scoreGame, computed.roundId);
     return {
       score: computed.score,
@@ -144,8 +175,17 @@ export class ScoreboardService {
     return rows.map((r) => ({ accountId: r.account_id, nickname: names.get(r.account_id) ?? `#${r.account_id}`, score: Number(r.score), games: Number(r.games) }));
   }
 
-  private async bestOf(accountId: bigint, game: ScoreGame, roundId: number) {
-    const best = await this.prisma.score_record.aggregate({ where: { account_id: accountId, game, round_id: roundId }, _max: { score: true } });
+  // 이번 판(runId) 자신의 진행 기록은 "이전 최고"에서 빼야 판이 끝났을 때 최고 기록 갱신을 제대로 판단한다.
+  private async bestOf(accountId: bigint, game: ScoreGame, roundId: number, excludeRunId: string | null) {
+    const best = await this.prisma.score_record.aggregate({
+      where: {
+        account_id: accountId,
+        game,
+        round_id: roundId,
+        ...(excludeRunId ? { OR: [{ run_key: null }, { run_key: { not: excludeRunId } }] } : {}),
+      },
+      _max: { score: true },
+    });
     return best._max.score;
   }
 

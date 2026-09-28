@@ -19,7 +19,7 @@ import { Projectile } from '../objects/Projectile';
 import { gameEvents, Events } from '../events';
 import type { SelectedTowerInfo } from '../events';
 import { setupBoardCamera } from '../boardCamera';
-import { reportGameResult } from '../gameResult';
+import { newRunId, reportGameResult } from '../gameResult';
 import type { BoardCamera } from '../boardCamera';
 import towerBasicUrl from '../assets/towers/basic.svg?url';
 import towerSplashUrl from '../assets/towers/splash.svg?url';
@@ -56,6 +56,7 @@ export class GameScene extends Phaser.Scene {
 
   gameEnded = false;
   kills = 0; // 스코어보드용 처치 수
+  private runId = '';
 
   constructor() {
     super('Game');
@@ -95,6 +96,7 @@ export class GameScene extends Phaser.Scene {
     this.selectedTower = null;
     this.gameEnded = false;
     this.kills = 0;
+    this.runId = newRunId();
 
     this.drawBackground();
     this.drawBoard();
@@ -351,6 +353,12 @@ export class GameScene extends Phaser.Scene {
         this.endGame(true);
       } else {
         gameEvents.emit(Events.WaveCleared, this.waveIndex + 1);
+        reportGameResult({
+          game: 'tower_defense',
+          runId: this.runId,
+          final: false,
+          stats: { won: false, wavesCleared: this.waveIndex + 1, kills: this.kills, lives: Math.max(0, this.lives), gold: this.gold },
+        });
       }
     }
   }
@@ -378,6 +386,8 @@ export class GameScene extends Phaser.Scene {
     // 스코어보드(2026-09-28): 결과 수치를 허브에 알림 — 패배 시 waveIndex(진행 중이던 웨이브 번호)가 곧 막아낸 웨이브 수
     reportGameResult({
       game: 'tower_defense',
+      runId: this.runId,
+      final: true,
       stats: { won, wavesCleared: won ? WAVES.length : Math.max(0, this.waveIndex), kills: this.kills, lives: Math.max(0, this.lives), gold: this.gold },
     });
     if (won) gameEvents.emit(Events.GameWin);
