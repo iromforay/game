@@ -1,0 +1,16 @@
+{
+  "id": 3,
+  "name": "당구대",
+  "floorFriction": 8,
+  "terrain": [
+    { "pieceId": 4, "dx": -130, "dy": 0, "bounce": 10 },
+    { "pieceId": 4, "dx": 130, "dy": 0, "bounce": 10 },
+    { "pieceId": 4, "dx": 0, "dy": -130, "bounce": 10 },
+    { "pieceId": 4, "dx": 0, "dy": 130, "bounce": 10 },
+    { "pieceId": 3, "dx": 0, "dy": 0, "bounce": 0 }
+  ],
+  "zones": [
+    { "dx": -150, "dy": -150, "radius": 45, "friction": 10 },
+    { "dx": 150, "dy": 150, "radius": 45, "friction": 10 }
+  ]
+}

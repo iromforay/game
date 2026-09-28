@@ -1,0 +1,7 @@
+[
+  { "id": 1, "name": "작은 바위", "radius": 16, "color": "#8a8478", "image": "/data/strategy-marbles/icons/rock.svg" },
+  { "id": 2, "name": "중간 바위", "radius": 20, "color": "#8a8478", "image": "/data/strategy-marbles/icons/rock.svg" },
+  { "id": 3, "name": "큰 바위", "radius": 26, "color": "#8a8478", "image": "/data/strategy-marbles/icons/rock.svg" },
+  { "id": 4, "name": "자동차", "radius": 20, "color": "#c0392b", "image": "/data/strategy-marbles/icons/car.svg" },
+  { "id": 5, "name": "나무", "radius": 22, "color": "#2f6b2a", "image": "/data/strategy-marbles/icons/tree.svg" }
+]
