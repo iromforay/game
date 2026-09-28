@@ -11,6 +11,9 @@ export const GAME_HEIGHT = BOARD_CENTER_Y * 2;
 export const CANVAS_WIDTH = GAME_WIDTH;
 export const CANVAS_HEIGHT = GAME_HEIGHT + HUD_HEIGHT;
 
+// The arena camera is enlarged independently from the HUD scene.
+export const BOARD_ZOOM = 1.5;
+
 export const DEFAULT_PLAYER_COUNT = 2;
 export const EGGS_PER_PLAYER = 4;
 

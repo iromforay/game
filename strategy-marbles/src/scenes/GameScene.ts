@@ -3,8 +3,11 @@ import {
   BOARD_CENTER_X,
   BOARD_CENTER_Y,
   BOARD_RADIUS,
+  BOARD_ZOOM,
   DEFAULT_PLAYER_COUNT,
   EGGS_PER_PLAYER,
+  GAME_HEIGHT,
+  GAME_WIDTH,
   MAX_LAUNCH_SPEED,
   MAX_PULL_DISTANCE,
   MAX_TURNS,
@@ -24,6 +27,8 @@ import { Egg } from '../objects/Egg';
 import { gameEvents, Events } from '../events';
 import type { ScoreEntry } from '../events';
 import type { EggOutcome, NetworkOptions, TurnActionPayload, TurnOutcomePayload } from '../network';
+import { STONE_TEXTURE_URLS } from '../assets/stoneTextures';
+import { MAP_BACKGROUND_TEXTURES } from '../assets/mapBackgrounds';
 
 interface PlayerState {
   index: number;
@@ -55,6 +60,8 @@ export class GameScene extends Phaser.Scene {
   selectedEgg: Egg | null = null;
   dragging = false;
   pullGraphics!: Phaser.GameObjects.Graphics;
+  cameraPanStart: { x: number; y: number; scrollX: number; scrollY: number } | null = null;
+  cameraPanning = false;
 
   timerEvent: Phaser.Time.TimerEvent | null = null;
   timerRemainingMs = TURN_TIME_LIMIT_MS;
@@ -91,6 +98,12 @@ export class GameScene extends Phaser.Scene {
     for (const file of PIECE_ICON_FILES) {
       this.load.svg(pieceTextureKey(`${file}.svg`), `/data/strategy-marbles/icons/${file}.svg`, { width: 64, height: 64 });
     }
+    for (const [key, url] of Object.entries(STONE_TEXTURE_URLS)) {
+      this.load.image(key, url);
+    }
+    for (const { key, url } of Object.values(MAP_BACKGROUND_TEXTURES)) {
+      this.load.image(key, url);
+    }
   }
 
   create() {
@@ -108,12 +121,14 @@ export class GameScene extends Phaser.Scene {
 
     this.drawBoard();
     this.spawnEggs();
+    this.setupBoardCamera();
 
     this.pullGraphics = this.add.graphics().setDepth(20);
 
     this.input.on('pointerdown', this.onPointerDown, this);
     this.input.on('pointermove', this.onPointerMove, this);
     this.input.on('pointerup', this.onPointerUp, this);
+    this.input.on('pointerupoutside', this.onPointerUp, this);
 
     this.matter.world.on('collisionstart', this.onCollisionStart, this);
     this.matter.world.on('collisionend', this.onCollisionEnd, this);
@@ -151,7 +166,19 @@ export class GameScene extends Phaser.Scene {
   }
 
   private drawBoard() {
-    this.add.circle(BOARD_CENTER_X, BOARD_CENTER_Y, BOARD_RADIUS, 0x2a3a2a).setStrokeStyle(4, 0x4a6a4a, 1);
+    const background = MAP_BACKGROUND_TEXTURES[this.map.id];
+    if (background && this.textures.exists(background.key)) {
+      this.add
+        .image(BOARD_CENTER_X, BOARD_CENTER_Y, background.key)
+        .setDisplaySize(BOARD_RADIUS * 2, BOARD_RADIUS * 2)
+        .setDepth(-10);
+      this.add
+        .circle(BOARD_CENTER_X, BOARD_CENTER_Y, BOARD_RADIUS, 0x000000, 0)
+        .setStrokeStyle(3, 0xd5c08a, 0.55)
+        .setDepth(-9);
+    } else {
+      this.add.circle(BOARD_CENTER_X, BOARD_CENTER_Y, BOARD_RADIUS, 0x2a3a2a).setStrokeStyle(4, 0x4a6a4a, 1);
+    }
     for (const placement of this.map.terrain) {
       const piece = this.getPiece(placement.pieceId);
       const x = BOARD_CENTER_X + placement.dx;
@@ -174,7 +201,7 @@ export class GameScene extends Phaser.Scene {
     this.map.zones.forEach((zone, index) => {
       const x = BOARD_CENTER_X + zone.dx;
       const y = BOARD_CENTER_Y + zone.dy;
-      const patch = this.add.circle(x, y, zone.radius, 0x3a6a8a, 0.28).setStrokeStyle(2, 0x8ad1ff, 0.5);
+      const patch = this.drawZonePatch(x, y, zone.radius);
       this.matter.add.gameObject(patch, {
         shape: { type: 'circle', radius: zone.radius },
         isStatic: true,
@@ -182,6 +209,35 @@ export class GameScene extends Phaser.Scene {
         label: `zone:${index}`,
       });
     });
+  }
+
+  private drawZonePatch(x: number, y: number, radius: number): Phaser.GameObjects.Arc {
+    if (this.map.id === 2) {
+      // A threadbare, polished patch in the carpet: visually slick without
+      // revealing its exact friction value.
+      this.add.circle(x - radius * 0.12, y - radius * 0.14, radius * 0.78, 0xb57a68, 0.12).setDepth(-4);
+      this.add.circle(x, y, radius * 0.7, 0x3a0f22, 0).setStrokeStyle(1, 0xd6a85f, 0.28).setDepth(-4);
+      return this.add
+        .circle(x, y, radius, 0x651b35, 0.42)
+        .setStrokeStyle(2, 0xd2ad72, 0.45)
+        .setDepth(-5);
+    }
+
+    if (this.map.id === 3) {
+      // Rough chalk-and-felt wear marks for the high-resistance pockets on
+      // the billiard map. The material change is visible, the number is not.
+      this.add.circle(x + radius * 0.1, y - radius * 0.08, radius * 0.72, 0xd8e6cf, 0.08).setDepth(-4);
+      this.add.circle(x, y, radius * 0.58, 0x102d28, 0).setStrokeStyle(2, 0xc4d9bd, 0.22).setDepth(-4);
+      return this.add
+        .circle(x, y, radius, 0x173f36, 0.48)
+        .setStrokeStyle(2, 0xaec9a8, 0.38)
+        .setDepth(-5);
+    }
+
+    return this.add
+      .circle(x, y, radius, 0x3a6a8a, 0.28)
+      .setStrokeStyle(2, 0x8ad1ff, 0.5)
+      .setDepth(-5);
   }
 
   private spawnEggs() {
@@ -364,9 +420,15 @@ export class GameScene extends Phaser.Scene {
   }
 
   private refreshWeightVisibility() {
+    // Network games always reveal only this client's own stones. In local
+    // hot-seat games, the current player is treated as the owner at the screen.
+    const revealPlayerIndex = this.network ? this.selfPlayerIndex : this.activePlayerIndex;
+    let opponentMarkerIndex = 0;
     for (const player of this.players) {
+      const revealWeight = player.index === revealPlayerIndex;
+      const markerIndex = revealWeight ? 0 : opponentMarkerIndex++;
       for (const egg of this.aliveEggs(player)) {
-        egg.setWeightVisible(player.index === this.activePlayerIndex);
+        egg.setWeightVisible(revealWeight, markerIndex);
       }
     }
   }
@@ -381,6 +443,14 @@ export class GameScene extends Phaser.Scene {
   }
 
   // --- Input (drag-to-flick, no trajectory preview) -------------------
+
+  private setupBoardCamera() {
+    const camera = this.cameras.main;
+    camera.setViewport(0, 0, GAME_WIDTH, GAME_HEIGHT);
+    camera.setBounds(0, 0, GAME_WIDTH, GAME_HEIGHT);
+    camera.setZoom(BOARD_ZOOM);
+    camera.centerOn(BOARD_CENTER_X, BOARD_CENTER_Y);
+  }
 
   private eggAt(pointerX: number, pointerY: number): Egg | null {
     let closest: Egg | null = null;
@@ -400,9 +470,14 @@ export class GameScene extends Phaser.Scene {
   }
 
   private onPointerDown(pointer: Phaser.Input.Pointer) {
-    if (this.phase !== 'aiming' || this.activePlayerIndex === null) return;
+    if (pointer.y >= GAME_HEIGHT) return;
     const egg = this.eggAt(pointer.worldX, pointer.worldY);
-    if (!egg) return;
+    if (!egg || this.phase !== 'aiming' || this.activePlayerIndex === null) {
+      const camera = this.cameras.main;
+      this.cameraPanStart = { x: pointer.x, y: pointer.y, scrollX: camera.scrollX, scrollY: camera.scrollY };
+      this.cameraPanning = false;
+      return;
+    }
     this.selectedEgg?.setSelected(false);
     this.selectedEgg = egg;
     egg.setSelected(true);
@@ -410,6 +485,17 @@ export class GameScene extends Phaser.Scene {
   }
 
   private onPointerMove(pointer: Phaser.Input.Pointer) {
+    if (this.cameraPanStart && pointer.isDown) {
+      const dx = pointer.x - this.cameraPanStart.x;
+      const dy = pointer.y - this.cameraPanStart.y;
+      if (!this.cameraPanning && Math.hypot(dx, dy) < 8) return;
+      this.cameraPanning = true;
+      this.cameras.main.setScroll(
+        this.cameraPanStart.scrollX - dx / BOARD_ZOOM,
+        this.cameraPanStart.scrollY - dy / BOARD_ZOOM,
+      );
+      return;
+    }
     if (!this.dragging || !this.selectedEgg) return;
     this.pullGraphics.clear();
 
@@ -432,6 +518,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   private onPointerUp(pointer: Phaser.Input.Pointer) {
+    if (this.cameraPanStart) {
+      this.cameraPanStart = null;
+      this.cameraPanning = false;
+      return;
+    }
     if (!this.dragging || !this.selectedEgg) return;
     this.dragging = false;
     this.pullGraphics.clear();

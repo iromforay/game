@@ -15,6 +15,7 @@ export class Tower {
   x: number;
   y: number;
   lastFired = 0;
+  private restingSpriteScale = 1;
 
   // Undefined maxHp means indestructible (normal mode: towers are never
   // attacked). Only set this when something in the game can damage towers.
@@ -87,6 +88,7 @@ export class Tower {
     this.rangeCircle.setRadius(this.range);
     this.sprite.setTexture(this.textureKey());
     this.fitSprite();
+    this.playUpgradeEffect();
   }
 
   /** Per-level art (`tower-<id>-lv<level>`) if loaded, else the single shared texture. */
@@ -106,9 +108,40 @@ export class Tower {
    * is normal for the genre.
    */
   private fitSprite() {
-    const target = 88;
+    // Evolved art gets a little more board presence, which also makes the
+    // level change readable on a phone-sized canvas.
+    const target = this.level > 1 ? 100 : 88;
     const scale = target / Math.max(this.sprite.width, this.sprite.height);
+    this.restingSpriteScale = scale;
     this.sprite.setScale(scale);
+  }
+
+  private playUpgradeEffect() {
+    const settledScale = this.sprite.scaleX;
+    this.sprite.setScale(settledScale * 0.72).setAlpha(0.35);
+
+    this.scene.tweens.add({
+      targets: this.sprite,
+      scaleX: settledScale * 1.14,
+      scaleY: settledScale * 1.14,
+      alpha: 1,
+      duration: 180,
+      ease: 'Back.Out',
+      yoyo: true,
+      onComplete: () => this.sprite.setScale(settledScale),
+    });
+
+    const burst = this.scene.add
+      .circle(this.x, this.y, 18, 0xffdd66, 0.4)
+      .setStrokeStyle(4, 0xffffff, 0.9);
+    this.scene.tweens.add({
+      targets: burst,
+      radius: 58,
+      alpha: 0,
+      duration: 420,
+      ease: 'Cubic.Out',
+      onComplete: () => burst.destroy(),
+    });
   }
 
   findTarget(enemies: Enemy[]): Enemy | null {
@@ -131,6 +164,42 @@ export class Tower {
 
   fire(now: number) {
     this.lastFired = now;
+    this.playAttackMotion();
+  }
+
+  private playAttackMotion() {
+    const scale = this.restingSpriteScale;
+    const motion = {
+      basic: { x: 0.9, y: 1.1, duration: 90, rotation: -2 },
+      splash: { x: 1.14, y: 0.86, duration: 150, rotation: 3 },
+      slow: { x: 1.08, y: 1.08, duration: 180, rotation: -3 },
+      storm: { x: 0.86, y: 1.14, duration: 70, rotation: 2 },
+    }[this.def.id];
+
+    this.scene.tweens.killTweensOf(this.sprite);
+    this.sprite
+      .setScale(scale * motion.x, scale * motion.y)
+      .setAngle(motion.rotation)
+      .setAlpha(0.78);
+    this.scene.tweens.add({
+      targets: this.sprite,
+      scaleX: scale,
+      scaleY: scale,
+      angle: 0,
+      alpha: 1,
+      duration: motion.duration,
+      ease: 'Back.Out',
+    });
+
+    const flash = this.scene.add.circle(this.x, this.y - 22, this.def.id === 'splash' ? 10 : 7, this.def.projectileColor, 0.8);
+    this.scene.tweens.add({
+      targets: flash,
+      scale: this.def.id === 'splash' ? 2.2 : 1.7,
+      alpha: 0,
+      duration: motion.duration + 40,
+      ease: 'Cubic.Out',
+      onComplete: () => flash.destroy(),
+    });
   }
 
   destroy() {

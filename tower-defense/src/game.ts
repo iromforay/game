@@ -43,6 +43,8 @@ export { default as towerSlowUrl } from './assets/towers/slow.svg?url';
 export { default as towerBasicLv1Url } from './assets/towers/basic-lv1.png?url';
 export { default as towerSplashLv1Url } from './assets/towers/splash-lv1.png?url';
 export { default as towerSlowLv1Url } from './assets/towers/slow-lv1.png?url';
+export { default as towerStormLv1Url } from './assets/towers/storm-lv1.png?url';
+export { default as towerStormLv2Url } from './assets/towers/storm-lv2.png?url';
 export { default as boardBackgroundUrl } from './assets/board/background.png?url';
 // Painted monster art - offense-tower's units are the same kind of creature
 // (walks a path, drawn by the shared Enemy class) so it reuses these instead

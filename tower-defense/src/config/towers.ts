@@ -1,4 +1,4 @@
-export type TowerType = 'basic' | 'splash' | 'slow';
+export type TowerType = 'basic' | 'splash' | 'slow' | 'storm';
 
 export interface TowerDef {
   id: TowerType;
@@ -55,6 +55,19 @@ export const TOWER_DEFS: Record<TowerType, TowerDef> = {
     projectileColor: 0xccaaff,
     slowFactor: 0.45,
     slowDuration: 1500,
+  },
+  storm: {
+    id: 'storm',
+    name: '폭풍 타워',
+    description: '고화력·초고속 공격과 소형 범위 피해',
+    cost: 160,
+    range: 105,
+    damage: 30,
+    fireRate: 320,
+    projectileSpeed: 760,
+    color: 0xf6c945,
+    projectileColor: 0xeaffff,
+    splashRadius: 52,
   },
 };
 

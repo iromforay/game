@@ -70,11 +70,43 @@ export class Enemy {
   takeDamage(amount: number): boolean {
     this.hp -= amount;
     this.updateHpBar();
+    this.playHitReaction();
     if (this.hp <= 0 && this.alive) {
       this.alive = false;
       return true; // died from this hit
     }
     return false;
+  }
+
+  private playHitReaction() {
+    const segment = this.pathPoints[Math.min(this.segmentIndex, this.pathPoints.length - 2)];
+    const next = this.pathPoints[Math.min(this.segmentIndex + 1, this.pathPoints.length - 1)];
+    const angle = Phaser.Math.Angle.Between(segment.x, segment.y, next.x, next.y);
+    const baseScaleX = this.body.scaleX;
+    const baseScaleY = this.body.scaleY;
+
+    this.scene.tweens.killTweensOf(this.body);
+    this.body.setPosition(-Math.cos(angle) * 6, -Math.sin(angle) * 6);
+    this.body.setScale(baseScaleX * 1.16, baseScaleY * 0.82).setAlpha(0.55);
+
+    if (this.body instanceof Phaser.GameObjects.Image) {
+      const image = this.body;
+      image.setTintFill(0xffffff);
+      this.scene.time.delayedCall(55, () => {
+        if (image.active) image.clearTint();
+      });
+    }
+
+    this.scene.tweens.add({
+      targets: this.body,
+      x: 0,
+      y: 0,
+      scaleX: baseScaleX,
+      scaleY: baseScaleY,
+      alpha: 1,
+      duration: 120,
+      ease: 'Back.Out',
+    });
   }
 
   update(deltaMs: number, now: number) {

@@ -15,6 +15,8 @@ import {
   towerBasicLv1Url,
   towerSplashLv1Url,
   towerSlowLv1Url,
+  towerStormLv1Url,
+  towerStormLv2Url,
   enemyGruntUrl,
   enemyTankUrl,
   enemyFastUrl,
@@ -34,13 +36,14 @@ import type { PixelPoint } from '../config/map';
 import { markRoundCleared } from '../roundProgress';
 import { gameEvents, Events } from '../events';
 
-const TOWER_ORDER: TowerType[] = ['basic', 'splash', 'slow'];
+const TOWER_ORDER: TowerType[] = ['basic', 'splash', 'slow', 'storm'];
 
-const AI_STARTING_GOLD = 90; // just enough to seed the bottleneck splash tower
+// 러시 대응(2026-09-28): 시드 스플래시(90) + 기본 타워(50) = 타워 2개로 시작
+const AI_STARTING_GOLD = 140;
 const AI_PLACEMENT_INTERVAL = 2600; // ms between AI build attempts
 
 // Unlike normal mode, AI towers here are destructible (roughly cost-scaled).
-const TOWER_HP: Record<TowerType, number> = { basic: 140, splash: 200, slow: 160 };
+const TOWER_HP: Record<TowerType, number> = { basic: 140, splash: 200, slow: 160, storm: 260 };
 
 const CLEAR_REWARD_COINS = 100;
 
@@ -93,6 +96,8 @@ export class GameScene extends Phaser.Scene {
     this.load.image('tower-basic-lv1', towerBasicLv1Url);
     this.load.image('tower-splash-lv1', towerSplashLv1Url);
     this.load.image('tower-slow-lv1', towerSlowLv1Url);
+    this.load.image('tower-storm-lv1', towerStormLv1Url);
+    this.load.image('tower-storm-lv2', towerStormLv2Url);
     // Units are the same "creature walking a path" role as tower-defense's
     // enemies, drawn by the same shared Enemy class - reuse that painted
     // monster art instead of needing new art (grunt~swarm, tank~tank, fast~speed).
@@ -132,6 +137,7 @@ export class GameScene extends Phaser.Scene {
     setupBoardCamera(this);
     this.buildAiCandidateTiles();
     this.placeSeedTower();
+    this.aiTryBuild(); // 남은 시작 골드로 즉시 두 번째 타워(순서상 basic — 스피드형 약점) 건설
 
     gameEvents.on(Events.RequestSpawn, (type: UnitType) => this.trySpawnUnit(type));
     gameEvents.on(Events.RequestSpawnHero, () => this.trySpawnHero());

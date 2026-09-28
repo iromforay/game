@@ -6,7 +6,7 @@ import { WAVES } from '../config/enemies';
 import { gameEvents, Events } from '../events';
 import type { SelectedTowerInfo } from '../events';
 
-const TOWER_ORDER: TowerType[] = ['basic', 'splash', 'slow'];
+const TOWER_ORDER: TowerType[] = ['basic', 'splash', 'slow', 'storm'];
 
 // Fantasy/gold theme shared with the hub - dark violet panels, gold accents.
 const PANEL_BG = 0x171029;
@@ -172,9 +172,9 @@ export class UIScene extends Phaser.Scene {
   }
 
   private buildHud() {
-    const startY = 96;
-    const rowH = 72;
-    const gap = 8;
+    const startY = 90;
+    const rowH = 58;
+    const gap = 6;
 
     TOWER_ORDER.forEach((type, i) => {
       const def = TOWER_DEFS[type];
@@ -206,8 +206,8 @@ export class UIScene extends Phaser.Scene {
         iconPlaceholder = this.add.circle(iconX, iconY, 15, def.color);
       }
 
-      this.add.text(x + 52, y + 7, `${def.name}  ${def.cost}G`, { fontSize: '12px', color: '#ffffff' });
-      this.add.text(x + 52, y + 26, def.description, { fontSize: '10px', color: '#b9aee0', lineSpacing: 3, wordWrap: { width: CONTENT_W - 52 } });
+      this.add.text(x + 52, y + 5, `${def.name}  ${def.cost}G`, { fontSize: '12px', color: '#ffffff' });
+      this.add.text(x + 52, y + 23, def.description, { fontSize: '9px', color: '#b9aee0', lineSpacing: 2, wordWrap: { width: CONTENT_W - 52 } });
 
       g.on('pointerover', () => {
         if (this.buildType !== type) g.setAlpha(0.85);
@@ -263,9 +263,9 @@ export class UIScene extends Phaser.Scene {
 
   private buildInfoPanel() {
     const x = CONTENT_X;
-    const y = 96 + 3 * (72 + 8) + 6; // just below the three build buttons
+    const y = 90 + 4 * (58 + 6) + 4; // just below the four build buttons
     const panelW = CONTENT_W;
-    const panelH = 92;
+    const panelH = 82;
 
     const bg = this.add.graphics({ x, y });
     bg.fillStyle(0x120c22, 0.85);

@@ -25,11 +25,13 @@ import towerBasicUrl from '../assets/towers/basic.svg?url';
 import towerSplashUrl from '../assets/towers/splash.svg?url';
 import towerSlowUrl from '../assets/towers/slow.svg?url';
 import towerBasicLv1Url from '../assets/towers/basic-lv1.png?url';
-import towerBasicLv2Url from '../assets/towers/basic-lv2.png?url';
+import towerBasicLv2Url from '../assets/towers/basic-lv2-v2.png?url';
 import towerSplashLv1Url from '../assets/towers/splash-lv1.png?url';
-import towerSplashLv2Url from '../assets/towers/splash-lv2.png?url';
+import towerSplashLv2Url from '../assets/towers/splash-lv2-v2.png?url';
 import towerSlowLv1Url from '../assets/towers/slow-lv1.png?url';
-import towerSlowLv2Url from '../assets/towers/slow-lv2.png?url';
+import towerSlowLv2Url from '../assets/towers/slow-lv2-v2.png?url';
+import towerStormLv1Url from '../assets/towers/storm-lv1.png?url';
+import towerStormLv2Url from '../assets/towers/storm-lv2.png?url';
 import enemyGruntUrl from '../assets/enemies/grunt.png?url';
 import enemyFastUrl from '../assets/enemies/fast.png?url';
 import enemyTankUrl from '../assets/enemies/tank.png?url';
@@ -70,6 +72,8 @@ export class GameScene extends Phaser.Scene {
     this.load.image('tower-splash-lv2', towerSplashLv2Url);
     this.load.image('tower-slow-lv1', towerSlowLv1Url);
     this.load.image('tower-slow-lv2', towerSlowLv2Url);
+    this.load.image('tower-storm-lv1', towerStormLv1Url);
+    this.load.image('tower-storm-lv2', towerStormLv2Url);
 
     this.load.image('enemy-grunt', enemyGruntUrl);
     this.load.image('enemy-fast', enemyFastUrl);
