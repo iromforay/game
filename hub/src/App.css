@@ -535,3 +535,11 @@
     text-indent: 0;
   }
 }
+
+/* 스코어보드(2026-09-28): 랭킹 버튼 아이콘 — 정식 이미지 전까지 이모지 자리표시(에셋 요청: docs/asset) */
+.dashboard-ranking-icon {
+  display: grid;
+  place-items: center;
+  font-size: 28px;
+  line-height: 1;
+}

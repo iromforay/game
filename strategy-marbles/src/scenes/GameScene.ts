@@ -730,5 +730,13 @@ export class GameScene extends Phaser.Scene {
       scores: this.players.map((p) => ({ playerIndex: p.index, score: p.score, eggsAlive: this.aliveEggs(p).length })),
       winnerIndexes,
     });
+
+    // 스코어보드(2026-09-28, docs/dev/scoreboard.md): 온라인 대전만 — 참가자마다 자기 결과를 허브에 알리고 허브가
+    // 그 사람 계정으로 제출한다. 한 기기에서 여럿이 하는 모드는 누가 누구인지 알 수 없어 제외.
+    if (this.network && typeof window !== 'undefined') {
+      const mine = winnerIndexes.includes(this.selfPlayerIndex);
+      const result = !mine ? 'none' : winnerIndexes.length === 1 ? 'win' : 'tie';
+      window.dispatchEvent(new CustomEvent('bomul:game-result', { detail: { game: 'marbles', stats: { result } } }));
+    }
   }
 }

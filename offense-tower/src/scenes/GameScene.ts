@@ -20,6 +20,8 @@ import {
   enemyFastUrl,
   logEvent,
   addCoins,
+  setupBoardCamera,
+  reportGameResult,
 } from 'tower-defense';
 import type { TowerType } from 'tower-defense';
 import { UNIT_DEFS, damageMultiplier } from '../config/units';
@@ -52,6 +54,7 @@ export class GameScene extends Phaser.Scene {
   breakthroughs = 0;
   unitBreakthroughs = 0; // excludes the hero - this is what the clear goal counts
   gameCleared = false;
+  private startedAt = 0; // 스코어보드용 클리어 시간 측정(this.time.now는 씬 시작 기준이 아님)
 
   aiPlacementTimer = 0;
   aiTowerOrderIndex = 0;
@@ -112,6 +115,7 @@ export class GameScene extends Phaser.Scene {
     this.breakthroughs = 0;
     this.unitBreakthroughs = 0;
     this.gameCleared = false;
+    this.startedAt = this.time.now;
     this.aiPlacementTimer = AI_PLACEMENT_INTERVAL;
     this.aiTowerOrderIndex = 0;
     this.spawnCooldownUntil = { swarm: 0, tank: 0, speed: 0 };
@@ -124,6 +128,8 @@ export class GameScene extends Phaser.Scene {
     this.drawBoard();
     this.drawPath();
     this.drawHeroZone();
+    // 사용자 요청(2026-09-28): 게임판 150% 확대 + 드래그 이동(판 위 탭 입력은 없음 — 소환은 사이드바 버튼)
+    setupBoardCamera(this);
     this.buildAiCandidateTiles();
     this.placeSeedTower();
 
@@ -381,6 +387,11 @@ export class GameScene extends Phaser.Scene {
     const totalCoins = addCoins(CLEAR_REWARD_COINS);
     logEvent('offense-tower', 'game_clear', { roundId: this.stage.id, unitBreakthroughs: this.unitBreakthroughs, reward: CLEAR_REWARD_COINS });
     gameEvents.emit(Events.GameCleared, { reward: CLEAR_REWARD_COINS, totalCoins });
+    // 스코어보드(2026-09-28): 결과 수치를 허브에 알림 — kills는 AI 타워에 잃은 내 유닛 수(영웅 포함)
+    reportGameResult({
+      game: 'offense_tower',
+      stats: { roundId: this.stage.id, clearSeconds: Math.round((this.time.now - this.startedAt) / 1000), unitsLost: this.kills },
+    });
   }
 
   private resolveHit(target: Enemy, def: (typeof TOWER_DEFS)['basic'], damage: number, x: number, y: number) {

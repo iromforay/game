@@ -18,6 +18,9 @@ import { Enemy } from '../objects/Enemy';
 import { Projectile } from '../objects/Projectile';
 import { gameEvents, Events } from '../events';
 import type { SelectedTowerInfo } from '../events';
+import { setupBoardCamera } from '../boardCamera';
+import { reportGameResult } from '../gameResult';
+import type { BoardCamera } from '../boardCamera';
 import towerBasicUrl from '../assets/towers/basic.svg?url';
 import towerSplashUrl from '../assets/towers/splash.svg?url';
 import towerSlowUrl from '../assets/towers/slow.svg?url';
@@ -47,8 +50,10 @@ export class GameScene extends Phaser.Scene {
   buildType: TowerType | null = null;
   selectedTower: Tower | null = null;
   hoverTile: Phaser.GameObjects.Rectangle | null = null;
+  private boardCam!: BoardCamera;
 
   gameEnded = false;
+  kills = 0; // 스코어보드용 처치 수
 
   constructor() {
     super('Game');
@@ -85,6 +90,7 @@ export class GameScene extends Phaser.Scene {
     this.buildType = null;
     this.selectedTower = null;
     this.gameEnded = false;
+    this.kills = 0;
 
     this.drawBackground();
     this.drawBoard();
@@ -92,8 +98,9 @@ export class GameScene extends Phaser.Scene {
 
     this.hoverTile = this.add.rectangle(0, 0, TILE, TILE, 0x33dd55, 0.35).setVisible(false);
 
+    // 사용자 요청(2026-09-28): 게임판 150% 확대 + 드래그 이동 — 드래그와 구분하려고 설치/선택은 "탭(손 뗄 때)"으로 처리
+    this.boardCam = setupBoardCamera(this, (wx, wy) => this.onBoardTap(wx, wy));
     this.input.on('pointermove', this.onPointerMove, this);
-    this.input.on('pointerdown', this.onPointerDown, this);
 
     gameEvents.on(Events.BuildTypeSelected, (type: TowerType | null) => {
       this.buildType = type;
@@ -146,12 +153,14 @@ export class GameScene extends Phaser.Scene {
   }
 
   private onPointerMove(pointer: Phaser.Input.Pointer) {
-    if (!this.buildType || pointer.x > COLS * TILE) {
+    if (!this.buildType || pointer.x > COLS * TILE || this.boardCam.isDragging()) {
       this.hoverTile?.setVisible(false);
       return;
     }
-    const col = Math.floor(pointer.x / TILE);
-    const row = Math.floor(pointer.y / TILE);
+    // 확대/이동된 카메라 기준 월드 좌표로 칸 계산(화면 좌표 pointer.x를 쓰면 확대 후 칸이 어긋남)
+    const world = this.boardCam.toWorld(pointer);
+    const col = Math.floor(world.x / TILE);
+    const row = Math.floor(world.y / TILE);
     if (col < 0 || col >= COLS || row < 0 || row >= ROWS) {
       this.hoverTile?.setVisible(false);
       return;
@@ -162,11 +171,9 @@ export class GameScene extends Phaser.Scene {
     this.hoverTile?.setVisible(true);
   }
 
-  private onPointerDown(pointer: Phaser.Input.Pointer) {
-    if (pointer.x > COLS * TILE) return;
-
-    const col = Math.floor(pointer.x / TILE);
-    const row = Math.floor(pointer.y / TILE);
+  private onBoardTap(worldX: number, worldY: number) {
+    const col = Math.floor(worldX / TILE);
+    const row = Math.floor(worldY / TILE);
     if (col < 0 || col >= COLS || row < 0 || row >= ROWS) return;
 
     if (this.buildType) {
@@ -313,6 +320,7 @@ export class GameScene extends Phaser.Scene {
     for (const enemy of this.enemies) {
       if (!enemy.alive) {
         this.gold += enemy.def.reward;
+        this.kills++;
         this.emitGold();
         enemy.destroy();
         continue;
@@ -363,6 +371,11 @@ export class GameScene extends Phaser.Scene {
 
   private endGame(won: boolean) {
     this.gameEnded = true;
+    // 스코어보드(2026-09-28): 결과 수치를 허브에 알림 — 패배 시 waveIndex(진행 중이던 웨이브 번호)가 곧 막아낸 웨이브 수
+    reportGameResult({
+      game: 'tower_defense',
+      stats: { won, wavesCleared: won ? WAVES.length : Math.max(0, this.waveIndex), kills: this.kills, lives: Math.max(0, this.lives), gold: this.gold },
+    });
     if (won) gameEvents.emit(Events.GameWin);
     else gameEvents.emit(Events.GameOver);
   }

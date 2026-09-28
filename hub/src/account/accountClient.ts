@@ -1,8 +1,9 @@
 // 허브 공통 계정(2026-09-28) — 아이디+비밀번호, 목적은 브라우저/기기 통합.
 // 게임들은 허브와 같은 출처(origin)에서 실행되므로 이 localStorage 토큰을 그대로 읽어 identify에 함께 보낸다.
 // 계정 API는 커비 서버(운영에서 HTTP 접근이 확인된 BE)로 호출 — 어느 BE로 불러도 같은 DB라 결과는 같다.
-const BASE_URL: string =
+export const ACCOUNT_SERVER_URL: string =
   import.meta.env.VITE_ACCOUNT_SERVER_URL ?? import.meta.env.VITE_KIRBY_SERVER_URL ?? 'http://localhost:3003';
+const BASE_URL = ACCOUNT_SERVER_URL;
 
 export const AUTH_TOKEN_KEY = 'bomul_auth_token';
 const NICKNAME_KEY = 'bomul_account_nickname';
@@ -53,6 +54,12 @@ function saveSession(res: { token: string; loginId: string; nickname: string }) 
 
 export function hasStoredToken() {
   return !!readStorage(AUTH_TOKEN_KEY);
+}
+
+// 다른 허브 기능(스코어보드 등)이 같은 로그인 토큰으로 서버를 부를 때 사용
+export function authHeader(): Record<string, string> {
+  const token = readStorage(AUTH_TOKEN_KEY);
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 export async function login(loginId: string, password: string) {

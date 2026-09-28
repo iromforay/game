@@ -6,9 +6,10 @@ import { AccountPanel } from './account/AccountPanel';
 interface DashboardProps {
   onSelectGame: (gameId: GameId) => void;
   onOpenKirbyGuide: () => void;
+  onOpenRanking: () => void;
 }
 
-export function Dashboard({ onSelectGame, onOpenKirbyGuide }: DashboardProps) {
+export function Dashboard({ onSelectGame, onOpenKirbyGuide, onOpenRanking }: DashboardProps) {
   return (
     <div className="dashboard">
       <div className="dashboard-header">
@@ -35,6 +36,16 @@ export function Dashboard({ onSelectGame, onOpenKirbyGuide }: DashboardProps) {
             </button>
           ))}
         </div>
+      </section>
+
+      <section className="dashboard-section dashboard-section-guide" aria-label="랭킹">
+        <button type="button" className="dashboard-guide-button" onClick={onOpenRanking}>
+          <span className="dashboard-guide-icon dashboard-ranking-icon" aria-hidden="true">🏆</span>
+          <span className="dashboard-guide-text">
+            <span className="dashboard-guide-title">랭킹</span>
+            <span className="dashboard-guide-desc">게임별 전체 순위 보기</span>
+          </span>
+        </button>
       </section>
 
       <section className="dashboard-section dashboard-section-guide" aria-label="도감">

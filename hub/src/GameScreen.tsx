@@ -8,14 +8,17 @@ import type { NetworkOptions } from 'strategy-marbles';
 import type Phaser from 'phaser';
 import { useMultiplayer } from './multiplayer/MultiplayerContext';
 import type { GameId } from './games';
+import { GameResultCard } from './scoreboard/GameResultCard';
+import type { RankingGame } from './scoreboard/scoreboardClient';
 
 interface GameScreenProps {
   gameId: GameId;
   roundId: number;
   onExit: () => void;
+  onOpenRanking: (game: RankingGame, roundId?: number) => void;
 }
 
-export function GameScreen({ gameId, roundId, onExit }: GameScreenProps) {
+export function GameScreen({ gameId, roundId, onExit, onOpenRanking }: GameScreenProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
   const multiplayer = useMultiplayer();
@@ -97,6 +100,8 @@ export function GameScreen({ gameId, roundId, onExit }: GameScreenProps) {
       <div className="game-canvas-wrapper">
         <div ref={containerRef} className="game-canvas-container" />
       </div>
+      {/* 스코어보드(2026-09-28): 게임이 판 결과를 알리면 점수 카드를 게임 위에 띄움 */}
+      <GameResultCard onOpenRanking={onOpenRanking} />
     </div>
   );
 }

@@ -3,16 +3,19 @@ import { Dashboard } from './Dashboard';
 import { Lobby } from './Lobby';
 import { GameScreen } from './GameScreen';
 import { KirbyGuide } from './KirbyGuide';
+import { Leaderboard } from './scoreboard/Leaderboard';
+import type { RankingGame } from './scoreboard/scoreboardClient';
 import { useMultiplayer } from './multiplayer/MultiplayerContext';
 import type { GameId } from './games';
 import './App.css';
 
-type Screen = 'dashboard' | 'lobby' | 'game' | 'kirby-guide';
+type Screen = 'dashboard' | 'lobby' | 'game' | 'kirby-guide' | 'ranking';
 
 function App() {
   const [screen, setScreen] = useState<Screen>('dashboard');
   const [selectedGame, setSelectedGame] = useState<GameId | null>(null);
   const [selectedRound, setSelectedRound] = useState(1);
+  const [ranking, setRanking] = useState<{ game?: RankingGame; roundId?: number }>({});
   const multiplayer = useMultiplayer();
 
   // A multiplayer match starts the instant the host's startGame lands on the
@@ -30,12 +33,22 @@ function App() {
     setScreen('dashboard');
   };
 
+  const openRanking = (game?: RankingGame, roundId?: number) => {
+    if (multiplayer.room) multiplayer.leaveRoom();
+    setRanking({ game, roundId });
+    setScreen('ranking');
+  };
+
+  if (screen === 'ranking') {
+    return <Leaderboard initialGame={ranking.game} initialRoundId={ranking.roundId} onBack={() => setScreen('dashboard')} />;
+  }
+
   if (screen === 'kirby-guide') {
     return <KirbyGuide onBack={() => setScreen('dashboard')} />;
   }
 
   if (screen === 'game' && selectedGame) {
-    return <GameScreen gameId={selectedGame} roundId={selectedRound} onExit={handleExitGame} />;
+    return <GameScreen gameId={selectedGame} roundId={selectedRound} onExit={handleExitGame} onOpenRanking={openRanking} />;
   }
 
   if (screen === 'lobby' && selectedGame) {
@@ -58,6 +71,7 @@ function App() {
         setScreen('lobby');
       }}
       onOpenKirbyGuide={() => setScreen('kirby-guide')}
+      onOpenRanking={() => openRanking()}
     />
   );
 }
