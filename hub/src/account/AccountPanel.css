@@ -1,0 +1,120 @@
+.account-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  font-size: 13px;
+  color: var(--text-h, #333);
+  margin: 0 0 20px;
+}
+
+.account-guest {
+  opacity: 0.7;
+}
+
+.account-link {
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--accent-border, #aa3bff80);
+  background: var(--accent-bg, #aa3bff1a);
+  color: var(--accent, #aa3bff);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.account-link:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.account-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.account-modal {
+  width: 100%;
+  max-width: 340px;
+  max-height: 100%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 20px;
+  border-radius: 12px;
+  background: var(--bg, #fff);
+  color: var(--text-h, #111);
+  box-shadow: var(--shadow, 0 8px 24px rgba(0, 0, 0, 0.3));
+  text-align: left;
+}
+
+.account-modal h2 {
+  margin: 0 0 4px;
+  font-size: 18px;
+}
+
+.account-modal label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.account-modal input {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border, #ddd);
+  background: var(--code-bg, #f4f3ec);
+  color: inherit;
+  font-size: 15px;
+}
+
+.account-note {
+  margin: 0;
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.account-error {
+  margin: 0;
+  font-size: 13px;
+  color: #e5484d;
+}
+
+.account-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.account-actions button {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border, #ddd);
+  background: transparent;
+  color: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.account-actions .account-primary {
+  border-color: var(--accent, #aa3bff);
+  background: var(--accent, #aa3bff);
+  color: #fff;
+}
+
+.account-switch {
+  border: none;
+  background: none;
+  color: var(--accent, #aa3bff);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0;
+}

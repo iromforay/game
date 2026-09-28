@@ -6,9 +6,10 @@ import type { LockState } from './baseAccess';
 export class PlayerController {
   constructor(private readonly playerService: PlayerService) {}
 
+  // authToken(선택) — 허브 공통 계정 로그인 토큰. 있으면 계정 기준, 없으면 기존처럼 device_uuid 기준(게스트)
   @Post('identify')
-  identify(@Body('deviceUuid') deviceUuid: string) {
-    return this.playerService.identify(deviceUuid);
+  identify(@Body('deviceUuid') deviceUuid: string, @Body('authToken') authToken?: string) {
+    return this.playerService.identify(deviceUuid, authToken);
   }
 
   @Get(':playerId')
@@ -16,9 +17,14 @@ export class PlayerController {
     return this.playerService.getPlayerState(playerId);
   }
 
+  @Post(':playerId/market/roll')
+  rollOffer(@Param('playerId') playerId: string, @Body('slot') slot: number) {
+    return this.playerService.rollOffer(playerId, Number(slot));
+  }
+
   @Post(':playerId/buy')
-  buy(@Param('playerId') playerId: string) {
-    return this.playerService.buy(playerId);
+  buy(@Param('playerId') playerId: string, @Body('offerId') offerId: string) {
+    return this.playerService.buy(playerId, offerId);
   }
 
   @Post(':playerId/sell/:instanceId')

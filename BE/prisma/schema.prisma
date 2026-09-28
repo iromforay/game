@@ -342,3 +342,39 @@ enum kirby_instance_status {
   idle
   stolen_in_transit
 }
+
+// 허브 공통 계정(2026-09-28, prisma/sql/2026-09-28_account.sql) — 아이디+비밀번호, 기기 통합 목적.
+// 게임 테이블(kirby_player/player)은 그대로 device_uuid 기반으로 두고, account_game_player 브리지로만 연결한다.
+model account {
+  id            BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  login_id      String   @unique(map: "uq_account_login_id") @db.VarChar(20)
+  password_hash String   @db.VarChar(255)
+  nickname      String   @db.VarChar(30)
+  created_at    DateTime @default(now()) @db.Timestamp(0)
+  updated_at    DateTime @default(now()) @db.Timestamp(0)
+}
+
+// 허브 계정 ↔ 게임별 플레이어 브리지(계정당 게임별 1개, 게임 플레이어당 계정 1개)
+model account_game_player {
+  id         BigInt                   @id @default(autoincrement()) @db.UnsignedBigInt
+  account_id BigInt                   @db.UnsignedBigInt
+  game       account_game_player_game
+  player_id  BigInt                   @db.UnsignedBigInt
+  created_at DateTime                 @default(now()) @db.Timestamp(0)
+
+  @@unique([account_id, game], map: "uq_agp_account_game")
+  @@unique([game, player_id], map: "uq_agp_game_player")
+}
+
+enum account_game_player_game {
+  kirby
+  turby
+}
+
+model account_session {
+  token_hash String   @id @db.Char(64)
+  account_id BigInt   @db.UnsignedBigInt
+  created_at DateTime @default(now()) @db.Timestamp(0)
+
+  @@index([account_id], map: "idx_account_session_account")
+}

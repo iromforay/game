@@ -11,17 +11,7 @@ export interface KirbyDef {
 
 export const KIRBIES: KirbyDef[] = kirbiesJson as KirbyDef[];
 
-const TOTAL_WEIGHT = KIRBIES.reduce((sum, k) => sum + k.weight, 0);
-
-// 3.2/7번 확정: 등장 확률은 백분율이 아니라 자연수 weight로 저장하고, weight/전체weight합으로 런타임 계산
-export function pickWeightedRandomKirby(): KirbyDef {
-  let roll = Math.random() * TOTAL_WEIGHT;
-  for (const kirby of KIRBIES) {
-    roll -= kirby.weight;
-    if (roll <= 0) return kirby;
-  }
-  return KIRBIES[KIRBIES.length - 1];
-}
+// 좌대 캐릭터 추첨은 서버(PlayerService.rollOffer)만 한다 — 2026-09-28 FE 추첨 제거(보이는 캐릭터와 구매 캐릭터 불일치 버그).
 
 export function kirbyGrade(kirby: KirbyDef): GradeDef {
   return getGrade(kirby.gradeId);

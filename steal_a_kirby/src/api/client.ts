@@ -21,10 +21,41 @@ export interface PlayerStateDto {
   kirbies: KirbyInstanceDto[];
 }
 
+export interface MarketOfferDto {
+  offerId: string;
+  slot: number;
+  code: string;
+  price: number;
+  expiresAt: number;
+}
+
 // identify()에서만 내려오는 세션 토큰 — Codex QA 지적(2026-09-18) 반영, presence:hello에 실어 보내
 // 서버가 "이 소켓이 정말 이 playerId가 맞는지" 검증하는 데 씀. 다른 조회 API는 이 필드를 안 줌(타인이 훔쳐볼 수 있는 경로라서).
 export interface IdentifyResponseDto extends PlayerStateDto {
   sessionToken: string;
+  // 허브 공통 계정으로 로그인한 상태면 채워짐(게스트면 null)
+  account: { nickname: string; linkedThisDevice: boolean } | null;
+}
+
+// 허브 공통 계정(2026-09-28) — 허브(같은 출처)가 저장한 로그인 토큰. hub/src/account/accountClient.ts와 키가 같아야 함.
+const AUTH_TOKEN_KEY = 'bomul_auth_token';
+// 이 기기의 게스트 플레이어가 계정에 연결됐다는 표시 — 허브 로그아웃 때 이 기기의 device_uuid를 지우는 기준
+const DEVICE_LINKED_KEY = 'steal_a_kirby_device_linked';
+
+function readAuthToken(): string | undefined {
+  try {
+    return localStorage.getItem(AUTH_TOKEN_KEY) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function markDeviceLinked() {
+  try {
+    localStorage.setItem(DEVICE_LINKED_KEY, '1');
+  } catch {
+    // localStorage 불가(프라이빗 모드 등) — 표시 생략
+  }
 }
 
 async function postJson<T>(path: string, body?: unknown): Promise<T> {
@@ -47,9 +78,12 @@ async function getJson<T>(path: string): Promise<T> {
 }
 
 export const api = {
-  identify: (deviceUuid: string) => postJson<IdentifyResponseDto>('/kirby/player/identify', { deviceUuid }),
+  identify: (deviceUuid: string) => postJson<IdentifyResponseDto>('/kirby/player/identify', { deviceUuid, authToken: readAuthToken() }),
   getState: (playerId: string) => getJson<PlayerStateDto>(`/kirby/player/${playerId}`),
-  buy: (playerId: string) => postJson<{ player: PlayerStateDto; bought: KirbyInstanceDto }>(`/kirby/player/${playerId}/buy`),
+  // 사용자 지적(2026-09-28): 좌대 캐릭터는 서버가 뽑은 판매권(offer)으로 표시하고, 구매도 그 판매권으로만 한다.
+  rollOffer: (playerId: string, slot: number) => postJson<MarketOfferDto>(`/kirby/player/${playerId}/market/roll`, { slot }),
+  buy: (playerId: string, offerId: string) =>
+    postJson<{ player: PlayerStateDto; bought: KirbyInstanceDto }>(`/kirby/player/${playerId}/buy`, { offerId }),
   sell: (playerId: string, instanceId: string) => postJson<PlayerStateDto>(`/kirby/player/${playerId}/sell/${instanceId}`),
   collectAll: (playerId: string) => postJson<{ player: PlayerStateDto; collected: number }>(`/kirby/player/${playerId}/collect-all`),
   collect: (playerId: string, instanceId: string) =>
@@ -63,9 +97,11 @@ export const api = {
 export function getOrCreateDeviceUuid(): string {
   // 개발/테스트 편의: 같은 브라우저의 여러 탭은 localStorage를 공유해서 기본값만으로는 항상 같은
   // device_uuid가 나옴(=같은 플레이어) — ?device=이름 쿼리로 탭마다 다른 테스트 계정을 강제할 수 있게 함.
-  const params = new URLSearchParams(window.location.search);
-  const forced = params.get('device');
-  if (forced) return `dev-${forced}`;
+  // 운영에서는 막음(2026-09-28) — 누구나 ?device=로 dev- 계정을 만들거나 들어갈 수 있었음(터비와 동일하게 개발 전용)
+  if (import.meta.env.DEV) {
+    const forced = new URLSearchParams(window.location.search).get('device');
+    if (forced) return `dev-${forced}`;
+  }
 
   const KEY = 'steal_a_kirby_device_uuid';
   let uuid = localStorage.getItem(KEY);

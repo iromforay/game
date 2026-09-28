@@ -1,5 +1,5 @@
 import { io, type Socket } from 'socket.io-client';
-import { api, getOrCreateDeviceUuid, type PlayerStateDto, type KirbyInstanceDto } from '../api/client';
+import { api, getOrCreateDeviceUuid, markDeviceLinked, type PlayerStateDto, type KirbyInstanceDto } from '../api/client';
 
 // 서버 주소는 api/client.ts와 동일하게 hub/.env의 VITE_KIRBY_SERVER_URL에서 읽어옴.
 const AUTO_INCOME_INTERVAL_MS = 5000;
@@ -98,6 +98,7 @@ class KirbyNetwork {
   private async doConnect() {
     const deviceUuid = getOrCreateDeviceUuid();
     const identified = await api.identify(deviceUuid);
+    if (identified.account?.linkedThisDevice) markDeviceLinked();
     this.state = identified;
     this.playerId = identified.playerId;
     this.sessionToken = identified.sessionToken;
@@ -206,8 +207,12 @@ class KirbyNetwork {
   }
 
   // ----- 경제(2.2/2.3/2.4) -----
-  async buy() {
-    const res = await api.buy(this.playerId);
+  rollOffer(slot: number) {
+    return api.rollOffer(this.playerId, slot);
+  }
+
+  async buy(offerId: string) {
+    const res = await api.buy(this.playerId, offerId);
     this.state = res.player;
     this.emit('stateChanged', this.state);
     return res.bought;
@@ -262,7 +267,9 @@ class KirbyNetwork {
 
   // 화면 재설계 후 "다른 기지 목록" UI에서 바로 쓸 수 있도록 준비해둔 조회(현재는 접속 중인 playerId만)
   listOnlinePlayers() {
-    return this.emitAsync<{ ok: boolean; playerIds: string[] }>('base:listOnline', { excludingPlayerId: this.playerId });
+    return this.emitAsync<{ ok: boolean; playerIds: string[]; players?: { playerId: string; nickname: string | null }[] }>('base:listOnline', {
+      excludingPlayerId: this.playerId,
+    });
   }
 
   // ----- 마을(로비) 앰비언트 프레즌스 — 사용자 지적(2026-09-18): 로비에서 다른 접속자 캐릭터가 안 보이던 문제 -----

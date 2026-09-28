@@ -4,8 +4,10 @@ import { PlayerService } from './player.service';
 import { PlayerController } from './player.controller';
 import { InvasionService } from './invasion.service';
 import { InvasionGateway } from './invasion.gateway';
+import { AccountModule } from '../account/account.module';
 
 @Module({
+  imports: [AccountModule],
   controllers: [PlayerController],
   providers: [PrismaService, PlayerService, InvasionService, InvasionGateway],
 })

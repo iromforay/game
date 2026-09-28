@@ -72,9 +72,13 @@ export class InvasionGateway implements OnGatewayDisconnect {
 
   // 화면 재설계로 "다른 기지 목록"류 UI가 생길 때 바로 쓸 수 있도록 준비해둔 조회 —
   // 접속 중인 다른 플레이어 ID 목록만 우선 반환(닉네임/기지 미리보기 등은 UI 확정 후 확장)
+  // 사용자 요청(2026-09-28): 로비 기지 이름표를 "#playerId" 대신 "닉네임의 기지"로 — 닉네임을 함께 내려준다
+  // (예전 클라이언트 호환을 위해 playerIds는 유지하고 players를 추가)
   @SubscribeMessage('base:listOnline')
-  handleListOnline(@MessageBody() body: { excludingPlayerId?: string }) {
-    return { ok: true, playerIds: this.invasions.listOnlinePlayerIds(body?.excludingPlayerId) };
+  async handleListOnline(@MessageBody() body: { excludingPlayerId?: string }) {
+    const playerIds = this.invasions.listOnlinePlayerIds(body?.excludingPlayerId);
+    const nicknames = await this.players.getNicknames(playerIds).catch(() => new Map<string, string>());
+    return { ok: true, playerIds, players: playerIds.map((playerId) => ({ playerId, nickname: nicknames.get(playerId) ?? null })) };
   }
 
   // 마을(로비) 앰비언트 프레즌스 — 사용자 지적(2026-09-18): 로비에서 다른 접속자의 캐릭터가

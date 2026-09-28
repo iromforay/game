@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { CANVAS_WIDTH, CANVAS_HEIGHT, AVATAR_SPEED, JOYSTICK_BASE_RADIUS, JOYSTICK_THUMB_RADIUS, DEPTH } from '../config/constants';
 import { GRADE_COLORS } from '../config/gradeColors';
-import { kirbyGrade, pickWeightedRandomKirby, type KirbyDef } from '../data/kirbyData';
+import { KIRBIES, kirbyGrade, type KirbyDef } from '../data/kirbyData';
 import { kirbyNetwork } from '../net/KirbyNetwork';
 import type { InvasionResolvedEvent, InvasionStartedEvent, LobbyEmoteEvent, LobbyLeftEvent, LobbyPositionEvent } from '../net/KirbyNetwork';
 import type { PlayerStateDto } from '../api/client';
@@ -73,6 +73,7 @@ function truncateKirbyName(name: string, max = 12): string {
 
 interface SpotKirby {
   kirby: KirbyDef;
+  offerId: string; // 서버가 발급한 판매권 — 구매는 이것으로만(사용자 지적 2026-09-28)
   glow: Phaser.GameObjects.Arc;
   tagBg: Phaser.GameObjects.Image;
   rarity: Phaser.GameObjects.Image;
@@ -101,6 +102,7 @@ export class LobbyScene extends Phaser.Scene {
   private localRing!: Phaser.GameObjects.Image; // S4-U03 로컬 플레이어 식별 링
   private myBaseStatusIcon!: Phaser.GameObjects.Image;
   private spots: (SpotKirby | null)[] = [null, null, null, null];
+  private spotRequests = [false, false, false, false]; // 좌대별 판매권 요청 진행 중(중복 요청 방지)
   private houseSlots: HouseSlotView[] = [];
   private pos = { x: PLAYER_START.x, y: PLAYER_START.y };
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
@@ -207,6 +209,7 @@ export class LobbyScene extends Phaser.Scene {
 
   create() {
     this.spots = [null, null, null, null];
+    this.spotRequests = [false, false, false, false];
     this.houseSlots = [];
     this.pos = { ...PLAYER_START };
 
@@ -654,10 +657,14 @@ export class LobbyScene extends Phaser.Scene {
       if (!res.ok) return;
       this.onlineText.setText(`접속 중: ${res.playerIds.length + 1}명`);
       const otherSlots = this.houseSlots.filter((s) => s.key !== 'bottomLeft');
+      // 사용자 요청(2026-09-28): 접속한 상대의 기지는 이름(허브 계정 닉네임)이 있으면 "닉네임의 기지",
+      // 이름이 없는 게스트는 "#{id} 기지"로 표시(서버가 계정 연결된 플레이어만 nickname을 채워 보냄)
+      const nicknameById = new Map((res.players ?? []).map((p) => [p.playerId, p.nickname]));
       otherSlots.forEach((slot, i) => {
         const targetId = res.playerIds[i] ?? null;
         slot.targetPlayerId = targetId;
-        slot.nameTag.setText(targetId ? `침입 가능\n#${targetId.slice(-4)}` : '빈 기지');
+        const nickname = targetId ? nicknameById.get(targetId) : null;
+        slot.nameTag.setText(!targetId ? '빈 기지' : nickname ? `${nickname}의 기지` : `#${targetId} 기지`);
       });
     } catch {
       /* BE 미접속 등 — 다음 주기에 다시 시도 */
@@ -710,10 +717,28 @@ export class LobbyScene extends Phaser.Scene {
 
   // 2026-09-18 로직 변경: 좌대 index 하나에 캐릭터 하나를 스폰, 7초 후 사라지고 잠깐 간격을 둔 뒤 재스폰.
   // 사용자 지적(2026-09-18): 등장/퇴장이 즉시 나타났다 사라지면 깜빡이는 것처럼 보여서 페이드인/아웃으로 처리.
+  // 사용자 지적(2026-09-28): 좌대 캐릭터를 FE가 직접 뽑고 구매는 서버가 다시 뽑아서, 보이는 캐릭터와 산 캐릭터가
+  // 달랐음(버든을 샀는데 릭이 진열). 좌대 캐릭터와 가격은 서버 판매권(offer)을 그대로 표시한다.
   private spawnAtSpot(index: number) {
-    if (this.spots[index]) return; // 이미 점유 중이면 무시(안전장치)
+    if (this.spots[index] || this.spotRequests[index]) return; // 이미 점유/요청 중이면 무시(안전장치)
+    this.spotRequests[index] = true;
+    kirbyNetwork
+      .rollOffer(index)
+      .then((offer) => {
+        this.spotRequests[index] = false;
+        if (!this.sys.isActive() || this.spots[index]) return; // 응답 전에 씬이 바뀌었으면 버림
+        const kirby = KIRBIES.find((k) => k.code === offer.code);
+        if (!kirby) throw new Error(`unknown kirby code ${offer.code}`);
+        this.showSpot(index, kirby, offer.offerId, offer.price);
+      })
+      .catch(() => {
+        this.spotRequests[index] = false;
+        if (this.sys.isActive()) this.time.delayedCall(2000, () => this.spawnAtSpot(index)); // 서버 일시 장애 시 재시도
+      });
+  }
+
+  private showSpot(index: number, kirby: KirbyDef, offerId: string, price: number) {
     const pos = SPOT_POS[index];
-    const kirby = pickWeightedRandomKirby();
     const grade = kirbyGrade(kirby);
     const color = GRADE_COLORS[grade.id] ?? 0xffffff;
     // 7.5(에셋 가이드) 확정: 등급색은 사각형 대신 후광 용도로 — 실제 캐릭터는 kirby/128 이미지 사용
@@ -737,13 +762,13 @@ export class LobbyScene extends Phaser.Scene {
       .setAlpha(0)
       .setDepth(DEPTH.WORLD_LABEL);
     const priceText = this.add
-      .text(pos.x, pos.y + 40, `${grade.buyPrice}G`, { fontSize: '18px', color: '#ffe082', fontStyle: 'bold', stroke: '#3a1d00', strokeThickness: 3 })
+      .text(pos.x, pos.y + 40, `${price}G`, { fontSize: '18px', color: '#ffe082', fontStyle: 'bold', stroke: '#3a1d00', strokeThickness: 3 })
       .setOrigin(0.5)
       .setAlpha(0)
       .setDepth(DEPTH.WORLD_LABEL);
     this.tweens.add({ targets: [glow, rarity, sprite, tagBg, nameText, priceText], alpha: 1, duration: SPOT_FADE_MS });
     const timer = this.time.delayedCall(SPOT_LIFETIME_MS, () => this.despawnSpot(index));
-    const item: SpotKirby = { kirby, glow, tagBg, rarity, sprite, nameText, priceText, timer };
+    const item: SpotKirby = { kirby, offerId, glow, tagBg, rarity, sprite, nameText, priceText, timer };
     this.spots[index] = item;
     this.markWorld(glow, rarity, sprite, tagBg, nameText, priceText);
     sprite.on('pointerdown', () => void this.tryBuy(index));
@@ -775,11 +800,18 @@ export class LobbyScene extends Phaser.Scene {
     if (!item || item.purchasing) return;
     item.purchasing = true;
     try {
-      await kirbyNetwork.buy();
+      await kirbyNetwork.buy(item.offerId);
       this.playPurchaseBurst(SPOT_POS[index].x, SPOT_POS[index].y); // S4-L04 구매 성공 버스트(응답 성공 후에만 — 실패 시 상품 유지)
       this.despawnSpot(index); // 구매 성공 시 즉시 사라지고 새 캐릭터로 교체
-    } catch {
-      this.showMessage('돈이 부족합니다');
+    } catch (err) {
+      // 실패 사유를 모두 "돈이 부족합니다"로 보여주던 것을 서버 사유 코드별로 구분
+      const msg = err instanceof Error ? err.message : '';
+      if (msg.includes('OFFER_EXPIRED')) {
+        this.showMessage('판매가 끝난 상품입니다');
+        this.despawnSpot(index);
+        return;
+      }
+      this.showMessage(msg.includes('BASE_FULL') ? '기지 보관 공간이 가득 찼습니다' : msg.includes('NOT_ENOUGH_GOLD') ? '돈이 부족합니다' : '구매에 실패했습니다');
       item.purchasing = false;
     }
   }

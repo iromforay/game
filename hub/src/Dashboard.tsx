@@ -1,6 +1,7 @@
 import { GAMES, CARD_FRAME_URL } from './games';
 import type { GameId } from './games';
 import kirbyGuideIconUrl from './assets/cards/icon-steal-a-kirby.png';
+import { AccountPanel } from './account/AccountPanel';
 
 interface DashboardProps {
   onSelectGame: (gameId: GameId) => void;
@@ -13,7 +14,7 @@ export function Dashboard({ onSelectGame, onOpenKirbyGuide }: DashboardProps) {
       <div className="dashboard-header">
         <h1>게임 허브</h1>
         <p className="dashboard-subtitle">플레이할 게임을 선택하세요.</p>
-        <p className="dashboard-status">프로필 관리는 준비 중입니다.</p>
+        <AccountPanel />
       </div>
 
       <section className="dashboard-section dashboard-section-games" aria-label="게임 선택">
