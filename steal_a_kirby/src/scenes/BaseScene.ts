@@ -87,6 +87,8 @@ export class BaseScene extends Phaser.Scene {
   private goldText!: Phaser.GameObjects.Text;
   private lockText!: Phaser.GameObjects.Text;
   private offlineText!: Phaser.GameObjects.Text;
+  private lockExpiresAtMs: number | null = null;
+  private lockExpirySyncing = false;
   // 도난 알림 배너(관리 화면) — 침입이 끝날 때까지 남고, 배너나 도난 슬롯을 누르면 방어 화면 진입
   private invasionAlert?: Phaser.GameObjects.Text;
   private alertInstance: { instanceId: string; characterName: string } | null = null;
@@ -121,6 +123,8 @@ export class BaseScene extends Phaser.Scene {
   private carriedKirby?: Phaser.GameObjects.Image;
   private carriedKirbyLabel?: Phaser.GameObjects.Text;
   private escapeHoldStartedAt: number | null = null;
+  private escapeRequestPending = false;
+  private escapeRetryAt = 0;
   private escapeHoldText?: Phaser.GameObjects.Text;
   // 방어 카운트다운(사용자 결정 2026-09-28): 침입 시작 후 1분. 방어 중엔 탈출 불가, 풀린 뒤엔 공격 불가.
   // defenseEndsAt은 이 씬의 시계(this.time.now) 기준 — 서버가 준 "남은 ms"로 계산해 기기 간 시계 차이 영향 없음
@@ -220,6 +224,8 @@ export class BaseScene extends Phaser.Scene {
     this.carriedKirby = undefined;
     this.carriedKirbyLabel = undefined;
     this.escapeHoldStartedAt = null;
+    this.escapeRequestPending = false;
+    this.escapeRetryAt = 0;
     this.escapeHoldText = undefined;
     this.defenseEndsAt = null;
     this.defenseText = undefined;
@@ -395,6 +401,7 @@ export class BaseScene extends Phaser.Scene {
     // 상태별 색상(열림=초록/잠김=빨강/조건부=주황)으로 한눈에 구분되게 함(이미지 3단계 status-lock 아이콘 사용)
     const lockColor = state.lockState === 'open' ? '#50fa7b' : state.lockState === 'locked' ? '#ff5555' : '#ffb84d';
     const lockLabel = state.lockState === 'open' ? '열림' : state.lockState === 'locked' ? '잠김' : '조건부잠김';
+    this.lockExpiresAtMs = state.lockExpiresAt ? new Date(state.lockExpiresAt).getTime() : null;
     this.lockText.setText(`잠금\n${lockLabel}`).setColor(lockColor);
     this.lockIcon.setVisible(state.lockState !== 'open');
     this.offlineText.setText(`자동 운영\n${state.offlineOperationEnabled ? 'ON' : 'OFF'}`);
@@ -1022,8 +1029,14 @@ export class BaseScene extends Phaser.Scene {
         if (this.escapeHoldStartedAt === null) this.escapeHoldStartedAt = now;
         const elapsed = now - this.escapeHoldStartedAt;
         const remaining = Math.max(0, ESCAPE_HOLD_MS - elapsed);
-        this.escapeHoldText?.setText(remaining > 0 ? `탈출 확보 중… ${(remaining / 1000).toFixed(1)}초` : '탈출!').setVisible(true);
-        if (remaining <= 0) void kirbyNetwork.exit(this.sceneData.targetPlayerId, this.sceneData.instanceId!);
+        const escapeLabel =
+          remaining > 0
+            ? `탈출 확보 중… ${(remaining / 1000).toFixed(1)}초`
+            : now < this.escapeRetryAt
+              ? '문이 잠겨 있어 훔친 채로 나갈 수 없습니다'
+              : '탈출 확인 중…';
+        this.escapeHoldText?.setText(escapeLabel).setVisible(true);
+        if (remaining <= 0 && !this.escapeRequestPending && now >= this.escapeRetryAt) void this.tryEscape();
       } else {
         this.escapeHoldStartedAt = null;
         this.escapeHoldText?.setVisible(false);
@@ -1031,10 +1044,43 @@ export class BaseScene extends Phaser.Scene {
     }
   }
 
+  private async tryEscape() {
+    this.escapeRequestPending = true;
+    try {
+      const result = await kirbyNetwork.exit(this.sceneData.targetPlayerId, this.sceneData.instanceId!);
+      if (!result.ok && result.reason === 'locked') {
+        this.escapeRetryAt = this.time.now + 1000;
+        this.escapeHoldText?.setText('문이 잠겨 있어 훔친 채로 나갈 수 없습니다').setVisible(true);
+      }
+    } finally {
+      this.escapeRequestPending = false;
+    }
+  }
+
+  private updateLockCountdown() {
+    const state = kirbyNetwork.state;
+    if (!state || state.lockState === 'open' || !this.lockExpiresAtMs) return;
+    const remainingSeconds = Math.max(0, Math.ceil((this.lockExpiresAtMs - Date.now()) / 1000));
+    const label = state.lockState === 'locked' ? '잠김' : '조건부잠김';
+    this.lockText.setText(`잠금\n${label} ${remainingSeconds}초`);
+    if (remainingSeconds > 0 || this.lockExpirySyncing) return;
+    this.lockExpirySyncing = true;
+    void kirbyNetwork
+      .updateSettings({ lockState: 'open' })
+      .catch(() => {
+        // 연결이 잠시 끊겼어도 서버는 DB 만료 시각을 기준으로 진입을 허용한다. UI만 잠시 후 재동기화한다.
+        this.lockExpiresAtMs = Date.now() + 1000;
+      })
+      .finally(() => {
+        this.lockExpirySyncing = false;
+      });
+  }
+
   // 기지 열람(관리/선택) 모드 이동 — 조이스틱 1차, 방향키는 데스크톱 테스트용 보조 입력.
   // 층별 상행/하행 계단에 근접(엣지 진입)하면 자동으로 층 이동(클릭은 보조 입력).
   private updateBrowse(delta: number) {
     if (!this.browseAvatar) return;
+    this.updateLockCountdown();
     const speed = (AVATAR_SPEED * delta) / 1000;
     let dx = this.joyVector.x * speed;
     let dy = this.joyVector.y * speed;

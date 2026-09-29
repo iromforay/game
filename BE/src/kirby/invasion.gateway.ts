@@ -290,9 +290,8 @@ export class InvasionGateway implements OnGatewayDisconnect {
     const ownerOnline = this.invasions.isOnline(realOwnerId);
     const allowed = canInvade(access, ownerOnline, actorId);
 
-    this.invasions.endInvasion(body.instanceId);
-
     if (allowed) {
+      this.invasions.endInvasion(body.instanceId);
       await this.players.transferOwnership(body.instanceId, BigInt(actorId));
       this.server.to(baseRoom(realOwnerId)).emit('invasion:resolved', {
         instanceId: body.instanceId,
@@ -303,13 +302,9 @@ export class InvasionGateway implements OnGatewayDisconnect {
       return { ok: true, result: 'success' };
     }
 
-    await this.players.resetStolenStatus(body.instanceId);
-    this.server.to(baseRoom(realOwnerId)).emit('invasion:resolved', {
-      instanceId: body.instanceId,
-      result: 'failed',
-      reason: 'exit-blocked',
-    });
-    return { ok: true, result: 'failed', reason: 'exit-blocked' };
+    // 침입 뒤 문이 잠긴 경우 일반 방문자는 나갈 수 있지만, 커비를 든 침입자는 탈출할 수 없다.
+    // 침입/운반 상태는 유지해 문이 다시 열리거나 방어자에게 붙잡힐 때까지 계속 진행한다.
+    return { ok: false, reason: 'locked' };
   }
 
   // 도주 중 로비 이동을 선택하면 훔치기를 포기한 것으로 처리한다. 클라이언트 화면만

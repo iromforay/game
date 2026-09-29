@@ -24,6 +24,7 @@ const TX_OPTIONS = { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommit
 
 // 2026-09-18 요청: 초당 발생 재화 — 오프라인 방치 악용 방지용 최대 정산 구간(24시간)
 const MAX_COLLECT_SECONDS = 24 * 60 * 60;
+const BASE_LOCK_DURATION_MS = 60_000;
 
 // 사용자 지적(2026-09-28): 좌대에 보이는 캐릭터(FE가 뽑음)와 실제 구매된 캐릭터(서버가 다시 뽑음)가
 // 달랐음 — 좌대 캐릭터를 서버가 뽑아 "판매권(offer)"으로 내려주고 그 판매권으로만 구매하게 한다.
@@ -319,10 +320,13 @@ export class PlayerService {
   // 4.4/4.5 확정: 잠금 상태/오프라인 운영 설정 변경
   async updateSettings(playerIdStr: string, body: { lockState?: LockState; offlineOperationEnabled?: boolean; allowedUserIds?: string[] }) {
     const player = await this.requirePlayer(playerIdStr);
+    const lockExpiresAt =
+      body.lockState === undefined ? undefined : body.lockState === 'open' ? null : new Date(Date.now() + BASE_LOCK_DURATION_MS);
     const updated = await this.prisma.kirby_player.update({
       where: { id: player.id },
       data: {
         ...(body.lockState !== undefined ? { lock_state: body.lockState } : {}),
+        ...(lockExpiresAt !== undefined ? { lock_expires_at: lockExpiresAt } : {}),
         ...(body.offlineOperationEnabled !== undefined ? { offline_operation_enabled: body.offlineOperationEnabled } : {}),
         ...(body.allowedUserIds !== undefined ? { allowed_user_ids_json: JSON.stringify(body.allowedUserIds) } : {}),
       },
@@ -376,8 +380,12 @@ export class PlayerService {
   }
 
   private async requirePlayerById(playerId: bigint) {
-    const player = await this.prisma.kirby_player.findUnique({ where: { id: playerId } });
+    let player = await this.prisma.kirby_player.findUnique({ where: { id: playerId } });
     if (!player) throw new NotFoundException('player not found');
+    // 만료 시각은 DB에 저장하므로 서버 재시작/소유자 오프라인과 무관하게 다음 접근에서 자동 해제된다.
+    if (player.lock_state !== 'open' && player.lock_expires_at && player.lock_expires_at.getTime() <= Date.now()) {
+      player = await this.prisma.kirby_player.update({ where: { id: playerId }, data: { lock_state: 'open', lock_expires_at: null } });
+    }
     return player;
   }
 
@@ -393,7 +401,7 @@ export class PlayerService {
   }
 
   private toStateDto(
-    player: { id: bigint; nickname: string; gold: number; lock_state: string; offline_operation_enabled: boolean },
+    player: { id: bigint; nickname: string; gold: number; lock_state: string; lock_expires_at: Date | null; offline_operation_enabled: boolean },
     kirbies: ReturnType<PlayerService['toInstanceDto']>[],
   ) {
     return {
@@ -401,6 +409,7 @@ export class PlayerService {
       nickname: player.nickname,
       gold: player.gold,
       lockState: player.lock_state,
+      lockExpiresAt: player.lock_expires_at?.toISOString() ?? null,
       offlineOperationEnabled: player.offline_operation_enabled,
       kirbies,
     };

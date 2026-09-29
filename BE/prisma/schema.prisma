@@ -307,6 +307,8 @@ model kirby_player {
   gold                      Int                     @default(0) @db.UnsignedInt
   // 4.4 확정: 기지 잠금 상태(열림/잠김/조건부잠김)
   lock_state                kirby_player_lock_state @default(open)
+  // 잠김/조건부잠김은 설정 시점부터 60초 동안만 유지된다. null이면 만료 없음(열림).
+  lock_expires_at           DateTime?               @db.Timestamp(3)
   // 4.4 조건부 잠김의 허용 유저 ID 목록 — 화이트리스트 방향으로 임시 채택(8.2-⑬ 최종 미확정), JSON 배열 문자열로 저장
   allowed_user_ids_json     String?                 @db.Text
   // 4.5 확정: 오프라인 기지 운영 여부

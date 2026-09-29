@@ -17,6 +17,7 @@ export interface PlayerStateDto {
   nickname: string;
   gold: number;
   lockState: 'open' | 'locked' | 'conditional';
+  lockExpiresAt: string | null;
   offlineOperationEnabled: boolean;
   kirbies: KirbyInstanceDto[];
 }

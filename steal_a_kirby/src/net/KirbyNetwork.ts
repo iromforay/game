@@ -320,7 +320,7 @@ class KirbyNetwork {
   }
 
   exit(targetPlayerId: string, instanceId: string) {
-    return this.emitAsync<{ ok: boolean; result?: 'success' | 'failed' }>('invasion:exit', {
+    return this.emitAsync<{ ok: boolean; result?: 'success' | 'failed'; reason?: string }>('invasion:exit', {
       viewerPlayerId: this.playerId,
       targetPlayerId,
       instanceId,
