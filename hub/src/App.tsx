@@ -6,12 +6,13 @@ import { KirbyGuide } from './KirbyGuide';
 import { TurbyGuide } from './TurbyGuide';
 import { Leaderboard } from './scoreboard/Leaderboard';
 import { AdminPage } from './admin/AdminPage';
+import { AdGameCatalog } from './AdGameCatalog';
 import type { RankingGame } from './scoreboard/scoreboardClient';
 import { useMultiplayer } from './multiplayer/MultiplayerContext';
 import type { GameId } from './games';
 import './App.css';
 
-type Screen = 'dashboard' | 'lobby' | 'game' | 'kirby-guide' | 'turby-guide' | 'ranking' | 'admin';
+type Screen = 'dashboard' | 'ad-game-catalog' | 'lobby' | 'game' | 'kirby-guide' | 'turby-guide' | 'ranking' | 'admin';
 
 function App() {
   const [screen, setScreen] = useState<Screen>('dashboard');
@@ -49,6 +50,10 @@ function App() {
     return <AdminPage onBack={() => setScreen('dashboard')} />;
   }
 
+  if (screen === 'ad-game-catalog') {
+    return <AdGameCatalog onBack={() => setScreen('dashboard')} />;
+  }
+
   if (screen === 'kirby-guide') {
     return <KirbyGuide onBack={() => setScreen('dashboard')} />;
   }
@@ -84,6 +89,7 @@ function App() {
       onOpenTurbyGuide={() => setScreen('turby-guide')}
       onOpenRanking={() => openRanking()}
       onOpenAdmin={() => setScreen('admin')}
+      onOpenAdGames={() => setScreen('ad-game-catalog')}
     />
   );
 }

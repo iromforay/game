@@ -11,9 +11,10 @@ interface DashboardProps {
   onOpenTurbyGuide: () => void;
   onOpenRanking: () => void;
   onOpenAdmin: () => void;
+  onOpenAdGames: () => void;
 }
 
-export function Dashboard({ onSelectGame, onOpenKirbyGuide, onOpenTurbyGuide, onOpenRanking, onOpenAdmin }: DashboardProps) {
+export function Dashboard({ onSelectGame, onOpenKirbyGuide, onOpenTurbyGuide, onOpenRanking, onOpenAdmin, onOpenAdGames }: DashboardProps) {
   const [isAdmin, setIsAdmin] = useState(false);
   return (
     <div className="dashboard">
@@ -40,6 +41,18 @@ export function Dashboard({ onSelectGame, onOpenKirbyGuide, onOpenTurbyGuide, on
               </span>
             </button>
           ))}
+          <button
+            type="button"
+            className="game-select-button ad-game-entry-button"
+            style={{ backgroundImage: `url(${CARD_FRAME_URL})` }}
+            onClick={onOpenAdGames}
+          >
+            <span className="game-select-icon ad-game-entry-icon" aria-hidden="true">AD</span>
+            <span className="game-select-text">
+              <span className="game-select-title">광고게임</span>
+              <span className="game-select-desc">광고에서 보던 게임을 직접 플레이</span>
+            </span>
+          </button>
         </div>
       </section>
 
