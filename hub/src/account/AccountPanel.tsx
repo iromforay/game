@@ -9,7 +9,11 @@ type Mode = 'login' | 'register';
 // 허브 공통 계정(2026-09-28) — 대시보드 상단의 로그인 영역.
 // 로그인/로그아웃 후에는 페이지를 새로고침한다: 게임 모듈(예: 커비 네트워크)이 앱 부팅 때 한 번 identify하고
 // 연결을 유지하므로, 새 계정 기준으로 다시 식별하려면 새로고침이 가장 단순하고 확실하다.
-export function AccountPanel() {
+interface Props {
+  onSession?: (session: AccountSession | null) => void;
+}
+
+export function AccountPanel({ onSession }: Props) {
   const [session, setSession] = useState<AccountSession | null>(null);
   const [checking, setChecking] = useState(hasStoredToken());
   const [mode, setMode] = useState<Mode | null>(null);
@@ -24,7 +28,9 @@ export function AccountPanel() {
     void fetchSession().then((s) => {
       setSession(s);
       setChecking(false);
+      onSession?.(s);
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const openForm = (next: Mode) => {

@@ -5,12 +5,13 @@ import { GameScreen } from './GameScreen';
 import { KirbyGuide } from './KirbyGuide';
 import { TurbyGuide } from './TurbyGuide';
 import { Leaderboard } from './scoreboard/Leaderboard';
+import { AdminPage } from './admin/AdminPage';
 import type { RankingGame } from './scoreboard/scoreboardClient';
 import { useMultiplayer } from './multiplayer/MultiplayerContext';
 import type { GameId } from './games';
 import './App.css';
 
-type Screen = 'dashboard' | 'lobby' | 'game' | 'kirby-guide' | 'turby-guide' | 'ranking';
+type Screen = 'dashboard' | 'lobby' | 'game' | 'kirby-guide' | 'turby-guide' | 'ranking' | 'admin';
 
 function App() {
   const [screen, setScreen] = useState<Screen>('dashboard');
@@ -42,6 +43,10 @@ function App() {
 
   if (screen === 'ranking') {
     return <Leaderboard initialGame={ranking.game} initialRoundId={ranking.roundId} onBack={() => setScreen('dashboard')} />;
+  }
+
+  if (screen === 'admin') {
+    return <AdminPage onBack={() => setScreen('dashboard')} />;
   }
 
   if (screen === 'kirby-guide') {
@@ -78,6 +83,7 @@ function App() {
       onOpenKirbyGuide={() => setScreen('kirby-guide')}
       onOpenTurbyGuide={() => setScreen('turby-guide')}
       onOpenRanking={() => openRanking()}
+      onOpenAdmin={() => setScreen('admin')}
     />
   );
 }

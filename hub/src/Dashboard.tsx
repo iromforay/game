@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { GAMES, CARD_FRAME_URL } from './games';
 import type { GameId } from './games';
 import kirbyGuideIconUrl from './assets/cards/icon-steal-a-kirby.png';
@@ -9,15 +10,17 @@ interface DashboardProps {
   onOpenKirbyGuide: () => void;
   onOpenTurbyGuide: () => void;
   onOpenRanking: () => void;
+  onOpenAdmin: () => void;
 }
 
-export function Dashboard({ onSelectGame, onOpenKirbyGuide, onOpenTurbyGuide, onOpenRanking }: DashboardProps) {
+export function Dashboard({ onSelectGame, onOpenKirbyGuide, onOpenTurbyGuide, onOpenRanking, onOpenAdmin }: DashboardProps) {
+  const [isAdmin, setIsAdmin] = useState(false);
   return (
     <div className="dashboard">
       <div className="dashboard-header">
         <h1>게임 허브</h1>
         <p className="dashboard-subtitle">플레이할 게임을 선택하세요.</p>
-        <AccountPanel />
+        <AccountPanel onSession={(s) => setIsAdmin(!!s?.isAdmin)} />
       </div>
 
       <section className="dashboard-section dashboard-section-games" aria-label="게임 선택">
@@ -66,6 +69,18 @@ export function Dashboard({ onSelectGame, onOpenKirbyGuide, onOpenTurbyGuide, on
           </span>
         </button>
       </section>
+
+      {isAdmin && (
+        <section className="dashboard-section dashboard-section-guide" aria-label="관리자">
+          <button type="button" className="dashboard-guide-button" onClick={onOpenAdmin}>
+            <span className="dashboard-guide-icon dashboard-ranking-icon" aria-hidden="true">🛠</span>
+            <span className="dashboard-guide-text">
+              <span className="dashboard-guide-title">관리자</span>
+              <span className="dashboard-guide-desc">백오피스 · 유저·커비·골드 관리</span>
+            </span>
+          </button>
+        </section>
+      )}
     </div>
   );
 }

@@ -35,8 +35,8 @@ const SLOT_POS = [
 const FLOOR_INFO_POS = { x: 1150, y: 210 }; // 층 정보(N층·보유수) 명판 — 계단 재설계로 우측 상단 계단이 없어져 고정 위치로 분리
 // 잠금/오프라인 라벨이 2줄로 늘어나면서(2026-09-18) 계단 아이콘(x:1150 기준 220px 폭)과 겹쳐서
 // x를 왼쪽으로 옮김 — 계단 이미지 바운딩박스(x:1040~1260, y:60~240) 밖에 위치하도록 조정.
-const LOCK_PLAQUE_POS = { x: 1080, y: 45 }; // 계단 재설계(우측 A계단 x:710~930)와 안 겹치게 더 오른쪽으로
-const HAND_ICON_POS = { x: 1080, y: 100 };
+const LOCK_PLAQUE_POS = { x: 995, y: 88 };
+const HAND_ICON_POS = { x: 1165, y: 88 };
 // 서버(BE/src/kirby/invasion.service.ts의 EXIT_ZONE)와 반드시 동일한 1280x720 월드 좌표를 써야
 // exit() 호출이 서버의 좌표 재검증(QA 지적, 2026-09-17)을 통과함.
 const EXIT_DOOR = { x: 605, y: 635, radius: 90 };
@@ -258,12 +258,6 @@ export class BaseScene extends Phaser.Scene {
     this.floorBadgeBg = this.add.image(CANVAS_WIDTH / 2, 34, 'ui-floor-panel').setDisplaySize(160, 50).setDepth(DEPTH.HUD - 1);
     this.floorBadge = this.add.text(CANVAS_WIDTH / 2, 34, '1층', { fontSize: '20px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5).setDepth(DEPTH.HUD);
 
-    this.add
-      .text(20, CANVAS_HEIGHT - 26, '[로비로 나가기]', { fontSize: '13px', color: '#8be9fd', backgroundColor: '#00000099', padding: { x: 6, y: 3 } })
-      .setInteractive({ useHandCursor: true })
-      .setDepth(DEPTH.CONTROLS)
-      .on('pointerdown', () => void this.leaveToLobby());
-
     if (this.sceneData.mode === 'manage' || this.sceneData.mode === 'select') {
       this.createBrowseUi();
     } else {
@@ -284,12 +278,12 @@ export class BaseScene extends Phaser.Scene {
   private createBrowseUi() {
     const isMine = this.sceneData.mode === 'manage';
     // 이미지 3단계(DELIVERED) — base-nameplate로 배경 교체
-    this.add.image(FLOOR_INFO_POS.x, FLOOR_INFO_POS.y, 'ui-base-nameplate').setDisplaySize(150, 44).setDepth(DEPTH.HUD - 1);
-    this.floorText = this.add.text(FLOOR_INFO_POS.x, FLOOR_INFO_POS.y, '1층', { fontSize: '13px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5).setDepth(DEPTH.HUD);
+    this.add.image(FLOOR_INFO_POS.x, FLOOR_INFO_POS.y, 'ui-base-nameplate').setDisplaySize(210, 54).setDepth(DEPTH.HUD - 1);
+    this.floorText = this.add.text(FLOOR_INFO_POS.x, FLOOR_INFO_POS.y, '1층', { fontSize: '18px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5).setDepth(DEPTH.HUD);
     // 이미지 3단계 interaction-prompt — 새로 생긴 근접 이동 방식 온보딩 힌트(사용자 지적 2026-09-18: 로비 나가는 법이 안 보임 등)
-    this.add.image(CANVAS_WIDTH / 2, CANVAS_HEIGHT - 34, 'ui-interaction-prompt').setDisplaySize(360, 44).setDepth(DEPTH.CONTROLS - 1);
+    this.add.image(CANVAS_WIDTH / 2, CANVAS_HEIGHT - 38, 'ui-interaction-prompt').setDisplaySize(500, 56).setDepth(DEPTH.CONTROLS - 1);
     this.add
-      .text(CANVAS_WIDTH / 2, CANVAS_HEIGHT - 34, '계단·출입문에 닿으면 이동', { fontSize: '13px', color: '#ffffff', fontStyle: 'bold' })
+      .text(CANVAS_WIDTH / 2, CANVAS_HEIGHT - 38, '계단 또는 출입문으로 이동하세요', { fontSize: '18px', color: '#ffffff', fontStyle: 'bold' })
       .setOrigin(0.5)
       .setDepth(DEPTH.CONTROLS);
 
@@ -306,7 +300,7 @@ export class BaseScene extends Phaser.Scene {
       const icon = this.add.image(pos.x, pos.y - 15, 'player-avatar').setDisplaySize(64, 64).setVisible(false).setDepth(DEPTH.BUILDINGS + 2);
       const overlay = this.add.image(pos.x, pos.y, 'base-slot-selected').setVisible(false).setDepth(DEPTH.BUILDINGS + 3);
       const label = this.add
-        .text(pos.x, pos.y + 55, '', { fontSize: '12px', color: '#ffffff', align: 'center', backgroundColor: '#00000099', padding: { x: 6, y: 4 } })
+        .text(pos.x, pos.y + 55, '', { fontSize: '16px', color: '#ffffff', fontStyle: 'bold', align: 'center', lineSpacing: 3, backgroundColor: '#000000cc', padding: { x: 9, y: 6 } })
         .setOrigin(0.5)
         .setDepth(DEPTH.WORLD_LABEL);
       zone.on('pointerdown', () => void this.onSlotClick(zone));
@@ -339,9 +333,11 @@ export class BaseScene extends Phaser.Scene {
       .setDepth(DEPTH.CONTROLS)
       .on('pointerdown', () => void this.leaveToLobby());
     this.add.image(CANVAS_WIDTH - 90, CANVAS_HEIGHT - 90, 'ui-action-hand-icon').setDisplaySize(40, 40).setDepth(DEPTH.CONTROLS + 1);
-    this.add.text(CANVAS_WIDTH - 90, CANVAS_HEIGHT - 46, '나가기', { fontSize: '12px', color: '#ffffff', backgroundColor: '#00000099', padding: { x: 6, y: 2 } }).setOrigin(0.5).setDepth(DEPTH.CONTROLS);
+    this.add.text(CANVAS_WIDTH - 90, CANVAS_HEIGHT - 42, '나가기', { fontSize: '16px', color: '#ffffff', fontStyle: 'bold', backgroundColor: '#000000bb', padding: { x: 8, y: 3 } }).setOrigin(0.5).setDepth(DEPTH.CONTROLS);
 
     if (isMine) {
+      this.add.rectangle(1080, 78, 360, 132, 0x111827, 0.9).setStrokeStyle(2, 0xffd166, 0.8).setDepth(DEPTH.HUD - 1);
+      this.add.text(1080, 24, '기지 설정', { fontSize: '18px', color: '#ffe082', fontStyle: 'bold' }).setOrigin(0.5).setDepth(DEPTH.HUD);
       // 초당 발생 재화(2026-09-18 요청) — 화면에 보이는 슬롯 중 idle 상태인 내 커비 위로 주기적으로
       // "+수입" 텍스트를 띄워서 재화가 발생하고 있음을 시각적으로 알림(실제 정산은 캐릭터 터치 시 collect()).
       this.time.addEvent({ delay: INCOME_TICK_MS, loop: true, callback: () => this.tickIncomeIndicators() });
@@ -351,26 +347,22 @@ export class BaseScene extends Phaser.Scene {
       // 사용자 지적(2026-09-18): 잠금 버튼이 있다는 걸 알아보기 어려움 — 자물쇠 아이콘+"탭하여 변경"
       // 힌트+테두리를 추가해서 눈에 띄는 버튼처럼 보이게 함(클릭 동작 자체는 기존 cycleLockState 그대로).
       this.lockText = this.add
-        .text(LOCK_PLAQUE_POS.x, LOCK_PLAQUE_POS.y, '', { fontSize: '13px', color: '#50fa7b', backgroundColor: '#00000099', padding: { x: 8, y: 4 } })
+        .text(LOCK_PLAQUE_POS.x, LOCK_PLAQUE_POS.y, '', { fontSize: '16px', color: '#50fa7b', fontStyle: 'bold', align: 'center', backgroundColor: '#263247', padding: { x: 14, y: 9 } })
         .setOrigin(0.5)
         .setInteractive({ useHandCursor: true })
         .setStroke('#ffffff', 1)
         .setDepth(DEPTH.HUD)
         .on('pointerdown', () => void this.cycleLockState());
       // 이미지 3단계 status-lock — 잠김/조건부잠김일 때만 실제 자물쇠 아이콘 표시(열림이면 숨김)
-      this.lockIcon = this.add.image(LOCK_PLAQUE_POS.x - 55, LOCK_PLAQUE_POS.y, 'ui-status-lock').setDisplaySize(20, 20).setVisible(false).setDepth(DEPTH.HUD);
+      this.lockIcon = this.add.image(LOCK_PLAQUE_POS.x - 66, LOCK_PLAQUE_POS.y, 'ui-status-lock').setDisplaySize(26, 26).setVisible(false).setDepth(DEPTH.HUD);
       this.offlineText = this.add
-        .text(HAND_ICON_POS.x, HAND_ICON_POS.y, '', { fontSize: '13px', color: '#50fa7b', backgroundColor: '#00000099', padding: { x: 8, y: 4 } })
+        .text(HAND_ICON_POS.x, HAND_ICON_POS.y, '', { fontSize: '16px', color: '#50fa7b', fontStyle: 'bold', align: 'center', backgroundColor: '#263247', padding: { x: 14, y: 9 } })
         .setOrigin(0.5)
         .setInteractive({ useHandCursor: true })
         .setStroke('#ffffff', 1)
         .setDepth(DEPTH.HUD)
         .on('pointerdown', () => void this.toggleOfflineOperation());
-      this.add
-        .text(HAND_ICON_POS.x, HAND_ICON_POS.y + 40, '※ 잠금·오프라인은 기지 전체 설정', { fontSize: '11px', color: '#ffffff', backgroundColor: '#00000099', padding: { x: 5, y: 2 } })
-        .setOrigin(0.5)
-        .setDepth(DEPTH.HUD);
-      this.offlineIcon = this.add.image(HAND_ICON_POS.x - 55, HAND_ICON_POS.y, 'ui-status-offline').setDisplaySize(20, 20).setVisible(false).setDepth(DEPTH.HUD);
+      this.offlineIcon = this.add.image(HAND_ICON_POS.x - 66, HAND_ICON_POS.y, 'ui-status-offline').setDisplaySize(26, 26).setVisible(false).setDepth(DEPTH.HUD);
 
       kirbyNetwork.on('stateChanged', this.onStateChanged);
       kirbyNetwork.on('invasionStarted', this.onInvasionStartedWhileManaging);
@@ -403,9 +395,9 @@ export class BaseScene extends Phaser.Scene {
     // 상태별 색상(열림=초록/잠김=빨강/조건부=주황)으로 한눈에 구분되게 함(이미지 3단계 status-lock 아이콘 사용)
     const lockColor = state.lockState === 'open' ? '#50fa7b' : state.lockState === 'locked' ? '#ff5555' : '#ffb84d';
     const lockLabel = state.lockState === 'open' ? '열림' : state.lockState === 'locked' ? '잠김' : '조건부잠김';
-    this.lockText.setText(`${lockLabel}\n(탭하여 변경)`).setColor(lockColor);
+    this.lockText.setText(`잠금\n${lockLabel}`).setColor(lockColor);
     this.lockIcon.setVisible(state.lockState !== 'open');
-    this.offlineText.setText(`오프라인 운영: ${state.offlineOperationEnabled ? 'ON' : 'OFF'}\n(탭하여 변경)`);
+    this.offlineText.setText(`자동 운영\n${state.offlineOperationEnabled ? 'ON' : 'OFF'}`);
     this.offlineIcon.setVisible(!state.offlineOperationEnabled);
     this.myKirbies = state.kirbies;
     this.renderSlots();
@@ -492,16 +484,16 @@ export class BaseScene extends Phaser.Scene {
       if (kirby.status === 'stolen_in_transit') {
         view.overlay.setTexture('base-slot-stealing').setVisible(true);
         view.pulse.setVisible(true).play('fx-stealing-pulse', true); // S4-B05 도난 중 붉은 펄스
-        view.label.setText(`${kirby.name}\n도둑맞는 중!\n(클릭해서 방어)`);
+        view.label.setText(`${kirby.name}\n방어하러 가기`).setColor('#ffb4b4');
       } else if (this.sceneData.mode === 'select') {
         view.pulse.setVisible(false).stop();
         view.overlay.setTexture('base-slot-selected').setVisible(true);
-        view.label.setText(`${kirby.name}\n(클릭해서 훔치기)`);
+        view.label.setText(`${kirby.name}\n훔치기`).setColor('#ffffff');
       } else {
         view.pulse.setVisible(false).stop();
         view.overlay.setVisible(false);
         // 상호작용 분리(2026-09-18): 캐릭터 터치=수금, 가격표(이 라벨) 터치=판매
-        view.label.setText(`${kirby.name}\n판매가 ${grade.sellPrice}G\n(가격표 클릭시 판매)`);
+        view.label.setText(`${kirby.name}\n판매 ${grade.sellPrice}G`).setColor('#ffffff');
       }
     }
   }
@@ -704,34 +696,34 @@ export class BaseScene extends Phaser.Scene {
     // 이미지 3단계 role-owner-icon/role-intruder-icon — 규칙11: 역할은 색상뿐 아니라 아이콘으로도 구분
     this.add.image(20, 16, role === 'owner' ? 'ui-role-owner-icon' : 'ui-role-intruder-icon').setDisplaySize(28, 28).setOrigin(0, 0.5).setDepth(DEPTH.HUD);
     this.add
-      .text(40, 16, `침입 진행 중 — ${this.sceneData.characterName}`, { fontSize: '18px', color: '#ffffff', backgroundColor: '#00000099', padding: { x: 6, y: 4 } })
+      .text(54, 20, `${role === 'owner' ? '방어자' : '침입자'} · ${this.sceneData.characterName}`, { fontSize: '20px', color: '#ffffff', fontStyle: 'bold', backgroundColor: '#000000cc', padding: { x: 10, y: 6 } })
       .setOrigin(0, 0.5)
       .setDepth(DEPTH.HUD);
     this.add
       .text(
         20,
-        46,
+        58,
         role === 'owner'
-          ? '방어 시간(1분) 안에 도둑에게 접근해 SPACE로 3회 타격하면 방어 성공'
-          : '방어 시간(1분)이 끝난 뒤 아래쪽 출입문에서 2.5초 버티면 성공!',
-        { fontSize: '13px', color: '#8be9fd', backgroundColor: '#00000099', padding: { x: 6, y: 4 } },
+          ? '목표  도둑에게 접근해 3회 타격'
+          : '목표  방어 종료 후 출입문에서 2.5초 버티기',
+        { fontSize: '18px', color: '#8be9fd', fontStyle: 'bold', backgroundColor: '#000000cc', padding: { x: 10, y: 7 } },
       )
       .setDepth(DEPTH.HUD);
     // 이미지 3단계 hit-counter-panel — 원형 pip 대신 실제 패널(내장 3소켓)을 채워서 표시
     // 규칙8: 하트 UI로 대체하지 않음, 3소켓 로컬 오프셋은 패널 이미지 실측값(중심 기준 -30/+23/+75, y=0)
-    const hitPanelPos = { x: 150, y: 80 };
+    const hitPanelPos = { x: 150, y: 126 };
     this.add.image(hitPanelPos.x, hitPanelPos.y, 'ui-hit-counter-panel').setDisplaySize(260, 70).setDepth(DEPTH.HUD - 1);
     this.hitSockets = [-30, 23, 75].map((dx) =>
       this.add.circle(hitPanelPos.x + dx, hitPanelPos.y, 15, 0xff5555, 0).setDepth(DEPTH.HUD),
     );
     this.hitText = this.add
-      .text(hitPanelPos.x, hitPanelPos.y + 42, `0 / ${BAT_HITS_REQUIRED} 명중`, { fontSize: '12px', color: '#ffaaaa', backgroundColor: '#00000099', padding: { x: 6, y: 2 } })
+      .text(hitPanelPos.x, hitPanelPos.y + 42, `0 / ${BAT_HITS_REQUIRED} 명중`, { fontSize: '16px', color: '#ffaaaa', fontStyle: 'bold', backgroundColor: '#000000bb', padding: { x: 8, y: 3 } })
       .setOrigin(0.5)
       .setDepth(DEPTH.HUD);
 
     // 출입문 이미지·하이라이트 원은 create()에서 이미 배치함(모든 모드 공용) — 여기선 라벨만 추가
     this.add
-      .text(EXIT_DOOR.x, EXIT_DOOR.y - EXIT_DOOR.radius - 16, '출입문(탈출)', { fontSize: '12px', color: '#50fa7b' })
+      .text(EXIT_DOOR.x, EXIT_DOOR.y - EXIT_DOOR.radius - 16, '탈출 지점', { fontSize: '18px', color: '#50fa7b', fontStyle: 'bold', backgroundColor: '#000000bb', padding: { x: 8, y: 4 } })
       .setOrigin(0.5)
       .setDepth(DEPTH.WORLD_LABEL);
     // S4-B04 탈출 방향 화살표 — 침입자에게만 출입문 위에서 반복 재생
@@ -765,7 +757,7 @@ export class BaseScene extends Phaser.Scene {
         .setDepth(DEPTH.WORLD_LABEL + 1);
       this.carriedKirbyLabel = this.add
         .text(carrier.x, carrier.y - 108, '훔친 커비', {
-          fontSize: '13px',
+          fontSize: '16px',
           color: '#ffffff',
           fontStyle: 'bold',
           backgroundColor: '#c62828dd',

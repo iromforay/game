@@ -36,6 +36,7 @@ import { computePathPoints, computePathTiles, isBuildable } from '../config/map'
 import type { PixelPoint } from '../config/map';
 import { markRoundCleared } from '../roundProgress';
 import { gameEvents, Events } from '../events';
+import vanguardUrl from '../assets/heroes/vanguard.png';
 
 const TOWER_ORDER: TowerType[] = ['basic', 'splash', 'slow', 'storm'];
 
@@ -107,6 +108,7 @@ export class GameScene extends Phaser.Scene {
     this.load.image('enemy-swarm', enemyGruntUrl);
     this.load.image('enemy-tank', enemyTankUrl);
     this.load.image('enemy-speed', enemyFastUrl);
+    this.load.image('enemy-vanguard', vanguardUrl);
     if (this.stage.background) {
       this.load.image(`round-bg-${this.stage.id}`, this.stage.background);
     }

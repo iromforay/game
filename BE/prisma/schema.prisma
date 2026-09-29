@@ -289,6 +289,10 @@ model kirby_character {
   name           String           @db.VarChar(50)
   grade_id       Int              @db.UnsignedTinyInt
   weight         Int              @db.UnsignedInt
+  // 스폿 설정(2026-09-29, prisma/sql/2026-09-29_kirby_spawn.sql) — 꺼져 있거나 기간 밖이면 좌대 추첨에서 제외(보유분은 그대로)
+  spawn_enabled   Boolean   @default(true)
+  spawn_starts_at DateTime? @db.DateTime(0)
+  spawn_ends_at   DateTime? @db.DateTime(0)
   image_key      String?          @db.VarChar(100)
   kirby_grade    kirby_grade      @relation(fields: [grade_id], references: [id], onUpdate: Restrict, map: "kirby_character_ibfk_1")
   kirby_instance kirby_instance[]
@@ -351,8 +355,30 @@ model account {
   login_id      String   @unique(map: "uq_account_login_id") @db.VarChar(20)
   password_hash String   @db.VarChar(255)
   nickname      String   @db.VarChar(30)
+  // 관리자 백오피스(2026-09-29, prisma/sql/2026-09-29_admin.sql) — 'admin'만 /admin/* 사용 가능
+  role          account_role @default(user)
   created_at    DateTime @default(now()) @db.Timestamp(0)
   updated_at    DateTime @default(now()) @db.Timestamp(0)
+}
+
+enum account_role {
+  user
+  admin
+}
+
+// 관리자 조작 기록(2026-09-29) — 백오피스에서 바꾼 모든 값의 전후
+model admin_log {
+  id               BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  admin_account_id BigInt   @db.UnsignedBigInt
+  action           String   @db.VarChar(40)
+  target_type      String   @db.VarChar(20)
+  target_id        String   @db.VarChar(40)
+  before_json      String?  @db.Text
+  after_json       String?  @db.Text
+  created_at       DateTime @default(now()) @db.Timestamp(0)
+
+  @@index([created_at], map: "idx_admin_log_created")
+  @@index([target_type, target_id], map: "idx_admin_log_target")
 }
 
 // 허브 계정 ↔ 게임별 플레이어 브리지(계정당 게임별 1개, 게임 플레이어당 계정 1개)

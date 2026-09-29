@@ -76,7 +76,13 @@ export class AccountService {
   async me(token: string | undefined) {
     const account = await this.findAccountByToken(token);
     if (!account) throw new UnauthorizedException({ message: '로그인이 필요합니다', code: 'NOT_LOGGED_IN' });
-    return { loginId: account.login_id, nickname: account.nickname };
+    return { loginId: account.login_id, nickname: account.nickname, isAdmin: account.role === 'admin' };
+  }
+
+  // 관리자 백오피스(2026-09-29) — 토큰의 계정이 role='admin'이면 계정 id, 아니면 null
+  async resolveAdminId(token: string | undefined): Promise<bigint | null> {
+    const account = await this.findAccountByToken(token);
+    return account?.role === 'admin' ? account.id : null;
   }
 
   // 게임 서버(커비/터비)의 identify에서 사용 — 토큰이 없거나 무효면 null(게스트로 처리)

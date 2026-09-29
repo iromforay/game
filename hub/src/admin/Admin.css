@@ -1,0 +1,306 @@
+/* 관리자 백오피스(2026-09-29) — 랭킹 화면(Scoreboard.css)과 같은 톤 */
+.admin {
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 16px;
+  box-sizing: border-box;
+  text-align: left;
+}
+
+.admin-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.admin-header h1 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.admin-back,
+.admin-tabs button,
+.admin-search button,
+.admin-form button,
+.admin-form select,
+.admin-form input,
+.admin-search input {
+  padding: 7px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border, #ddd);
+  background: transparent;
+  color: var(--text-h, #111);
+  font-size: 14px;
+}
+
+.admin-back,
+.admin-tabs button {
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.admin-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 16px 0 12px;
+}
+
+.admin-tabs button.active {
+  border-color: var(--accent, #aa3bff);
+  background: var(--accent-bg, #aa3bff1a);
+  color: var(--accent, #aa3bff);
+  font-weight: 600;
+}
+
+.admin-search,
+.admin-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.admin-search input {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.admin-search button,
+.admin-form button {
+  cursor: pointer;
+  border-color: var(--accent, #aa3bff);
+  color: var(--accent, #aa3bff);
+  font-weight: 600;
+}
+
+.admin-form {
+  padding: 10px 12px;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 10px;
+}
+
+.admin-form h2 {
+  flex-basis: 100%;
+  margin: 0 0 2px;
+  font-size: 15px;
+}
+
+.admin-form select {
+  max-width: 100%;
+}
+
+.admin-form input {
+  width: 160px;
+  min-width: 0;
+}
+
+.admin-form input.admin-count {
+  width: 70px;
+}
+
+.admin-table-wrap {
+  overflow-x: auto;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.admin-table th,
+.admin-table td {
+  padding: 7px 6px;
+  border-bottom: 1px solid var(--border, #ddd);
+  vertical-align: top;
+}
+
+.admin-table th {
+  font-weight: 600;
+  opacity: 0.7;
+  white-space: nowrap;
+}
+
+.admin-table .num {
+  text-align: right;
+}
+
+.admin-table .nowrap {
+  white-space: nowrap;
+}
+
+.admin-table tr.clickable {
+  cursor: pointer;
+}
+
+.admin-table tr.clickable:hover td {
+  background: var(--accent-bg, #aa3bff1a);
+}
+
+.admin-json {
+  font-size: 12px;
+  opacity: 0.85;
+  word-break: break-all;
+}
+
+.admin-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
+  margin: 12px 0 4px;
+}
+
+.admin-summary div {
+  padding: 8px 10px;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 10px;
+}
+
+.admin-summary dt {
+  font-size: 12px;
+  opacity: 0.65;
+}
+
+.admin-summary dd {
+  margin: 2px 0 0;
+  font-size: 15px;
+}
+
+.admin-subtitle {
+  margin: 16px 0 6px;
+  font-size: 15px;
+}
+
+.admin-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent, #aa3bff);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.admin-danger {
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid #e05252;
+  background: transparent;
+  color: #e05252;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.admin-danger:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.admin-muted {
+  margin: 6px 0;
+  opacity: 0.7;
+  font-size: 13px;
+}
+
+.admin-error {
+  margin: 6px 0;
+  color: #e05252;
+  font-size: 13px;
+}
+
+.admin-notice {
+  margin: 6px 0;
+  color: #2e9d5b;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.admin-warn {
+  color: #d98a00;
+  font-weight: 600;
+}
+
+/* 스폿 확률·이벤트 탭 */
+.admin-grade-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 4px 0 10px;
+  font-size: 13px;
+}
+
+.admin-spawn-table input[type='number'],
+.admin-spawn-table input[type='datetime-local'] {
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--border, #ddd);
+  background: transparent;
+  color: var(--text-h, #111);
+  font-size: 13px;
+}
+
+.admin-spawn-table input.admin-weight {
+  width: 80px;
+  text-align: right;
+}
+
+.admin-spawn-table td {
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.admin-spawn-table tr.dirty td {
+  background: rgba(255, 179, 0, 0.12);
+}
+
+.admin-status {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.admin-status-active {
+  color: #2e9d5b;
+}
+
+.admin-status-off,
+.admin-status-ended {
+  opacity: 0.55;
+}
+
+.admin-status-scheduled {
+  color: #d98a00;
+}
+
+.admin-savebar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 0;
+  background: var(--bg, #fff);
+}
+
+.admin-savebar button {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border, #ddd);
+  background: transparent;
+  color: var(--text-h, #111);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.admin-savebar button.primary {
+  border-color: var(--accent, #aa3bff);
+  background: var(--accent, #aa3bff);
+  color: #fff;
+  font-weight: 600;
+}
+
+.admin-savebar button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

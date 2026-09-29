@@ -19,6 +19,7 @@ const GAME_DEVICE_KEYS = [
 export interface AccountSession {
   loginId: string;
   nickname: string;
+  isAdmin?: boolean; // 관리자 백오피스(2026-09-29) — 버튼 표시용, 실제 권한은 서버가 /admin/*에서 확인
 }
 
 function readStorage(key: string) {
@@ -29,7 +30,7 @@ function readStorage(key: string) {
   }
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = readStorage(AUTH_TOKEN_KEY);
   const res = await fetch(`${BASE_URL}${path}`, {
     ...init,

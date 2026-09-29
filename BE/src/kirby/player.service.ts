@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from './prisma.service';
 import type { BaseAccessState, LockState } from './baseAccess';
 import { AccountService } from '../account/account.service';
+import { isSpawnActive } from './spawnRules';
 
 // 계정 전용으로 새로 만든 커비 플레이어의 device_uuid 값(account:<accountId>) — 게스트 device_uuid로는 쓸 수 없음
 const ACCOUNT_DEVICE_PREFIX = 'account:';
@@ -229,8 +230,9 @@ export class PlayerService {
     const current = [...mine.values()].find((o) => o.slot === slot && !o.used && now < o.expiresAt);
     if (current) return this.toOfferDto(current);
 
-    const characters = await this.prisma.kirby_character.findMany({ include: { kirby_grade: true } });
-    if (characters.length === 0) throw new BadRequestException('no kirby characters seeded');
+    // 관리자 스폿 설정(2026-09-29): 꺼졌거나 등장 기간 밖인 캐릭터는 제외 — 매번 DB를 읽으므로 설정 변경이 바로 반영됨
+    const characters = (await this.prisma.kirby_character.findMany({ include: { kirby_grade: true } })).filter((c) => isSpawnActive(c, now));
+    if (characters.length === 0) throw new BadRequestException('no kirby characters available');
     const totalWeight = characters.reduce((sum, c) => sum + c.weight, 0);
     let roll = Math.random() * totalWeight;
     let picked = characters[characters.length - 1];
