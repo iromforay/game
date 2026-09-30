@@ -9,7 +9,7 @@ import { SessionService } from '../src/turby/session.service';
 import { RoomsService } from '../src/turby/rooms/rooms.service';
 import { BattleService } from '../src/turby/battle/battle.service';
 import { BattleError } from '../src/turby/battle/battle-types';
-import { applyAction, createBattle, submitParty } from '../src/turby/battle/battle-engine';
+import { applyAction, createBattle, submitParty, toSnapshot } from '../src/turby/battle/battle-engine';
 import type { BattleDefinition, BattleRules, BattleState } from '../src/turby/battle/battle-types';
 
 const P = 1n;
@@ -220,4 +220,18 @@ test('8. 두 임시 전투 정의(데이터 파일)가 엔진 계약으로 끝�
   const k = runDefinition(knot);
   assert.deepEqual([k.phase, k.outcome], ['resolved', 'win'], '거대 매듭 승리(부위 순서대로 → 중심부)');
   assert.ok(['outer_strand_1', 'outer_strand_2', 'outer_strand_3'].every((id) => k.units.find((u) => u.unitId === id)!.stunned));
+});
+
+test('9. 스냅샷에 스토리 전투 표식(포획·야생 보상 없음)과 기본값을 채운 목표가 실린다 — 일반 야생 전투에는 없음', async () => {
+  const s = setup();
+  await enterForest(s);
+  const snap = await s.battles.startStory('1', 'forest_stitchling_ambush');
+  assert.deepEqual(snap.story, { encounterKey: 'forest_stitchling_ambush', captureEnabled: false, wildRewards: false });
+  assert.deepEqual(snap.objectives, { win: [{ kind: 'defeat_all' }], lose: [{ kind: 'party_down' }, { kind: 'protect', unitIds: ['bopuli'] }] });
+
+  const knot = toSnapshot(createBattle({ battleId: 'k', roomCode: 'R', stageCode: 'forest', spawnIndex: -1, encounterPlayerId: 'a', wild: { code: 'x', name: 'x', stats: { attack: 0, defense: 0, actionPower: 0, maxHp: 1 } }, rules: RULES, participants: [{ playerId: 'a', nickname: 'a', slot: 1, connected: true }], definition: new StoryContentService().battle('forest_giant_knot')!, story: { encounterKey: 'forest_giant_knot' } }));
+  assert.deepEqual(knot.objectives!.win, [{ kind: 'defeat_units', unitIds: ['giant_knot'] }]);
+
+  const wild = toSnapshot(createBattle({ battleId: 'w', roomCode: 'R', stageCode: 'forest', spawnIndex: 0, encounterPlayerId: 'a', wild: { code: 'nubi', name: '누비', stats: { attack: 1, defense: 1, actionPower: 1, maxHp: 1 } }, rules: RULES, participants: [{ playerId: 'a', nickname: 'a', slot: 1, connected: true }] }));
+  assert.equal('story' in wild || 'objectives' in wild, false, '일반 야생 전투 스냅샷은 기존 형태 그대로');
 });

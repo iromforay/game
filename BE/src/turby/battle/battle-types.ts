@@ -148,6 +148,7 @@ export interface BattleState {
   pendingParties: Record<string, PartyEntry[]>; // 파티 선택 중 제출된 목록(playerId → 파티). 전투 시작 후 비운다
   definition?: BattleDefinition | null; // 있으면 야생 1마리 대신 정의 데이터로 적·NPC·목표·지형을 만든다
   blocked?: string[]; // 현재 통행 불가 칸 "col,row"
+  story?: { encounterKey: string } | null; // 스토리 전투 표식
 }
 
 export type BattleEvent =
@@ -220,4 +221,6 @@ export interface BattleSnapshotDto {
   participants: { playerId: string; nickname: string; slot: number; connected: boolean; active: boolean; partySubmitted: boolean; eligibleForReward: boolean; invitePending: boolean; leftReason: string | null }[];
   units: BattleUnitDto[];
   blocked?: string[];
+  objectives?: { win: BattleObjective[]; lose: BattleObjective[] }; // 정의 전투만: 기본값을 채운 목표(프런트 표시용)
+  story?: { encounterKey: string; captureEnabled: false; wildRewards: false }; // 스토리 전투 표식 — 포획·일반 야생 보상 없음
 }

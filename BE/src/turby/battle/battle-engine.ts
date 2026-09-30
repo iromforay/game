@@ -24,6 +24,7 @@ export interface CreateBattleInput {
   encounterPlayerId: string;
   participants: { playerId: string; nickname: string; slot: number; connected: boolean; invited?: boolean }[]; // invited=초대받은 사람(응답 전까지 pending)
   definition?: BattleDefinition | null; // M4-A: 있으면 야생 1마리 대신 정의 데이터로 적·NPC·목표·지형을 만든다
+  story?: { encounterKey: string } | null; // M4-B: 스토리 전투 표식(포획·야생 보상 없음)
 }
 
 export function createBattle(input: CreateBattleInput): BattleState {
@@ -51,6 +52,7 @@ export function createBattle(input: CreateBattleInput): BattleState {
     expiresAt: null,
     pendingParties: {},
     definition: input.definition ?? null,
+    story: input.story ?? null,
   };
 }
 
@@ -454,10 +456,17 @@ function objectiveMet(state: BattleState, o: BattleObjective): boolean {
   }
 }
 
+// 기본 조건을 채운 승리·패배 목표 — 판정과 스냅샷(프런트 목표 표시)이 같은 목록을 쓴다
+function objectivesOf(state: BattleState): { win: BattleObjective[]; lose: BattleObjective[] } {
+  return {
+    win: state.definition?.objectives?.win ?? [{ kind: 'defeat_all' }],
+    lose: [{ kind: 'party_down' }, ...(state.definition?.objectives?.lose ?? [])],
+  };
+}
+
 function evaluateOutcome(state: BattleState, ctx: Ctx) {
   if (state.phase === 'resolved') return;
-  const lose: BattleObjective[] = [{ kind: 'party_down' }, ...(state.definition?.objectives?.lose ?? [])];
-  const win: BattleObjective[] = state.definition?.objectives?.win ?? [{ kind: 'defeat_all' }];
+  const { win, lose } = objectivesOf(state);
   if (lose.some((o) => objectiveMet(state, o))) resolve(state, ctx, 'lose');
   else if (win.every((o) => objectiveMet(state, o))) resolve(state, ctx, 'win');
 }
@@ -706,6 +715,7 @@ export function toSnapshot(state: BattleState): BattleSnapshotDto {
           }
         : {}),
     })),
-    ...(state.definition ? { blocked: [...(state.blocked ?? [])] } : {}),
+    ...(state.definition ? { blocked: [...(state.blocked ?? [])], objectives: objectivesOf(state) } : {}),
+    ...(state.story ? { story: { encounterKey: state.story.encounterKey, captureEnabled: false as const, wildRewards: false as const } } : {}),
   };
 }

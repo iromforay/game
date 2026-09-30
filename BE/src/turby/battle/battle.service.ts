@@ -177,6 +177,7 @@ export class BattleService implements OnModuleInit {
       rules: this.rules(),
       participants: [{ playerId, nickname: member.nickname, slot: 1, connected: member.connected }],
       definition,
+      story: { encounterKey: key },
     });
     const record: BattleRecord = { state, responses: new Map(), ended: null, settled: false, queue: Promise.resolve(), cleanup: null, timer: null, timerKey: null, story: { encounterKey: key, onWinEvents: available.def.onWinEvents, storyNubiId: available.storyNubiId.toString() } };
     this.battles.set(state.battleId, record);
