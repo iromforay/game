@@ -8,6 +8,7 @@ export const GAME_RESULT_EVENT = 'bomul:game-result';
 export type GameResultDetail = { runId?: string; final?: boolean } & (
   | { game: 'tower_defense'; stats: { won: boolean; wavesCleared: number; kills: number; lives: number; gold: number } }
   | { game: 'offense_tower'; stats: { roundId: number; cleared: boolean; breakthroughs: number; clearSeconds: number; unitsLost: number } }
+  | { game: 'number_hero_tower'; stats: { stageId: number; currentScore: number; floorsCleared: number; cleared: boolean } }
   | { game: 'marbles'; stats: { result: 'win' | 'tie' | 'none' } }
 );
 

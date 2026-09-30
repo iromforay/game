@@ -20,7 +20,7 @@ export const AD_GAMES: AdGameMeta[] = [
     id: 'number-hero-tower',
     number: 2,
     title: '숫자 용사 탑',
-    description: '작은 숫자부터 쓰러뜨려 성장하고 최상층 드래곤에 도전하세요.',
-    status: 'planning',
+    description: '공격 숫자와 경로 폭을 판단하고 숨은 보상을 흡수해 드래곤에 도전하세요.',
+    status: 'available',
   },
 ];

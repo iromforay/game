@@ -8,6 +8,7 @@ import './Scoreboard.css';
 const TABS: { game: RankingGame; title: string; scoreLabel: string; note: string }[] = [
   { game: 'tower_defense', title: '타워 디펜스', scoreLabel: '최고 점수', note: '웨이브·처치·라이프·골드로 계산한 한 판 최고 점수' },
   { game: 'offense_tower', title: '오펜스 타워', scoreLabel: '최고 점수', note: '라운드별 · 빨리, 유닛을 덜 잃고 클리어할수록 높음' },
+  { game: 'number_hero_tower', title: '숫자 용사 탑', scoreLabel: '최고 합산', note: '각 선택의 보상 합산 직후 자동 저장되는 최고 숫자' },
   { game: 'marbles', title: '전략 알까기', scoreLabel: '누적 승점', note: '온라인 대전 · 단독 1위 3점, 공동 1위 1점' },
   { game: 'kirby', title: '커비 훔치기', scoreLabel: '총 자산', note: '보유 골드 + 보유 커비 판매가 합(실시간)' },
 ];

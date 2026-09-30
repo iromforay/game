@@ -66,7 +66,7 @@ function App() {
   }
 
   if (screen === 'ad-game' && selectedAdGame) {
-    return <AdGameScreen gameId={selectedAdGame} onExit={() => setScreen('ad-game-catalog')} />;
+    return <AdGameScreen gameId={selectedAdGame} onExit={() => setScreen('ad-game-catalog')} onOpenRanking={openRanking} />;
   }
 
   if (screen === 'kirby-guide') {
