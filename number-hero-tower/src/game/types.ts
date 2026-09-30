@@ -1,5 +1,5 @@
 export type RouteWidth = 'wide' | 'tight' | 'general';
-export type RunPhase = 'choosing' | 'battling' | 'revealing' | 'dragon' | 'cleared' | 'failed';
+export type RunPhase = 'traveling' | 'choosing' | 'battling' | 'revealing' | 'dragon' | 'cleared' | 'failed';
 
 export interface EnemyChoice {
   id: string;
