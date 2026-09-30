@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'fs';
 import { join, resolve } from 'path';
 import { resumeOf } from '../src/turby/story/story-rules';
-import type { Checkpoint } from '../src/turby/story/story-data';
+import { EVENT_BY_ID, type Checkpoint } from '../src/turby/story/story-data';
 
 const ROOT = resolve(__dirname, '../..');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -12,7 +12,7 @@ const DOCS = (require(join(ROOT, 'BE/story-data/save-a-turby/tools/docs-root.js'
 const schema = JSON.parse(readFileSync(join(DOCS, 'docs/dev/save-a-turby/m0/dialogue.schema.json'), 'utf8'));
 const load = (code: string) => JSON.parse(readFileSync(join(ROOT, `BE/story-data/save-a-turby/dialogue/${code}.json`), 'utf8'));
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { EXCLUDED } = require(join(ROOT, 'BE/story-data/save-a-turby/tools/build-ch01.js')) as { EXCLUDED: Record<number, string> };
+const { EXCLUDED, PARTIAL, sentences } = require(join(ROOT, 'BE/story-data/save-a-turby/tools/build-ch01.js')) as { EXCLUDED: Record<number, string>; PARTIAL: Record<number, { keep: number[] }>; sentences: (s: string) => string[] };
 
 type Entry = { kind: string; dialogueId: string; [k: string]: unknown };
 type Segment = { segmentId: string; resumeFrom: string; replayOnResume: boolean; completesWith: string | null; entries: Entry[] };
@@ -45,7 +45,7 @@ function checkSchema(file: { segments: Segment[] } & Record<string, unknown>) {
 }
 
 // MD의 대사 영역을 순서대로 읽어 JSON 항목(대사·지문·제목)과 한 줄씩 대조. 제외 목록 외의 줄이 빠지거나 바뀌면 실패
-function compareWithMd(file: { segments: Segment[] }, mdPath: string, fromHeading: string, excluded: Record<number, string>) {
+function compareWithMd(file: { segments: Segment[] }, mdPath: string, fromHeading: string, excluded: Record<number, string>, partial: Record<number, { keep: number[] }> = {}) {
   const raw = readFileSync(join(DOCS, mdPath), 'utf8').split(/\r?\n/);
   const start = raw.findIndex((l) => l.trim() === fromHeading);
   assert.ok(start >= 0, `시작 제목 ${fromHeading}`);
@@ -53,6 +53,12 @@ function compareWithMd(file: { segments: Segment[] }, mdPath: string, fromHeadin
   for (let i = start + 1; i < raw.length; i++) {
     const s = raw[i].trim();
     if (!s || s.startsWith('#') || excluded[i + 1]) continue;
+    if (partial[i + 1]) {
+      // 설계 문장과 서술이 섞인 줄: 남기기로 한 문장만 원문 그대로 대조
+      const parts = sentences(s);
+      for (const k of partial[i + 1].keep) md.push({ line: i + 1, kind: 'text', text: parts[k] });
+      continue;
+    }
     const next = raw[i + 1]?.trim();
     if (next && next.startsWith('“') && !s.startsWith('“')) {
       md.push({ line: i + 1, kind: 'line', label: s, text: next.replace(/^“/, '').replace(/”$/, '') });
@@ -77,7 +83,7 @@ test('1장 대화: 스키마 규칙 통과', () => {
 });
 
 test('1장 대화: MD 대본과 순서·화자·문구가 항목별로 일치(연출 지시문 제외 목록만 빠짐)', () => {
-  const matched = compareWithMd(load('ch01'), 'docs/scene/1장.md', '## 첫 번째 길', EXCLUDED);
+  const matched = compareWithMd(load('ch01'), 'docs/scene/1장.md', '## 첫 번째 길', EXCLUDED, PARTIAL);
   assert.ok(matched > 60);
   for (const reason of Object.values(EXCLUDED)) assert.ok(reason.length > 0);
 });
@@ -98,11 +104,13 @@ test('1장 대화: 서버 재접속 구간 ID가 모두 파일에 있고, 전투
   const marks = flat.filter((e) => e.kind === 'storyBattle' || e.kind === 'storyEvent').map((e) => `${e.seg}:${e.kind === 'storyBattle' ? e.encounterKey : e.eventId}`);
   assert.deepEqual(marks, [
     'ch01.first_path:forest_stitchling_ambush',
-    'ch01.compass_craft:forest_compass_granted',
     'ch01.hidden_path:forest_giant_knot',
     'ch01.primordial_knot:forest_primordial_knot_seen',
   ]);
   assert.deepEqual(file.segments.map((s) => s.completesWith), [null, 'forest_dansuring_clue_learned', null, null, 'forest_first_knot_awakened', null, null]);
+  // 대화가 클라이언트 경로로 완료시키는 이벤트에는 서버 전용 이벤트가 없어야 한다(시작·나침판·전투 승리는 서버 트리거/전투만)
+  const clientEvents = [...flat.filter((e) => e.kind === 'storyEvent').map((e) => e.eventId as string), ...file.segments.map((s) => s.completesWith).filter((x): x is string => !!x)];
+  for (const id of clientEvents) assert.equal(EVENT_BY_ID.get(id)?.serverOnly ?? false, false, `${id}는 서버 전용 이벤트`);
 });
 
 test('오프닝 대화: 같은 검증기로 스키마·MD 대조 통과(회귀)', () => {

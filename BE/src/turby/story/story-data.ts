@@ -63,6 +63,7 @@ export type Evidence =
   | { kind: 'none' }
   | { kind: 'region'; stageCode: string; regionId: string } // 서버가 아는 플레이어 좌표가 구역 안
   | { kind: 'point'; stageCode: string; pointId: string } // 서버가 아는 플레이어 좌표가 지점 반경 안
+  | { kind: 'stage'; stageCode: string } // 임시(Codex v2 §1.1): 좌표 확정 전 — 그 지역 탐험 세션(맵 입장) 안에 있음. 지도 개편 후 region/point로 교체
   | { kind: 'name' }; // 이름 API로 저장했거나, 기존 계정이 이미 기본값이 아닌 닉네임을 가짐
 
 export interface StoryEventDef {
@@ -102,7 +103,8 @@ export const STORY_EVENTS: StoryEventDef[] = [
   ev({ id: 'story_nubi_granted', chapter: 0, allowedAt: ['OPENING_NAME_SAVED'], requires: ['opening_name_saved'], evidence: { kind: 'none' }, grantStoryNubi: true, to: 'OPENING_COMPLETE' }),
 
   // ---- 1장 소파 속 먼지숲 ----
-  ev({ id: 'forest_first_path_started', chapter: 1, allowedAt: ['OPENING_COMPLETE'], requires: ['story_nubi_granted'], evidence: { kind: 'region', stageCode: 'forest', regionId: 'forest_first_path_start' }, to: 'CH01_STARTED' }),
+  // 숲 첫 정상 진입 트리거(forest_entry)만 기록한다(서버 전용 — 클라이언트가 장 시작을 직접 요청할 수 없음)
+  ev({ id: 'forest_first_path_started', chapter: 1, allowedAt: ['OPENING_COMPLETE'], requires: ['story_nubi_granted'], serverOnly: true, evidence: { kind: 'stage', stageCode: 'forest' }, to: 'CH01_STARTED' }),
   ev({ id: 'forest_stitchling_battle_won', chapter: 1, allowedAt: ['CH01_STARTED'], requires: ['forest_first_path_started'], serverOnly: true, evidence: { kind: 'none' }, alsoComplete: ['forest_bopul_rescued'] }),
   ev({ id: 'forest_bopul_rescued', chapter: 1, allowedAt: ['CH01_STARTED'], requires: ['forest_first_path_started'], serverOnly: true, evidence: { kind: 'none' } }),
   ev({ id: 'forest_dansuring_clue_learned', chapter: 1, allowedAt: ['CH01_STARTED'], requires: ['forest_bopul_rescued'], evidence: { kind: 'none' }, to: 'CH01_BOPUL_RESCUED' }),
@@ -111,8 +113,9 @@ export const STORY_EVENTS: StoryEventDef[] = [
     chapter: 1,
     allowedAt: ['CH01_BOPUL_RESCUED'],
     requires: ['forest_dansuring_clue_learned'],
-    evidence: { kind: 'point', stageCode: 'forest', pointId: 'npc_bopuli' },
-    requireObjective: { key: 'forest_glowing_dust', count: 10 },
+    // 보풀이 전달 트리거(npc_bopuli)만 기록한다(서버 전용). 조건은 서버 인벤토리 실가루 수량(Codex v2 §2.3) — 소비·지급·체크포인트가 한 트랜잭션
+    serverOnly: true,
+    evidence: { kind: 'stage', stageCode: 'forest' },
     consume: [{ itemCode: 'glowing_yarn_dust', quantity: 10 }],
     grant: [{ itemCode: 'yarn_tremor_compass', quantity: 1 }],
     to: 'CH01_COMPASS_ACQUIRED',
@@ -163,6 +166,46 @@ export const RELIC_EQUIP_EVENT = new Map(STORY_EVENTS.filter((e) => e.equipRelic
 // 이야기 탭(가방 40칸에 포함하지 않음)
 export const STORY_CATEGORIES = new Set(['mission', 'relic', 'memento']);
 export const STORY_SLOT_PREFIX = 'story_';
+
+// ---- 스토리 트리거(M4-C) ----
+// 트리거 판정(어디서·언제)과 대화 실행을 분리한다: 서버가 트리거를 판정해 이벤트를 기록하고 재생할 구간을 알려 준다.
+// 클라이언트는 서버가 알려 준 구간만 재생한다(임의 구간 ID로 진행을 건너뛸 수 없음 — 진행은 이벤트 규칙으로만 바뀐다).
+// 좌표가 필요한 트리거(point)는 지역 스토리 데이터가 없으면 서버가 거부하므로 일반 플레이에서 거짓 진행되지 않는다.
+export interface StoryTriggerDef {
+  id: string;
+  stageCode: string;
+  evidence: Evidence;
+  event?: string; // 트리거가 서버 경로로 기록하는 이벤트
+  optionalEvent?: boolean; // 이벤트를 기록할 수 없는 시점이어도 거부하지 않고 재생 구간만 판단(지역 진입)
+  need?: ItemGrant; // 이벤트 전에 확인할 보유 수량(부족하면 기록하지 않고 부족 수량을 돌려줌)
+  activeAt?: Checkpoint[]; // 이벤트 없는 트리거의 허용 체크포인트
+  unless?: string[]; // 이미 완료됐으면 트리거가 열리지 않는 이벤트
+  play: 'resume' | string; // resume = 현재 진행의 복귀 구간(이 지역 장의 구간만), 그 밖에는 새로 기록했을 때만 재생할 구간
+}
+
+export const STORY_TRIGGERS: StoryTriggerDef[] = [
+  { id: 'forest_entry', stageCode: 'forest', evidence: { kind: 'stage', stageCode: 'forest' }, event: 'forest_first_path_started', optionalEvent: true, play: 'resume' },
+  { id: 'npc_bopuli', stageCode: 'forest', evidence: { kind: 'stage', stageCode: 'forest' }, event: 'forest_compass_granted', need: { itemCode: 'glowing_yarn_dust', quantity: 10 }, play: 'ch01.compass_craft' },
+  { id: 'forest_hidden_path', stageCode: 'forest', evidence: { kind: 'point', stageCode: 'forest', pointId: 'hidden_path' }, activeAt: ['CH01_COMPASS_ACQUIRED'], unless: ['forest_giant_knot_defeated'], play: 'ch01.hidden_path' },
+  { id: 'forest_dansuring', stageCode: 'forest', evidence: { kind: 'point', stageCode: 'forest', pointId: 'dansuring' }, event: 'forest_dansuring_found', play: 'ch01.primordial_knot' },
+];
+export const TRIGGER_BY_ID = new Map(STORY_TRIGGERS.map((t) => [t.id, t]));
+
+// 한 번에 이어서 재생하는 구간의 끝. 그다음 구간은 별도 트리거(보풀이 전달·지도 지점·유물 장착)가 있어야 열린다
+export const SEGMENT_CHAIN_END: Record<string, string> = {
+  'ch01.first_path': 'ch01.bopul_clue',
+  'ch01.bopul_clue': 'ch01.bopul_clue',
+  'ch01.compass_craft': 'ch01.compass_craft',
+  'ch01.hidden_path': 'ch01.first_knot_awaken',
+  'ch01.first_knot_awaken': 'ch01.first_knot_awaken',
+  'ch01.first_knot_equipped': 'ch01.first_knot_equipped',
+  'ch01.primordial_knot': 'ch01.primordial_knot',
+};
+
+// 이벤트를 새로 기록했을 때 이어서 재생할 구간(유물 장착 → 장착 장면)
+export const SEGMENT_AFTER_EVENT: Record<string, string> = {
+  forest_first_knot_equipped: 'ch01.first_knot_equipped',
+};
 
 // ---- 스토리 전투 조우(M4-B) ----
 // 탐험 세션 안에서 battle:story:start { encounterKey }로 시작한다. 승리 이벤트는 서버 전투 확정만 기록한다(REST 불가).

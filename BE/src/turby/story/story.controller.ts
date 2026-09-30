@@ -28,6 +28,13 @@ export class StoryController {
     return this.story.collectObject(await this.session.require(token), objectiveKey, objectId);
   }
 
+  // 이야기 지점 상호작용(보풀이 전달 등). 서버가 위치·진행·보유 수량을 판정하고 재생할 구간을 돌려준다
+  @Post('story/triggers/:triggerId')
+  @HttpCode(200)
+  async trigger(@Headers(SESSION_HEADER) token: string, @Param('triggerId') triggerId: string) {
+    return this.story.trigger(await this.session.require(token), triggerId);
+  }
+
   @Post('profile/name')
   @HttpCode(200)
   async name(@Headers(SESSION_HEADER) token: string, @Body('name') name: unknown) {

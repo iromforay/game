@@ -277,13 +277,22 @@
       "completesWith": null,
       "entries": [
         {
-          "kind": "storyEvent",
+          "kind": "narration",
           "dialogueId": "ch01.compass_craft.001",
-          "eventId": "forest_compass_granted"
+          "text": "보풀이는 실가루를 둥글게 모아 한 방향으로 흐르는 떨림을 만들고, 작은 바늘과 크림색 실로 테두리를 단단히 묶는다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch01.compass_craft.002",
+          "text": "빛이 가라앉자 `실의 떨림을 찾는 나침판`이 완성된다.",
+          "cameraCue": null,
+          "soundCue": null
         },
         {
           "kind": "line",
-          "dialogueId": "ch01.compass_craft.002",
+          "dialogueId": "ch01.compass_craft.003",
           "speaker": "bopuli",
           "speakerLabel": "보풀이",
           "text": "완성됐어. 이건 실의 떨림을 찾는 나침판이야. 오래된 실과 단수링이 있는 곳을 가리킬 거야.",
@@ -294,28 +303,28 @@
         },
         {
           "kind": "narration",
-          "dialogueId": "ch01.compass_craft.003",
+          "dialogueId": "ch01.compass_craft.004",
           "text": "나침판의 바늘이 빠르게 회전한다.",
           "cameraCue": null,
           "soundCue": null
         },
         {
           "kind": "narration",
-          "dialogueId": "ch01.compass_craft.004",
+          "dialogueId": "ch01.compass_craft.005",
           "text": "그러다 숲 깊은 곳이 아닌 누비를 향해 멈춘다.",
           "cameraCue": null,
           "soundCue": null
         },
         {
           "kind": "narration",
-          "dialogueId": "ch01.compass_craft.005",
+          "dialogueId": "ch01.compass_craft.006",
           "text": "잠시 뒤 바늘은 다시 움직여 숲 안쪽을 가리킨다.",
           "cameraCue": null,
           "soundCue": null
         },
         {
           "kind": "line",
-          "dialogueId": "ch01.compass_craft.006",
+          "dialogueId": "ch01.compass_craft.007",
           "speaker": "bopuli",
           "speakerLabel": "보풀이",
           "text": "어라? 방금 누비를 가리킨 것 같은데?",
@@ -326,7 +335,7 @@
         },
         {
           "kind": "line",
-          "dialogueId": "ch01.compass_craft.007",
+          "dialogueId": "ch01.compass_craft.008",
           "speaker": "nubi",
           "speakerLabel": "누비",
           "text": "고장 난 거겠지. 나는 오래된 실이 아니라, 그냥 풀린누비인걸.",

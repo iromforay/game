@@ -61,9 +61,13 @@ test('이벤트 허용: 시작 상태·선행 이벤트·목표·성장 단계',
   assert.equal(checkEvent(ev('story_nubi_granted'), snap('OPENING_NOT_STARTED'))?.code, 'STORY_EVENT_NOT_ALLOWED');
   assert.equal(checkEvent(ev('forest_first_path_started'), snap('OPENING_NAME_SAVED'))?.code, 'CHAPTER_LOCKED');
   assert.equal(checkEvent(ev('forest_dansuring_clue_learned'), snap('CH01_STARTED', ['forest_first_path_started']))?.code, 'STORY_PREREQUISITE_MISSING');
+  // 나침판 조건은 목표 진행이 아니라 서버 인벤토리 실가루 수량(Codex v2 §2.3) — 규칙은 체크포인트·선행 이벤트만, 수량은 트리거·소비가 확인
+  assert.equal(checkEvent(ev('forest_compass_granted'), snap('CH01_BOPUL_RESCUED', ['forest_dansuring_clue_learned'])), null);
+  // 목표 조건 규칙 자체는 유지(수집 목표를 조건으로 쓰는 이벤트용)
   const nine = Array.from({ length: 9 }, (_, i) => `dust_0${i + 1}`);
-  assert.equal(checkEvent(ev('forest_compass_granted'), snap('CH01_BOPUL_RESCUED', ['forest_dansuring_clue_learned'], { forest_glowing_dust: nine }))?.code, 'STORY_PREREQUISITE_MISSING');
-  assert.equal(checkEvent(ev('forest_compass_granted'), snap('CH01_BOPUL_RESCUED', ['forest_dansuring_clue_learned'], { forest_glowing_dust: [...nine, 'dust_10'] })), null);
+  const withObjective = { ...ev('forest_compass_granted'), requireObjective: { key: 'forest_glowing_dust', count: 10 } };
+  assert.equal(checkEvent(withObjective, snap('CH01_BOPUL_RESCUED', ['forest_dansuring_clue_learned'], { forest_glowing_dust: nine }))?.code, 'STORY_PREREQUISITE_MISSING');
+  assert.equal(checkEvent(withObjective, snap('CH01_BOPUL_RESCUED', ['forest_dansuring_clue_learned'], { forest_glowing_dust: [...nine, 'dust_10'] })), null);
   assert.equal(checkEvent(ev('forest_primordial_knot_seen'), snap('CH01_FIRST_KNOT_EQUIPPED', ['forest_dansuring_found'], {}, 0))?.code, 'STORY_PREREQUISITE_MISSING', '장 완료는 성장 단계 1 확인');
   assert.equal(checkEvent(ev('forest_primordial_knot_seen'), snap('CH01_FIRST_KNOT_EQUIPPED', ['forest_dansuring_found'], {}, 1)), null);
 });

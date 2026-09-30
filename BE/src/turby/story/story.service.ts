@@ -13,7 +13,11 @@ import {
   ENCOUNTER_BY_KEY,
   EVENT_BY_ID,
   OBJECTIVE_BY_KEY,
+  SEGMENT_AFTER_EVENT,
+  SEGMENT_CHAIN_END,
   STAGE_CHAPTER,
+  STORY_TRIGGERS,
+  TRIGGER_BY_ID,
   STORY_CATEGORIES,
   STORY_NUBI_CHARACTER,
   type Checkpoint,
@@ -21,6 +25,7 @@ import {
   type ItemGrant,
   type StoryEncounterDef,
   type StoryEventDef,
+  type StoryTriggerDef,
 } from './story-data';
 import {
   bagRoomFor,
@@ -64,6 +69,21 @@ export interface StoryStateDto {
   storyNubi: { turbyId: string; growthStage: number } | null;
   storyNubiMissing: boolean;
   stages: StageStatusDto[]; // 지역 입장·표시 상태(M2: story.stageAccessV2에 따라 신·구 판정)
+  // 지금 전달을 기다리는 수집 목표(서버 인벤토리 수량 기준, Codex v2 §2.3). 없으면 null
+  delivery: { triggerId: string; itemCode: string; have: number; need: number } | null;
+}
+
+// 서버가 재생하라고 알려 주는 대화 범위(segmentId부터 endAfter까지 파일 순서대로)
+export interface StoryPlayDto {
+  segmentId: string;
+  endAfter: string;
+}
+
+export interface StoryTriggerResultDto {
+  triggerId: string;
+  play: StoryPlayDto | null;
+  shortage: { itemCode: string; have: number; need: number } | null;
+  story: StoryStateDto;
 }
 
 export interface StoryEventResultDto {
@@ -72,7 +92,10 @@ export interface StoryEventResultDto {
   grants: Grant[];
   consumed: ItemGrant[];
   story: StoryStateDto;
+  play?: StoryPlayDto | null; // 새로 기록했을 때 이어서 재생할 구간(유물 장착 장면 등)
 }
+
+const playOf = (segmentId: string | null | undefined): StoryPlayDto | null => (segmentId ? { segmentId, endAfter: SEGMENT_CHAIN_END[segmentId] ?? segmentId } : null);
 
 // 스토리 진행·보상·장 개방의 서버 권위 구현(docs/dev/save-a-turby/m0/m0_design.md 3절).
 // 멱등성: (player_id, event_id)·(player_id, objective_key, object_id) unique + 체크포인트 조건부 갱신.
@@ -122,6 +145,7 @@ export class StoryService {
       storyNubi: progress?.story_nubi_turby_instance_id ? { turbyId: progress.story_nubi_turby_instance_id.toString(), growthStage: progress.nubi_growth_stage } : null,
       storyNubiMissing,
       stages: await this.stageAccess.statuses(playerId),
+      delivery: await this.deliveryOf(playerId, snap),
     };
   }
 
@@ -189,7 +213,59 @@ export class StoryService {
       else if (isUniqueViolation(err) && (await this.eventExists(playerId, def.id))) already = true;
       else throw err;
     }
-    return { eventId: def.id, alreadyCompleted: already, grants: already ? [] : grants, consumed: already ? [] : consumed, story: await this.getState(playerId) };
+    return { eventId: def.id, alreadyCompleted: already, grants: already ? [] : grants, consumed: already ? [] : consumed, story: await this.getState(playerId), play: already ? null : playOf(SEGMENT_AFTER_EVENT[def.id]) };
+  }
+
+  // ---------- 트리거(M4-C) ----------
+
+  // 지역 진입(map:enter 성공 뒤): 그 지역의 진입 트리거가 있으면 실행. 없으면 null
+  async onStageEntered(playerId: bigint, stageCode: string): Promise<StoryTriggerResultDto | null> {
+    const def = STORY_TRIGGERS.find((t) => t.play === 'resume' && t.stageCode === stageCode);
+    return def ? this.trigger(playerId, def.id) : null;
+  }
+
+  // 서버가 트리거 위치·진행 조건을 판정하고, 이벤트는 서버 경로로 멱등 기록한다. 재생 구간은 서버가 정한다.
+  async trigger(playerId: bigint, triggerIdRaw: unknown): Promise<StoryTriggerResultDto> {
+    const def = typeof triggerIdRaw === 'string' ? TRIGGER_BY_ID.get(triggerIdRaw) : undefined;
+    if (!def) throw gameError(404, 'STORY_TRIGGER_UNKNOWN', '알 수 없는 이야기 지점입니다.');
+    if (!(await this.stageAccess.openingComplete(playerId))) throw gameError(403, 'OPENING_REQUIRED', '먼저 누비와 이야기를 마쳐 주세요.');
+    this.checkPositionEvidence(playerId, def.evidence);
+    return this.serialize(playerId, () => this.runTrigger(playerId, def));
+  }
+
+  private async runTrigger(playerId: bigint, def: StoryTriggerDef): Promise<StoryTriggerResultDto> {
+    const done = (play: StoryPlayDto | null, shortage: StoryTriggerResultDto['shortage'] = null) => this.getState(playerId).then((story) => ({ triggerId: def.id, play, shortage, story }));
+    const snap = await this.readSnapshot(playerId);
+    const resume = () => {
+      const seg = resumeOf(snap).segmentId;
+      return seg && STAGE_CHAPTER[def.stageCode] !== undefined && seg.startsWith(`ch0${STAGE_CHAPTER[def.stageCode]}.`) ? playOf(seg) : null;
+    };
+
+    if (def.event) {
+      const ev = EVENT_BY_ID.get(def.event)!;
+      if (snap.events.has(ev.id)) return done(def.play === 'resume' ? resume() : null); // 이미 기록 — 새로 재생하지 않음(재접속 복귀는 resume만)
+      const failure = checkEvent(ev, snap);
+      if (failure) {
+        if (def.optionalEvent) return done(def.play === 'resume' ? resume() : null);
+        throw this.ruleError(failure, snap);
+      }
+      if (def.need) {
+        const have = await this.itemQuantity(playerId, def.need.itemCode);
+        if (have < def.need.quantity) return done(null, { itemCode: def.need.itemCode, have, need: def.need.quantity });
+      }
+      const res = await this.runEvent(playerId, ev, null);
+      if (def.play === 'resume') {
+        const after = await this.readSnapshot(playerId);
+        const seg = resumeOf(after).segmentId;
+        return { triggerId: def.id, play: playOf(seg), shortage: null, story: res.story };
+      }
+      return { triggerId: def.id, play: res.alreadyCompleted ? null : playOf(def.play), shortage: null, story: res.story };
+    }
+
+    // 이벤트 없는 트리거: 허용 체크포인트·미완료 조건만 확인하고 구간을 연다
+    const open = (def.activeAt ?? []).includes(snap.checkpoint) && !(def.unless ?? []).some((e) => snap.events.has(e));
+    if (!open) throw gameError(409, 'STORY_EVENT_NOT_ALLOWED', '지금은 진행할 수 없는 이야기입니다.');
+    return done(def.play === 'resume' ? resume() : playOf(def.play));
   }
 
   // ---------- 수집 목표 ----------
@@ -267,6 +343,32 @@ export class StoryService {
 
   // ---------- 내부: 상태 ----------
 
+  private async readSnapshot(playerId: bigint): Promise<StorySnapshot> {
+    const [progress, events, objectives] = await Promise.all([
+      this.prisma.player_story_progress.findUnique({ where: { player_id: playerId } }),
+      this.prisma.player_story_event.findMany({ where: { player_id: playerId } }),
+      this.prisma.player_story_objective_progress.findMany({ where: { player_id: playerId } }),
+    ]);
+    return this.snapshotOf(progress, events, objectives);
+  }
+
+  private async itemQuantity(playerId: bigint, itemCode: string): Promise<number> {
+    const def = await this.prisma.item_definition.findUnique({ where: { code: itemCode } });
+    if (!def) return 0;
+    const owned = await this.prisma.player_item.findUnique({ where: { player_id_item_definition_id: { player_id: playerId, item_definition_id: def.id } } });
+    return owned?.quantity ?? 0;
+  }
+
+  // 전달 트리거 중 지금 이벤트 조건(체크포인트·선행 이벤트)이 맞는 것 — 목표 0/10 표시용
+  private async deliveryOf(playerId: bigint, snap: StorySnapshot): Promise<StoryStateDto['delivery']> {
+    for (const t of STORY_TRIGGERS) {
+      if (!t.need || !t.event || snap.events.has(t.event)) continue;
+      if (checkEvent(EVENT_BY_ID.get(t.event)!, snap)) continue;
+      return { triggerId: t.id, itemCode: t.need.itemCode, have: await this.itemQuantity(playerId, t.need.itemCode), need: t.need.quantity };
+    }
+    return null;
+  }
+
   private async eventExists(playerId: bigint, eventId: string) {
     return (await this.prisma.player_story_event.count({ where: { player_id: playerId, event_id: eventId } })) > 0;
   }
@@ -321,10 +423,11 @@ export class StoryService {
   // ---------- 내부: 증거 ----------
 
   private checkPositionEvidence(playerId: bigint, evidence: Evidence) {
-    if (evidence.kind !== 'region' && evidence.kind !== 'point') return;
+    if (evidence.kind !== 'region' && evidence.kind !== 'point' && evidence.kind !== 'stage') return;
     const room = this.rooms.roomOf(playerId.toString());
     const pos = room ? this.rooms.memberPosition(room, playerId.toString()) : null;
     if (!room || !pos?.inMap || room.stageCode !== evidence.stageCode) throw gameError(422, 'STORY_EVIDENCE_INVALID', '해당 지역에 있지 않습니다.');
+    if (evidence.kind === 'stage') return; // 좌표 확정 전 임시 증거: 그 지역 탐험 세션(맵 입장) 안이면 충분
     const stage = this.content.stage(evidence.stageCode);
     const slack = this.settings.numberOr('story.evidenceSlackPx', 48);
     if (evidence.kind === 'region') {

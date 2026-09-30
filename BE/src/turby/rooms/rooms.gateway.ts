@@ -3,6 +3,7 @@ import { Logger, OnModuleInit } from '@nestjs/common';
 import type { Server, Socket } from 'socket.io';
 import { RoomsService } from './rooms.service';
 import { BattleService } from '../battle/battle.service';
+import { StoryService } from '../story/story.service';
 import { RoomError } from './types';
 import type { Room } from './types';
 
@@ -19,6 +20,7 @@ export class RoomsGateway implements OnGatewayDisconnect, OnModuleInit {
   constructor(
     private readonly rooms: RoomsService,
     private readonly battles: BattleService,
+    private readonly story: StoryService,
   ) {}
 
   onModuleInit() {
@@ -111,7 +113,12 @@ export class RoomsGateway implements OnGatewayDisconnect, OnModuleInit {
       await client.join(this.rooms.mapChannel(room));
       // 전투 후 복귀처럼 이미 맵에 있던 사람의 재입장도 joined로 알린다 — 클라이언트는 playerId 기준으로 갱신(upsert)한다
       client.to(this.rooms.mapChannel(room)).emit('map:joined', { player: self });
-      return { ok: true as const, self, players: others, wilds };
+      // M4-C: 지역 진입 트리거(숲 첫 진입 → 1장 시작 기록)와 재생할 이야기 구간. 이야기 처리 실패가 맵 입장을 막지는 않는다
+      const story = await this.story.onStageEntered(BigInt(playerId), room.stageCode).catch((err: unknown) => {
+        this.log.warn(`story trigger on map:enter failed: ${err instanceof Error ? err.message : String(err)}`);
+        return null;
+      });
+      return { ok: true as const, self, players: others, wilds, story: story ? { play: story.play, delivery: story.story.delivery } : null };
     });
   }
 

@@ -30,11 +30,18 @@ const EXCLUDED = {
   40: '트리거 동작 설명',
   71: '첫 전투 진행 설명 → storyBattle forest_stitchling_ambush',
   104: '목표 UI 설명(단서 기록·실가루 0/10)',
-  106: '제작 이벤트 설명 — 설계 문장과 서술이 한 문단에 섞여 있어 옮기지 않음(Codex 확인 요청)',
   119: '보스 전투 진행 설명 → storyBattle forest_giant_knot',
   140: '발동 조건(트리거 설명)',
   142: '자동 전환 금지 설명',
 };
+
+// 한 줄에 설계 문장과 서술이 섞인 줄: 서술 문장만 원문 그대로 옮긴다(문장 번호는 0부터). 문장을 새로 쓰지 않는다.
+// 106: Codex v2 §1.2 — 제작 연출로 처리. 앞 두 문장("열 개를 모은 것만으로는…", "…제작 이벤트가 시작된다")은 발동 조건 설명이라
+//      보풀이 전달 트리거(npc_bopuli)가 대신하고, 뒤 두 문장(실가루를 둥글게 모음·떨림 → 바늘과 크림색 실 → 나침판 완성)을 지문으로 쓴다.
+const PARTIAL = {
+  106: { keep: [2, 3], reason: '앞 두 문장은 제작 발동 조건 설명 → 보풀이 전달 트리거' },
+};
+const sentences = (s) => s.split(/(?<=다\.)\s+/);
 
 let seq = {};
 function id(seg) {
@@ -43,6 +50,8 @@ function id(seg) {
 }
 const n = (seg, line, extra = {}) => ({ kind: 'narration', dialogueId: id(seg), text: unbacktick(L(line)), cameraCue: null, soundCue: null, ...extra });
 const t = (seg, line) => ({ kind: 'title', dialogueId: id(seg), text: L(line) });
+// 부분 줄의 한 문장(원문 그대로)
+const ns = (seg, line, index) => ({ kind: 'narration', dialogueId: id(seg), text: sentences(L(line))[index], cameraCue: null, soundCue: null });
 function l(seg, labelLine, textLine, expression) {
   const label = L(labelLine);
   const speaker = SPEAKER[label];
@@ -98,7 +107,9 @@ const file = {
     ]),
     // 실가루 10개 전달(보풀이 근처) — 서버 이벤트 성공 뒤 제작 장면. 이후 체크포인트는 COMPASS_ACQUIRED라 재접속 때 다시 틀지 않는다
     segment('ch01.compass_craft', 'CH01_BOPUL_RESCUED', false, null, (s) => [
-      ev(s, 'forest_compass_granted'),
+      // 전달(실가루 10개 소비)·나침판 지급·체크포인트는 보풀이 전달 트리거가 서버에서 먼저 확정한다(클라이언트가 이벤트를 보내지 않음)
+      ns(s, 106, 2),
+      ns(s, 106, 3),
       l(s, 107, 108, 'neutral'),
       n(s, 109),
       n(s, 110),
@@ -174,4 +185,4 @@ if (require.main === module) {
   const count = file.segments.reduce((sum, s) => sum + s.entries.length, 0);
   console.log(`ch01.json: 구간 ${file.segments.length}개, 항목 ${count}개, 제외 지시문 ${Object.keys(EXCLUDED).length}줄`);
 }
-module.exports = { EXCLUDED };
+module.exports = { EXCLUDED, PARTIAL, sentences };
