@@ -1,18 +1,63 @@
-// 통합 검증용 DB 도구(개발 전용 — 운영 API 아님). BE/.env의 DATABASE_URL을 쓰고, 접속 정보는 출력하지 않는다.
-// 사용: npx ts-node --transpile-only test/integration/db-tool.ts <명령>
-//   check                    읽기 전용: M1 스키마·아이템 정의·테스트 계정 상태
-//   apply <sql 파일>          주석을 뺀 문장을 하나씩 실행하고 결과만 요약(여러 번 실행해도 안전한 SQL만)
-//   fixture <device> <이름>   테스트 계정(dev-device-it-v4-*)에만: dust10 = 빛나는 실가루 10개, knot = 첫 매듭 각성 상태,
-//                            bulk = 일반 아이템 여러 종·가방 터비 여러 마리(페이지 확인용)
-//   legacy <device>          구 BE 시절 계정 재현: 진행 행 없음 + 스타터 누비(선반, 무기 장착) + 가방 터비 + 아이템·타레
+// 통합 검증용 DB 도구 — 개발 전용(운영 API·앱 번들 아님). BE/.env의 DATABASE_URL에 붙으므로 운영 DB에도 닿을 수 있다.
+//
+// 목적: 실제 BE + 실제 클라이언트 통합 검증 때 테스트 계정(dev-device-it-*)의 상태를 준비·확인·정리한다.
+// 허용 환경: 개발자 PC에서 사람이 직접 실행할 때만. NODE_ENV=production이면 거부한다.
+// 사용자 승인: 원격·운영 DB가 대상이면 실행 전에 반드시 사용자 승인을 받는다(대상 호스트/DB는 실행 때 표시된다).
+// 앱(src)·npm test·build는 이 파일을 import하지 않는다(test/dev-tools-isolation.test.ts가 검사).
+//
+// 안전장치(기본은 항상 거부):
+//   모든 명령        TURBY_DB_TOOL=enable
+//   읽기(check, inspect)       추가 조건 없음
+//   픽스처·정리(fixture, legacy, cleanup)  TURBY_DB_TOOL_FIXTURE=allow  + --confirm <명령>:<호스트>/<DB>
+//   SQL 적용(apply)           TURBY_DB_TOOL_SQL=allow      + --confirm apply:<호스트>/<DB>
+//   대상 계정은 device_uuid가 dev-device-it- 로 시작하는 것만.
+//
+// 명령:
+//   check                    읽기 전용: M1 스키마·아이템 정의·테스트 계정 수
 //   inspect <device>         읽기 전용: 테스트 계정의 진행·터비·아이템 요약
-//   cleanup                  dev-device-it-v4-* 계정과 그 계정의 모든 행 삭제
-import 'dotenv/config';
+//   apply <sql 파일>          주석을 뺀 문장을 하나씩 실행하고 결과만 요약(여러 번 실행해도 안전한 SQL만)
+//   fixture <device> <이름>   dust10 = 빛나는 실가루 10개, knot = 첫 매듭 각성 상태, bulk = 일반 아이템 여러 종·가방 터비 여러 마리
+//   legacy <device>          구 BE 시절 계정 재현: 진행 행 없음 + 스타터 누비(선반, 무기 장착) + 가방 터비 + 아이템·타레
+//   cleanup                  dev-device-it-* 계정과 그 계정의 모든 행 삭제
+//
+// 예(PowerShell):
+//   $env:TURBY_DB_TOOL='enable'; npx ts-node --transpile-only test/integration/db-tool.ts check
+//   $env:TURBY_DB_TOOL='enable'; $env:TURBY_DB_TOOL_FIXTURE='allow'; npx ts-node --transpile-only test/integration/db-tool.ts cleanup --confirm cleanup:<호스트>/<DB>
+import { config as loadEnv } from 'dotenv';
 import { readFileSync } from 'fs';
 import { PrismaClient } from '@prisma/client';
 
-const TEST_PREFIX = 'dev-device-it-v4-'; // 프런트 개발 서버 ?device=it-v4-N → dev-device-it-v4-N-account
-const prisma = new PrismaClient();
+const TEST_PREFIX = 'dev-device-it-'; // 프런트 개발 서버 ?device=it-<이름> → dev-device-it-<이름>-account
+let prisma: PrismaClient; // 안전장치를 통과한 뒤에만 만든다
+
+type Tier = 'read' | 'fixture' | 'sql';
+const TIER: Record<string, Tier> = { check: 'read', inspect: 'read', fixture: 'fixture', legacy: 'fixture', cleanup: 'fixture', apply: 'sql' };
+
+// 연결 대상(호스트/DB)만 뽑는다 — 비밀번호·사용자명·전체 연결 문자열은 다루지 않는다
+export function targetOf(url: string | undefined): string {
+  if (!url) return '(DATABASE_URL 없음)';
+  try {
+    const u = new URL(url);
+    return `${u.hostname}${u.port ? `:${u.port}` : ''}/${u.pathname.replace(/^\//, '')}`;
+  } catch {
+    return '(해석할 수 없는 DATABASE_URL)';
+  }
+}
+
+// 실행 허가 판정(순수 함수 — 테스트 대상). 통과하면 null, 아니면 거부 사유
+export function refusal(cmd: string | undefined, env: Record<string, string | undefined>, argv: string[], target: string): string | null {
+  if (env.NODE_ENV === 'production') return 'NODE_ENV=production에서는 실행하지 않습니다';
+  if (env.TURBY_DB_TOOL !== 'enable') return 'TURBY_DB_TOOL=enable이 없어 거부합니다(기본은 항상 거부)';
+  const tier = cmd ? TIER[cmd] : undefined;
+  if (!tier) return '알 수 없는 명령입니다';
+  if (tier === 'read') return null;
+  if (tier === 'fixture' && env.TURBY_DB_TOOL_FIXTURE !== 'allow') return '픽스처·정리 명령에는 TURBY_DB_TOOL_FIXTURE=allow가 필요합니다';
+  if (tier === 'sql' && env.TURBY_DB_TOOL_SQL !== 'allow') return 'SQL 적용 명령에는 TURBY_DB_TOOL_SQL=allow가 필요합니다';
+  const i = argv.indexOf('--confirm');
+  const confirm = i >= 0 ? argv[i + 1] : undefined;
+  if (confirm !== `${cmd}:${target}`) return `확인 값이 필요합니다: --confirm ${cmd}:${target}`;
+  return null;
+}
 
 function statements(sql: string): string[] {
   const noComments = sql
@@ -155,7 +200,14 @@ async function cleanup() {
 }
 
 async function main() {
-  const [cmd, a, b] = process.argv.slice(2);
+  const argv = process.argv.slice(2);
+  const [cmd, a, b] = argv.filter((x, i) => x !== '--confirm' && argv[i - 1] !== '--confirm');
+  loadEnv(); // .env는 직접 실행할 때만 읽는다(판정 함수만 불러가는 테스트는 환경을 건드리지 않음)
+  const target = targetOf(process.env.DATABASE_URL);
+  console.log(`대상 DB: ${target}`);
+  const denied = refusal(cmd, process.env, argv, target);
+  if (denied) throw new Error(denied);
+  prisma = new PrismaClient();
   if (cmd === 'check') await check();
   else if (cmd === 'apply') await apply(a);
   else if (cmd === 'fixture') await fixture(a, b);
@@ -165,9 +217,12 @@ async function main() {
   else throw new Error('명령: check | apply <file> | fixture <device> <dust10|knot|bulk> | legacy <device> | inspect <device> | cleanup');
 }
 
-main()
-  .catch((e) => {
-    console.error(String(e instanceof Error ? e.message : e));
-    process.exitCode = 1;
-  })
-  .finally(() => void prisma.$disconnect());
+// 직접 실행할 때만 동작(테스트가 판정 함수만 불러갈 때는 아무것도 하지 않는다)
+if (require.main === module) {
+  main()
+    .catch((e) => {
+      console.error(String(e instanceof Error ? e.message : e));
+      process.exitCode = 1;
+    })
+    .finally(() => void prisma?.$disconnect());
+}
