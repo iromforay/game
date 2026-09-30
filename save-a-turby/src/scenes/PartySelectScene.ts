@@ -3,6 +3,8 @@ import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../config/constants';
 import { CHARACTER_IMAGES } from '../assets/registry';
 import { inventory } from '../state/inventory';
 import { fetchStory } from '../api/client';
+import { partySelectLayout, type PartySelectLayout } from '../battle/partySelectLayout';
+import { displayScaleOf } from '../ui/responsive';
 import type { OwnedTurby } from '../state/inventory';
 import { battleClient } from '../net/battleClient';
 import { roomClient, RoomApiError } from '../net/roomClient';
@@ -32,13 +34,17 @@ export class PartySelectScene extends Phaser.Scene {
   private snap!: BattleSnapshot;
   private selected: Set<string> = new Set();
   private cardBorders = new Map<string, Phaser.GameObjects.Rectangle>();
+  private layout!: PartySelectLayout;
+  private cardLayer: Phaser.GameObjects.GameObject[] = [];
+  private page = 0;
   private countText?: Phaser.GameObjects.Text;
   private limitText?: Phaser.GameObjects.Text;
   private timerText?: Phaser.GameObjects.Text;
   private titleText?: Phaser.GameObjects.Text;
   private chips: Phaser.GameObjects.GameObject[] = [];
   private overlay: Phaser.GameObjects.GameObject[] = [];
-  private startButton?: Phaser.GameObjects.Text;
+  private startButton?: Phaser.GameObjects.Rectangle;
+  private startLabel?: Phaser.GameObjects.Text;
   private submitting = false;
   private submitted = false;
   private leaving = false;
@@ -54,6 +60,7 @@ export class PartySelectScene extends Phaser.Scene {
     this.snap = data.snapshot;
     this.selected = new Set();
     this.cardBorders = new Map();
+    this.cardLayer = [];
     this.chips = [];
     this.overlay = [];
     this.submitting = false;
@@ -91,16 +98,20 @@ export class PartySelectScene extends Phaser.Scene {
 
   async create() {
     this.cameras.main.setBackgroundColor('#1a1030');
-    this.titleText = this.add.text(CANVAS_WIDTH / 2, 24, '', { fontSize: '24px', color: '#ffe9a8' }).setOrigin(0.5);
-    this.limitText = this.add.text(CANVAS_WIDTH / 2, 62, '', { fontSize: '15px', color: '#cccccc' }).setOrigin(0.5);
-    this.timerText = this.add.text(CANVAS_WIDTH - 16, 16, '', { fontSize: '18px', color: '#9fe58a' }).setOrigin(1, 0);
-
     let bag = inventory.getBag();
-    // 스토리 전투: 이야기 누비는 서버가 자동으로 편성하므로 고르는 목록에서 뺀다(안내 문구와 맞춤). 조회 실패 시 그대로 둔다(서버가 중복을 걸러 냄)
+    // 스토리 전투: 이야기 누비는 서버가 자동으로 편성하므로 고르는 목록에서 빼고, 맨 앞 "자동 참가" 카드로 보여 준다. 조회 실패 시 그대로 둔다(서버가 중복을 걸러 냄)
+    let autoNubi: OwnedTurby | null = null;
     if (this.story) {
       const nubiId = (await fetchStory().catch(() => null))?.storyNubi?.turbyId;
+      autoNubi = bag.find((t) => t.id === nubiId) ?? { id: 'story-nubi', characterCode: 'nubi', characterName: '누비', locationType: 'bag', slotIndex: null, equipment: [], stats: { attack: 0, defense: 0, actionPower: 0, maxHp: 0 } };
       if (nubiId) bag = bag.filter((t) => t.id !== nubiId);
     }
+    // 실제 표시 배율에 맞춘 배치(작은 화면: 카드·글자·버튼 확대, 빈 공간 축소)
+    this.layout = partySelectLayout(displayScaleOf(this.scale.displaySize.width), bag.length + (autoNubi ? 1 : 0));
+    const L = this.layout;
+    this.titleText = this.add.text(CANVAS_WIDTH / 2, L.titleY, '', { fontSize: `${L.font.title}px`, color: '#ffe9a8' }).setOrigin(0.5);
+    this.limitText = this.add.text(CANVAS_WIDTH / 2, L.infoY, '', { fontSize: `${L.font.body}px`, color: '#dddddd', align: 'center', wordWrap: { width: 1200, useAdvancedWrap: true } }).setOrigin(0.5);
+    this.timerText = this.add.text(CANVAS_WIDTH - 16, 16, '', { fontSize: `${L.font.body}px`, color: '#9fe58a' }).setOrigin(1, 0);
     if (bag.length === 0 && !this.story) {
       this.add.text(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, '가방이 비어있습니다.\n기지에서 선반의 터비를 가방으로 옮겨주세요.', { fontSize: '16px', color: '#ffb199', align: 'center' }).setOrigin(0.5);
       this.add
@@ -111,15 +122,32 @@ export class PartySelectScene extends Phaser.Scene {
       return;
     }
 
-    this.renderBagGrid(bag);
-    this.countText = this.add.text(CANVAS_WIDTH / 2, CANVAS_HEIGHT - 92, '', { fontSize: '14px', color: '#ffffff' }).setOrigin(0.5);
+    this.page = 0;
+    this.renderCards(bag, autoNubi);
+    if (L.prev && L.next) {
+      const pager = (r: { x: number; y: number; w: number; h: number }, label: string, d: number) =>
+        this.add
+          .text(r.x + r.w / 2, r.y + r.h / 2, label, { fontSize: `${L.font.button}px`, color: '#ffffff', backgroundColor: '#3d2f66', fixedWidth: r.w, align: 'center', padding: { x: 0, y: Math.max(0, (r.h - L.font.button * 1.25) / 2) } })
+          .setOrigin(0.5)
+          .setInteractive({ useHandCursor: true })
+          .on('pointerdown', () => {
+            this.page = (this.page + d + L.pages) % L.pages;
+            this.renderCards(bag, autoNubi);
+          });
+      pager(L.prev, '◀', -1);
+      pager(L.next, '▶', 1);
+    }
+    // 카드 바로 아래 한 줄: 선택 수 + 완료 버튼(한 시선 흐름)
+    this.countText = this.add.text(L.count.x + L.count.w, L.count.y + L.count.h / 2, '', { fontSize: `${L.font.button}px`, color: '#ffffff' }).setOrigin(1, 0.5);
     this.startButton = this.add
-      .text(CANVAS_WIDTH / 2, CANVAS_HEIGHT - 50, '선택 완료', { fontSize: '20px', color: '#ffffff', backgroundColor: '#5a3a8a', padding: { x: 20, y: 10 } })
-      .setOrigin(0.5)
+      .rectangle(L.button.x, L.button.y, L.button.w, L.button.h, 0x5a3a8a)
+      .setOrigin(0, 0)
+      .setStrokeStyle(3, 0x9f86d6)
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => void this.onStart(bag));
+    this.startLabel = this.add.text(L.button.x + L.button.w / 2, L.button.y + L.button.h / 2, '선택 완료', { fontSize: `${L.font.button}px`, color: '#ffffff' }).setOrigin(0.5);
     this.add
-      .text(16, CANVAS_HEIGHT - 16, '전투에서 나가기', { fontSize: '13px', color: '#ffffff', backgroundColor: '#6a3a3a', padding: { x: 8, y: 5 } })
+      .text(L.leave.x, L.leave.y, '전투에서 나가기', { fontSize: `${L.font.small}px`, color: '#ffffff', backgroundColor: '#6a3a3a', padding: { x: 10, y: 6 } })
       .setOrigin(0, 1)
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => void this.backToMap());
@@ -137,33 +165,35 @@ export class PartySelectScene extends Phaser.Scene {
     this.applySnapshot();
   }
 
-  private renderBagGrid(bag: OwnedTurby[]) {
-    const cols = 8;
-    const cellSize = 90;
-    const startX = 100;
-    const startY = 200;
-
-    bag.forEach((item, i) => {
-      const col = i % cols;
-      const row = Math.floor(i / cols);
-      const x = startX + col * cellSize;
-      const y = startY + row * cellSize;
-
-      const border = this.add.rectangle(x, y, 64, 64).setStrokeStyle(3, 0x5a3a8a, 0);
-      this.cardBorders.set(item.id, border);
-
-      const hasImage = this.textures.exists(`turby-${item.characterCode}`);
-      if (hasImage) this.add.image(x, y, `turby-${item.characterCode}`).setDisplaySize(48, 48);
-      else this.add.circle(x, y, 22, 0x7fc8ff);
-
-      this.add.text(x, y + 36, item.characterName, { fontSize: '11px', color: '#ffffff' }).setOrigin(0.5, 0);
-      this.add.text(x, y + 50, `공${item.stats.attack} 체${item.stats.maxHp}`, { fontSize: '9px', color: '#998866' }).setOrigin(0.5, 0);
-
-      this.add
-        .zone(x, y, 74, 90)
-        .setInteractive({ useHandCursor: true })
-        .on('pointerdown', () => this.toggleSelect(item.id));
+  // 카드: 그림(카드 폭의 55%) · 이름 · 능력치. 스토리 전투는 맨 앞에 "자동 참가" 누비 카드(선택 불가)
+  private renderCards(bag: OwnedTurby[], autoNubi: OwnedTurby | null) {
+    const L = this.layout;
+    this.cardLayer.forEach((o) => o.destroy());
+    this.cardLayer = [];
+    this.cardBorders.clear();
+    const keep = <T extends Phaser.GameObjects.GameObject>(o: T) => {
+      this.cardLayer.push(o);
+      return o;
+    };
+    const all: { t: OwnedTurby; auto: boolean }[] = [...(autoNubi ? [{ t: autoNubi, auto: true }] : []), ...bag.map((t) => ({ t, auto: false }))];
+    const list = all.slice(this.page * L.pageSize, (this.page + 1) * L.pageSize); // 넘치면 페이지로(카드를 더 줄이지 않음)
+    list.forEach(({ t, auto }, i) => {
+      const r = L.cards[i];
+      const cx = r.x + r.w / 2;
+      keep(this.add.rectangle(r.x, r.y, r.w, r.h, auto ? 0x2f4a3c : 0x2c2148, 1).setOrigin(0, 0).setStrokeStyle(2, auto ? 0x7fd6a0 : 0x5a3a8a));
+      const border = keep(this.add.rectangle(r.x, r.y, r.w, r.h).setOrigin(0, 0).setStrokeStyle(6, 0x9fe58a, 0));
+      if (!auto) this.cardBorders.set(t.id, border);
+      const img = r.w * 0.55;
+      const iy = r.y + 14 + img / 2;
+      if (this.textures.exists(`turby-${t.characterCode}`)) keep(this.add.image(cx, iy, `turby-${t.characterCode}`).setDisplaySize(img, img));
+      else keep(this.add.circle(cx, iy, img / 2.4, 0x7fc8ff));
+      const nameY = iy + img / 2 + 10;
+      keep(this.add.text(cx, nameY, t.characterName, { fontSize: `${L.font.body}px`, color: '#ffffff' }).setOrigin(0.5, 0));
+      const sub = auto ? '자동 참가' : `공 ${t.stats.attack} · 체 ${t.stats.maxHp}`;
+      keep(this.add.text(cx, nameY + L.font.body + 8, sub, { fontSize: `${L.font.small}px`, color: auto ? '#9fe5b8' : '#d9c89a' }).setOrigin(0.5, 0));
+      if (!auto) keep(this.add.zone(r.x, r.y, r.w, r.h).setOrigin(0, 0).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.toggleSelect(t.id)));
     });
+    this.refreshSelection();
   }
 
   private toggleSelect(id: string) {
@@ -178,8 +208,8 @@ export class PartySelectScene extends Phaser.Scene {
   }
 
   private refreshSelection() {
-    for (const [id, border] of this.cardBorders) border.setStrokeStyle(3, 0x9fe58a, this.selected.has(id) ? 1 : 0);
-    this.countText?.setText(`선택: ${this.selected.size}/${this.maxParty}`);
+    for (const [id, border] of this.cardBorders) border.setStrokeStyle(6, 0x9fe58a, this.selected.has(id) ? 1 : 0);
+    this.countText?.setText(`선택 ${this.selected.size}/${this.maxParty}${this.story ? ' · 누비 자동' : ''}`);
   }
 
   // ---------- 서버 상태 반영 ----------
@@ -194,6 +224,7 @@ export class PartySelectScene extends Phaser.Scene {
     this.chips.forEach((c) => c.destroy());
     this.chips = [];
     const list = this.snap.participants;
+    if (list.length <= 1) return; // 혼자면 표시하지 않는다(이름표 대신 카드에 집중)
     const w = 190;
     const startX = (CANVAS_WIDTH - (list.length * w + (list.length - 1) * 10)) / 2;
     list.forEach((p, i) => {
@@ -236,7 +267,9 @@ export class PartySelectScene extends Phaser.Scene {
     this.renderChips();
     this.updateTimer();
     this.showWaiting(this.snap.phase === 'inviting' ? '참전 응답을 기다리는 중...' : me.partySubmitted ? '다른 참가자를 기다리는 중...' : null);
-    this.startButton?.setAlpha(this.snap.phase === 'party_select' && !me.partySubmitted ? 1 : 0.4);
+    const ready = this.snap.phase === 'party_select' && !me.partySubmitted ? 1 : 0.4;
+    this.startButton?.setAlpha(ready);
+    this.startLabel?.setAlpha(ready);
   }
 
   private showWaiting(message: string | null) {

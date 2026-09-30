@@ -9,7 +9,9 @@ import type { ActionBody, BattleEnded, BattleEvent, BattleResponse, BattleSnapsh
 import { showToast, feltPanel, pillButton, TEXT } from '../ui/kit';
 import { loadWorldImages } from '../assets/loader';
 import coopSlots from '../data/coop-slots.json';
-import { isStoryBattle, labelPlacement, objectiveLines, reachableCells, returnDestination, showsCornerEscape, storyResultText, targetState, unitTags, STORY_BADGE, STORY_NOTICE, TARGET_HINT, type BattleReturn } from '../battle/battleView';
+import { battleHudLayout, clampLabel, unitLabel, type BattleHudLayout } from '../battle/battleView';
+import { displayScaleOf } from '../ui/responsive';
+import { isStoryBattle, labelPlacement, objectiveLines, reachableCells, returnDestination, showsCornerEscape, storyResultText, targetState, STORY_BADGE, STORY_NOTICE, TARGET_HINT, type BattleReturn } from '../battle/battleView';
 
 interface BattleInitData {
   stageCode: string;
@@ -62,6 +64,9 @@ export class BattleScene extends Phaser.Scene {
   private offsetX = 0;
   private offsetY = 0;
   private blockedObjs: Phaser.GameObjects.GameObject[] = [];
+  private hud!: BattleHudLayout;
+  private goalLayer: Phaser.GameObjects.GameObject[] = [];
+  private goalOpen = false;
   private blockedDrawn = '';
 
   constructor() {
@@ -115,13 +120,18 @@ export class BattleScene extends Phaser.Scene {
 
     // 화면 6 상단 중앙 턴 패널(라운드·현재 서브턴·남은 시간). 조작 안내는 화면 아래쪽 한 줄로 따로 둔다.
     if (this.textures.exists('turn-panel')) this.add.image(CANVAS_WIDTH / 2, 26, 'turn-panel').setDisplaySize(520, 76).setDepth(1998);
+    // v3 §5: 실제 표시 배율에 맞춘 글자(턴 > 행동 안내 > 목표 순으로 크게)
+    this.hud = battleHudLayout(displayScaleOf(this.scale.displaySize.width), BATTLE_TILE_SIZE);
+    this.goalLayer = [];
+    this.goalOpen = false;
+    const F = this.hud.font;
     this.statusText = this.add
-      .text(CANVAS_WIDTH / 2, 24, '', { fontSize: '18px', color: this.textures.exists('turn-panel') ? TEXT.body : '#ffe9a8' })
+      .text(CANVAS_WIDTH / 2, 24, '', { fontSize: `${F.status}px`, color: this.textures.exists('turn-panel') ? TEXT.body : '#ffe9a8' })
       .setOrigin(0.5)
       .setDepth(2000);
-    this.hintText = this.add.text(CANVAS_WIDTH / 2, CANVAS_HEIGHT - 18, '', { fontSize: '13px', color: '#cfc6ee', backgroundColor: '#00000060', padding: { x: 8, y: 3 } }).setOrigin(0.5).setDepth(2000);
+    this.hintText = this.add.text(CANVAS_WIDTH / 2, CANVAS_HEIGHT - 6, '', { fontSize: `${F.hint}px`, color: '#e4dcff', backgroundColor: '#000000a0', padding: { x: 10, y: 4 }, align: 'center', wordWrap: { width: CANVAS_WIDTH - 520, useAdvancedWrap: true } }).setOrigin(0.5, 1).setDepth(2000);
     this.add
-      .text(CANVAS_WIDTH - 16, 16, '턴 종료', { fontSize: '16px', color: '#ffffff', backgroundColor: '#5a3a8a', padding: { x: 10, y: 6 } })
+      .text(CANVAS_WIDTH - 16, 16, '턴 종료', { fontSize: `${F.button}px`, color: '#ffffff', backgroundColor: '#5a3a8a', padding: { x: 12, y: 8 } })
       .setOrigin(1, 0)
       .setDepth(2000)
       .setInteractive({ useHandCursor: true })
@@ -138,7 +148,7 @@ export class BattleScene extends Phaser.Scene {
 
     this.band = this.add.rectangle(0, 0, CANVAS_WIDTH, 6, 0x000000, 0).setOrigin(0, 0).setDepth(1999);
     this.add
-      .text(16, CANVAS_HEIGHT - 16, '전투 나가기', { fontSize: '13px', color: '#ffffff', backgroundColor: '#6a3a3a', padding: { x: 8, y: 5 } })
+      .text(16, CANVAS_HEIGHT - 16, '전투 나가기', { fontSize: `${F.button}px`, color: '#ffffff', backgroundColor: '#6a3a3a', padding: { x: 10, y: 6 } })
       .setOrigin(0, 1)
       .setDepth(2000)
       .setInteractive({ useHandCursor: true })
@@ -174,14 +184,18 @@ export class BattleScene extends Phaser.Scene {
     return { x: this.offsetX + col * BATTLE_TILE_SIZE + BATTLE_TILE_SIZE / 2, y: this.offsetY + row * BATTLE_TILE_SIZE + BATTLE_TILE_SIZE / 2 };
   }
 
+  // 이웃과 엇갈리게(labelPlacement) 두되, 격자 안으로 끌어온다(맨 윗줄은 아래로, 맨 아랫줄은 위로 — 목표 패널·화면 밖으로 넘지 않게)
   private placeLabel(t: Phaser.GameObjects.Text, u: BattleUnit, x: number, y: number) {
-    if (labelPlacement(this.snap, u) === 'above') t.setOrigin(0.5, 1).setPosition(x, y - LABEL_GAP);
-    else t.setOrigin(0.5, 0).setPosition(x, y + LABEL_GAP);
+    let above = labelPlacement(this.snap, u) === 'above';
+    if (u.row === 0) above = false;
+    if (u.row === this.snap.grid.rows - 1) above = true;
+    const top = above ? y - LABEL_GAP - t.height : y + LABEL_GAP;
+    const c = clampLabel(x, top, t.width, t.height, { x: this.offsetX, y: this.offsetY, w: this.gridW, h: this.gridH });
+    t.setOrigin(0.5, 0).setPosition(c.cx, c.top);
   }
 
   private hpLabel(u: BattleUnit) {
-    const tags = unitTags(u);
-    return `${u.name} HP ${u.hp}/${u.maxHp}${tags.length > 0 ? ` (${tags.join(' · ')})` : ''}`;
+    return unitLabel(u, this.hud?.mode === 'compact');
   }
 
   // 통행 불가 칸(스토리 전투 지형). 지형 규칙으로 바뀌면 다시 그린다 — 임시 도형(에셋 확정 전)
@@ -197,16 +211,42 @@ export class BattleScene extends Phaser.Scene {
     });
   }
 
-  // 스토리 전투 표식·현재 목표·보상 없음 안내 — 격자 왼쪽 여백에 세로로(격자를 가리지 않게). 임시 텍스트 패널
+  // 스토리 전투 표식·현재 목표·보상 없음 안내. 보통 화면: 격자 왼쪽 여백에 세로 패널. 작은 화면: "목표" 버튼으로 접고 펼친다(v3 §5)
   private renderStoryPanel() {
     if (!isStoryBattle(this.snap)) return;
+    const F = this.hud.font;
+    if (!this.hud.objectivesCollapsible) {
+      const x = 8;
+      const w = Math.max(120, this.offsetX - 16);
+      const wrap = { width: w - 16, useAdvancedWrap: true };
+      const badge = this.add.text(x + 8, 68, STORY_BADGE, { fontSize: `${F.panelTitle}px`, color: '#ffd27f' }).setDepth(2001);
+      const goals = this.add.text(x + 8, badge.y + badge.height + 10, objectiveLines(this.snap).map((l) => `· ${l}`).join('\n'), { fontSize: `${F.panel}px`, color: '#ffffff', lineSpacing: 6, wordWrap: wrap }).setDepth(2001);
+      const notice = this.add.text(x + 8, goals.y + goals.height + 12, STORY_NOTICE, { fontSize: `${F.panel}px`, color: '#cfc6ee', wordWrap: wrap }).setDepth(2001);
+      this.add.rectangle(x, 58, w, notice.y + notice.height + 10 - 58, 0x241a3d, 0.92).setOrigin(0, 0).setStrokeStyle(2, 0xffd27f, 0.9).setDepth(2000);
+      return;
+    }
+    this.add
+      .text(8, 8, `${STORY_BADGE} · 목표 ▾`, { fontSize: `${F.button}px`, color: '#241a3d', backgroundColor: '#ffd27f', padding: { x: 12, y: 8 } })
+      .setDepth(2002)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.toggleGoals());
+  }
+
+  // 작은 화면의 목표 상세(펼침) — 격자 위에 겹쳐 그리고, 다시 누르거나 패널을 누르면 접힌다
+  private toggleGoals() {
+    this.goalLayer.forEach((o) => o.destroy());
+    this.goalLayer = [];
+    this.goalOpen = !this.goalOpen;
+    if (!this.goalOpen) return;
+    const F = this.hud.font;
     const x = 8;
-    const w = Math.max(120, this.offsetX - 16);
-    const wrap = { width: w - 16, useAdvancedWrap: true };
-    const badge = this.add.text(x + 8, 68, STORY_BADGE, { fontSize: '16px', color: '#ffd27f' }).setDepth(2001);
-    const goals = this.add.text(x + 8, badge.y + badge.height + 10, objectiveLines(this.snap).map((l) => `· ${l}`).join('\n'), { fontSize: '13px', color: '#ffffff', lineSpacing: 6, wordWrap: wrap }).setDepth(2001);
-    const notice = this.add.text(x + 8, goals.y + goals.height + 12, STORY_NOTICE, { fontSize: '12px', color: '#cfc6ee', wordWrap: wrap }).setDepth(2001);
-    this.add.rectangle(x, 58, w, notice.y + notice.height + 10 - 58, 0x241a3d, 0.92).setOrigin(0, 0).setStrokeStyle(2, 0xffd27f, 0.9).setDepth(2000);
+    const y = 8 + F.button * 2 + 12;
+    const w = 760;
+    const wrap = { width: w - 32, useAdvancedWrap: true };
+    const goals = this.add.text(x + 16, y + 14, objectiveLines(this.snap).map((l) => `· ${l}`).join('\n'), { fontSize: `${F.panel}px`, color: '#ffffff', lineSpacing: 8, wordWrap: wrap }).setDepth(2004);
+    const notice = this.add.text(x + 16, goals.y + goals.height + 10, STORY_NOTICE, { fontSize: `${F.panel}px`, color: '#cfc6ee', wordWrap: wrap }).setDepth(2004);
+    const bg = this.add.rectangle(x, y, w, notice.y + notice.height + 14 - y, 0x241a3d, 0.96).setOrigin(0, 0).setStrokeStyle(3, 0xffd27f, 1).setDepth(2003).setInteractive().on('pointerdown', () => this.toggleGoals());
+    this.goalLayer.push(bg, goals, notice);
   }
 
   private createView(u: BattleUnit): UnitView {
@@ -220,7 +260,7 @@ export class BattleScene extends Phaser.Scene {
     container.add([selectRing, ring, body]);
     container.setDepth(10);
     // 라벨은 줄이지 않고 두 칸 폭 안에서 줄바꿈(이웃 라벨은 위·아래로 엇갈려 겹치지 않음 — labelPlacement)
-    const hpText = this.add.text(x, y + LABEL_GAP, this.hpLabel(u), { fontSize: '11px', color: '#ffffff', align: 'center', wordWrap: { width: LABEL_WRAP, useAdvancedWrap: true }, backgroundColor: u.side === 'party' ? slotHex(u.participantSlot) : '#00000090', padding: { x: 4, y: 2 } }).setOrigin(0.5, 0).setDepth(11);
+    const hpText = this.add.text(x, y + LABEL_GAP, this.hpLabel(u), { fontSize: `${this.hud.font.label}px`, color: '#ffffff', align: 'center', wordWrap: { width: LABEL_WRAP, useAdvancedWrap: true }, backgroundColor: u.side === 'party' ? slotHex(u.participantSlot) : '#00000090', padding: { x: 4, y: 2 } }).setOrigin(0.5, 0).setDepth(11);
 
     body.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
       if (u.side === 'wild') void this.onWildClicked(u.unitId);
@@ -607,7 +647,7 @@ export class BattleScene extends Phaser.Scene {
       const target = this.views.get(ev.targetId);
       const targetUnit = this.unit(ev.targetId);
       if (target && targetUnit) {
-        target.hpText.setText(`${targetUnit.name} HP ${ev.targetHp}/${targetUnit.maxHp}${ev.targetStunned ? ' (기절)' : ''}`);
+        target.hpText.setText(this.hpLabel({ ...targetUnit, hp: ev.targetHp, stunned: ev.targetStunned }));
         target.container.setAlpha(ev.targetStunned ? 0.4 : 1);
         this.tweens.add({ targets: target.container, scale: 1.25, duration: 100, yoyo: true });
         await wait(this, ev.attackerId === 'wild' ? 400 : 250);

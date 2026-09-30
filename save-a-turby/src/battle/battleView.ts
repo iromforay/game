@@ -149,3 +149,38 @@ export function labelPlacement(snap: BattleSnapshot, u: BattleUnit): 'below' | '
   };
   return place(u);
 }
+
+// ---------- 전투 HUD 배치(v3 §5) ----------
+// 우선순위: 턴(가장 크게) > 행동 안내 > 목표. 작은 화면에서는 목표 패널을 접고(버튼으로 펼침) 유닛 라벨을 짧은 한 줄로.
+export interface BattleHudLayout {
+  mode: 'regular' | 'compact';
+  font: { status: number; hint: number; button: number; panelTitle: number; panel: number; label: number };
+  objectivesCollapsible: boolean;
+  labelWrap: number;
+}
+export function battleHudLayout(scale: number, tile = 80): BattleHudLayout {
+  const compact = scale < 0.75;
+  const f = (base: number, min: number) => Math.max(base, Math.ceil(min / Math.max(0.1, scale)));
+  return {
+    mode: compact ? 'compact' : 'regular',
+    font: { status: f(22, 16), hint: f(15, 13), button: f(18, 14), panelTitle: f(18, 14), panel: f(15, 12), label: f(13, 12) },
+    objectivesCollapsible: compact,
+    labelWrap: tile * 2 - 12,
+  };
+}
+
+// 작은 화면의 유닛 라벨: "이름 HP/최대" 한 줄 + 상태 표식은 짧은 UI 표기로 둘째 줄(대본 문구가 아님)
+const SHORT_TAG: Record<string, string> = { '보호 대상': '보호', '부위 먼저': '부위 먼저' };
+export function unitLabel(u: BattleUnit, compact: boolean): string {
+  const tags = unitTags(u);
+  if (!compact) return `${u.name} HP ${u.hp}/${u.maxHp}${tags.length > 0 ? ` (${tags.join(' · ')})` : ''}`;
+  const short = tags.map((t) => SHORT_TAG[t] ?? t);
+  return `${u.name} ${u.hp}/${u.maxHp}${short.length > 0 ? `\n${short.join(' · ')}` : ''}`;
+}
+
+// 라벨이 격자·화면 밖으로 나가지 않게 가운데 좌표를 끌어온다(bounds 안에 w×h 상자가 들어오도록)
+export function clampLabel(cx: number, top: number, w: number, h: number, bounds: { x: number; y: number; w: number; h: number }): { cx: number; top: number } {
+  const minX = bounds.x + w / 2;
+  const maxX = bounds.x + bounds.w - w / 2;
+  return { cx: Math.min(Math.max(cx, minX), Math.max(minX, maxX)), top: Math.min(Math.max(top, bounds.y), bounds.y + bounds.h - h) };
+}
