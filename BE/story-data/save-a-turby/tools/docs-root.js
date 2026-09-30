@@ -1,4 +1,4 @@
-// docs/는 .gitignore 대상이라 git 워크트리에는 없고 본 체크아웃에만 있다.
+// docs/는 .gitignore 대상이라 대본·설계 문서(docs/scene 등)는 본 체크아웃에만 있다(워크트리 docs/에는 소통 폴더만 있음).
 // 찾는 순서: TURBY_DOCS_ROOT 환경변수 → 이 체크아웃 → git 공용 저장소(.git)가 속한 본 체크아웃.
 const fs = require('fs');
 const path = require('path');
@@ -12,8 +12,8 @@ function docsRoot(repoRoot) {
   } catch {
     // git이 없으면 앞의 후보만 본다
   }
-  const found = candidates.find((dir) => dir && fs.existsSync(path.join(dir, 'docs')));
-  if (!found) throw new Error('docs/ 폴더를 찾지 못했습니다. TURBY_DOCS_ROOT에 docs/가 있는 체크아웃 경로를 지정해 주세요.');
+  const found = candidates.find((dir) => dir && fs.existsSync(path.join(dir, 'docs', 'scene')));
+  if (!found) throw new Error('docs/scene을 찾지 못했습니다. TURBY_DOCS_ROOT에 docs/scene이 있는 체크아웃 경로를 지정해 주세요.');
   return found;
 }
 

@@ -167,8 +167,11 @@ const file = {
   ],
 };
 
-fs.mkdirSync(path.dirname(OUT), { recursive: true });
-fs.writeFileSync(OUT, JSON.stringify(file, null, 2) + '\n', 'utf8');
-const count = file.segments.reduce((sum, s) => sum + s.entries.length, 0);
-console.log(`ch01.json: 구간 ${file.segments.length}개, 항목 ${count}개, 제외 지시문 ${Object.keys(EXCLUDED).length}줄`);
+// 테스트가 EXCLUDED만 가져갈 때는 파일을 다시 쓰지 않는다(직접 실행할 때만 생성)
+if (require.main === module) {
+  fs.mkdirSync(path.dirname(OUT), { recursive: true });
+  fs.writeFileSync(OUT, JSON.stringify(file, null, 2) + '\n', 'utf8');
+  const count = file.segments.reduce((sum, s) => sum + s.entries.length, 0);
+  console.log(`ch01.json: 구간 ${file.segments.length}개, 항목 ${count}개, 제외 지시문 ${Object.keys(EXCLUDED).length}줄`);
+}
 module.exports = { EXCLUDED };
