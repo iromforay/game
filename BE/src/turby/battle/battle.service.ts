@@ -153,13 +153,14 @@ export class BattleService implements OnModuleInit {
       throw new BattleError('ALREADY_IN_BATTLE', '진행 중인 전투가 있습니다.');
     }
 
+    // 스토리 판정을 먼저: 이미 이긴 전투는 어디서 요청해도 STORY_ENCOUNTER_DONE(새로고침 복원 뒤 대화가 다음으로 넘어가는 근거)
+    const available = await this.story.encounterAvailability(BigInt(playerId), key);
+    if (!available.ok) throw new BattleError(available.code, available.message);
+
     const room = this.rooms.roomOf(playerId);
     if (!room) throw new BattleError('NOT_IN_ROOM', '참여 중인 방이 없습니다.');
     if (room.phase !== 'playing') throw new BattleError('ROOM_NOT_STARTED', '방이 아직 시작되지 않았습니다.');
     if (!this.rooms.memberPosition(room, playerId)?.inMap) throw new BattleError('NOT_IN_MAP', '맵에 입장하지 않았습니다.');
-
-    const available = await this.story.encounterAvailability(BigInt(playerId), key);
-    if (!available.ok) throw new BattleError(available.code, available.message);
     if (room.stageCode !== available.def.stageCode) throw new BattleError('STORY_ENCOUNTER_NOT_AVAILABLE', '이 지역에서 시작할 수 없는 전투입니다.');
     const definition = this.content.battle(key);
     if (!definition) throw new BattleError('STORY_DATA_MISSING', '전투 정의 데이터가 없습니다.');

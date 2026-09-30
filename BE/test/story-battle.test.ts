@@ -130,6 +130,8 @@ test('5·6. 승리하면 승리 이벤트를 서버 경로로 1회만 기록, �
   assert.equal(events(s, 'forest_stitchling_battle_won'), 1, '중복 기록 없음');
   assert.equal(s.db.rows('turby_instance', { owner_player_id: P }).length, before, '포획 터비 없음');
   assert.equal(await code(s.battles.startStory('1', 'forest_stitchling_ambush')), 'STORY_ENCOUNTER_DONE', '이긴 전투는 다시 시작 불가');
+  s.rooms.leaveRoom('1');
+  assert.equal(await code(s.battles.startStory('1', 'forest_stitchling_ambush')), 'STORY_ENCOUNTER_DONE', '새로고침 복원 중(맵 밖)에도 이긴 전투는 DONE — 대화가 다음으로 넘어가는 근거');
   assert.equal((await s.story.getState(P)).resume.segmentId, 'ch01.bopul_clue', '다음 재생 구간');
 });
 
