@@ -175,7 +175,12 @@ function autoPlay(s: BattleState, maxRounds = 60) {
   while (s.phase === 'player_subturn' && s.round <= maxRounds) {
     const me = s.units.find((u) => u.side === 'party' && !u.stunned)!;
     let acted = false;
-    const foes = s.units.filter((u) => u.side === 'wild' && !u.stunned).sort((a, b) => d(me, a) - d(me, b));
+    // 지금 공격 규칙상 칠 수 있는 대상만 노린다(부위가 남은 중심부·순서가 아닌 부위는 제외 — 엔진 attack()과 같은 판정)
+    const live = s.units.filter((u) => u.side === 'wild' && !u.stunned && u.targetable !== false);
+    const nextOrder = (core: string) => Math.min(...live.filter((p) => p.partOf === core).map((p) => p.breakOrder ?? 0));
+    const foes = live
+      .filter((u) => (!u.partOf || (u.breakOrder ?? 0) === nextOrder(u.partOf)) && !live.some((p) => p.partOf === u.unitId))
+      .sort((a, b) => d(me, a) - d(me, b));
     for (const f of foes) if (d(me, f) === 1 && tryAct(s, { type: 'attack', unitId: me.unitId, targetUnitId: f.unitId })) { acted = true; break; }
     if (!acted && me.ap > 0) {
       outer: for (const f of foes) {
