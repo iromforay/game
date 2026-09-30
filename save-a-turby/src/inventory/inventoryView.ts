@@ -158,3 +158,36 @@ export function inventoryLayout(scale: number): InventoryLayout {
 
 export const insideCanvas = (r: Rect) => r.x >= 0 && r.y >= 0 && r.x + r.w <= 1280 && r.y + r.h <= 720;
 export const overlaps = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+
+// ---------- 페이지(v4 §4.2) ----------
+// 한 페이지 = 격자에 들어가는 칸 수. 페이지 이동 줄은 격자 아래(그 줄만큼 격자 높이를 뺀다)
+export interface GridPaging {
+  perPage: number;
+  pages: number;
+  page: number; // 범위 안으로 맞춘 현재 페이지
+  cells: GridCell[]; // 이 페이지 칸
+  pager: { prev: Rect; next: Rect; label: { x: number; y: number } } | null;
+}
+export function pageCells(cells: GridCell[], L: InventoryLayout, page: number): GridPaging {
+  const pagerH = L.font.button * 2;
+  const fullRows = Math.max(1, Math.floor((L.grid.h + 8) / (L.cell + 8)));
+  const fitsAll = cells.length <= fullRows * L.cols;
+  const rows = fitsAll ? fullRows : Math.max(1, Math.floor((L.grid.h - pagerH - 8 + 8) / (L.cell + 8)));
+  const perPage = rows * L.cols;
+  const pages = Math.max(1, Math.ceil(cells.length / perPage));
+  const p = Math.min(Math.max(0, page), pages - 1);
+  const y = L.grid.y + L.grid.h - pagerH;
+  const w = Math.max(pagerH * 1.6, L.font.button * 3);
+  return {
+    perPage,
+    pages,
+    page: p,
+    cells: cells.slice(p * perPage, (p + 1) * perPage),
+    pager: pages > 1 ? { prev: { x: L.grid.x, y, w, h: pagerH }, next: { x: L.grid.x + L.grid.w - w, y, w, h: pagerH }, label: { x: L.grid.x + L.grid.w / 2, y: y + pagerH / 2 } } : null,
+  };
+}
+
+// 페이지를 바꾼 뒤 선택한 아이템이 이 페이지에 없으면 상세를 비운다
+export function keepSelection(selected: string | null, visible: GridCell[]): string | null {
+  return selected && visible.some((c) => c.item.itemCode === selected) ? selected : null;
+}

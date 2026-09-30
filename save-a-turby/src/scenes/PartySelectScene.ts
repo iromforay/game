@@ -36,6 +36,7 @@ export class PartySelectScene extends Phaser.Scene {
   private cardBorders = new Map<string, Phaser.GameObjects.Rectangle>();
   private layout!: PartySelectLayout;
   private cardLayer: Phaser.GameObjects.GameObject[] = [];
+  private cardBadges = new Map<string, Phaser.GameObjects.Text>();
   private page = 0;
   private countText?: Phaser.GameObjects.Text;
   private limitText?: Phaser.GameObjects.Text;
@@ -171,18 +172,25 @@ export class PartySelectScene extends Phaser.Scene {
     this.cardLayer.forEach((o) => o.destroy());
     this.cardLayer = [];
     this.cardBorders.clear();
+    this.cardBadges.clear();
     const keep = <T extends Phaser.GameObjects.GameObject>(o: T) => {
       this.cardLayer.push(o);
       return o;
     };
     const all: { t: OwnedTurby; auto: boolean }[] = [...(autoNubi ? [{ t: autoNubi, auto: true }] : []), ...bag.map((t) => ({ t, auto: false }))];
     const list = all.slice(this.page * L.pageSize, (this.page + 1) * L.pageSize); // 넘치면 페이지로(카드를 더 줄이지 않음)
+    if (L.pages > 1) {
+      const right = Math.max(...L.cards.map((c) => c.x + c.w));
+      keep(this.add.text(right, L.cards[0].y - 8, `${this.page + 1} / ${L.pages}`, { fontSize: `${L.font.small}px`, color: '#dddddd' }).setOrigin(1, 1));
+    }
     list.forEach(({ t, auto }, i) => {
       const r = L.cards[i];
       const cx = r.x + r.w / 2;
       keep(this.add.rectangle(r.x, r.y, r.w, r.h, auto ? 0x2f4a3c : 0x2c2148, 1).setOrigin(0, 0).setStrokeStyle(2, auto ? 0x7fd6a0 : 0x5a3a8a));
       const border = keep(this.add.rectangle(r.x, r.y, r.w, r.h).setOrigin(0, 0).setStrokeStyle(6, 0x9fe58a, 0));
       if (!auto) this.cardBorders.set(t.id, border);
+      // 자동 참가(누비)와 사용자가 고른 터비를 구분: 고른 카드에만 "선택됨" 표시(페이지를 넘겨도 선택은 id로 유지)
+      if (!auto) this.cardBadges.set(t.id, keep(this.add.text(r.x + r.w - 8, r.y + 8, '선택됨', { fontSize: `${L.font.small}px`, color: '#1f3b2a', backgroundColor: '#9fe58a', padding: { x: 6, y: 2 } }).setOrigin(1, 0).setVisible(false)));
       const img = r.w * 0.55;
       const iy = r.y + 14 + img / 2;
       if (this.textures.exists(`turby-${t.characterCode}`)) keep(this.add.image(cx, iy, `turby-${t.characterCode}`).setDisplaySize(img, img));
@@ -190,7 +198,8 @@ export class PartySelectScene extends Phaser.Scene {
       const nameY = iy + img / 2 + 10;
       keep(this.add.text(cx, nameY, t.characterName, { fontSize: `${L.font.body}px`, color: '#ffffff' }).setOrigin(0.5, 0));
       const sub = auto ? '자동 참가' : `공 ${t.stats.attack} · 체 ${t.stats.maxHp}`;
-      keep(this.add.text(cx, nameY + L.font.body + 8, sub, { fontSize: `${L.font.small}px`, color: auto ? '#9fe5b8' : '#d9c89a' }).setOrigin(0.5, 0));
+      const subText = keep(this.add.text(cx, nameY + L.font.body + 8, sub, { fontSize: `${L.font.small}px`, color: auto ? '#9fe5b8' : '#d9c89a' }).setOrigin(0.5, 0));
+      if (!auto && subText.width > r.w - 12) subText.setText(`공${t.stats.attack} 체${t.stats.maxHp}`); // 좁은 카드(작은 화면): 카드 밖으로 넘치지 않게 짧게
       if (!auto) keep(this.add.zone(r.x, r.y, r.w, r.h).setOrigin(0, 0).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.toggleSelect(t.id)));
     });
     this.refreshSelection();
@@ -209,6 +218,7 @@ export class PartySelectScene extends Phaser.Scene {
 
   private refreshSelection() {
     for (const [id, border] of this.cardBorders) border.setStrokeStyle(6, 0x9fe58a, this.selected.has(id) ? 1 : 0);
+    for (const [id, badge] of this.cardBadges) badge.setVisible(this.selected.has(id));
     this.countText?.setText(`선택 ${this.selected.size}/${this.maxParty}${this.story ? ' · 누비 자동' : ''}`);
   }
 

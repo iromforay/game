@@ -152,21 +152,47 @@ export function labelPlacement(snap: BattleSnapshot, u: BattleUnit): 'below' | '
 
 // ---------- 전투 HUD 배치(v3 §5) ----------
 // 우선순위: 턴(가장 크게) > 행동 안내 > 목표. 작은 화면에서는 목표 패널을 접고(버튼으로 펼침) 유닛 라벨을 짧은 한 줄로.
+type HudRect = { x: number; y: number; w: number; h: number };
 export interface BattleHudLayout {
   mode: 'regular' | 'compact';
   font: { status: number; hint: number; button: number; panelTitle: number; panel: number; label: number };
   objectivesCollapsible: boolean;
   labelWrap: number;
+  // 누르는 영역·글자 영역(캔버스 좌표). 서로 겹치지 않는다(v4 §4.1 — 테스트로 확인)
+  rects: {
+    endTurn: HudRect; // 오른쪽 위
+    goalButton: HudRect | null; // 작은 화면: 왼쪽 위 목표 요약 버튼
+    goalPanel: HudRect | null; // 작은 화면: 펼친 목표 상세(오른쪽 위 — 아군이 시작하는 왼쪽을 가리지 않게), 높이는 최대치
+    turn: HudRect; // 가운데 위 턴 표시
+    leave: HudRect; // 왼쪽 아래
+    hint: HudRect; // 나가기 버튼 오른쪽 남은 폭(한 줄)
+  };
 }
 export function battleHudLayout(scale: number, tile = 80): BattleHudLayout {
   const compact = scale < 0.75;
   const f = (base: number, min: number) => Math.max(base, Math.ceil(min / Math.max(0.1, scale)));
-  return {
-    mode: compact ? 'compact' : 'regular',
-    font: { status: f(22, 16), hint: f(15, 13), button: f(18, 14), panelTitle: f(18, 14), panel: f(15, 12), label: f(13, 12) },
-    objectivesCollapsible: compact,
-    labelWrap: tile * 2 - 12,
-  };
+  const font = { status: f(22, 16), hint: f(15, 13), button: f(18, 14), panelTitle: f(18, 14), panel: f(15, 12), label: f(13, 12) };
+  const btnH = Math.round(font.button * 1.9);
+  const endTurn = { x: 1280 - 8 - Math.round(font.button * 5.2), y: 4, w: Math.round(font.button * 5.2), h: btnH };
+  const leave = { x: 8, y: 720 - 6 - btnH, w: Math.round(font.button * 6.2), h: btnH };
+  const hintH = Math.round(font.hint * 1.6);
+  const hint = compact ? { x: leave.x + leave.w + 12, y: 720 - 6 - hintH, w: 1280 - (leave.x + leave.w + 12) - 8, h: hintH } : { x: 260, y: 720 - 6 - hintH, w: 760, h: hintH };
+  const goalButton = compact ? { x: 8, y: 4, w: 540, h: btnH } : null; // 목표 요약 한 줄이 들어가는 폭
+  const turn = compact ? { x: goalButton!.x + goalButton!.w + 12, y: 4, w: endTurn.x - 12 - (goalButton!.x + goalButton!.w + 12), h: btnH } : { x: 380, y: 0, w: 520, h: 56 };
+  const goalPanel = compact ? { x: 1280 - 8 - 620, y: endTurn.y + endTurn.h + 8, w: 620, h: 260 } : null;
+  return { mode: compact ? 'compact' : 'regular', font, objectivesCollapsible: compact, labelWrap: tile * 2 - 12, rects: { endTurn, goalButton, goalPanel, turn, leave, hint } };
+}
+
+// 하단 행동 안내(UI 문구). 작은 화면에서는 한 줄에 들어가게 짧게
+export function actionHint(unitName: string | null, compact: boolean): string {
+  if (!unitName) return compact ? '움직일 유닛이 없어요 · 턴 종료' : '행동할 수 있는 유닛이 없습니다. 턴 종료를 눌러주세요';
+  return compact ? `${unitName} · 칸=이동 · 적=공격 · 자신=다음` : `${unitName}: 이동할 칸/다른 유닛 선택, 더 할 게 없으면 자신을 눌러 다음 유닛으로`;
+}
+
+// 목표 요약(작은 화면 버튼): 첫 목표 + 나머지 개수
+export function goalSummary(lines: string[]): string {
+  if (lines.length === 0) return '목표';
+  return `목표: ${lines[0]}${lines.length > 1 ? ` 외 ${lines.length - 1}` : ''} ▾`;
 }
 
 // 작은 화면의 유닛 라벨: "이름 HP/최대" 한 줄 + 상태 표식은 짧은 UI 표기로 둘째 줄(대본 문구가 아님)

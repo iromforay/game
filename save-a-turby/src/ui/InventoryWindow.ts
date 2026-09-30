@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { PAL, TEXT, feltPanel } from './kit';
 import { displayScaleOf } from './responsive';
 import { equipRelicToNubi, fetchInventory, fetchStory, markItemSeen } from '../api/client';
-import { EMPTY_TEXT, NUBI_FIXED_NOTE, TABS, detailOf, filterItems, gridCells, inventoryLayout, nubiSlots, type InventoryItem, type InventoryLayout, type InventoryList, type TabFilter } from '../inventory/inventoryView';
+import { EMPTY_TEXT, NUBI_FIXED_NOTE, TABS, detailOf, filterItems, gridCells, inventoryLayout, keepSelection, nubiSlots, pageCells, type InventoryItem, type InventoryLayout, type InventoryList, type TabFilter } from '../inventory/inventoryView';
 import type { StoryPlay } from '../story/storyFlow';
 
 type NubiState = { slots: { slotKey: string; itemCode: string; name: string }[] } | null;
@@ -19,6 +19,10 @@ export class InventoryWindow {
   private state: 'loading' | 'ready' | 'error' = 'loading';
   private busy = false;
   private message: string | null = null;
+  private page = 0;
+  private onResize = () => {
+    if (this.layer.visible) this.render(); // 열린 채 화면 크기가 바뀌면 다시 배치(v4 §4.2)
+  };
 
   private readonly scene: Phaser.Scene;
   private readonly opts: { onClose?: () => void; onPlay?: (play: StoryPlay) => void };
@@ -27,6 +31,8 @@ export class InventoryWindow {
     this.scene = scene;
     this.opts = opts;
     this.layer = scene.add.container(0, 0).setScrollFactor(0).setDepth(6000).setVisible(false);
+    scene.scale.on('resize', this.onResize);
+    scene.events.once('shutdown', () => scene.scale.off('resize', this.onResize));
   }
 
   get isVisible() {
@@ -37,6 +43,7 @@ export class InventoryWindow {
     this.tab = tab;
     this.selected = null;
     this.message = null;
+    this.page = 0;
     this.layer.setVisible(true);
     await this.reload();
   }
@@ -108,6 +115,7 @@ export class InventoryWindow {
         this.tab = t.key;
         this.selected = null;
         this.message = null;
+        this.page = 0;
         this.render();
       });
       this.text(r.x + r.w / 2, r.y + r.h / 2, t.label, f.button, TEXT.body).setOrigin(0.5);
@@ -121,20 +129,32 @@ export class InventoryWindow {
     }
 
     const items = filterItems(this.data.items, this.tab);
-    this.renderGrid(items, L);
+    const paging = pageCells(gridCells(items), L, this.page);
+    this.page = paging.page;
+    this.selected = keepSelection(this.selected, paging.cells); // 페이지를 바꿔 선택이 사라지면 상세를 비운다
+    this.renderGrid(items, L, paging);
     const sel = this.data.items.find((i) => i.itemCode === this.selected) ?? null;
     this.renderDetail(sel, L);
   }
 
-  private renderGrid(items: InventoryItem[], L: InventoryLayout) {
+  private renderGrid(items: InventoryItem[], L: InventoryLayout, paging: ReturnType<typeof pageCells>) {
     const g = L.grid;
     if (items.length === 0) {
       this.text(g.x + g.w / 2, g.y + 80, EMPTY_TEXT[this.tab], L.font.body, TEXT.sub).setOrigin(0.5);
       return;
     }
-    const cells = gridCells(items);
-    const rows = Math.max(1, Math.floor((g.h + 8) / (L.cell + 8)));
-    cells.slice(0, rows * L.cols).forEach((c, i) => {
+    if (paging.pager) {
+      const { prev, next, label } = paging.pager;
+      const go = (d: number) => {
+        this.page = (paging.page + d + paging.pages) % paging.pages;
+        this.message = null;
+        this.render();
+      };
+      this.button(prev, '◀', L.font.button, true, () => go(-1), PAL.lavender);
+      this.button(next, '▶', L.font.button, true, () => go(1), PAL.lavender);
+      this.text(label.x, label.y, `${paging.page + 1} / ${paging.pages}`, L.font.body, TEXT.body).setOrigin(0.5);
+    }
+    paging.cells.forEach((c, i) => {
       const x = g.x + (i % L.cols) * (L.cell + 8);
       const y = g.y + Math.floor(i / L.cols) * (L.cell + 8);
       const selected = c.item.itemCode === this.selected;
@@ -154,7 +174,6 @@ export class InventoryWindow {
       if (c.item.isNew) this.text(x + 6, y + 4, 'N', L.font.badge, '#ffffff', { backgroundColor: '#e5708f', padding: { x: 5, y: 1 } });
       if (c.item.isLocked) this.text(x + L.cell - 6, y + 4, '잠김', L.font.badge, '#ffffff', { backgroundColor: '#8a7aa8', padding: { x: 4, y: 1 } }).setOrigin(1, 0);
     });
-    if (cells.length > rows * L.cols) this.text(g.x, g.y + g.h - L.font.body, `외 ${cells.length - rows * L.cols}칸`, L.font.body, TEXT.sub);
   }
 
   private renderDetail(item: InventoryItem | null, L: InventoryLayout) {

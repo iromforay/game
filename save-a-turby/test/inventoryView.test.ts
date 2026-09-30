@@ -3,9 +3,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { EMPTY_TEXT, detailOf, filterItems, gridCells, insideCanvas, inventoryLayout, nubiSlots, overlaps, type InventoryItem } from '../src/inventory/inventoryView.ts';
+import { EMPTY_TEXT, detailOf, filterItems, gridCells, insideCanvas, inventoryLayout, keepSelection, nubiSlots, overlaps, pageCells, type InventoryItem } from '../src/inventory/inventoryView.ts';
 import { partySelectLayout } from '../src/battle/partySelectLayout.ts';
-import { battleHudLayout, clampLabel, unitLabel } from '../src/battle/battleView.ts';
+import { actionHint, battleHudLayout, clampLabel, goalSummary, unitLabel } from '../src/battle/battleView.ts';
 import { displayScaleOf, finalPx, layoutModeOf, MIN_BODY_PX, MIN_BUTTON_PX } from '../src/ui/responsive.ts';
 import { devFlags } from '../src/story/devFlags.ts';
 import type { BattleUnit } from '../src/net/battleTypes.ts';
@@ -118,4 +118,53 @@ test('운영 맵: 원격 전달 버튼은 개발 플래그가 꺼져 있으면(�
   assert.match(src, /remoteDelivery: false/);
   // 운영 코드 어디에서도 플래그를 켜지 않는다(개발 미리보기만)
   for (const f of ['scenes/MapScene.ts', 'scenes/VillageScene.ts', 'game.ts']) assert.doesNotMatch(readFileSync(fileURLToPath(new URL(`../src/${f}`, import.meta.url)), 'utf8'), /remoteDelivery\s*=\s*true/);
+});
+
+test('v4 전투 HUD(640×360·1280×720): 턴·목표·턴 종료·나가기·안내 영역이 화면 안에서 서로 겹치지 않고, 작은 화면 안내는 한 줄 폭 안, 펼친 목표는 오른쪽 위', () => {
+  for (const scale of [0.5, 1]) {
+    const H = battleHudLayout(scale);
+    const r = H.rects;
+    const all = [r.endTurn, r.turn, r.leave, r.hint, ...(r.goalButton ? [r.goalButton] : [])];
+    for (const a of all) assert.ok(insideCanvas(a), `${scale}: ${JSON.stringify(a)}`);
+    for (let i = 0; i < all.length; i++) for (let j = i + 1; j < all.length; j++) assert.ok(!overlaps(all[i], all[j]), `${scale}: ${JSON.stringify(all[i])} × ${JSON.stringify(all[j])}`);
+  }
+  const C = battleHudLayout(0.5);
+  // 한 줄 폭: 한글 한 글자 ≈ 글자 크기(보수적으로 1.0배)
+  const text = actionHint('보풀이', true);
+  assert.ok([...text].length * C.font.hint <= C.rects.hint.w, `${text} (${[...text].length * C.font.hint} > ${C.rects.hint.w})`);
+  assert.ok(C.rects.goalPanel!.x >= 640, '펼친 목표는 오른쪽(아군이 시작하는 왼쪽 전장을 가리지 않음)');
+  assert.ok(insideCanvas(C.rects.goalPanel!));
+  assert.ok(!overlaps(C.rects.goalPanel!, C.rects.endTurn) && !overlaps(C.rects.goalPanel!, C.rects.goalButton!));
+  assert.equal(goalSummary(['적을 모두 물리치기', '보풀이 지키기 — 쓰러지면 패배']), '목표: 적을 모두 물리치기 외 1 ▾');
+  assert.ok([...goalSummary(['적을 모두 물리치기', 'x'])].length * C.font.button <= C.rects.goalButton!.w + C.font.button * 2, '요약이 버튼 폭 안');
+});
+
+test('v4 인벤토리 페이지: 한 화면을 넘으면 페이지로 나누고 이동 버튼은 격자 안·겹치지 않음, 범위 밖 페이지는 맞춤, 페이지 전환 뒤 사라진 선택은 초기화', () => {
+  for (const scale of [0.5, 1]) {
+    const L = inventoryLayout(scale);
+    const many = Array.from({ length: 40 }, (_, i) => item({ itemCode: `it${i}`, name: `아이템${i}`, stacks: [1] }));
+    const cells = gridCells(many);
+    const p0 = pageCells(cells, L, 0);
+    assert.ok(p0.pages > 1 && p0.pager, `${scale}: 여러 페이지`);
+    assert.equal(p0.cells.length, p0.perPage);
+    const lastRowBottom = L.grid.y + Math.ceil(p0.perPage / L.cols) * (L.cell + 8) - 8;
+    assert.ok(lastRowBottom <= p0.pager!.prev.y, '칸이 페이지 버튼 줄을 침범하지 않음');
+    for (const r of [p0.pager!.prev, p0.pager!.next]) assert.ok(insideCanvas(r) && !overlaps(r, L.detail));
+    assert.ok(!overlaps(p0.pager!.prev, p0.pager!.next));
+    const last = pageCells(cells, L, 99);
+    assert.equal(last.page, last.pages - 1, '범위 밖 페이지는 마지막으로');
+    assert.equal(p0.cells.length * (last.pages - 1) + last.cells.length, 40, '모든 칸이 어느 한 페이지에');
+    // 선택 유지/초기화
+    assert.equal(keepSelection('it0', p0.cells), 'it0');
+    assert.equal(keepSelection('it0', last.cells), null, '다른 페이지로 가면 상세 초기화');
+    // 한 페이지에 들어가면 이동 줄 없음
+    assert.equal(pageCells(gridCells(many.slice(0, 3)), L, 0).pager, null);
+  }
+});
+
+test('v4 PartySelect: 여러 페이지에서도 완료·나가기·페이지 버튼이 서로 겹치지 않음(640×360)', () => {
+  const L = partySelectLayout(0.5, 13);
+  assert.ok(L.pages > 1);
+  for (const a of [L.button, L.count, L.prev!, L.next!]) assert.ok(!overlaps(a, L.leaveRect), JSON.stringify(a));
+  assert.ok(insideCanvas(L.leaveRect));
 });

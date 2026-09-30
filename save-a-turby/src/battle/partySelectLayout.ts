@@ -15,6 +15,7 @@ export interface PartySelectLayout {
   count: Rect; // "선택 n/m" 글자 영역
   button: Rect; // 선택 완료
   leave: { x: number; y: number };
+  leaveRect: Rect; // 나가기 버튼이 차지하는 영역(완료 버튼 줄과 겹치지 않음 — 테스트)
   font: { title: number; body: number; small: number; button: number };
 }
 
@@ -81,6 +82,7 @@ export function partySelectLayout(scale: number, cardCount: number): PartySelect
     count: { x: cx0, y: footerY, w: countW, h: buttonH },
     button: { x: cx0 + countW + 24, y: footerY, w: buttonW, h: buttonH },
     leave: { x: 16, y: 720 - 16 },
+    leaveRect: { x: 16, y: 720 - 16 - Math.round(font.small * 1.25 + 12), w: Math.round(font.small * 7.5 + 20), h: Math.round(font.small * 1.25 + 12) },
     font,
   };
 }
