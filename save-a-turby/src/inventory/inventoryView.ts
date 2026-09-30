@@ -74,20 +74,28 @@ export const EMPTY_TEXT: Record<TabFilter, string> = {
 };
 
 // 상세 패널 문구와 행동
+// 상세 패널(v5 §5.2): 1 이름·상태 배지 → 2 설명 → 3 수량·분류 → 4 잠금 이유 → 5 누비 슬롯·가능한 행동 순으로 나눠 그린다.
+// 문구는 서버·기존 문구 그대로(배지는 이미 쓰던 짧은 표기).
 export interface DetailView {
   title: string;
-  lines: string[];
+  badges: string[]; // 이름 옆 상태: 신규·잠김·장착됨
+  description: string | null;
+  meta: string[]; // 수량·분류(·최근 획득)
+  lines: string[]; // 설명 + meta(이전 형식, 호환용)
   equip: { label: string; enabled: boolean; note: string | null } | null;
   equippedLabel: string | null;
   lockNote: string | null;
 }
 export function detailOf(item: InventoryItem): DetailView {
-  const lines = [`분류: ${item.tabLabel}`, `수량: ${item.quantity}${item.maxStack > 1 ? ` (한 칸 최대 ${item.maxStack})` : ''}`];
-  if (item.description) lines.unshift(item.description);
-  if (item.lastAcquiredAt) lines.push(`최근 획득: ${item.lastAcquiredAt.slice(0, 10)}`);
+  const meta = [`수량: ${item.quantity}${item.maxStack > 1 ? ` (한 칸 최대 ${item.maxStack})` : ''}`, `분류: ${item.tabLabel}`];
+  if (item.lastAcquiredAt) meta.push(`최근 획득: ${item.lastAcquiredAt.slice(0, 10)}`);
+  const badges = [item.isNew ? '신규' : null, item.isLocked ? '잠김' : null, item.equippedOnStoryNubi ? '장착됨' : null].filter((b): b is string => b !== null);
   return {
     title: item.name,
-    lines,
+    badges,
+    description: item.description ?? null,
+    meta,
+    lines: [...(item.description ? [item.description] : []), ...meta],
     equip: item.storyAction ? { label: item.storyAction.label, enabled: item.storyAction.available, note: item.storyAction.available ? null : item.storyAction.reason } : null,
     equippedLabel: item.equippedOnStoryNubi ? '누비에게 장착됨' : null,
     lockNote: item.isLocked ? (item.lockReason ?? '잠긴 아이템이에요') : null,

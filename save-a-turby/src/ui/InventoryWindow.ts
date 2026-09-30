@@ -7,6 +7,9 @@ import type { StoryPlay } from '../story/storyFlow';
 
 type NubiState = { slots: { slotKey: string; itemCode: string; name: string }[] } | null;
 
+// 열려 있을 수 있는 창 목록(개발 도구·E2E 진단이 현재 탭·페이지·배치 모드를 읽는다). 씬이 끝나면 빠진다
+export const liveInventoryWindows = new Set<InventoryWindow>();
+
 // MMORPG형 인벤토리 창(v3 §2) — 마을·탐험 화면 공용, 화면 고정 오버레이. 전투 화면에는 두지 않는다.
 // 수량·잠금·장착 가능 여부는 서버 응답 그대로. 배치는 실제 표시 배율에 따라 보통/작은 화면용을 고른다(inventoryLayout).
 // 아이콘·패널은 임시 도형(에셋 확정 전).
@@ -32,11 +35,20 @@ export class InventoryWindow {
     this.opts = opts;
     this.layer = scene.add.container(0, 0).setScrollFactor(0).setDepth(6000).setVisible(false);
     scene.scale.on('resize', this.onResize);
-    scene.events.once('shutdown', () => scene.scale.off('resize', this.onResize));
+    liveInventoryWindows.add(this);
+    scene.events.once('shutdown', () => {
+      scene.scale.off('resize', this.onResize);
+      liveInventoryWindows.delete(this);
+    });
   }
 
   get isVisible() {
     return this.layer.visible;
+  }
+
+  // 진단용 요약(화면 상태만 — 서버 값·식별 정보 없음)
+  get debugState() {
+    return { visible: this.layer.visible, state: this.state, tab: this.tab, page: this.page, selected: this.selected, mode: this.layout.mode, itemCount: this.data?.items.length ?? 0 };
   }
 
   async open(tab: TabFilter = 'all') {
@@ -191,14 +203,41 @@ export class InventoryWindow {
       return;
     }
     const view = detailOf(item);
+    const inner = d.w - pad * 2;
+    // 1) 이름 + 상태 배지(이름 오른쪽, 자리가 모자라면 다음 줄)
     const title = this.text(d.x + pad, y, view.title, f.title, TEXT.body, wrap);
-    y += title.height + 8;
-    const body = this.text(d.x + pad, y, view.lines.join('\n'), f.body, TEXT.sub, { ...wrap, lineSpacing: 4 });
-    y += body.height + 10;
-    if (view.lockNote) {
-      const lock = this.text(d.x + pad, y, `잠김 · ${view.lockNote}`, f.body, '#8a5a7a', wrap);
-      y += lock.height + 10;
+    let bx = d.x + pad + title.width + 10;
+    let by = y + Math.max(0, (title.height - f.body * 1.4) / 2);
+    const BADGE: Record<string, [string, string]> = { 신규: ['#ffffff', '#e0708a'], 잠김: ['#ffffff', '#8a6aa8'], 장착됨: [TEXT.onMint, '#cfeedd'] };
+    for (const b of view.badges) {
+      const [fg, bg] = BADGE[b] ?? [TEXT.body, '#eeeeee'];
+      const t = this.text(bx, by, b, f.body, fg, { backgroundColor: bg, padding: { x: 6, y: 2 } });
+      if (bx + t.width > d.x + d.w - pad) {
+        by = y + title.height + 4;
+        bx = d.x + pad;
+        t.setPosition(bx, by);
+      }
+      bx += t.width + 6;
     }
+    y = Math.max(y + title.height, by + f.body * 1.4) + 10;
+    // 2) 설명
+    if (view.description) {
+      const desc = this.text(d.x + pad, y, view.description, f.body, TEXT.body, { ...wrap, lineSpacing: 4 });
+      y += desc.height + 8;
+    }
+    // 3) 수량·분류: 구분선 아래 보조 정보
+    this.add(this.scene.add.rectangle(d.x + pad, y, inner, 2, PAL.lavender, 0.6).setOrigin(0, 0));
+    y += 8;
+    const meta = this.text(d.x + pad, y, view.meta.join('  ·  '), f.body, TEXT.sub, { ...wrap, lineSpacing: 4 });
+    y += meta.height + 10;
+    // 4) 잠금 이유: 연보라 상자
+    if (view.lockNote) {
+      const box = this.add(this.scene.add.rectangle(d.x + pad, y, inner, 10, 0xf3e6f3).setOrigin(0, 0).setStrokeStyle(2, 0xc9a6c9));
+      const lock = this.text(d.x + pad + 10, y + 6, `잠김 · ${view.lockNote}`, f.body, '#6a3f6a', { wordWrap: { width: inner - 20, useAdvancedWrap: true } });
+      box.setSize(inner, lock.height + 12);
+      y += lock.height + 12 + 10;
+    }
+    // 5) 누비 슬롯 또는 가능한 행동
     if (view.equippedLabel) {
       const eq = this.text(d.x + pad, y, view.equippedLabel, f.button, TEXT.onMint, { backgroundColor: '#cfeedd', padding: { x: 8, y: 4 } });
       y += eq.height + 10;

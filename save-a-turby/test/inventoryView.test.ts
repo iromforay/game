@@ -1,12 +1,13 @@
 // v3 M4-D 인벤토리·저해상도 배치 — 순수 판정 검증
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { EMPTY_TEXT, detailOf, filterItems, gridCells, insideCanvas, inventoryLayout, keepSelection, nubiSlots, overlaps, pageCells, type InventoryItem } from '../src/inventory/inventoryView.ts';
 import { partySelectLayout } from '../src/battle/partySelectLayout.ts';
-import { actionHint, battleHudLayout, clampLabel, goalSummary, unitLabel } from '../src/battle/battleView.ts';
-import { displayScaleOf, finalPx, layoutModeOf, MIN_BODY_PX, MIN_BUTTON_PX } from '../src/ui/responsive.ts';
+import { actionHint, battleHudLayout, clampLabel, goalSummary, resultLayout, unitLabel } from '../src/battle/battleView.ts';
+import { displayScaleOf, finalPx, layoutKey, layoutModeOf, MIN_BODY_PX, MIN_BUTTON_PX } from '../src/ui/responsive.ts';
 import { devFlags } from '../src/story/devFlags.ts';
 import type { BattleUnit } from '../src/net/battleTypes.ts';
 
@@ -167,4 +168,75 @@ test('v4 PartySelect: 여러 페이지에서도 완료·나가기·페이지 버
   assert.ok(L.pages > 1);
   for (const a of [L.button, L.count, L.prev!, L.next!]) assert.ok(!overlaps(a, L.leaveRect), JSON.stringify(a));
   assert.ok(insideCanvas(L.leaveRect));
+});
+
+// ---------- v5 §4·§5 ----------
+
+const inside = (a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }) => a.x >= b.x && a.y >= b.y && a.x + a.w <= b.x + b.w && a.y + a.h <= b.y + b.h;
+
+test('v5 결과창: 640×360은 화면 거의 전체·읽을 수 있는 글자·터치 높이, 보상 행 0~5개 모두 패널 안에서 겹치지 않음', () => {
+  for (const scale of [0.5, 0.6, 1]) {
+    for (const [n, framed] of [[0, false], [1, false], [3, true], [5, true], [5, false]] as const) {
+      const R = resultLayout(scale, n, framed);
+      const tag = `${scale}/${n}행/${framed ? '테두리' : '도형'}`;
+      assert.ok(insideCanvas(R.panel) && inside(R.button, R.panel), tag);
+      const imageBox = { x: 640 - R.image.size / 2, y: R.image.cy - R.image.size / 2, w: R.image.size, h: R.image.size };
+      const subBox = { x: R.rows.x, y: R.subY - R.font.sub * 0.7, w: R.rows.w, h: R.font.sub * 1.4 };
+      const titleBox = { x: R.rows.x, y: R.titleY - R.font.title * 0.6, w: R.rows.w, h: R.font.title * 1.2 };
+      const rowBoxes = Array.from({ length: n }, (_, i) => ({ x: R.rows.x, y: R.rows.y0 + i * (R.rows.h + R.rows.gap), w: R.rows.w, h: R.rows.h }));
+      const boxes = [titleBox, ...(R.image.size > 0 ? [imageBox] : []), subBox, ...rowBoxes, R.button];
+      for (const b of boxes) assert.ok(inside(b, R.panel), `${tag}: 패널 밖 ${JSON.stringify(b)}`);
+      for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) assert.ok(!overlaps(boxes[i], boxes[j]), `${tag}: 겹침 ${i}×${j}`);
+      assert.ok(finalPx(R.font.sub, scale) >= MIN_BODY_PX && finalPx(R.font.row, scale) >= MIN_BODY_PX && finalPx(R.font.button, scale) >= MIN_BUTTON_PX, `${tag}: 글자 기준`);
+    }
+  }
+  const C = resultLayout(0.5, 1);
+  assert.equal(C.mode, 'compact');
+  assert.ok(C.panel.w >= 1200 && C.panel.h >= 680, '작은 화면은 바깥 여백을 줄여 화면 거의 전체');
+  assert.ok(finalPx(C.font.title, 0.5) >= 20 && finalPx(C.font.sub, 0.5) >= 15, '제목·핵심 결과가 본문 기준보다 크게');
+  assert.ok(finalPx(C.button.h, 0.5) >= 40 && finalPx(C.button.w, 0.5) >= 150, '버튼 터치 영역(최종 40px 이상 높이)');
+  assert.ok(C.image.size >= 120, '포획 대상 그림이 크게');
+});
+
+test('v5 목표 패널: 닫기 버튼은 펼친 패널 안 오른쪽 위, 요약 버튼·턴 종료와 겹치지 않음, 요약은 열림/닫힘 표시', () => {
+  const H = battleHudLayout(0.5);
+  const r = H.rects;
+  assert.ok(inside(r.goalClose!, r.goalPanel!));
+  for (const o of [r.goalButton!, r.endTurn, r.turn]) assert.ok(!overlaps(r.goalClose!, o) && !overlaps(r.goalPanel!, o));
+  assert.ok(finalPx(r.goalClose!.h, 0.5) >= 24, '닫기 터치 높이');
+  assert.match(goalSummary(['적을 모두 물리치기'], true), /▴$/);
+  assert.match(goalSummary(['적을 모두 물리치기'], false), /▾$/);
+  assert.equal(battleHudLayout(1).rects.goalClose, null, '보통 화면은 목표가 항상 펼쳐져 있어 닫기 없음');
+});
+
+test('v5 인벤토리 상세 위계: 이름·배지 → 설명 → 수량·분류 → 잠금 이유 → 행동, 문구는 기존 그대로', () => {
+  const d = detailOf({ ...knot, description: '누비의 첫 기억', isNew: true, lastAcquiredAt: '2026-09-30T01:00:00Z' });
+  assert.deepEqual(d.badges, ['신규', '잠김']);
+  assert.equal(d.description, '누비의 첫 기억');
+  assert.deepEqual(d.meta, ['수량: 1', '분류: 스토리', '최근 획득: 2026-09-30']);
+  assert.equal(d.lockNote, '이야기에 필요한 물건');
+  assert.equal(d.equip?.label, '누비에게 장착');
+  assert.deepEqual(detailOf({ ...knot, equippedOnStoryNubi: true, storyAction: null }).badges, ['잠김', '장착됨']);
+  assert.deepEqual(detailOf(needle).badges, [], '일반 장비는 배지 없음');
+});
+
+test('v5 크기 변경 기준(layoutKey): 배율 1 이상은 하나로, 모드·글자 구간이 바뀔 때만 다시 배치', () => {
+  assert.equal(layoutKey(1), layoutKey(1.6), '큰 화면끼리는 다시 배치 안 함');
+  assert.notEqual(layoutKey(0.5), layoutKey(1));
+  assert.notEqual(layoutKey(0.74), layoutKey(0.76), '작은 화면용 배치 경계');
+  assert.equal(layoutKey(0.5), layoutKey(0.5 + 1e-6 * 0), '같은 배율은 같은 키');
+});
+
+test('v5 독립 실행 페이지: #app이 창 전체를 차지(창을 키우면 캔버스도 커짐), 캔버스 크기로 줄어드는 옛 방식 아님', () => {
+  const html = readFileSync(fileURLToPath(new URL('../index.html', import.meta.url)), 'utf8');
+  assert.match(html, /#app\s*\{[^}]*width:\s*100vw[^}]*height:\s*100vh/);
+  assert.match(html, /overflow:\s*hidden/, '스크롤바로 화면 밖 넘침 없음');
+  const game = readFileSync(fileURLToPath(new URL('../src/game.ts', import.meta.url)), 'utf8');
+  assert.match(game, /mode:\s*Phaser\.Scale\.FIT/, '종횡비 유지(FIT)');
+});
+
+test('v5 개발 도구 격리: 게임 소스(src)가 dev/ 도우미를 import하지 않음', () => {
+  const dir = fileURLToPath(new URL('../src/', import.meta.url));
+  const walk = (d: string): string[] => readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(join(d, e.name)) : e.name.endsWith('.ts') ? [join(d, e.name)] : []));
+  for (const f of walk(dir)) assert.doesNotMatch(readFileSync(f, 'utf8'), /from ['"][^'"]*\/dev\/|import\(['"][^'"]*\/dev\//, f);
 });

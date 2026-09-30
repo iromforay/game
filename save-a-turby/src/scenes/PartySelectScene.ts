@@ -5,6 +5,7 @@ import { inventory } from '../state/inventory';
 import { fetchStory } from '../api/client';
 import { partySelectLayout, type PartySelectLayout } from '../battle/partySelectLayout';
 import { displayScaleOf } from '../ui/responsive';
+import { watchLayout } from '../ui/relayout';
 import type { OwnedTurby } from '../state/inventory';
 import { battleClient } from '../net/battleClient';
 import { roomClient, RoomApiError } from '../net/roomClient';
@@ -22,6 +23,7 @@ interface PartySelectInitData {
   removedIndices: number[];
   snapshot: BattleSnapshot; // 서버가 만든 전투(초대 대기 또는 파티 선택 단계) — 파티 상한·마감 시각도 서버가 정한 값
   returnTo?: BattleReturn; // 스토리 전투: 끝나거나 나가면 돌아갈 화면
+  keep?: { selected: string[]; page: number }; // 창 크기 변경으로 다시 배치할 때 이어받는 화면 상태(v5 §4)
 }
 
 const slotColor = (slot: number) => coopSlots.find((c) => c.slot === slot)?.main ?? '#888888';
@@ -51,6 +53,7 @@ export class PartySelectScene extends Phaser.Scene {
   private leaving = false;
   private offUpdate: (() => void) | null = null;
   private offReconnect: (() => void) | null = null;
+  private relayoutPending = false;
 
   constructor() {
     super('PartySelect');
@@ -59,7 +62,16 @@ export class PartySelectScene extends Phaser.Scene {
   init(data: PartySelectInitData) {
     this.initData = data;
     this.snap = data.snapshot;
-    this.selected = new Set();
+    this.selected = new Set(data.keep?.selected ?? []);
+    this.relayoutPending = false;
+    // 같은 씬 인스턴스를 다시 쓰므로(scene.start 재진입) 이전 화면의 글자·버튼 참조를 비운다 — 남겨 두면 파괴된 객체에
+    // setText를 호출해 create가 중간에 멈춘다(두 번째 조우에서 제목·버튼이 안 보이던 문제, v5 E2E에서 발견)
+    this.countText = undefined;
+    this.limitText = undefined;
+    this.timerText = undefined;
+    this.titleText = undefined;
+    this.startButton = undefined;
+    this.startLabel = undefined;
     this.cardBorders = new Map();
     this.cardLayer = [];
     this.chips = [];
@@ -123,7 +135,7 @@ export class PartySelectScene extends Phaser.Scene {
       return;
     }
 
-    this.page = 0;
+    this.page = Math.min(this.initData.keep?.page ?? 0, L.pages - 1);
     this.renderCards(bag, autoNubi);
     if (L.prev && L.next) {
       const pager = (r: { x: number; y: number; w: number; h: number }, label: string, d: number) =>
@@ -154,7 +166,9 @@ export class PartySelectScene extends Phaser.Scene {
       .on('pointerdown', () => void this.backToMap());
 
     // 시작할 때 항상 최소 1마리(가방의 첫 개체)를 기본 선택해둬서 빈 파티로 못 나가게 함(스토리 전투는 누비가 자동 참가하므로 비워도 된다)
-    if (!this.story && bag.length > 0) this.toggleSelect(bag[0].id);
+    // (크기 변경으로 다시 배치한 경우는 고르던 상태를 그대로 이어받는다)
+    if (!this.initData.keep && !this.story && bag.length > 0) this.toggleSelect(bag[0].id);
+    watchLayout(this, () => this.relayout());
 
     this.offUpdate = roomClient.on('battleUpdate', (u) => this.onUpdate(u));
     this.offReconnect = roomClient.on('reconnected', () => void this.resync());
@@ -162,8 +176,22 @@ export class PartySelectScene extends Phaser.Scene {
       this.offUpdate?.();
       this.offReconnect?.();
     });
-    this.time.addEvent({ delay: 250, loop: true, callback: () => this.updateTimer() });
+    this.time.addEvent({ delay: 250, loop: true, callback: () => {
+      this.updateTimer();
+      if (this.relayoutPending) this.relayout();
+    } });
     this.applySnapshot();
+  }
+
+  // 표시 배율이 바뀌면 새 배율의 카드·글자·버튼으로 다시 그린다. 선택·페이지·서버 전투 상태는 이어받고,
+  // 제출·이탈 요청 중이면 끝난 뒤에 한다(요청 응답을 잃지 않게)
+  private relayout() {
+    if (this.submitting || this.leaving) {
+      this.relayoutPending = true;
+      return;
+    }
+    this.relayoutPending = false;
+    this.scene.restart({ ...this.initData, snapshot: this.snap, keep: { selected: [...this.selected], page: this.page } });
   }
 
   // 카드: 그림(카드 폭의 55%) · 이름 · 능력치. 스토리 전투는 맨 앞에 "자동 참가" 누비 카드(선택 불가)
@@ -287,7 +315,7 @@ export class PartySelectScene extends Phaser.Scene {
     this.overlay = [];
     if (!message) return;
     this.overlay.push(this.add.rectangle(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT, 0x000000, 0.35).setOrigin(0, 0).setDepth(50).setInteractive());
-    this.overlay.push(this.add.text(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 60, message, { fontSize: '20px', color: '#ffe9a8', backgroundColor: '#241a3d', padding: { x: 18, y: 10 } }).setOrigin(0.5).setDepth(51));
+    this.overlay.push(this.add.text(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 60, message, { fontSize: `${this.layout?.font.button ?? 20}px`, color: '#ffe9a8', backgroundColor: '#241a3d', padding: { x: 18, y: 10 } }).setOrigin(0.5).setDepth(51));
   }
 
   private updateTimer() {

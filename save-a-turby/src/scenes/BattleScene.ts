@@ -9,7 +9,8 @@ import type { ActionBody, BattleEnded, BattleEvent, BattleResponse, BattleSnapsh
 import { showToast, feltPanel, pillButton, TEXT } from '../ui/kit';
 import { loadWorldImages } from '../assets/loader';
 import coopSlots from '../data/coop-slots.json';
-import { actionHint, battleHudLayout, clampLabel, goalSummary, unitLabel, type BattleHudLayout } from '../battle/battleView';
+import { actionHint, battleHudLayout, clampLabel, goalSummary, resultLayout, unitLabel, type BattleHudLayout } from '../battle/battleView';
+import { watchLayout } from '../ui/relayout';
 import { displayScaleOf } from '../ui/responsive';
 import { isStoryBattle, labelPlacement, objectiveLines, reachableCells, returnDestination, showsCornerEscape, storyResultText, targetState, STORY_BADGE, STORY_NOTICE, TARGET_HINT, type BattleReturn } from '../battle/battleView';
 
@@ -19,6 +20,7 @@ interface BattleInitData {
   removedIndices: number[];
   snapshot: BattleSnapshot; // 서버가 내려준 전투 상태(파티 확정 직후 또는 새로고침 복구)
   returnTo?: BattleReturn; // 스토리 전투: 끝나면 돌아갈 화면(결과를 storyBattleEnd로 넘긴다)
+  keep?: { goalOpen: boolean; selectedUnitId: string | null; doneUnits: string[]; lastRound: number; ended: BattleEnded | null; settleGaveUp: boolean }; // 창 크기 변경으로 다시 배치할 때 이어받는 화면 상태(v5 §4)
 }
 
 interface UnitView {
@@ -68,6 +70,9 @@ export class BattleScene extends Phaser.Scene {
   private goalLayer: Phaser.GameObjects.GameObject[] = [];
   private goalOpen = false;
   private blockedDrawn = '';
+  private generation = 0; // 다시 배치(재시작)할 때마다 증가 — 이전 화면의 자동 재확인 루프를 멈춘다
+  private relayoutPending = false;
+  private goalButtonText?: Phaser.GameObjects.Text;
 
   constructor() {
     super('Battle');
@@ -92,6 +97,16 @@ export class BattleScene extends Phaser.Scene {
     this.leavingRemoved = false;
     this.blockedObjs = [];
     this.blockedDrawn = '';
+    this.generation++;
+    this.relayoutPending = false;
+    const k = data.keep;
+    if (k) {
+      this.selectedUnitId = k.selectedUnitId;
+      this.doneUnits = new Set(k.doneUnits);
+      this.lastRound = k.lastRound;
+      this.resultEnded = k.ended;
+      this.settleGaveUp = k.settleGaveUp;
+    }
   }
 
   preload() {
@@ -122,6 +137,7 @@ export class BattleScene extends Phaser.Scene {
     this.hud = battleHudLayout(displayScaleOf(this.scale.displaySize.width), BATTLE_TILE_SIZE);
     this.goalLayer = [];
     this.goalOpen = false;
+    this.goalButtonText = undefined;
     const F = this.hud.font;
     // 화면 6 상단 턴 패널(라운드·현재 서브턴·남은 시간). 조작 안내는 화면 아래쪽 한 줄로 따로 둔다.
     // 턴 표시: 보통 화면은 가운데, 작은 화면은 목표 버튼과 턴 종료 사이 영역 가운데(누르는 영역과 겹치지 않게)
@@ -161,11 +177,30 @@ export class BattleScene extends Phaser.Scene {
       .setDepth(2000)
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => this.confirmLeave());
-    this.time.addEvent({ delay: 250, loop: true, callback: () => this.updateStatusText() });
+    this.time.addEvent({ delay: 250, loop: true, callback: () => {
+      this.updateStatusText();
+      if (this.relayoutPending) this.relayout();
+    } });
     this.renderStoryPanel();
+    if (this.initData.keep?.goalOpen && this.hud.objectivesCollapsible) this.toggleGoals();
 
     this.syncFromSnapshot();
-    if (this.snap.phase === 'resolved') void this.showResult(null);
+    if (this.snap.phase === 'resolved') void this.showResult(this.initData.keep?.ended ?? null);
+    watchLayout(this, () => this.relayout());
+  }
+
+  // 표시 배율이 바뀌면 새 배율의 HUD·라벨·결과창으로 다시 그린다(서버 상태는 최신 snapshot 그대로).
+  // 행동 요청·재생 중이면 끝난 뒤에 한다(응답을 잃지 않게)
+  private relayout() {
+    if (this.busy || this.queuedUpdate) {
+      this.relayoutPending = true;
+      return;
+    }
+    this.relayoutPending = false;
+    // 보통 배치는 목표가 늘 펼쳐져 있어 열림 상태가 없다 — 작은 배치에서 마지막으로 고른 상태를 그대로 넘긴다
+    const goalOpen = this.hud.objectivesCollapsible ? this.goalOpen : (this.initData.keep?.goalOpen ?? false);
+    const keep = { goalOpen, selectedUnitId: this.selectedUnitId, doneUnits: [...this.doneUnits], lastRound: this.lastRound, ended: this.resultEnded, settleGaveUp: this.settleGaveUp };
+    this.scene.restart({ ...this.initData, snapshot: this.snap, keep });
   }
 
   // ---------- 그리기 ----------
@@ -234,7 +269,7 @@ export class BattleScene extends Phaser.Scene {
       return;
     }
     const gb = this.hud.rects.goalButton!;
-    this.add
+    this.goalButtonText = this.add
       .text(gb.x, gb.y + gb.h / 2, goalSummary(objectiveLines(this.snap)), { fontSize: `${F.button}px`, color: '#241a3d', backgroundColor: '#ffd27f', padding: { x: 12, y: 8 }, fixedWidth: gb.w })
       .setOrigin(0, 0.5)
       .setDepth(2002)
@@ -242,22 +277,31 @@ export class BattleScene extends Phaser.Scene {
       .on('pointerdown', () => this.toggleGoals());
   }
 
-  // 작은 화면의 목표 상세(펼침) — 격자 위에 겹쳐 그리고, 다시 누르거나 패널을 누르면 접힌다
+  // 작은 화면의 목표 상세(펼침) — 격자 위에 겹쳐 그리고, 요약 버튼(▴)·닫기 버튼·패널을 누르면 접힌다
   private toggleGoals() {
     this.goalLayer.forEach((o) => o.destroy());
     this.goalLayer = [];
     this.goalOpen = !this.goalOpen;
+    this.goalButtonText?.setText(goalSummary(objectiveLines(this.snap), this.goalOpen)).setBackgroundColor(this.goalOpen ? '#ffe9b8' : '#ffd27f');
     if (!this.goalOpen) return;
     const F = this.hud.font;
     const P = this.hud.rects.goalPanel!;
     const { x, y, w } = P;
+    const C = this.hud.rects.goalClose!;
     const wrap = { width: w - 32, useAdvancedWrap: true };
-    const title = this.add.text(x + 16, y + 10, STORY_BADGE, { fontSize: `${F.panelTitle}px`, color: '#ffd27f' }).setDepth(2004);
-    const goals = this.add.text(x + 16, title.y + title.height + 6, objectiveLines(this.snap).map((l) => `· ${l}`).join('\n'), { fontSize: `${F.panel}px`, color: '#ffffff', lineSpacing: 6, wordWrap: wrap }).setDepth(2004);
+    const title = this.add.text(x + 16, y + 10, STORY_BADGE, { fontSize: `${F.panelTitle}px`, color: '#ffd27f', wordWrap: { width: C.x - x - 24, useAdvancedWrap: true } }).setDepth(2004);
+    // 닫기 버튼: 패널 오른쪽 위 모서리, 제목 줄과 따로 누르는 영역(요약 버튼·턴 종료와 겹치지 않음 — 테스트)
+    const close = this.add
+      .text(C.x + C.w / 2, C.y + C.h / 2, '닫기 ✕', { fontSize: `${F.button}px`, color: '#241a3d', backgroundColor: '#ffd27f', fixedWidth: C.w, align: 'center', padding: { x: 0, y: Math.max(0, (C.h - F.button * 1.25) / 2) } })
+      .setOrigin(0.5)
+      .setDepth(2005)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.toggleGoals());
+    const goals = this.add.text(x + 16, Math.max(title.y + title.height, C.y + C.h) + 8, objectiveLines(this.snap).map((l) => `· ${l}`).join('\n'), { fontSize: `${F.panel}px`, color: '#ffffff', lineSpacing: 6, wordWrap: wrap }).setDepth(2004);
     const notice = this.add.text(x + 16, goals.y + goals.height + 8, STORY_NOTICE, { fontSize: `${F.panel}px`, color: '#cfc6ee', wordWrap: wrap }).setDepth(2004);
-    // 오른쪽 위에 반투명으로(아군이 시작하는 왼쪽 전장을 가리지 않게). 누르면 접힌다
+    // 오른쪽 위에 반투명으로(아군이 시작하는 왼쪽 전장을 가리지 않게). 패널을 눌러도 접힌다
     const bg = this.add.rectangle(x, y, w, Math.min(P.h, notice.y + notice.height + 12 - y), 0x241a3d, 0.88).setOrigin(0, 0).setStrokeStyle(3, 0xffd27f, 1).setDepth(2003).setInteractive().on('pointerdown', () => this.toggleGoals());
-    this.goalLayer.push(title);
+    this.goalLayer.push(title, close);
     this.goalLayer.push(bg, goals, notice);
   }
 
@@ -694,16 +738,17 @@ export class BattleScene extends Phaser.Scene {
     if (!ended) ended = (await battleClient.snapshot(this.snap.battleId).catch(() => null))?.ended ?? null;
     this.resultEnded = ended;
     this.renderResult();
-    if (!ended || !ended.settled) void this.autoSettle();
+    if ((!ended || !ended.settled) && !this.settleGaveUp) void this.autoSettle();
   }
 
   // 보상 기록이 아직 확정되지 않았을 때(settled:false) 제한된 지수 백오프로 서버에 다시 확인한다.
   // settled:true가 되기 전에는 보상 완료 문구를 보여주지 않는다. 자동 재시도 뒤에도 안 되면 '다시 확인' 버튼을 준다.
   private async autoSettle() {
+    const gen = this.generation;
     this.settleGaveUp = false;
     for (const delay of [1000, 2000, 4000, 8000]) {
       await wait(this, delay);
-      if (!this.scene.isActive()) return;
+      if (!this.scene.isActive() || gen !== this.generation) return; // 끝났거나 다시 배치된 화면(새 화면이 이어서 확인)
       const res = await battleClient.snapshot(this.snap.battleId).catch(() => null);
       if (res?.ended?.settled) {
         this.resultEnded = res.ended;
@@ -739,49 +784,59 @@ export class BattleScene extends Phaser.Scene {
     const won = outcome === 'win';
     const cx = CANVAS_WIDTH / 2;
     const cy = CANVAS_HEIGHT / 2;
+    const rows = story ? [] : this.snap.participants.filter((p) => p.partySubmitted); // 스토리 전투는 포획·야생 보상 행이 없다
+    // v5 §5.1: 표시 배율에 맞춘 결과창(작은 화면은 화면 거의 전체, 제목·그림·핵심 결과·버튼을 크게)
+    const RL = resultLayout(displayScaleOf(this.scale.displaySize.width), rows.length, this.textures.exists('result-panel'));
+    const P = RL.panel;
 
     track(this.add.rectangle(cx, cy, CANVAS_WIDTH, CANVAS_HEIGHT, 0x4a3a44, 0.68).setDepth(2999).setInteractive());
-    asDepth(track(feltPanel(this, cx - 400, cy - 270, 800, 540, { radius: 30, strokeW: 6, image: 'result-panel' })), 3000);
-    track(this.add.text(cx, cy - 178, TITLES.title, { fontSize: '28px', color: TITLES.color }).setOrigin(0.5).setDepth(3001));
-    if (!story && this.textures.exists(`turby-${wild.characterCode}`)) track(this.add.image(cx, cy - 112, `turby-${wild.characterCode}`).setDisplaySize(80, 80).setDepth(3001));
+    asDepth(track(feltPanel(this, P.x, P.y, P.w, P.h, { radius: 30, strokeW: 6, image: 'result-panel' })), 3000);
+    track(this.add.text(cx, RL.titleY, TITLES.title, { fontSize: `${RL.font.title}px`, color: TITLES.color }).setOrigin(0.5).setDepth(3001));
+    if (!story && RL.image.size > 0 && this.textures.exists(`turby-${wild.characterCode}`)) track(this.add.image(cx, RL.image.cy, `turby-${wild.characterCode}`).setDisplaySize(RL.image.size, RL.image.size).setDepth(3001));
     const sub = story ? (won && !settled ? '이야기 진행을 저장하는 중이에요...' : TITLES.sub) : won && !settled ? '보상을 확인하는 중이에요...' : won && !mine?.capturedTurby ? '이번에는 보상이 없어요' : TITLES.sub;
-    track(this.add.text(cx, cy - 56, sub, { fontSize: '15px', color: TEXT.sub }).setOrigin(0.5).setDepth(3001));
+    track(this.add.text(cx, RL.subY, sub, { fontSize: `${RL.font.sub}px`, color: TEXT.sub, align: 'center', wordWrap: { width: RL.rows.w, useAdvancedWrap: true } }).setOrigin(0.5).setDepth(3001));
 
     // 참가자별 보상 행(파티를 확정한 참가자, 최대 5명). 확정 전에는 '확인 중'만 보여준다.
-    const rows = story ? [] : this.snap.participants.filter((p) => p.partySubmitted); // 스토리 전투는 포획·야생 보상 행이 없다
     const reasonText = (r: string | null | undefined) => (r === 'left' ? '이탈 — 보상 없음' : r === 'timeout' ? '접속 만료 — 보상 없음' : r === 'party_timeout' ? '참전 취소' : '보상 없음');
-    rows.forEach((p, i) => {
-      const y = cy - 14 + i * 42;
+    const R = RL.rows;
+    rows.slice(0, 5).forEach((p, i) => {
+      const top = R.y0 + i * (R.h + R.gap);
+      const y = top + R.h / 2;
       const reward = ended?.rewards.find((r) => r.playerId === p.playerId);
       const rowTint = Phaser.Display.Color.HexStringToColor(coopSlots.find((q) => q.slot === p.slot)?.sub ?? '#FFF4DF').color;
-      asDepth(track(feltPanel(this, cx - 340, y - 22, 680, 46, { radius: 16, image: 'reward-row', tint: rowTint, fit: 'width' })), 3001);
-      track(this.add.circle(cx - 316, y, 7, slotNum(p.slot)).setDepth(3002));
+      asDepth(track(feltPanel(this, R.x, top, R.w, R.h, { radius: 16, image: 'reward-row', tint: rowTint, fit: 'width' })), 3001);
+      // 행 그림(reward-row): 왼쪽 타원이 이름 자리, 오른쪽 끝에 장식 — 글자가 테두리·장식에 겹치지 않게 폭 비율로 띄운다
+      const inL = this.textures.exists('reward-row') ? Math.round(R.w * 0.05) : 24;
+      const inR = this.textures.exists('reward-row') ? Math.round(R.w * 0.09) : 24;
+      track(this.add.circle(R.x + inL, y, 7, slotNum(p.slot)).setDepth(3002));
       const nick = p.nickname.length > 10 ? `${p.nickname.slice(0, 9)}…` : p.nickname;
-      track(this.add.text(cx - 296, y, `${nick}${p.playerId === this.myId ? ' (나)' : ''}`, { fontSize: '16px', color: TEXT.body }).setOrigin(0, 0.5).setDepth(3002));
+      track(this.add.text(R.x + inL + 16, y, `${nick}${p.playerId === this.myId ? ' (나)' : ''}`, { fontSize: `${RL.font.row}px`, color: TEXT.body }).setOrigin(0, 0.5).setDepth(3002));
       const granted = settled && reward?.rewardStatus === 'granted';
       const label = !settled ? '확인 중...' : granted ? `${reward?.capturedTurby?.characterName ?? '터비'} 획득` : reasonText(reward?.reason ?? p.leftReason);
-      track(this.add.text(cx + 316, y, label, { fontSize: '15px', color: granted ? TEXT.onMint : TEXT.sub }).setOrigin(1, 0.5).setDepth(3002));
+      track(this.add.text(R.x + R.w - inR, y, label, { fontSize: `${RL.font.row}px`, color: granted ? TEXT.onMint : TEXT.sub }).setOrigin(1, 0.5).setDepth(3002));
     });
 
     // 버튼: 확정 전에는 '보상 확인 중', 자동 재시도 뒤에도 안 되면 '다시 확인', 확정되면 돌아가기
-    const by = cy + 188;
+    const B = RL.button;
+    const by = B.y + B.h / 2;
     if (!settled && !this.settleGaveUp) {
-      track(pillButton(this, cx, by, 260, 48, story ? '저장 중...' : '보상 확인 중...', 'disabled', () => undefined)).setDepth(3002);
+      track(pillButton(this, cx, by, B.w, B.h, story ? '저장 중...' : '보상 확인 중...', 'disabled', () => undefined, undefined, RL.font.button)).setDepth(3002);
     } else if (!settled) {
       track(
-        pillButton(this, cx, by, 240, 48, '다시 확인', 'primary', () => {
+        pillButton(this, cx, by, B.w, B.h, '다시 확인', 'primary', () => {
+          this.settleGaveUp = false;
           this.renderResult();
           void this.autoSettle();
-        }),
+        }, undefined, RL.font.button),
       ).setDepth(3002);
     } else {
       track(
-        pillButton(this, cx, by, 300, 48, TITLES.btn, 'primary', () => {
+        pillButton(this, cx, by, B.w, B.h, TITLES.btn, 'primary', () => {
           // 3.4: 승리=포획(재등장 안 함) / 패배=야생 도주 / 무승부·취소=재도전 가능 — 마커 상태는 서버가 소유하고 방송한다
           const spawnIndex = this.snap.spawnIndex;
           const capturedIndices = won && !story ? [...this.initData.capturedIndices, spawnIndex] : this.initData.capturedIndices;
           this.exitTo(outcome, capturedIndices);
-        }),
+        }, undefined, RL.font.button),
       ).setDepth(3002);
     }
   }

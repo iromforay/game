@@ -163,6 +163,7 @@ export interface BattleHudLayout {
     endTurn: HudRect; // 오른쪽 위
     goalButton: HudRect | null; // 작은 화면: 왼쪽 위 목표 요약 버튼
     goalPanel: HudRect | null; // 작은 화면: 펼친 목표 상세(오른쪽 위 — 아군이 시작하는 왼쪽을 가리지 않게), 높이는 최대치
+    goalClose: HudRect | null; // 펼친 목표 상세 안의 닫기 버튼(오른쪽 위 모서리)
     turn: HudRect; // 가운데 위 턴 표시
     leave: HudRect; // 왼쪽 아래
     hint: HudRect; // 나가기 버튼 오른쪽 남은 폭(한 줄)
@@ -180,7 +181,9 @@ export function battleHudLayout(scale: number, tile = 80): BattleHudLayout {
   const goalButton = compact ? { x: 8, y: 4, w: 540, h: btnH } : null; // 목표 요약 한 줄이 들어가는 폭
   const turn = compact ? { x: goalButton!.x + goalButton!.w + 12, y: 4, w: endTurn.x - 12 - (goalButton!.x + goalButton!.w + 12), h: btnH } : { x: 380, y: 0, w: 520, h: 56 };
   const goalPanel = compact ? { x: 1280 - 8 - 620, y: endTurn.y + endTurn.h + 8, w: 620, h: 260 } : null;
-  return { mode: compact ? 'compact' : 'regular', font, objectivesCollapsible: compact, labelWrap: tile * 2 - 12, rects: { endTurn, goalButton, goalPanel, turn, leave, hint } };
+  const closeW = Math.round(font.button * 4);
+  const goalClose = goalPanel ? { x: goalPanel.x + goalPanel.w - 8 - closeW, y: goalPanel.y + 8, w: closeW, h: btnH } : null;
+  return { mode: compact ? 'compact' : 'regular', font, objectivesCollapsible: compact, labelWrap: tile * 2 - 12, rects: { endTurn, goalButton, goalPanel, goalClose, turn, leave, hint } };
 }
 
 // 하단 행동 안내(UI 문구). 작은 화면에서는 한 줄에 들어가게 짧게
@@ -189,10 +192,52 @@ export function actionHint(unitName: string | null, compact: boolean): string {
   return compact ? `${unitName} · 칸=이동 · 적=공격 · 자신=다음` : `${unitName}: 이동할 칸/다른 유닛 선택, 더 할 게 없으면 자신을 눌러 다음 유닛으로`;
 }
 
-// 목표 요약(작은 화면 버튼): 첫 목표 + 나머지 개수
-export function goalSummary(lines: string[]): string {
-  if (lines.length === 0) return '목표';
-  return `목표: ${lines[0]}${lines.length > 1 ? ` 외 ${lines.length - 1}` : ''} ▾`;
+// 목표 요약(작은 화면 버튼): 첫 목표 + 나머지 개수. 열림(▴)·닫힘(▾) 상태를 표시
+export function goalSummary(lines: string[], open = false): string {
+  const mark = open ? '▴' : '▾';
+  if (lines.length === 0) return `목표 ${mark}`;
+  return `목표: ${lines[0]}${lines.length > 1 ? ` 외 ${lines.length - 1}` : ''} ${mark}`;
+}
+
+// ---------- 전투 결과창(v5 §5.1) ----------
+// 작은 화면: 패널을 화면 거의 전체로 넓혀 바깥 여백을 줄이고, 제목 > 터비 그림·이름 > 핵심 결과 > 복귀 버튼 순으로 크게.
+// 보상 행 수(0~5)와 상태(성공·실패·보상 없음·확인 중·오류)에 상관없이 같은 틀 안에 들어간다.
+export interface ResultLayout {
+  mode: 'regular' | 'compact';
+  panel: HudRect;
+  font: { title: number; sub: number; row: number; button: number };
+  titleY: number;
+  image: { cy: number; size: number };
+  subY: number;
+  rows: { y0: number; h: number; gap: number; x: number; w: number };
+  button: HudRect;
+}
+// framed: 결과 패널 그림(뜨개 테두리)을 쓸 때 — 테두리 두께만큼 안쪽 여백을 더 둔다(제목·버튼이 테두리에 겹치지 않게)
+export function resultLayout(scale: number, rowCount: number, framed = false): ResultLayout {
+  const compact = scale < 0.75;
+  const f = (base: number, min: number) => Math.max(base, Math.ceil(min / Math.max(0.1, scale)));
+  const font = compact ? { title: f(28, 20), sub: f(15, 15), row: f(16, 13), button: f(20, 16) } : { title: f(28, 16), sub: f(15, 12), row: f(16, 12), button: f(20, 14) };
+  const pad = (compact ? 20 : 36) + (framed ? (compact ? 64 : 40) : 0);
+  const buttonH = Math.max(48, Math.round(font.button * 2.4), compact ? Math.ceil(40 / Math.max(0.1, scale)) : 0); // 최종 화면 40px 이상 터치 높이
+  const n = Math.max(0, Math.min(5, rowCount));
+  const rowH = Math.max(46, Math.round(font.row * 1.9));
+  const gap = compact ? 6 : 8;
+  const rowsH = n > 0 ? n * rowH + (n - 1) * gap : 0;
+  // 보통 화면: 기본 800×540, 보상 행이 많으면 내용(제목·그림 80·결과·행·버튼)이 들어가게 세로로 늘린다(화면 안까지)
+  const need = 2 * pad + font.title * 1.2 + 10 + 80 + 10 + font.sub * 1.4 + (n > 0 ? 14 + rowsH : 0) + 16 + buttonH;
+  const regularH = Math.min(720 - 32, Math.max(540, Math.ceil(need)));
+  const panel = compact ? { x: 24, y: 16, w: 1280 - 48, h: 720 - 32 } : { x: 240, y: Math.round((720 - regularH) / 2), w: 800, h: regularH };
+  const buttonW = Math.min(panel.w - 2 * pad, Math.max(300, Math.round(font.button * 13)));
+  const button = { x: 640 - buttonW / 2, y: panel.y + panel.h - pad - buttonH, w: buttonW, h: buttonH };
+  const titleY = panel.y + pad + font.title * 0.6;
+  // 그림 크기: 남은 세로 공간에 맞춘다(보상 행이 많으면 줄어듦)
+  const top = titleY + font.title * 0.6 + 10;
+  const bottom = button.y - 16 - rowsH - (n > 0 ? 14 : 0) - font.sub * 1.4 - 10;
+  const size = Math.max(0, Math.min(compact ? 180 : 80, Math.floor(bottom - top)));
+  const image = { cy: top + size / 2, size };
+  const subY = top + size + 10 + (font.sub * 1.4) / 2;
+  const rows = { y0: subY + (font.sub * 1.4) / 2 + 14, h: rowH, gap, x: panel.x + pad, w: panel.w - 2 * pad };
+  return { mode: compact ? 'compact' : 'regular', panel, font, titleY, image, subY, rows, button };
 }
 
 // 작은 화면의 유닛 라벨: "이름 HP/최대" 한 줄 + 상태 표식은 짧은 UI 표기로 둘째 줄(대본 문구가 아님)

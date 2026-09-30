@@ -66,6 +66,7 @@ export function pillButton(
   kind: ButtonKind,
   onClick: () => void,
   onDisabledClick?: () => void,
+  fontPx?: number, // 표시 배율에 맞춘 글자 크기(없으면 버튼 높이로 16/20)
 ) {
   const st = BUTTON_STYLE[kind];
   const box = scene.add.container(cx, cy);
@@ -80,7 +81,7 @@ export function pillButton(
     g.strokeRoundedRect(-w / 2, -h / 2, w, h, Math.min(20, h / 2));
     box.add(g);
   }
-  const text = scene.add.text(0, 0, label, { fontSize: h >= 56 ? '20px' : '16px', color: st.color }).setOrigin(0.5);
+  const text = scene.add.text(0, 0, label, { fontSize: `${fontPx ?? (h >= 56 ? 20 : 16)}px`, color: st.color }).setOrigin(0.5);
   box.add(text);
   if (!scene.textures.exists(imageKey)) box.setAlpha(st.alpha);
   box.setSize(Math.max(w, 64), Math.max(h, 48));
