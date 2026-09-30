@@ -231,6 +231,7 @@ test('9. 스냅샷에 스토리 전투 표식(포획·야생 보상 없음)과 �
 
   const knot = toSnapshot(createBattle({ battleId: 'k', roomCode: 'R', stageCode: 'forest', spawnIndex: -1, encounterPlayerId: 'a', wild: { code: 'x', name: 'x', stats: { attack: 0, defense: 0, actionPower: 0, maxHp: 1 } }, rules: RULES, participants: [{ playerId: 'a', nickname: 'a', slot: 1, connected: true }], definition: new StoryContentService().battle('forest_giant_knot')!, story: { encounterKey: 'forest_giant_knot' } }));
   assert.deepEqual(knot.objectives!.win, [{ kind: 'defeat_units', unitIds: ['giant_knot'] }]);
+  assert.equal(snap.cornerEscape, false, '정의 전투는 꼭짓점 퇴각 기본 꺼짐');
 
   const wild = toSnapshot(createBattle({ battleId: 'w', roomCode: 'R', stageCode: 'forest', spawnIndex: 0, encounterPlayerId: 'a', wild: { code: 'nubi', name: '누비', stats: { attack: 1, defense: 1, actionPower: 1, maxHp: 1 } }, rules: RULES, participants: [{ playerId: 'a', nickname: 'a', slot: 1, connected: true }] }));
   assert.equal('story' in wild || 'objectives' in wild, false, '일반 야생 전투 스냅샷은 기존 형태 그대로');

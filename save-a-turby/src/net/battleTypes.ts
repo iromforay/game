@@ -7,7 +7,7 @@ export type BattleOutcome = 'win' | 'lose' | 'draw' | 'cancelled';
 
 export interface BattleUnit {
   unitId: string;
-  side: 'party' | 'wild';
+  side: 'party' | 'wild' | 'neutral'; // neutral: 스토리 전투의 보호 대상 NPC 등(공격·조작 불가)
   ownerPlayerId: string | null;
   participantSlot: number;
   characterCode: string;
@@ -20,7 +20,24 @@ export interface BattleUnit {
   maxAp: number;
   stunned: boolean;
   inactive: boolean;
+  // 아래는 정의(스토리) 전투에서만 온다
+  statuses?: StatusEffect[];
+  targetable?: boolean;
+  invulnerable?: boolean; // 부위가 남아 있는 중심부
+  partOf?: string | null; // 이 부위가 속한 중심부 unitId
+  breakOrder?: number | null; // 부위 파괴 순서(작은 수부터만 공격 가능)
+  fled?: boolean; // 도주 연출로 전장에서 빠짐
 }
+
+export interface StatusEffect {
+  kind: 'bind';
+  turnsLeft: number;
+  movePenalty: number;
+  sourceUnitId: string | null;
+  appliedRound: number;
+}
+
+export type BattleObjective = { kind: 'defeat_all' } | { kind: 'defeat_units'; unitIds: string[] } | { kind: 'protect'; unitIds: string[] } | { kind: 'party_down' };
 
 export interface BattleParticipant {
   playerId: string;
@@ -52,6 +69,11 @@ export interface BattleSnapshot {
   outcome: BattleOutcome | null;
   participants: BattleParticipant[];
   units: BattleUnit[];
+  // 아래는 정의(스토리) 전투에서만 온다
+  blocked?: string[]; // 통행 불가 칸 "col,row"
+  objectives?: { win: BattleObjective[]; lose: BattleObjective[] };
+  cornerEscape?: boolean;
+  story?: { encounterKey: string; captureEnabled: false; wildRewards: false };
 }
 
 export type BattleEvent =
@@ -61,7 +83,11 @@ export type BattleEvent =
   | { version: number; type: 'subturn'; phase: BattlePhase; round: number; currentPlayerId: string | null }
   | { version: number; type: 'participant_left'; playerId: string; reason: string }
   | { version: number; type: 'participant_status'; playerId: string; connected: boolean }
-  | { version: number; type: 'resolved'; outcome: BattleOutcome };
+  | { version: number; type: 'resolved'; outcome: BattleOutcome }
+  | { version: number; type: 'status'; unitId: string; statuses: StatusEffect[] }
+  | { version: number; type: 'part_broken'; unitId: string; coreId: string; coreExposed: boolean }
+  | { version: number; type: 'terrain'; blocked: string[] }
+  | { version: number; type: 'unit_exit'; unitId: string; mode: 'flee' };
 
 export interface BattleReward {
   playerId: string;

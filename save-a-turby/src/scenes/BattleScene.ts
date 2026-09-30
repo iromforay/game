@@ -9,12 +9,14 @@ import type { ActionBody, BattleEnded, BattleEvent, BattleResponse, BattleSnapsh
 import { showToast, feltPanel, pillButton, TEXT } from '../ui/kit';
 import { loadWorldImages } from '../assets/loader';
 import coopSlots from '../data/coop-slots.json';
+import { isStoryBattle, objectiveLines, reachableCells, returnDestination, showsCornerEscape, storyResultText, targetState, unitTags, STORY_BADGE, STORY_NOTICE, TARGET_HINT, type BattleReturn } from '../battle/battleView';
 
 interface BattleInitData {
   stageCode: string;
   capturedIndices: number[];
   removedIndices: number[];
   snapshot: BattleSnapshot; // 서버가 내려준 전투 상태(파티 확정 직후 또는 새로고침 복구)
+  returnTo?: BattleReturn; // 스토리 전투: 끝나면 돌아갈 화면(결과를 storyBattleEnd로 넘긴다)
 }
 
 interface UnitView {
@@ -57,6 +59,8 @@ export class BattleScene extends Phaser.Scene {
   private gridH = 0;
   private offsetX = 0;
   private offsetY = 0;
+  private blockedObjs: Phaser.GameObjects.GameObject[] = [];
+  private blockedDrawn = '';
 
   constructor() {
     super('Battle');
@@ -79,6 +83,8 @@ export class BattleScene extends Phaser.Scene {
     this.settleGaveUp = false;
     this.resultEnded = null;
     this.leavingRemoved = false;
+    this.blockedObjs = [];
+    this.blockedDrawn = '';
   }
 
   preload() {
@@ -94,7 +100,7 @@ export class BattleScene extends Phaser.Scene {
       const me = this.snap.participants.find((p) => p.playerId === this.myId);
       // 응답하지 않은 초대는 맵의 초대 팝업으로, 그 밖에는 파티 선택 화면으로
       if (me?.invitePending) this.scene.start('Map', { stageCode: this.initData.stageCode, capturedIndices: this.initData.capturedIndices, removedIndices: this.initData.removedIndices, invite: this.snap });
-      else this.scene.start('PartySelect', { stageCode: this.initData.stageCode, wildCharacterCode: this.snap.wildCharacterCode, spawnIndex: this.snap.spawnIndex, capturedIndices: this.initData.capturedIndices, removedIndices: this.initData.removedIndices, snapshot: this.snap });
+      else this.scene.start('PartySelect', { stageCode: this.initData.stageCode, wildCharacterCode: this.snap.wildCharacterCode, spawnIndex: this.snap.spawnIndex, capturedIndices: this.initData.capturedIndices, removedIndices: this.initData.removedIndices, snapshot: this.snap, returnTo: this.initData.returnTo });
       return;
     }
 
@@ -136,6 +142,7 @@ export class BattleScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => this.confirmLeave());
     this.time.addEvent({ delay: 250, loop: true, callback: () => this.updateStatusText() });
+    this.renderStoryPanel();
 
     this.syncFromSnapshot();
     if (this.snap.phase === 'resolved') void this.showResult(null);
@@ -151,7 +158,8 @@ export class BattleScene extends Phaser.Scene {
     for (let c = 0; c <= this.snap.grid.cols; c++) g.lineBetween(this.offsetX + c * BATTLE_TILE_SIZE, this.offsetY, this.offsetX + c * BATTLE_TILE_SIZE, this.offsetY + this.gridH);
     for (let r = 0; r <= this.snap.grid.rows; r++) g.lineBetween(this.offsetX, this.offsetY + r * BATTLE_TILE_SIZE, this.offsetX + this.gridW, this.offsetY + r * BATTLE_TILE_SIZE);
 
-    // 퇴각존(네 꼭짓점, 3.4/3.5.2 확정)
+    // 퇴각존(네 꼭짓점, 3.4/3.5.2 확정) — 스토리(정의) 전투는 정의가 켠 경우만
+    if (!showsCornerEscape(this.snap)) return;
     const lastCol = this.snap.grid.cols - 1;
     const lastRow = this.snap.grid.rows - 1;
     for (const [col, row] of [[0, 0], [lastCol, 0], [0, lastRow], [lastCol, lastRow]]) {
@@ -165,21 +173,51 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private hpLabel(u: BattleUnit) {
-    return `${u.name} HP ${u.hp}/${u.maxHp}${u.stunned ? ' (기절)' : ''}${u.inactive ? ' (이탈)' : ''}`;
+    const tags = unitTags(u);
+    return `${u.name} HP ${u.hp}/${u.maxHp}${tags.length > 0 ? ` (${tags.join(' · ')})` : ''}`;
+  }
+
+  // 통행 불가 칸(스토리 전투 지형). 지형 규칙으로 바뀌면 다시 그린다 — 임시 도형(에셋 확정 전)
+  private drawBlocked(blocked: string[]) {
+    const key = blocked.join('|');
+    if (key === this.blockedDrawn) return;
+    this.blockedDrawn = key;
+    this.blockedObjs.forEach((o) => o.destroy());
+    this.blockedObjs = blocked.map((k) => {
+      const [col, row] = k.split(',').map(Number);
+      const { x, y } = this.tileToWorld(col, row);
+      return this.add.rectangle(x, y, BATTLE_TILE_SIZE - 4, BATTLE_TILE_SIZE - 4, 0x0d0818, 0.85).setStrokeStyle(2, 0x6a5a8a, 0.9).setDepth(5);
+    });
+  }
+
+  // 스토리 전투 표식·현재 목표·보상 없음 안내 — 격자 왼쪽 여백에 세로로(격자를 가리지 않게). 임시 텍스트 패널
+  private renderStoryPanel() {
+    if (!isStoryBattle(this.snap)) return;
+    const x = 8;
+    const w = Math.max(120, this.offsetX - 16);
+    const wrap = { width: w - 16, useAdvancedWrap: true };
+    const badge = this.add.text(x + 8, 68, STORY_BADGE, { fontSize: '16px', color: '#ffd27f' }).setDepth(2001);
+    const goals = this.add.text(x + 8, badge.y + badge.height + 10, objectiveLines(this.snap).map((l) => `· ${l}`).join('\n'), { fontSize: '13px', color: '#ffffff', lineSpacing: 6, wordWrap: wrap }).setDepth(2001);
+    const notice = this.add.text(x + 8, goals.y + goals.height + 12, STORY_NOTICE, { fontSize: '12px', color: '#cfc6ee', wordWrap: wrap }).setDepth(2001);
+    this.add.rectangle(x, 58, w, notice.y + notice.height + 10 - 58, 0x241a3d, 0.92).setOrigin(0, 0).setStrokeStyle(2, 0xffd27f, 0.9).setDepth(2000);
   }
 
   private createView(u: BattleUnit): UnitView {
     const { x, y } = this.tileToWorld(u.col, u.row);
     const container = this.add.container(x, y);
     const hasImage = this.textures.exists(`turby-${u.characterCode}`);
-    const body = hasImage ? this.add.image(0, 0, `turby-${u.characterCode}`).setDisplaySize(52, 52) : this.add.circle(0, 0, 24, u.side === 'party' ? 0xffd27f : 0x7fc8ff);
+    const fill = u.side === 'party' ? 0xffd27f : u.side === 'neutral' ? 0x9fe58a : 0x7fc8ff;
+    const body = hasImage ? this.add.image(0, 0, `turby-${u.characterCode}`).setDisplaySize(52, 52) : this.add.circle(0, 0, u.partOf ? 16 : 24, fill);
     const selectRing = this.add.circle(0, 0, 29).setStrokeStyle(3, 0x9fe58a, 0);
-    const ring = this.add.circle(0, 0, 26).setStrokeStyle(3, u.side === 'party' ? slotNum(u.participantSlot) : 0x2d6fa3);
+    const ring = this.add.circle(0, 0, 26).setStrokeStyle(3, u.side === 'party' ? slotNum(u.participantSlot) : u.side === 'neutral' ? 0x4a9a4a : 0x2d6fa3);
     container.add([selectRing, ring, body]);
     container.setDepth(10);
     const hpText = this.add.text(x, y + 34, this.hpLabel(u), { fontSize: '11px', color: '#ffffff', backgroundColor: u.side === 'party' ? slotHex(u.participantSlot) : '#00000090', padding: { x: 4, y: 2 } }).setOrigin(0.5, 0).setDepth(10);
 
-    body.setInteractive({ useHandCursor: true }).on('pointerdown', () => (u.side === 'wild' ? void this.onWildClicked() : this.onPartyUnitClicked(u.unitId)));
+    body.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+      if (u.side === 'wild') void this.onWildClicked(u.unitId);
+      else if (u.side === 'party') this.onPartyUnitClicked(u.unitId);
+    });
     return { container, hpText, selectRing };
   }
 
@@ -192,9 +230,10 @@ export class BattleScene extends Phaser.Scene {
         this.views.set(u.unitId, view);
       }
       const { x, y } = this.tileToWorld(u.col, u.row);
-      view.container.setPosition(x, y).setAlpha(u.stunned || u.inactive ? 0.4 : 1);
-      view.hpText.setPosition(x, y + 34).setText(this.hpLabel(u)).setAlpha(u.stunned || u.inactive ? 0.6 : 1);
+      view.container.setPosition(x, y).setAlpha(u.stunned || u.inactive ? 0.4 : 1).setVisible(!u.fled);
+      view.hpText.setPosition(x, y + 34).setText(this.hpLabel(u)).setAlpha(u.stunned || u.inactive ? 0.6 : 1).setVisible(!u.fled);
     }
+    this.drawBlocked(this.snap.blocked ?? []);
     if (this.snap.round !== this.lastRound) {
       this.doneUnits.clear();
       this.lastRound = this.snap.round;
@@ -218,6 +257,13 @@ export class BattleScene extends Phaser.Scene {
   }
 
   // ---------- 상태 조회 ----------
+
+  // 전투를 떠날 때 갈 곳: 스토리 전투는 부른 화면(returnTo)으로 결과와 함께, 그 밖에는 기존처럼 맵
+  private exitTo(outcome: BattleEnded['outcome'] | 'cancelled', capturedIndices = this.initData.capturedIndices) {
+    const end = this.snap.story ? { encounterKey: this.snap.story.encounterKey, outcome } : null;
+    const d = returnDestination(this.initData.returnTo, { scene: 'Map', data: { stageCode: this.initData.stageCode, capturedIndices, removedIndices: this.initData.removedIndices } }, end);
+    this.scene.start(d.scene, d.data);
+  }
 
   private get myId() {
     return roomClient.playerId;
@@ -302,10 +348,6 @@ export class BattleScene extends Phaser.Scene {
     });
   }
 
-  private isOccupied(col: number, row: number, except: BattleUnit) {
-    return this.snap.units.some((u) => u !== except && !u.stunned && !u.inactive && u.col === col && u.row === row);
-  }
-
   private clearHighlights() {
     this.moveHighlights.forEach((h) => h.destroy());
     this.moveHighlights = [];
@@ -315,18 +357,15 @@ export class BattleScene extends Phaser.Scene {
     this.clearHighlights();
     const unit = this.unit(this.selectedUnitId);
     if (this.busy || !this.isMyTurn || !unit || !this.actionable(unit)) return;
-    for (let col = 0; col < this.snap.grid.cols; col++) {
-      for (let row = 0; row < this.snap.grid.rows; row++) {
-        const cost = Math.abs(col - unit.col) + Math.abs(row - unit.row);
-        if (cost === 0 || cost > unit.ap || this.isOccupied(col, row, unit)) continue;
-        const { x, y } = this.tileToWorld(col, row);
-        const rect = this.add
-          .rectangle(x, y, BATTLE_TILE_SIZE - 6, BATTLE_TILE_SIZE - 6, 0x9fe58a, 0.22)
-          .setStrokeStyle(2, 0x9fe58a, 0.6)
-          .setInteractive({ useHandCursor: true })
-          .on('pointerdown', () => void this.send({ type: 'move', unitId: unit.unitId, targetCol: col, targetRow: row }));
-        this.moveHighlights.push(rect);
-      }
+    // 막힌 칸 우회·속박 감소량까지 반영한 서버와 같은 이동 규칙(최종 판정은 서버)
+    for (const { col, row } of reachableCells(this.snap, unit)) {
+      const { x, y } = this.tileToWorld(col, row);
+      const rect = this.add
+        .rectangle(x, y, BATTLE_TILE_SIZE - 6, BATTLE_TILE_SIZE - 6, 0x9fe58a, 0.22)
+        .setStrokeStyle(2, 0x9fe58a, 0.6)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => void this.send({ type: 'move', unitId: unit.unitId, targetCol: col, targetRow: row }));
+      this.moveHighlights.push(rect);
     }
   }
 
@@ -345,12 +384,18 @@ export class BattleScene extends Phaser.Scene {
     this.showMoveHighlights();
   }
 
-  private async onWildClicked() {
+  private async onWildClicked(targetId: string) {
     const u = this.unit(this.selectedUnitId);
-    const wild = this.wildUnit;
-    if (this.busy || !this.isMyTurn || !u || !this.actionable(u) || wild.stunned) return;
-    if (Math.abs(u.col - wild.col) + Math.abs(u.row - wild.row) !== 1) return;
-    await this.send({ type: 'attack', unitId: u.unitId, targetUnitId: wild.unitId });
+    const target = this.unit(targetId);
+    if (this.busy || !this.isMyTurn || !u || !this.actionable(u) || !target) return;
+    const st = targetState(this.snap, target);
+    if (st === 'not_target') return;
+    if (st !== 'ok') {
+      showToast(this, TARGET_HINT[st], { y: 660 }); // 부위 순서·중심부 보호 — 서버도 같은 규칙(PART_ORDER/TARGET_PROTECTED)
+      return;
+    }
+    if (Math.abs(u.col - target.col) + Math.abs(u.row - target.row) !== 1) return;
+    await this.send({ type: 'attack', unitId: u.unitId, targetUnitId: target.unitId });
   }
 
   private async endTurn() {
@@ -475,7 +520,8 @@ export class BattleScene extends Phaser.Scene {
     };
     this.leaveLayer.push(this.add.rectangle(cx, cy, CANVAS_WIDTH, CANVAS_HEIGHT, 0x000000, 0.5).setDepth(3999).setInteractive());
     this.leaveLayer.push(this.add.rectangle(cx, cy, 380, 170, 0x241a3d, 0.97).setStrokeStyle(3, 0x6a3a3a).setDepth(4000));
-    this.leaveLayer.push(this.add.text(cx, cy - 40, '전투에서 나가시겠어요?\n나가면 이번 전투의 보상을 받을 수 없어요.', { fontSize: '14px', color: '#ffffff', align: 'center' }).setOrigin(0.5).setDepth(4001));
+    const leaveText = isStoryBattle(this.snap) ? '전투에서 나가시겠어요?\n전투 직전부터 다시 도전하게 돼요.' : '전투에서 나가시겠어요?\n나가면 이번 전투의 보상을 받을 수 없어요.';
+    this.leaveLayer.push(this.add.text(cx, cy - 40, leaveText, { fontSize: '14px', color: '#ffffff', align: 'center' }).setOrigin(0.5).setDepth(4001));
     this.leaveLayer.push(
       this.add
         .text(cx - 70, cy + 45, '나가기', { fontSize: '16px', color: '#ffffff', backgroundColor: '#8a3a3a', padding: { x: 18, y: 8 } })
@@ -489,7 +535,7 @@ export class BattleScene extends Phaser.Scene {
           } catch (err) {
             console.warn('[battle] 나가기 요청 실패:', err);
           }
-          this.scene.start('Map', { stageCode: this.initData.stageCode, capturedIndices: this.initData.capturedIndices, removedIndices: this.initData.removedIndices });
+          this.exitTo('cancelled');
         }),
     );
     this.leaveLayer.push(
@@ -553,6 +599,18 @@ export class BattleScene extends Phaser.Scene {
         this.tweens.add({ targets: target.container, scale: 1.25, duration: 100, yoyo: true });
         await wait(this, ev.attackerId === 'wild' ? 400 : 250);
       }
+    } else if (ev.type === 'unit_exit') {
+      const view = this.views.get(ev.unitId);
+      if (view) {
+        this.tweens.add({ targets: [view.container, view.hpText], alpha: 0, duration: 300 });
+        await wait(this, 320);
+      }
+    } else if (ev.type === 'part_broken') {
+      showToast(this, ev.coreExposed ? '바깥 부위를 모두 끊었어요! 이제 중심을 노릴 수 있어요' : '부위 하나를 끊었어요', { y: 660 });
+      await wait(this, 250);
+    } else if (ev.type === 'terrain') {
+      this.drawBlocked(ev.blocked);
+      await wait(this, 200);
     } else if (ev.type === 'subturn' && ev.phase === 'wild_turn') {
       this.statusText.setText('야생 터비 차례...');
       await wait(this, 500);
@@ -605,8 +663,9 @@ export class BattleScene extends Phaser.Scene {
     const mine = ended?.rewards.find((r) => r.playerId === this.myId);
     if (settled && mine?.capturedTurby) inventory.addFromServer(mine.capturedTurby); // 3.2: 서버가 지급한 포획 터비를 보유 목록에 반영(같은 id는 중복 추가되지 않음)
     const wild = this.wildUnit;
+    const story = isStoryBattle(this.snap);
 
-    const TITLES = {
+    const TITLES = story ? { ...storyResultText(outcome), color: outcome === 'win' ? '#8A6B2A' : '#5E7FA8' } : {
       win: { title: '포획 성공!', color: '#8A6B2A', sub: `${withIGa(wild.name)} 가방에 들어왔어요`, btn: '가방에 넣고 돌아가기' },
       lose: { title: '야생 터비가 도망쳤어요', color: '#B85C70', sub: '다음 기회에 다시 도전해보세요', btn: '맵으로 돌아가기' },
       draw: { title: '무승부 — 퇴각', color: '#5E7FA8', sub: '같은 자리에서 다시 도전할 수 있어요', btn: '맵으로 돌아가기' },
@@ -619,12 +678,12 @@ export class BattleScene extends Phaser.Scene {
     track(this.add.rectangle(cx, cy, CANVAS_WIDTH, CANVAS_HEIGHT, 0x4a3a44, 0.68).setDepth(2999).setInteractive());
     asDepth(track(feltPanel(this, cx - 400, cy - 270, 800, 540, { radius: 30, strokeW: 6, image: 'result-panel' })), 3000);
     track(this.add.text(cx, cy - 178, TITLES.title, { fontSize: '28px', color: TITLES.color }).setOrigin(0.5).setDepth(3001));
-    if (this.textures.exists(`turby-${wild.characterCode}`)) track(this.add.image(cx, cy - 112, `turby-${wild.characterCode}`).setDisplaySize(80, 80).setDepth(3001));
-    const sub = won && !settled ? '보상을 확인하는 중이에요...' : won && !mine?.capturedTurby ? '이번에는 보상이 없어요' : TITLES.sub;
+    if (!story && this.textures.exists(`turby-${wild.characterCode}`)) track(this.add.image(cx, cy - 112, `turby-${wild.characterCode}`).setDisplaySize(80, 80).setDepth(3001));
+    const sub = story ? (won && !settled ? '이야기 진행을 저장하는 중이에요...' : TITLES.sub) : won && !settled ? '보상을 확인하는 중이에요...' : won && !mine?.capturedTurby ? '이번에는 보상이 없어요' : TITLES.sub;
     track(this.add.text(cx, cy - 56, sub, { fontSize: '15px', color: TEXT.sub }).setOrigin(0.5).setDepth(3001));
 
     // 참가자별 보상 행(파티를 확정한 참가자, 최대 5명). 확정 전에는 '확인 중'만 보여준다.
-    const rows = this.snap.participants.filter((p) => p.partySubmitted);
+    const rows = story ? [] : this.snap.participants.filter((p) => p.partySubmitted); // 스토리 전투는 포획·야생 보상 행이 없다
     const reasonText = (r: string | null | undefined) => (r === 'left' ? '이탈 — 보상 없음' : r === 'timeout' ? '접속 만료 — 보상 없음' : r === 'party_timeout' ? '참전 취소' : '보상 없음');
     rows.forEach((p, i) => {
       const y = cy - 14 + i * 42;
@@ -642,7 +701,7 @@ export class BattleScene extends Phaser.Scene {
     // 버튼: 확정 전에는 '보상 확인 중', 자동 재시도 뒤에도 안 되면 '다시 확인', 확정되면 돌아가기
     const by = cy + 188;
     if (!settled && !this.settleGaveUp) {
-      track(pillButton(this, cx, by, 260, 48, '보상 확인 중...', 'disabled', () => undefined)).setDepth(3002);
+      track(pillButton(this, cx, by, 260, 48, story ? '저장 중...' : '보상 확인 중...', 'disabled', () => undefined)).setDepth(3002);
     } else if (!settled) {
       track(
         pillButton(this, cx, by, 240, 48, '다시 확인', 'primary', () => {
@@ -655,8 +714,8 @@ export class BattleScene extends Phaser.Scene {
         pillButton(this, cx, by, 300, 48, TITLES.btn, 'primary', () => {
           // 3.4: 승리=포획(재등장 안 함) / 패배=야생 도주 / 무승부·취소=재도전 가능 — 마커 상태는 서버가 소유하고 방송한다
           const spawnIndex = this.snap.spawnIndex;
-          const capturedIndices = won ? [...this.initData.capturedIndices, spawnIndex] : this.initData.capturedIndices;
-          this.scene.start('Map', { stageCode: this.initData.stageCode, capturedIndices, removedIndices: this.initData.removedIndices });
+          const capturedIndices = won && !story ? [...this.initData.capturedIndices, spawnIndex] : this.initData.capturedIndices;
+          this.exitTo(outcome, capturedIndices);
         }),
       ).setDepth(3002);
     }

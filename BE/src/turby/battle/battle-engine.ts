@@ -711,11 +711,12 @@ export function toSnapshot(state: BattleState): BattleSnapshotDto {
             targetable: u.targetable ?? true,
             invulnerable: hasParts(state, u) ? hasLiveParts(state, u) : undefined,
             partOf: u.partOf ?? null,
+            breakOrder: u.breakOrder ?? null,
             fled: u.fled ?? false,
           }
         : {}),
     })),
-    ...(state.definition ? { blocked: [...(state.blocked ?? [])], objectives: objectivesOf(state) } : {}),
+    ...(state.definition ? { blocked: [...(state.blocked ?? [])], objectives: objectivesOf(state), cornerEscape: cornerEscapeOn(state) } : {}),
     ...(state.story ? { story: { encounterKey: state.story.encounterKey, captureEnabled: false as const, wildRewards: false as const } } : {}),
   };
 }

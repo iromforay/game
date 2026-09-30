@@ -9,6 +9,7 @@ import type { BattleParticipant, BattleSnapshot, BattleUpdate } from '../net/bat
 import { showToast, TEXT, feltPanel } from '../ui/kit';
 import { loadWorldImages } from '../assets/loader';
 import coopSlots from '../data/coop-slots.json';
+import { isStoryBattle, returnDestination, STORY_BADGE, STORY_NOTICE, type BattleReturn } from '../battle/battleView';
 
 interface PartySelectInitData {
   wildCharacterCode: string;
@@ -17,6 +18,7 @@ interface PartySelectInitData {
   capturedIndices: number[];
   removedIndices: number[];
   snapshot: BattleSnapshot; // 서버가 만든 전투(초대 대기 또는 파티 선택 단계) — 파티 상한·마감 시각도 서버가 정한 값
+  returnTo?: BattleReturn; // 스토리 전투: 끝나거나 나가면 돌아갈 화면
 }
 
 const slotColor = (slot: number) => coopSlots.find((c) => c.slot === slot)?.main ?? '#888888';
@@ -62,8 +64,18 @@ export class PartySelectScene extends Phaser.Scene {
     return roomClient.playerId;
   }
 
+  // 스토리 전투는 이야기 누비가 서버에서 자동으로 한 칸을 쓴다(D6) — 고를 수 있는 수는 하나 적다
+  private get story() {
+    return isStoryBattle(this.snap);
+  }
+
   private get maxParty() {
-    return this.snap.partyLimit;
+    return this.story ? Math.max(0, this.snap.partyLimit - 1) : this.snap.partyLimit;
+  }
+
+  private exit(outcome: 'cancelled' | null) {
+    const d = returnDestination(this.initData.returnTo, { scene: 'Map', data: { stageCode: this.initData.stageCode, capturedIndices: this.initData.capturedIndices, removedIndices: this.initData.removedIndices } }, outcome && this.snap.story ? { encounterKey: this.snap.story.encounterKey, outcome } : null);
+    this.scene.start(d.scene, d.data);
   }
 
   preload() {
@@ -80,7 +92,7 @@ export class PartySelectScene extends Phaser.Scene {
     this.timerText = this.add.text(CANVAS_WIDTH - 16, 16, '', { fontSize: '18px', color: '#9fe58a' }).setOrigin(1, 0);
 
     const bag = inventory.getBag();
-    if (bag.length === 0) {
+    if (bag.length === 0 && !this.story) {
       this.add.text(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, '가방이 비어있습니다.\n기지에서 선반의 터비를 가방으로 옮겨주세요.', { fontSize: '16px', color: '#ffb199', align: 'center' }).setOrigin(0.5);
       this.add
         .text(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 80, '맵으로 돌아가기', { fontSize: '16px', color: '#ffffff', backgroundColor: '#5a3a8a', padding: { x: 14, y: 8 } })
@@ -103,8 +115,8 @@ export class PartySelectScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => void this.backToMap());
 
-    // 시작할 때 항상 최소 1마리(가방의 첫 개체)를 기본 선택해둬서 빈 파티로 못 나가게 함
-    this.toggleSelect(bag[0].id);
+    // 시작할 때 항상 최소 1마리(가방의 첫 개체)를 기본 선택해둬서 빈 파티로 못 나가게 함(스토리 전투는 누비가 자동 참가하므로 비워도 된다)
+    if (!this.story && bag.length > 0) this.toggleSelect(bag[0].id);
 
     this.offUpdate = roomClient.on('battleUpdate', (u) => this.onUpdate(u));
     this.offReconnect = roomClient.on('reconnected', () => void this.resync());
@@ -200,8 +212,14 @@ export class PartySelectScene extends Phaser.Scene {
       this.finish(me && !me.active ? (me.leftReason === 'party_timeout' ? '선택 시간이 지나 참전이 취소되었어요.' : '전투에서 빠졌어요.') : '전투가 취소되었어요.');
       return;
     }
-    this.titleText?.setText(this.snap.phase === 'inviting' ? '다른 참가자의 참전 응답을 기다리는 중...' : '야생 터비와 조우!');
-    this.limitText?.setText(this.snap.phase === 'inviting' ? '응답이 끝나면 파티를 고를 수 있어요' : `내가 데려갈 수 있는 터비: 최대 ${this.maxParty}마리`);
+    this.titleText?.setText(this.snap.phase === 'inviting' ? '다른 참가자의 참전 응답을 기다리는 중...' : this.story ? STORY_BADGE : '야생 터비와 조우!');
+    this.limitText?.setText(
+      this.snap.phase === 'inviting'
+        ? '응답이 끝나면 파티를 고를 수 있어요'
+        : this.story
+          ? `누비는 자동으로 함께해요 · 더 데려갈 터비: 최대 ${this.maxParty}마리 · ${STORY_NOTICE}`
+          : `내가 데려갈 수 있는 터비: 최대 ${this.maxParty}마리`,
+    );
     // 상한이 줄면(참전자가 늘면) 선택을 잘라낸다
     while (this.selected.size > this.maxParty) this.selected.delete([...this.selected].pop()!);
     this.submitted = me.partySubmitted;
@@ -250,14 +268,14 @@ export class PartySelectScene extends Phaser.Scene {
   private startBattle() {
     if (this.leaving) return;
     this.leaving = true;
-    this.scene.start('Battle', { stageCode: this.initData.stageCode, capturedIndices: this.initData.capturedIndices, removedIndices: this.initData.removedIndices, snapshot: this.snap });
+    this.scene.start('Battle', { stageCode: this.initData.stageCode, capturedIndices: this.initData.capturedIndices, removedIndices: this.initData.removedIndices, snapshot: this.snap, returnTo: this.initData.returnTo });
   }
 
   private finish(message: string) {
     if (this.leaving) return;
     this.leaving = true;
     showToast(this, message, { y: 600 });
-    this.time.delayedCall(1200, () => this.scene.start('Map', { stageCode: this.initData.stageCode, capturedIndices: this.initData.capturedIndices, removedIndices: this.initData.removedIndices }));
+    this.time.delayedCall(1200, () => this.exit('cancelled'));
   }
 
   // ---------- 입력 ----------
@@ -271,12 +289,12 @@ export class PartySelectScene extends Phaser.Scene {
     } catch (err) {
       console.warn('[battle] 전투 정리 실패(서버가 다시 시작됐거나 이미 끝남):', err);
     }
-    this.scene.start('Map', { stageCode: this.initData.stageCode, capturedIndices: this.initData.capturedIndices, removedIndices: this.initData.removedIndices });
+    this.exit('cancelled');
   }
 
   // 고른 파티를 서버에 제출한다. 서버가 소유·가방 여부·상한을 검증하고, 서버가 거절하면 완료 상태를 되돌리고 이유를 보여준다.
   private async onStart(bag: OwnedTurby[]) {
-    if (this.selected.size === 0 || this.submitting || this.submitted || this.snap.phase !== 'party_select') return;
+    if ((this.selected.size === 0 && !this.story) || this.submitting || this.submitted || this.snap.phase !== 'party_select') return;
     this.submitting = true;
     const ids = bag.filter((t) => this.selected.has(t.id)).map((t) => t.id);
     try {

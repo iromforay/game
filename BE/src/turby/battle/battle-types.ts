@@ -199,6 +199,7 @@ export interface BattleUnitDto {
   targetable?: boolean;
   invulnerable?: boolean;
   partOf?: string | null;
+  breakOrder?: number | null;
   fled?: boolean;
 }
 
@@ -222,5 +223,6 @@ export interface BattleSnapshotDto {
   units: BattleUnitDto[];
   blocked?: string[];
   objectives?: { win: BattleObjective[]; lose: BattleObjective[] }; // 정의 전투만: 기본값을 채운 목표(프런트 표시용)
+  cornerEscape?: boolean; // 정의 전투만: 꼭짓점 퇴각(무승부) 사용 여부 — 프런트가 퇴각존을 그릴지 정한다
   story?: { encounterKey: string; captureEnabled: false; wildRewards: false }; // 스토리 전투 표식 — 포획·일반 야생 보상 없음
 }
