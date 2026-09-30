@@ -7,17 +7,20 @@ import { TurbyGuide } from './TurbyGuide';
 import { Leaderboard } from './scoreboard/Leaderboard';
 import { AdminPage } from './admin/AdminPage';
 import { AdGameCatalog } from './AdGameCatalog';
+import { AdGameScreen } from './AdGameScreen';
+import type { AdGameId } from './adGames';
 import type { RankingGame } from './scoreboard/scoreboardClient';
 import { useMultiplayer } from './multiplayer/MultiplayerContext';
 import type { GameId } from './games';
 import './App.css';
 
-type Screen = 'dashboard' | 'ad-game-catalog' | 'lobby' | 'game' | 'kirby-guide' | 'turby-guide' | 'ranking' | 'admin';
+type Screen = 'dashboard' | 'ad-game-catalog' | 'ad-game' | 'lobby' | 'game' | 'kirby-guide' | 'turby-guide' | 'ranking' | 'admin';
 
 function App() {
   const [screen, setScreen] = useState<Screen>('dashboard');
   const [selectedGame, setSelectedGame] = useState<GameId | null>(null);
   const [selectedRound, setSelectedRound] = useState(1);
+  const [selectedAdGame, setSelectedAdGame] = useState<AdGameId | null>(null);
   const [ranking, setRanking] = useState<{ game?: RankingGame; roundId?: number }>({});
   const multiplayer = useMultiplayer();
 
@@ -51,7 +54,19 @@ function App() {
   }
 
   if (screen === 'ad-game-catalog') {
-    return <AdGameCatalog onBack={() => setScreen('dashboard')} />;
+    return (
+      <AdGameCatalog
+        onBack={() => setScreen('dashboard')}
+        onSelectGame={(gameId) => {
+          setSelectedAdGame(gameId);
+          setScreen('ad-game');
+        }}
+      />
+    );
+  }
+
+  if (screen === 'ad-game' && selectedAdGame) {
+    return <AdGameScreen gameId={selectedAdGame} onExit={() => setScreen('ad-game-catalog')} />;
   }
 
   if (screen === 'kirby-guide') {

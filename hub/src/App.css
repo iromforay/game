@@ -633,6 +633,25 @@
   opacity: 0.78;
 }
 
+.ad-game-card:not(:disabled) {
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease, filter 0.15s ease;
+}
+
+.ad-game-card:not(:disabled):hover {
+  transform: translateY(-3px);
+  border-color: rgba(255, 179, 92, 0.72);
+  filter: brightness(1.08);
+}
+
+.ad-game-card:not(:disabled):active {
+  transform: translateY(0);
+}
+
+.ad-game-canvas-wrapper {
+  background: radial-gradient(ellipse at center, #28576a 0%, #102236 72%, #08131f 100%);
+}
+
 .ad-game-number {
   color: #ffb35c;
   font-size: 30px;

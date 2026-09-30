@@ -2,9 +2,10 @@ import { AD_GAMES } from './adGames';
 
 interface AdGameCatalogProps {
   onBack: () => void;
+  onSelectGame: (gameId: (typeof AD_GAMES)[number]['id']) => void;
 }
 
-export function AdGameCatalog({ onBack }: AdGameCatalogProps) {
+export function AdGameCatalog({ onBack, onSelectGame }: AdGameCatalogProps) {
   return (
     <main className="ad-game-catalog">
       <header className="ad-game-catalog-header">
@@ -26,6 +27,7 @@ export function AdGameCatalog({ onBack }: AdGameCatalogProps) {
               className="ad-game-card"
               disabled={!isAvailable}
               aria-describedby={`${game.id}-status`}
+              onClick={() => isAvailable && onSelectGame(game.id)}
             >
               <span className="ad-game-number" aria-hidden="true">
                 {String(game.number).padStart(2, '0')}
