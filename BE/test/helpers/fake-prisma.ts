@@ -36,12 +36,22 @@ const TABLES: Record<string, TableDef> = {
   turby_instance: {
     uniques: [['id']],
     autoId: true,
-    defaults: () => ({ base_slot_id: null, is_story_companion: false, is_locked: false, created_at: new Date() }),
+    defaults: () => ({ base_slot_id: null, is_story_companion: false, is_locked: false, created_at: new Date(), atk_bonus: 0, def_bonus: 0, ap_bonus: 0, hp_bonus: 0 }),
   },
   turby_equipment: {
     uniques: [['turby_instance_id', 'slot_key']],
     compound: { turby_instance_id_slot_key: ['turby_instance_id', 'slot_key'] },
     autoId: true,
+  },
+  // 실제 앱 통합 테스트: 설정(SettingsService가 기동 때 읽음)
+  game_setting: { uniques: [['setting_key']] },
+  // 일반 야생 전투 정산(회귀 테스트)
+  coop_battle: { uniques: [['battle_key']], autoId: true, defaults: () => ({ created_at: new Date() }) },
+  battle_result: {
+    uniques: [['battle_id', 'player_id']],
+    compound: { battle_id_player_id: ['battle_id', 'player_id'] },
+    autoId: true,
+    defaults: () => ({ opponent_player_id: null, reward_tare: 0, reward_exp: 0, reward_item_json: null, captured_turby_instance_id: null, created_at: new Date() }),
   },
 };
 
@@ -93,6 +103,13 @@ export class FakeDb {
     return Object.entries(where).every(([k, cond]) => {
       if (cond !== null && typeof cond === 'object' && !(cond instanceof Date)) {
         const c = cond as Row;
+        // 관계 필터(예: turby_equipment.where.turby_instance.owner_player_id) — 연결된 한 행이 조건을 만족하는지
+        const rel = FakeDb.RELATIONS[table]?.[k];
+        if (rel && !rel[3]) {
+          const [target, fromKey, toKey] = rel;
+          const linked = this.tables[target].find((x) => same(x[toKey], row[fromKey]));
+          return !!linked && this.matches(target, linked, c);
+        }
         if ('gte' in c) return (row[k] as number) >= (c.gte as number);
         if ('in' in c) return (c.in as unknown[]).some((x) => same(x, row[k]));
         if ('not' in c) return !same(row[k], c.not);
@@ -129,7 +146,7 @@ export class FakeDb {
       turby_equipment: ['turby_equipment', 'id', 'turby_instance_id', true],
     },
     turby_character: { turby_grade: ['turby_grade', 'grade_id', 'id', false] },
-    turby_equipment: { item_definition: ['item_definition', 'item_definition_id', 'id', false] },
+    turby_equipment: { item_definition: ['item_definition', 'item_definition_id', 'id', false], turby_instance: ['turby_instance', 'turby_instance_id', 'id', false] },
   };
 
   private include(table: string, row: Row, include: Row | undefined): Row {
@@ -154,11 +171,11 @@ export class FakeDb {
         const r = db.rows(table, args.where)[0];
         return r ? db.include(table, r, args.include) : null;
       },
-      async findUniqueOrThrow(args: { where: Row }) {
+      async findUniqueOrThrow(args: { where: Row; include?: Row }) {
         await tick();
         const r = db.rows(table, args.where)[0];
         if (!r) throw new Error(`${table} not found`);
-        return { ...r };
+        return db.include(table, r, args.include);
       },
       async findFirst(args: { where: Row; orderBy?: Row[] }) {
         await tick();
@@ -238,8 +255,33 @@ export class FakeDb {
         }
         return { count: list.length };
       },
+      // 삭제(장비 해제 등). 트랜잭션이 실패하면 지운 행을 되돌린다
+      async deleteMany(args: { where: Row }) {
+        await tick();
+        const list = db.rows(table, args.where);
+        db.tables[table] = db.tables[table].filter((r) => !list.includes(r));
+        undo?.push(() => db.tables[table].push(...list));
+        return { count: list.length };
+      },
+      async delete(args: { where: Row }) {
+        await tick();
+        const row = db.rows(table, args.where)[0];
+        if (!row) throw new Error(`${table} not found`);
+        db.tables[table] = db.tables[table].filter((r) => r !== row);
+        undo?.push(() => db.tables[table].push(row));
+        return { ...row };
+      },
     });
     const client: Row = Object.fromEntries(Object.keys(TABLES).map((t) => [t, model(t)]));
+    // 태그드 템플릿 $queryRaw 흉내: 장비 장착의 "SELECT quantity FROM player_item WHERE player_id = ? AND item_definition_id = ? FOR UPDATE"만 지원
+    client.$queryRaw = async (strings: TemplateStringsArray, ...values: unknown[]) => {
+      await tick();
+      const sql = strings.join('?');
+      if (/FROM player_item WHERE player_id = \? AND item_definition_id = \?/.test(sql)) {
+        return db.tables.player_item.filter((r) => same(r.player_id, values[0]) && same(r.item_definition_id, values[1])).map((r) => ({ quantity: r.quantity }));
+      }
+      throw new Error(`fake-prisma: 지원하지 않는 $queryRaw: ${sql}`);
+    };
     client.$transaction = async (fn: (tx: unknown) => Promise<unknown>) => {
       const log: Undo[] = [];
       try {

@@ -9,6 +9,8 @@ import { SessionService } from '../src/turby/session.service';
 import { RoomsService } from '../src/turby/rooms/rooms.service';
 import { BattleService } from '../src/turby/battle/battle.service';
 import { BattleError } from '../src/turby/battle/battle-types';
+import { EquipmentService } from '../src/turby/equipment.service';
+import { InventoryService } from '../src/turby/inventory.service';
 import { applyAction, createBattle, submitParty, toSnapshot } from '../src/turby/battle/battle-engine';
 import type { BattleDefinition, BattleRules, BattleState } from '../src/turby/battle/battle-types';
 
@@ -237,4 +239,51 @@ test('9. 스냅샷에 스토리 전투 표식(포획·야생 보상 없음)과 �
 
   const wild = toSnapshot(createBattle({ battleId: 'w', roomCode: 'R', stageCode: 'forest', spawnIndex: 0, encounterPlayerId: 'a', wild: { code: 'nubi', name: '누비', stats: { attack: 1, defense: 1, actionPower: 1, maxHp: 1 } }, rules: RULES, participants: [{ playerId: 'a', nickname: 'a', slot: 1, connected: true }] }));
   assert.equal('story' in wild || 'objectives' in wild, false, '일반 야생 전투 스냅샷은 기존 형태 그대로');
+});
+
+// ---------- v4 §3 회귀: 스토리 규칙이 일반 전투·장비에 섞이지 않는다 ----------
+
+test('v4 회귀: 일반 야생 전투 — 누비 강제 참가 없음·스토리 표식 없음·승리 시 포획 보상 지급, 스토리 이벤트는 그대로', async () => {
+  const s = setup({ checkpoint: 'CH01_FIRST_KNOT_EQUIPPED' });
+  NUMBERS['battle.encounterRadiusPx'] = 200;
+  const weak = s.db.seed('turby_grade', { id: 2, name: '약함', base_attack: 1, base_defense: 0, base_action_power: 0, base_hp: 1 });
+  s.db.seed('turby_character', { code: 'bopuli', name: '보풀이', grade_id: weak.id, atk_mod: 0, def_mod: 0, ap_mod: 0, hp_mod: 0 });
+  s.db.seed('stage_wild_spawn', { stage_code: 'forest', spawn_index: 0, character_code: 'bopuli', x: 110, y: 110 });
+  await enterForest(s);
+  const eventsBefore = s.db.rows('player_story_event', { player_id: P }).length;
+  const snap = await s.battles.start('1', 0);
+  assert.equal(snap.story, undefined, '일반 전투에는 스토리 표식 없음');
+  assert.equal(snap.objectives, undefined);
+  const res = await s.battles.party('1', snap.battleId, [s.ids.bag1]);
+  const party = res.snapshot.units.filter((u) => u.side === 'party');
+  assert.equal(party.length, 1, '고른 터비만(이야기 누비 자동 편성 없음)');
+  assert.notEqual(party[0].unitId, undefined);
+  // 야생을 바로 옆으로(테스트 편의) 옮겨 한 번에 이긴다
+  const rec = (s.battles as unknown as { battles: Map<string, { state: { units: { side: string; col: number; row: number }[] } }> }).battles.get(snap.battleId)!;
+  const wildUnit = rec.state.units.find((u) => u.side === 'wild')!;
+  const me = rec.state.units.find((u) => u.side === 'party')!;
+  wildUnit.col = me.col + 1;
+  wildUnit.row = me.row;
+  const win = await s.battles.action('1', { battleId: snap.battleId, actionId: 'w1', expectedVersion: res.snapshot.version, type: 'attack', unitId: party[0].unitId, targetUnitId: (wildUnit as unknown as { unitId: string }).unitId });
+  const ended = win.ended ?? (await s.battles.snapshot('1', snap.battleId)).ended;
+  assert.equal(ended?.outcome, 'win');
+  const mine = ended!.rewards.find((r) => r.playerId === '1')!;
+  assert.equal(mine.rewardStatus, 'granted', '포획 보상 유지');
+  assert.equal(mine.capturedTurby?.characterCode, 'bopuli');
+  assert.equal(s.db.rows('turby_instance', { owner_player_id: P, acquired_via: 'wild_capture' }).length, 1);
+  assert.equal(s.db.rows('player_story_event', { player_id: P }).length, eventsBefore, '일반 전투는 스토리 진행을 바꾸지 않음');
+});
+
+test('v4 회귀: 일반 장비 슬롯 장착·해제 정상, 일반 아이템은 스토리 잠금으로 보이지 않음', async () => {
+  const s = setup({ checkpoint: 'CH01_FIRST_KNOT_EQUIPPED' });
+  const needle = s.db.seed('item_definition', { code: 'knit_needle', name: '뜨개바늘', category: 'equipment', equip_slot: 'weapon', atk_bonus: 2, def_bonus: 0, ap_bonus: 0, hp_bonus: 0, max_stack: 1 });
+  s.db.seed('player_item', { player_id: P, item_definition_id: needle.id, quantity: 1, is_new: false });
+  const eq = new EquipmentService(s.db.client());
+  const t = await eq.equip('1', s.ids.bag1, 'knit_needle');
+  assert.deepEqual(t.equipment.map((e: { slotKey: string; itemCode: string }) => [e.slotKey, e.itemCode]), [['weapon', 'knit_needle']]);
+  const inv = new InventoryService(s.db.client(), { numberOr: (_k: string, d: number) => d } as never);
+  const row = (await inv.list(P)).items.find((i) => i.itemCode === 'knit_needle')!;
+  assert.deepEqual([row.tabLabel, row.isLocked, row.permissions.sell, row.permissions.unequip, row.storyAction, row.equipped], ['장비', false, true, true, null, 1]);
+  const off = await eq.unequip('1', s.ids.bag1, 'weapon');
+  assert.equal(off.equipment.length, 0, '일반 슬롯 해제 가능');
 });
