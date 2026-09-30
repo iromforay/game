@@ -111,6 +111,7 @@ export class FakeDb {
           return !!linked && this.matches(target, linked, c);
         }
         if ('gte' in c) return (row[k] as number) >= (c.gte as number);
+        if ('gt' in c) return (row[k] as number) > (c.gt as number);
         if ('in' in c) return (c.in as unknown[]).some((x) => same(x, row[k]));
         if ('not' in c) return !same(row[k], c.not);
         if ('startsWith' in c) return typeof row[k] === 'string' && (row[k] as string).startsWith(c.startsWith as string);
@@ -198,6 +199,18 @@ export class FakeDb {
       async count(args: { where?: Row } = {}) {
         await tick();
         return db.rows(table, args.where ?? {}).length;
+      },
+      // 묶음 개수(장비 목록의 장착 수 등): by 열 값별 _count._all만 지원
+      async groupBy(args: { by: string[]; where?: Row; _count?: { _all: true } }) {
+        await tick();
+        const groups = new Map<string, Row & { _count: { _all: number } }>();
+        for (const r of db.rows(table, args.where ?? {})) {
+          const key = JSON.stringify(args.by.map((k) => String(r[k])));
+          const g = groups.get(key) ?? { ...Object.fromEntries(args.by.map((k) => [k, r[k]])), _count: { _all: 0 } };
+          g._count._all++;
+          groups.set(key, g);
+        }
+        return [...groups.values()];
       },
       async create(args: { data: Row }) {
         await tick();

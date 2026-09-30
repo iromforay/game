@@ -13,7 +13,8 @@
     "start": "node dist/main.js",
     "start:turby": "node dist/turby-main.js",
     "start:kirby": "node dist/kirby-main.js",
-    "test": "node --experimental-strip-types --no-warnings --test -r ts-node/register/transpile-only test/*.test.ts"
+    "test": "node --experimental-strip-types --no-warnings --test -r ts-node/register/transpile-only test/*.test.ts",
+    "test:e2e": "node --no-warnings --test --test-concurrency=1 -r ts-node/register/transpile-only test/e2e/*.e2e.ts"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.15",
@@ -31,6 +32,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
+    "playwright-core": "^1.63.0",
     "prisma": "^6.2.1",
     "ts-node": "^10.9.2",
     "typescript": "~5.7.3"
