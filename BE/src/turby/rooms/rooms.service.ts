@@ -66,7 +66,7 @@ export class RoomsService {
       this.events.emit('room:state', room);
     }
     // 같은 소켓이 hello를 다시 보낸 경우는 '이전 소켓'이 아니다(자기 자신을 끊지 않도록)
-    return { playerId, nickname: player.nickname, previousSocketId: previousSocketId === socketId ? null : previousSocketId, room: room ?? null, returnToVillage };
+    return { playerId, nickname: player.nickname, previousSocketId: previousSocketId === socketId ? null : previousSocketId, room: room ?? null, returnToVillage, returnReason: returnToVillage ? ('OPENING_REQUIRED' as const) : null };
   }
 
   socketIdOf(playerId: string): string | null {

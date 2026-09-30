@@ -100,7 +100,7 @@ test('5. 남아 있던 탐험 세션은 재접속시키지 않고 마을 복귀 
   // 게이트 도입 전에 만들어진 세션을 흉내: 진행이 오프닝 미완료인 채로 세션만 남음
   s.db.rows('player_story_progress', { player_id: P })[0].checkpoint = 'OPENING_FALL_COMPLETE';
   const res = await s.rooms.identify('sock-2', 'dev-test-gate');
-  assert.deepEqual([res.room, res.returnToVillage], [null, true]);
+  assert.deepEqual([res.room, res.returnToVillage, res.returnReason], [null, true, 'OPENING_REQUIRED']);
   assert.equal(s.rooms.roomOf('1'), undefined);
   assert.equal(s.db.rows('player_story_progress', { player_id: P })[0].checkpoint, 'OPENING_FALL_COMPLETE', '진행 데이터 삭제 없음');
 });

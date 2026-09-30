@@ -60,6 +60,7 @@ export class RoomsGateway implements OnGatewayDisconnect, OnModuleInit {
         nickname: res.nickname,
         room: res.room ? this.rooms.toState(res.room) : null,
         returnToVillage: res.returnToVillage, // v15: 오프닝 미완료로 남은 탐험 세션을 닫았다 — 클라이언트는 마을로
+        returnReason: res.returnReason, // 차단 사유 코드(OPENING_REQUIRED)로 통일
         players: res.room && inMap ? this.rooms.snapshotOf(res.room, res.playerId) : [],
         wilds: res.room && inMap ? this.rooms.wildsOf(res.room) : [],
         battle: await this.battles.activeSnapshotOf(res.playerId), // 새로고침·재접속 시 진행 중 전투를 이어받는다
