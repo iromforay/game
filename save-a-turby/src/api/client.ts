@@ -126,6 +126,7 @@ export interface StoryState {
   playerName: string;
   stages: ServerStageStatus[];
   delivery: StoryDelivery | null; // M4-C: 전달을 기다리는 목표(서버 인벤토리 수량)
+  storyNubi?: { turbyId: string; growthStage: number } | null;
 }
 
 export function fetchStory(): Promise<StoryState> {

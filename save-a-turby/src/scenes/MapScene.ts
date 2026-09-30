@@ -234,10 +234,10 @@ export class MapScene extends Phaser.Scene {
     try {
       const res = await triggerStory(triggerId);
       this.showDelivery(res.story.delivery);
-      if (res.shortage) showToast(this, shortageText(res.shortage), { y: 660 });
+      if (res.shortage) showToast(this, shortageText(res.shortage), { y: 660, fixed: true });
       if (res.play) this.launchStory(res.play);
     } catch (err) {
-      showToast(this, err instanceof Error && err.message ? err.message : '서버에 연결할 수 없습니다.', { y: 660, error: true });
+      showToast(this, err instanceof Error && err.message ? err.message : '서버에 연결할 수 없습니다.', { y: 660, error: true, fixed: true });
     } finally {
       this.delivering = false;
     }

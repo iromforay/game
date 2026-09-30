@@ -129,3 +129,23 @@ export function returnDestination(ret: BattleReturn | undefined, fallback: Battl
   if (!ret) return { scene: fallback.scene, data: fallback.data ?? {}, mode: 'start' };
   return { scene: ret.scene, data: { ...(ret.data ?? {}), ...(end ? { storyBattleEnd: end } : {}) }, mode: ret.mode ?? 'start' };
 }
+
+// 이름·HP 라벨 위치(인접 유닛끼리 겹치지 않게). 같은 줄에서 왼쪽으로 붙어 있는 유닛 수가 홀수면 위, 짝수면 아래.
+// 단, 바로 위 칸 유닛의 라벨이 아래(=이 칸 위쪽 경계)에 있으면 부딪히므로 아래로 둔다. 문구는 줄이지 않고 칸 너비로 줄바꿈한다.
+export function labelPlacement(snap: BattleSnapshot, u: BattleUnit): 'below' | 'above' {
+  const shown = (col: number, row: number) => snap.units.find((o) => o.col === col && o.row === row && !o.fled && !o.inactive);
+  const memo = new Map<string, 'below' | 'above'>();
+  const place = (unit: BattleUnit): 'below' | 'above' => {
+    const key = unit.unitId;
+    const cached = memo.get(key);
+    if (cached) return cached;
+    let run = 0;
+    while (shown(unit.col - run - 1, unit.row)) run++;
+    let result: 'below' | 'above' = run % 2 === 1 ? 'above' : 'below';
+    const up = shown(unit.col, unit.row - 1);
+    if (result === 'above' && up && place(up) === 'below') result = 'below';
+    memo.set(key, result);
+    return result;
+  };
+  return place(u);
+}

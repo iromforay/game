@@ -12,6 +12,11 @@ const CARD_W = 216;
 const CARD_H = 452;
 const GAP = 16;
 const CARD_Y = 104;
+// stage-card-frame.png(240×480)은 좌우 25px가 투명 — 그대로 카드 폭에 늘리면 보이는 틀이 좁아져 안쪽 내용이 틀 밖으로 넘쳤다(v2 §4 재현).
+// 보이는 틀 = 카드 폭이 되도록 투명 여백만큼 넓혀 그리고, 내용은 로프 안쪽 폭(INNER_W)에 맞춘다.
+const FRAME_ART = { width: 240, left: 25, right: 25 };
+const ROPE = 24;
+const INNER_W = CARD_W - ROPE * 2;
 
 const STATE_STYLE = {
   cleared: { badge: '완료', badgeFill: PAL.lavender, badgeText: TEXT.body },
@@ -66,38 +71,44 @@ export class StageSelectScene extends Phaser.Scene {
     const code = st.chapter.stageCode;
     const cx = x + CARD_W / 2;
 
-    feltPanel(this, x, y, CARD_W, CARD_H, { fill: current ? PAL.mint : PAL.cream, stroke: PAL.lavender, strokeW: current ? 6 : 4, radius: 26, alpha: locked ? 0.92 : 1, image: 'stage-card-frame', tint: current ? PAL.mint : undefined });
-    this.add.text(cx, y + 30, st.chapter.titleKo, { fontSize: '20px', color: locked ? TEXT.disabled : TEXT.body }).setOrigin(0.5);
+    const framed = this.textures.exists('stage-card-frame');
+    const scale = CARD_W / (FRAME_ART.width - FRAME_ART.left - FRAME_ART.right);
+    const fx = framed ? x - FRAME_ART.left * scale : x;
+    const fw = framed ? FRAME_ART.width * scale : CARD_W;
+    feltPanel(this, fx, y, fw, CARD_H, { fill: current ? PAL.mint : PAL.cream, stroke: PAL.lavender, strokeW: current ? 6 : 4, radius: 26, alpha: locked ? 0.92 : 1, image: 'stage-card-frame', tint: current ? PAL.mint : undefined });
+    this.add.text(cx, y + 36, st.chapter.titleKo, { fontSize: '20px', color: locked ? TEXT.disabled : TEXT.body }).setOrigin(0.5);
 
-    // 미리보기 196x126
+    // 미리보기(로프 안쪽 폭, 원래 196:126 비율)
     const previewY = y + 58;
+    const pw = INNER_W;
+    const ph = Math.round((pw * 126) / 196);
     if (this.textures.exists(`bg-${code}`)) {
-      const img = this.add.image(cx, previewY + 63, `bg-${code}`).setDisplaySize(196, 126);
+      const img = this.add.image(cx, previewY + 63, `bg-${code}`).setDisplaySize(pw, ph);
       if (locked) img.setAlpha(0.45).setTint(0xd8d0d5);
       else img.setAlpha(st.state === 'cleared' ? 0.88 : 1);
     } else {
-      this.add.rectangle(cx, previewY + 63, 196, 126, PAL.cream2);
+      this.add.rectangle(cx, previewY + 63, pw, ph, PAL.cream2);
     }
 
     this.add
-      .text(cx, y + 198, st.stageName, { fontSize: '17px', color: locked ? TEXT.sub : TEXT.body, align: 'center', wordWrap: { width: CARD_W - 28 } })
+      .text(cx, y + 198, st.stageName, { fontSize: '17px', color: locked ? TEXT.sub : TEXT.body, align: 'center', wordWrap: { width: INNER_W, useAdvancedWrap: true } })
       .setOrigin(0.5, 0);
 
     // 대표 터비 64x64 + 이름
-    const tx = x + 16 + 32;
+    const tx = x + ROPE + 32;
     const ty = y + 274;
     if (this.textures.exists(`turby-${st.chapter.clearCharacterCode}`)) {
       const t = this.add.image(tx, ty, `turby-${st.chapter.clearCharacterCode}`).setDisplaySize(64, 64);
       if (locked) t.setAlpha(0.5);
     }
-    this.add.text(x + 96, ty - 14, '대표 터비', { fontSize: '12px', color: TEXT.sub });
-    this.add.text(x + 96, ty + 2, ellipsize(st.clearCharacterName, 8), { fontSize: '16px', color: locked ? TEXT.sub : TEXT.body });
+    this.add.text(x + ROPE + 72, ty - 14, '대표 터비', { fontSize: '12px', color: TEXT.sub });
+    this.add.text(x + ROPE + 72, ty + 2, ellipsize(st.clearCharacterName, 8), { fontSize: '16px', color: locked ? TEXT.sub : TEXT.body });
     // 구 판정(롤백 상태)에서만 참인 안내 — 신 판정에서는 포획이 장을 열지 않는다
-    if (st.legacyTargetCode) this.add.text(x + 16, y + 318, '직접 포획하면 장 완료', { fontSize: '13px', color: TEXT.sub });
+    if (st.legacyTargetCode) this.add.text(x + ROPE, y + 318, '직접 포획하면 장 완료', { fontSize: '13px', color: TEXT.sub });
 
     // 잠금 이유(또는 백필 지역의 이야기 대기 안내)는 읽을 수 있게 유지한다
     if ((locked || st.state === 'open') && st.unlockHint) {
-      this.add.text(x + 16, y + 342, st.unlockHint, { fontSize: '12px', color: TEXT.sub, wordWrap: { width: CARD_W - 32 }, lineSpacing: 2 });
+      this.add.text(x + ROPE, y + 342, st.unlockHint, { fontSize: '12px', color: TEXT.sub, wordWrap: { width: INNER_W, useAdvancedWrap: true }, lineSpacing: 2 });
     }
 
     // 상태 배지

@@ -9,7 +9,7 @@ import type { ActionBody, BattleEnded, BattleEvent, BattleResponse, BattleSnapsh
 import { showToast, feltPanel, pillButton, TEXT } from '../ui/kit';
 import { loadWorldImages } from '../assets/loader';
 import coopSlots from '../data/coop-slots.json';
-import { isStoryBattle, objectiveLines, reachableCells, returnDestination, showsCornerEscape, storyResultText, targetState, unitTags, STORY_BADGE, STORY_NOTICE, TARGET_HINT, type BattleReturn } from '../battle/battleView';
+import { isStoryBattle, labelPlacement, objectiveLines, reachableCells, returnDestination, showsCornerEscape, storyResultText, targetState, unitTags, STORY_BADGE, STORY_NOTICE, TARGET_HINT, type BattleReturn } from '../battle/battleView';
 
 interface BattleInitData {
   stageCode: string;
@@ -26,6 +26,8 @@ interface UnitView {
 }
 
 const RETRY_LIMIT = 3;
+const LABEL_GAP = 30; // 유닛 중심에서 라벨까지
+const LABEL_WRAP = BATTLE_TILE_SIZE * 2 - 12; // 이웃 라벨은 반대편에 있으므로 두 칸 폭까지 쓸 수 있다
 const asDepth = (o: Phaser.GameObjects.GameObject, depth: number) => (o as unknown as Phaser.GameObjects.Components.Depth).setDepth(depth);
 const slotHex = (slot: number) => coopSlots.find((c) => c.slot === slot)?.main ?? '#888888';
 const slotNum = (slot: number) => Phaser.Display.Color.HexStringToColor(slotHex(slot)).color;
@@ -172,6 +174,11 @@ export class BattleScene extends Phaser.Scene {
     return { x: this.offsetX + col * BATTLE_TILE_SIZE + BATTLE_TILE_SIZE / 2, y: this.offsetY + row * BATTLE_TILE_SIZE + BATTLE_TILE_SIZE / 2 };
   }
 
+  private placeLabel(t: Phaser.GameObjects.Text, u: BattleUnit, x: number, y: number) {
+    if (labelPlacement(this.snap, u) === 'above') t.setOrigin(0.5, 1).setPosition(x, y - LABEL_GAP);
+    else t.setOrigin(0.5, 0).setPosition(x, y + LABEL_GAP);
+  }
+
   private hpLabel(u: BattleUnit) {
     const tags = unitTags(u);
     return `${u.name} HP ${u.hp}/${u.maxHp}${tags.length > 0 ? ` (${tags.join(' · ')})` : ''}`;
@@ -212,7 +219,8 @@ export class BattleScene extends Phaser.Scene {
     const ring = this.add.circle(0, 0, 26).setStrokeStyle(3, u.side === 'party' ? slotNum(u.participantSlot) : u.side === 'neutral' ? 0x4a9a4a : 0x2d6fa3);
     container.add([selectRing, ring, body]);
     container.setDepth(10);
-    const hpText = this.add.text(x, y + 34, this.hpLabel(u), { fontSize: '11px', color: '#ffffff', backgroundColor: u.side === 'party' ? slotHex(u.participantSlot) : '#00000090', padding: { x: 4, y: 2 } }).setOrigin(0.5, 0).setDepth(10);
+    // 라벨은 줄이지 않고 두 칸 폭 안에서 줄바꿈(이웃 라벨은 위·아래로 엇갈려 겹치지 않음 — labelPlacement)
+    const hpText = this.add.text(x, y + LABEL_GAP, this.hpLabel(u), { fontSize: '11px', color: '#ffffff', align: 'center', wordWrap: { width: LABEL_WRAP, useAdvancedWrap: true }, backgroundColor: u.side === 'party' ? slotHex(u.participantSlot) : '#00000090', padding: { x: 4, y: 2 } }).setOrigin(0.5, 0).setDepth(11);
 
     body.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
       if (u.side === 'wild') void this.onWildClicked(u.unitId);
@@ -231,7 +239,8 @@ export class BattleScene extends Phaser.Scene {
       }
       const { x, y } = this.tileToWorld(u.col, u.row);
       view.container.setPosition(x, y).setAlpha(u.stunned || u.inactive ? 0.4 : 1).setVisible(!u.fled);
-      view.hpText.setPosition(x, y + 34).setText(this.hpLabel(u)).setAlpha(u.stunned || u.inactive ? 0.6 : 1).setVisible(!u.fled);
+      view.hpText.setText(this.hpLabel(u)).setAlpha(u.stunned || u.inactive ? 0.6 : 1).setVisible(!u.fled);
+      this.placeLabel(view.hpText, u, x, y);
     }
     this.drawBlocked(this.snap.blocked ?? []);
     if (this.snap.round !== this.lastRound) {
@@ -591,7 +600,7 @@ export class BattleScene extends Phaser.Scene {
       if (view) {
         const { x, y } = this.tileToWorld(ev.toCol, ev.toRow);
         this.tweens.add({ targets: view.container, x, y, duration: 140 });
-        this.tweens.add({ targets: view.hpText, x, y: y + 34, duration: 140 });
+        this.tweens.add({ targets: view.hpText, x, y: y + (view.hpText.originY === 0 ? LABEL_GAP : -LABEL_GAP), duration: 140 });
         await wait(this, ev.unitId === 'wild' ? 400 : 170);
       }
     } else if (ev.type === 'attack') {

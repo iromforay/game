@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../config/constants';
 import { CHARACTER_IMAGES } from '../assets/registry';
 import { inventory } from '../state/inventory';
+import { fetchStory } from '../api/client';
 import type { OwnedTurby } from '../state/inventory';
 import { battleClient } from '../net/battleClient';
 import { roomClient, RoomApiError } from '../net/roomClient';
@@ -88,13 +89,18 @@ export class PartySelectScene extends Phaser.Scene {
     }
   }
 
-  create() {
+  async create() {
     this.cameras.main.setBackgroundColor('#1a1030');
     this.titleText = this.add.text(CANVAS_WIDTH / 2, 24, '', { fontSize: '24px', color: '#ffe9a8' }).setOrigin(0.5);
     this.limitText = this.add.text(CANVAS_WIDTH / 2, 62, '', { fontSize: '15px', color: '#cccccc' }).setOrigin(0.5);
     this.timerText = this.add.text(CANVAS_WIDTH - 16, 16, '', { fontSize: '18px', color: '#9fe58a' }).setOrigin(1, 0);
 
-    const bag = inventory.getBag();
+    let bag = inventory.getBag();
+    // 스토리 전투: 이야기 누비는 서버가 자동으로 편성하므로 고르는 목록에서 뺀다(안내 문구와 맞춤). 조회 실패 시 그대로 둔다(서버가 중복을 걸러 냄)
+    if (this.story) {
+      const nubiId = (await fetchStory().catch(() => null))?.storyNubi?.turbyId;
+      if (nubiId) bag = bag.filter((t) => t.id !== nubiId);
+    }
     if (bag.length === 0 && !this.story) {
       this.add.text(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, '가방이 비어있습니다.\n기지에서 선반의 터비를 가방으로 옮겨주세요.', { fontSize: '16px', color: '#ffb199', align: 'center' }).setOrigin(0.5);
       this.add

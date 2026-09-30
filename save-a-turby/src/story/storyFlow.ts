@@ -44,7 +44,10 @@ export function deliveryGoalText(d: StoryDelivery): string {
 }
 
 export function shortageText(s: { itemCode: string; have: number; need: number }): string {
-  return `${DELIVERY_ITEM_NAME[s.itemCode] ?? s.itemCode}이(가) ${s.need - s.have}개 더 필요해요 (${s.have}/${s.need})`;
+  const name = DELIVERY_ITEM_NAME[s.itemCode] ?? s.itemCode;
+  const code = name.charCodeAt(name.length - 1) - 0xac00; // 받침 있으면 '이', 없으면 '가'(utils/korean과 같은 판정 — 테스트 가능한 순수 모듈이라 직접 둠)
+  const particle = code >= 0 && code <= 11171 && code % 28 !== 0 ? '이' : '가';
+  return `${name}${particle} ${s.need - s.have}개 더 필요해요 (${s.have}/${s.need})`;
 }
 
 // 지역 → 장 대화 파일(story_chapter 순서와 같다: 1장 숲 … 5장 사막)

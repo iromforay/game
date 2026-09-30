@@ -99,6 +99,11 @@ export interface RunnerPorts {
 export const PLAYER_NAME_TOKEN = '{playerName}';
 export const STORY_BATTLE_RETRY_MESSAGE = '전투에서 졌어요. 다시 도전해 볼까요?';
 
+// 정본 대본의 `…` 는 아이템·장식 이름 강조 표기(마크다운)라 화면에는 기호 없이 보인다. 데이터는 정본 그대로 둔다
+export function plainText(text: string): string {
+  return text.replace(/`([^`]+)`/g, '$1');
+}
+
 export function fillName(text: string, playerName: string): string {
   return text.split(PLAYER_NAME_TOKEN).join(playerName);
 }
@@ -198,7 +203,7 @@ export async function runDialogue(file: DialogueFile, startSegmentId: string, po
       ports.cue(entry);
       const name = ports.playerName();
       const label = entry.kind === 'line' ? fillName(entry.speakerLabel, name) : null;
-      const advance = await ports.show({ entry, text: fillName(entry.text, name), label, canSkipSegment: canSkip });
+      const advance = await ports.show({ entry, text: plainText(fillName(entry.text, name)), label, canSkipSegment: canSkip });
       if (advance === 'skip' && canSkip) skipping = true;
     }
 

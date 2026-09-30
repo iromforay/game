@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { canAttack, isStoryBattle, moveAllowance, objectiveLines, reachableCells, showsCornerEscape, storyResultText, targetState, unitTags, STORY_NOTICE } from '../src/battle/battleView.ts';
+import { canAttack, isStoryBattle, labelPlacement, moveAllowance, objectiveLines, reachableCells, showsCornerEscape, storyResultText, targetState, unitTags, STORY_NOTICE } from '../src/battle/battleView.ts';
 import type { BattleSnapshot, BattleUnit } from '../src/net/battleTypes.ts';
 
 interface DefUnit {
@@ -136,4 +136,18 @@ test('스토리 결과 문구에는 포획 문구가 없다', () => {
     assert.ok(!/포획 성공|가방/.test(t.title + t.sub + t.btn), o);
   }
   assert.equal(storyResultText('win').sub, STORY_NOTICE);
+});
+
+test('라벨 배치: 같은 줄에 붙은 유닛은 아래·위로 엇갈리고, 바로 위 칸 라벨과 부딪히면 아래로 — 매복 전투 보풀이·실밥이', () => {
+  const s = snapshotOf({ key: 't', units: [] }, [hero(3, 2), hero(4, 2, { unitId: 'b' }), hero(5, 2, { unitId: 'c' })]);
+  assert.deepEqual(s.units.map((u) => labelPlacement(s, u)), ['below', 'above', 'below']);
+  s.units.push(hero(4, 1, { unitId: 'up' }));
+  assert.equal(labelPlacement(s, unit(s, 'b')), 'below', '위 칸 유닛 라벨(아래)과 부딪히지 않게');
+  const fled = snapshotOf({ key: 't', units: [] }, [hero(3, 2, { fled: true }), hero(4, 2, { unitId: 'b' })]);
+  assert.equal(labelPlacement(fled, unit(fled, 'b')), 'below', '도주해 사라진 유닛은 이웃으로 보지 않음');
+
+  const a = snapshotOf(load('forest_stitchling_ambush'), [hero(1, 4)]);
+  const bop = unit(a, 'bopuli');
+  const left = a.units.find((u) => u.col === bop.col - 1 && u.row === bop.row);
+  if (left) assert.notEqual(labelPlacement(a, bop), labelPlacement(a, left), '보풀이와 바로 옆 실밥이 라벨은 반대편');
 });

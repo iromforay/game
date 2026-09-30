@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { runDialogue, type DialogueFile, type RunnerPorts, type StoryBattleResult } from '../src/story/dialogueRunner.ts';
+import { plainText, runDialogue, type DialogueFile, type RunnerPorts, type StoryBattleResult } from '../src/story/dialogueRunner.ts';
 import { battleEntryOf, battleResultOf, battleStartErrorResult, chapterOfSegment, chapterOfStage, deliveryGoalText, shortageText } from '../src/story/storyFlow.ts';
 
 const CH01 = JSON.parse(readFileSync(fileURLToPath(new URL('../../BE/story-data/save-a-turby/dialogue/ch01.json', import.meta.url)), 'utf8')) as DialogueFile;
@@ -91,7 +91,8 @@ test('전투 결과·오류 → 진행기 결과, 목표·부족 문구, 장 파
   assert.equal(battleStartErrorResult('NOT_IN_MAP'), null, '그 밖은 재시도');
   assert.equal(deliveryGoalText({ triggerId: 'npc_bopuli', itemCode: 'glowing_yarn_dust', have: 0, need: 10 }), '빛나는 실가루 모으기 0/10');
   assert.equal(deliveryGoalText({ triggerId: 'npc_bopuli', itemCode: 'glowing_yarn_dust', have: 13, need: 10 }), '빛나는 실가루 모으기 10/10');
-  assert.equal(shortageText({ itemCode: 'glowing_yarn_dust', have: 3, need: 10 }), '빛나는 실가루이(가) 7개 더 필요해요 (3/10)');
+  assert.equal(shortageText({ itemCode: 'glowing_yarn_dust', have: 3, need: 10 }), '빛나는 실가루가 7개 더 필요해요 (3/10)');
   assert.equal(chapterOfSegment('ch01.bopul_clue'), 'ch01');
   assert.equal(chapterOfStage('forest'), 'ch01');
+  assert.equal(plainText('빛이 가라앉자 `실의 떨림을 찾는 나침판`이 완성된다.'), '빛이 가라앉자 실의 떨림을 찾는 나침판이 완성된다.', '강조 표기는 화면에서 기호 없이');
 });
