@@ -17,6 +17,11 @@ import coopSlots from '../data/coop-slots.json';
 import type { Facing, MapPlayer } from '../net/roomClient';
 import charactersData from '../data/characters.json';
 import { AVATAR_IMAGE, CHARACTER_IMAGES, BACKGROUND_TILES } from '../assets/registry';
+import { fetchStory, triggerStory } from '../api/client';
+import { apiStoryClient } from '../story/apiStoryClient';
+import { getPlayerId } from '../state/player';
+import { deliveryGoalText, shortageText, type StoryDelivery, type StoryPlay } from '../story/storyFlow';
+import type { StoryDialogueData } from './StoryDialogueScene';
 
 interface WildMarker {
   spawn: WildSpawn;
@@ -66,6 +71,8 @@ export class MapScene extends Phaser.Scene {
   private inviteTimer: Phaser.Time.TimerEvent | null = null;
   private inviteBattleId: string | null = null;
   private selfRing?: Phaser.GameObjects.Ellipse | Phaser.GameObjects.Image;
+  private deliveryLayer: Phaser.GameObjects.GameObject[] = [];
+  private delivering = false;
 
   constructor() {
     super('Map');
@@ -81,6 +88,8 @@ export class MapScene extends Phaser.Scene {
     this.inviteLayer = null;
     this.inviteTimer = null;
     this.inviteBattleId = null;
+    this.deliveryLayer = [];
+    this.delivering = false;
   }
 
   preload() {
@@ -164,7 +173,74 @@ export class MapScene extends Phaser.Scene {
         if (opening) this.joystick.setEnabled(false); // 닫을 때는 InventoryPanel의 onClose 콜백이 다시 켜줌
       });
     this.ready = true;
+    // M4-C: 이야기 대화가 끝나 이 화면이 깨어나면 전달 목표를 서버 기준으로 다시 그린다
+    const onWake = () => {
+      this.joystick.setEnabled(true);
+      void this.refreshDelivery();
+    };
+    this.events.on('wake', onWake);
+    this.events.once('shutdown', () => this.events.off('wake', onWake));
     this.setupRoom();
+  }
+
+  // ----- M4-C: 1장 이야기 연결(서버가 정한 구간만 재생) -----
+
+  private launchStory(play: StoryPlay) {
+    const data: StoryDialogueData = {
+      client: apiStoryClient,
+      seenKey: `turby_seen_segments:${getPlayerId()}`,
+      stageCode: this.stageCode,
+      play,
+      onDone: (s) => {
+        s.scene.wake('Map');
+        s.scene.stop();
+      },
+    };
+    this.joystick.setEnabled(false);
+    this.scene.launch('StoryDialogue', data);
+    this.scene.sleep();
+  }
+
+  private async refreshDelivery() {
+    try {
+      this.showDelivery((await fetchStory()).delivery);
+    } catch (err) {
+      console.warn('[story] 목표를 불러오지 못했습니다:', err);
+    }
+  }
+
+  // 전달 목표(빛나는 실가루 n/10, 서버 인벤토리 수량)와 보풀이 전달 버튼. 좌표가 없으므로 지도 NPC 대신 화면 상단 패널로 둔다(임시 도형)
+  private showDelivery(delivery: StoryDelivery | null) {
+    this.deliveryLayer.forEach((o) => o.destroy());
+    this.deliveryLayer = [];
+    if (!delivery) return;
+    const cx = CANVAS_WIDTH / 2;
+    const panel = this.add.rectangle(cx, 44, 440, 72, 0x241a3d, 0.9).setStrokeStyle(2, 0xffd27f, 0.9).setScrollFactor(0).setDepth(2000);
+    const goal = this.add.text(cx, 26, deliveryGoalText(delivery), { fontSize: '17px', color: '#ffe9a8' }).setOrigin(0.5).setScrollFactor(0).setDepth(2001);
+    const button = this.add
+      .text(cx, 58, '보풀이에게 실가루 전달', { fontSize: '15px', color: '#ffffff', backgroundColor: '#5a3a8a', padding: { x: 12, y: 5 } })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(2001)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => void this.deliver(delivery.triggerId));
+    this.deliveryLayer.push(panel, goal, button);
+  }
+
+  // 서버가 수량·진행·위치를 판정한다. 부족하면 부족 수량만, 충분하면 서버가 소비·지급을 확정한 뒤 제작 장면을 재생한다
+  private async deliver(triggerId: string) {
+    if (this.delivering) return; // 이중 클릭(서버도 멱등)
+    this.delivering = true;
+    try {
+      const res = await triggerStory(triggerId);
+      this.showDelivery(res.story.delivery);
+      if (res.shortage) showToast(this, shortageText(res.shortage), { y: 660 });
+      if (res.play) this.launchStory(res.play);
+    } catch (err) {
+      showToast(this, err instanceof Error && err.message ? err.message : '서버에 연결할 수 없습니다.', { y: 660, error: true });
+    } finally {
+      this.delivering = false;
+    }
   }
 
   // ----- 4-A: 같은 방 플레이어 위치 동기화(개발용 표시 — 최종 표현은 코덱스 디자인 확정 후 교체) -----
@@ -211,6 +287,10 @@ export class MapScene extends Phaser.Scene {
       players.forEach((p) => this.upsertPeer(p));
       this.markers.forEach((m) => this.applyWildState(m.index, roomClient.wilds.get(m.index) ?? 'free'));
       if (!this.selfRing) this.selfRing = this.makeRing(this.slotColor(roomClient.slotOf(roomClient.playerId ?? ''))).setDepth(5);
+      // M4-C: 서버가 이 입장에 붙여 준 이야기(숲 첫 진입 → 첫 길, 새로고침 → 복귀 구간) — 서버가 정한 구간만 재생
+      const story = roomClient.storyOnEnter;
+      this.showDelivery(story?.delivery ?? null);
+      if (story?.play) this.launchStory(story.play);
     } catch (err) {
       this.inRoomMap = false;
       console.warn('[room] 맵 입장 실패:', err);

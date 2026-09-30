@@ -9,6 +9,7 @@ import { PartySelectScene } from './scenes/PartySelectScene';
 import { BattleScene } from './scenes/BattleScene';
 import { BootScene } from './scenes/BootScene';
 import { OpeningScene } from './scenes/OpeningScene';
+import { StoryDialogueScene } from './scenes/StoryDialogueScene';
 import { inventory } from './state/inventory';
 import { session } from './api/client';
 
@@ -34,7 +35,7 @@ export async function mountGame(parent: HTMLElement | string): Promise<Phaser.Ga
       autoCenter: Phaser.Scale.NO_CENTER,
     },
     // 첫 씬 Boot가 서버 스토리 상태로 오프닝/마을을 고른다(M3)
-    scene: [BootScene, VillageScene, HomeScene, MarketScene, StageSelectScene, MapScene, PartySelectScene, BattleScene, OpeningScene],
+    scene: [BootScene, VillageScene, HomeScene, MarketScene, StageSelectScene, MapScene, PartySelectScene, BattleScene, OpeningScene, StoryDialogueScene],
   };
 
   return new Phaser.Game(config);

@@ -1,4 +1,8 @@
 import Phaser from 'phaser';
+import { apiStoryClient } from '../story/apiStoryClient';
+import { getPlayerId } from '../state/player';
+import type { StoryDialogueData } from './StoryDialogueScene';
+import { chapterOfStage } from '../story/storyFlow';
 import { CANVAS_WIDTH, CANVAS_HEIGHT, AVATAR_SPEED } from '../config/constants';
 import { AVATAR_IMAGE, BACKGROUND_TILES } from '../assets/registry';
 import { loadWorldImages } from '../assets/loader';
@@ -229,7 +233,9 @@ ${storyHint}` : it.hint,
       .then(() => {
         const battle = roomClient.activeBattle;
         if (!battle || !this.scene.isActive()) return;
-        this.scene.start('Battle', { stageCode: battle.stageCode, capturedIndices: [], removedIndices: [], snapshot: battle });
+        // M4-C: 스토리 전투면 끝난 뒤 그 전투 항목부터 대화를 잇는다(대화 위치 복원). 그 구간 뒤는 맵 재입장 때 서버가 알려 준다
+        const returnTo = battle.story ? { scene: 'StoryDialogue', mode: 'start' as const, data: storyResumeData(battle.stageCode, battle.story.encounterKey) } : undefined;
+        this.scene.start('Battle', { stageCode: battle.stageCode, capturedIndices: [], removedIndices: [], snapshot: battle, returnTo });
       })
       .catch(() => undefined);
   }
@@ -297,4 +303,17 @@ ${storyHint}` : it.hint,
       else this.scene.start('StageSelect');
     });
   }
+}
+
+// 새로고침으로 스토리 전투부터 복원할 때의 대화 화면 데이터: 끝나면 그 지역 맵으로(재입장 시 서버가 다음 구간을 알려 줌)
+function storyResumeData(stageCode: string, encounterKey: string): StoryDialogueData {
+  return {
+    client: apiStoryClient,
+    seenKey: `turby_seen_segments:${getPlayerId()}`,
+    stageCode,
+    resumeBattle: { encounterKey, chapterCode: chapterOfStage(stageCode) },
+    onDone: (s) => {
+      s.scene.start('Map', { stageCode });
+    },
+  };
 }

@@ -1,4 +1,5 @@
 import { io } from 'socket.io-client';
+import type { StoryDelivery, StoryPlay } from '../story/storyFlow';
 import type { Socket } from 'socket.io-client';
 import { BASE_URL, session } from '../api/client';
 import { getPlayerId } from '../state/player';
@@ -243,8 +244,12 @@ class RoomClient {
     return this.startRoom();
   }
 
+  // M4-C: 마지막 맵 입장 때 서버가 알려 준 이야기(재생할 구간·전달 목표). 없으면 null
+  storyOnEnter: { play: StoryPlay | null; delivery: StoryDelivery | null } | null = null;
+
   async enterMap(x: number, y: number, dir: Facing): Promise<MapPlayer[]> {
-    const res = await this.request<{ players: MapPlayer[]; wilds: WildInfo[] }>('map:enter', { x, y, dir });
+    const res = await this.request<{ players: MapPlayer[]; wilds: WildInfo[]; story?: { play: StoryPlay | null; delivery: StoryDelivery | null } | null }>('map:enter', { x, y, dir });
+    this.storyOnEnter = res.story ?? null;
     this.setWilds(res.wilds);
     this.others.clear();
     res.players.forEach((p) => this.others.set(p.playerId, p));

@@ -119,12 +119,13 @@ export function storyResultText(outcome: BattleOutcome): { title: string; sub: s
 export interface BattleReturn {
   scene: string;
   data?: Record<string, unknown>;
+  mode?: 'start' | 'wake'; // wake: 잠들어 있는 대화 화면을 깨워 이어 간다(대화 진행 위치 유지), start: 새로 시작(새로고침 복원)
 }
 export interface StoryBattleEnd {
   encounterKey: string;
   outcome: BattleOutcome;
 }
-export function returnDestination(ret: BattleReturn | undefined, fallback: BattleReturn, end: StoryBattleEnd | null): { scene: string; data: Record<string, unknown> } {
-  if (!ret) return { scene: fallback.scene, data: fallback.data ?? {} };
-  return { scene: ret.scene, data: { ...(ret.data ?? {}), ...(end ? { storyBattleEnd: end } : {}) } };
+export function returnDestination(ret: BattleReturn | undefined, fallback: BattleReturn, end: StoryBattleEnd | null): { scene: string; data: Record<string, unknown>; mode: 'start' | 'wake' } {
+  if (!ret) return { scene: fallback.scene, data: fallback.data ?? {}, mode: 'start' };
+  return { scene: ret.scene, data: { ...(ret.data ?? {}), ...(end ? { storyBattleEnd: end } : {}) }, mode: ret.mode ?? 'start' };
 }

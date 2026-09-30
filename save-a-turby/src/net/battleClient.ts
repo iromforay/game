@@ -7,6 +7,11 @@ export const battleClient = {
     return (await roomClient.request<{ snapshot: BattleSnapshot }>('battle:start', { spawnIndex })).snapshot;
   },
 
+  // M4-B/C: 대화의 storyBattle 항목 → 서버 스토리 전투(이미 이긴 전투는 STORY_ENCOUNTER_DONE 오류)
+  async startStory(encounterKey: string): Promise<BattleSnapshot> {
+    return (await roomClient.request<{ snapshot: BattleSnapshot }>('battle:story:start', { encounterKey })).snapshot;
+  },
+
   // 조우 초대에 참전/불참으로 응답
   respond(battleId: string, join: boolean): Promise<BattleResponse> {
     return roomClient.request<BattleResponse>('battle:respond', { battleId, join });

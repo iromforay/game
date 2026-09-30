@@ -253,7 +253,8 @@ export class BattleScene extends Phaser.Scene {
     this.leavingRemoved = true;
     const why = me.leftReason === 'timeout' ? '접속이 오래 끊겨 전투에서 제외되었어요.' : '전투에서 빠졌어요.';
     showToast(this, why, { y: 660, error: true });
-    this.time.delayedCall(1800, () => this.scene.start(roomClient.room ? 'Map' : 'StageSelect', { stageCode: this.initData.stageCode, capturedIndices: this.initData.capturedIndices, removedIndices: this.initData.removedIndices }));
+    // 스토리 전투는 불러낸 대화 화면으로(재도전) — 대화가 잠든 채로 남지 않게
+    this.time.delayedCall(1800, () => (this.initData.returnTo ? this.exitTo('cancelled') : this.scene.start(roomClient.room ? 'Map' : 'StageSelect', { stageCode: this.initData.stageCode, capturedIndices: this.initData.capturedIndices, removedIndices: this.initData.removedIndices })));
   }
 
   // ---------- 상태 조회 ----------
@@ -262,7 +263,10 @@ export class BattleScene extends Phaser.Scene {
   private exitTo(outcome: BattleEnded['outcome'] | 'cancelled', capturedIndices = this.initData.capturedIndices) {
     const end = this.snap.story ? { encounterKey: this.snap.story.encounterKey, outcome } : null;
     const d = returnDestination(this.initData.returnTo, { scene: 'Map', data: { stageCode: this.initData.stageCode, capturedIndices, removedIndices: this.initData.removedIndices } }, end);
-    this.scene.start(d.scene, d.data);
+    if (d.mode === 'wake') {
+      this.scene.wake(d.scene, d.data); // 대화 화면이 전투 결과를 받아 같은 위치에서 이어 간다
+      this.scene.stop();
+    } else this.scene.start(d.scene, d.data);
   }
 
   private get myId() {
@@ -486,7 +490,7 @@ export class BattleScene extends Phaser.Scene {
       showToast(this, '전투 상태가 달라져 화면을 맞췄어요.', { y: 660 });
     } else if (err.code === 'BATTLE_EXPIRED' || err.code === 'NOT_PARTICIPANT') {
       showToast(this, '전투가 사라졌어요. 지역 선택으로 돌아갑니다.', { y: 660, error: true });
-      this.time.delayedCall(1800, () => this.scene.start('StageSelect'));
+      this.time.delayedCall(1800, () => (this.initData.returnTo ? this.exitTo('cancelled') : this.scene.start('StageSelect')));
     } else if (err.code === 'BATTLE_RESOLVED') {
       const res = await battleClient.snapshot(this.snap.battleId).catch(() => null);
       if (res) await this.playResponse(res);

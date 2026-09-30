@@ -131,17 +131,35 @@ async function withRetry(ports: RunnerPorts, run: () => Promise<void>, message: 
   }
 }
 
-export async function runDialogue(file: DialogueFile, startSegmentId: string, ports: RunnerPorts): Promise<void> {
-  const first = startIndex(file, startSegmentId);
-  if (first < 0) throw new Error(`알 수 없는 시작 구간: ${startSegmentId}`);
+// endAfter: 서버가 정한 이어서 재생할 마지막 구간(그다음 구간은 별도 트리거가 연다). 없으면 파일 끝까지.
+// fromEntry: 복원용 — 시작 구간 안에서 이 항목(dialogueId)부터 재생(스토리 전투 도중 새로고침 → 전투 항목부터). 서버 진행과 무관한 화면 위치일 뿐이다.
+// exact: 서버가 실시간 흐름으로 알려 준 구간(트리거 직후 제작 장면 등)은 replayOnResume=false여도 그 구간부터 재생한다.
+//        기본(false)은 재접속 시작점 규칙 — 실시간 전용 구간이면 다음 구간부터.
+export interface RunOptions {
+  endAfter?: string | null;
+  fromEntry?: string | null;
+  exact?: boolean;
+}
 
-  for (let s = first; s < file.segments.length; s++) {
+export async function runDialogue(file: DialogueFile, startSegmentId: string, ports: RunnerPorts, opts: RunOptions = {}): Promise<void> {
+  const first = opts.fromEntry || opts.exact ? file.segments.findIndex((s) => s.segmentId === startSegmentId) : startIndex(file, startSegmentId);
+  if (first < 0) throw new Error(`알 수 없는 시작 구간: ${startSegmentId}`);
+  const last = opts.endAfter ? file.segments.findIndex((s) => s.segmentId === opts.endAfter) : file.segments.length - 1;
+  if (last < first) throw new Error(`알 수 없는 끝 구간: ${opts.endAfter}`);
+
+  for (let s = first; s <= last; s++) {
     const seg = file.segments[s];
     ports.onSegment?.(seg.segmentId);
     const canSkip = ports.isSeen(seg.segmentId);
     let skipping = false;
+    let entries = seg.entries;
+    if (s === first && opts.fromEntry) {
+      const at = entries.findIndex((e) => e.dialogueId === opts.fromEntry);
+      if (at < 0) throw new Error(`알 수 없는 시작 항목: ${opts.fromEntry}`);
+      entries = entries.slice(at);
+    }
 
-    for (const entry of seg.entries) {
+    for (const entry of entries) {
       if (entry.kind === 'nameInput') {
         skipping = false; // 이름 입력은 건너뛰지 않는다
         if (!ports.needsName()) {

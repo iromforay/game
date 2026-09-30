@@ -20,10 +20,11 @@ const BOX = { x: 40, y: 488, w: 1200, h: 200 };
 const PORTRAIT = { x: 56, y: 276, size: 200 };
 const TYPE_MS = 22;
 
+// 대사 표시·입력은 1장 대화 화면(StoryDialogueScene)도 그대로 쓴다(상속) — 재생 범위와 전투 연결만 다르다
 export class OpeningScene extends Phaser.Scene {
-  private opts!: OpeningSceneData;
-  private state!: OpeningStoryState;
-  private seen = new Set<string>();
+  protected opts!: OpeningSceneData;
+  protected state!: OpeningStoryState;
+  protected seen = new Set<string>();
   private bg?: Phaser.GameObjects.TileSprite;
   private layer!: Phaser.GameObjects.Container;
   private advanceResolver: ((a: Advance) => void) | null = null;
@@ -31,8 +32,8 @@ export class OpeningScene extends Phaser.Scene {
   private fullText = '';
   private textObj!: Phaser.GameObjects.Text;
 
-  constructor() {
-    super('Opening');
+  constructor(key = 'Opening') {
+    super(key);
   }
 
   init(data: OpeningSceneData) {
@@ -60,17 +61,22 @@ export class OpeningScene extends Phaser.Scene {
     this.input.keyboard?.on('keydown-SPACE', () => this.tapAdvance());
     this.input.keyboard?.on('keydown-ENTER', () => this.tapAdvance());
 
-    const file = await this.retrying(() => this.opts.client.fetchDialogue('opening'), '이야기를 불러오지 못했어요.');
-    this.state = this.opts.state ?? (await this.retrying(() => this.opts.client.fetchState(), '이야기 진행 정보를 불러오지 못했어요.'));
-    const start = this.state.resume.segmentId;
-    if (start && start.startsWith('opening.')) await runDialogue(file as DialogueFile, start, this.ports());
+    await this.runStory();
     this.clearLayer();
     await this.opts.onDone(this);
   }
 
+  // 재생 범위: 오프닝은 서버 복귀 구간부터 오프닝 끝까지(1장 대화 화면은 이 부분만 바꾼다)
+  protected async runStory() {
+    const file = await this.retrying(() => this.opts.client.fetchDialogue('opening'), '이야기를 불러오지 못했어요.');
+    this.state = this.opts.state ?? (await this.retrying(() => this.opts.client.fetchState(), '이야기 진행 정보를 불러오지 못했어요.'));
+    const start = this.state.resume.segmentId;
+    if (start && start.startsWith('opening.')) await runDialogue(file as DialogueFile, start, this.ports());
+  }
+
   // ---------- 재생기 연결 ----------
 
-  private ports(): RunnerPorts {
+  protected ports(): RunnerPorts {
     return {
       show: (line) => this.showLine(line),
       cue: (entry) => this.playCue(entry),
@@ -100,12 +106,12 @@ export class OpeningScene extends Phaser.Scene {
 
   // ---------- 화면 ----------
 
-  private setBackdrop(code: string) {
+  protected setBackdrop(code: string) {
     this.bg?.destroy();
     if (this.textures.exists(`bg-${code}`)) this.bg = this.add.tileSprite(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT, `bg-${code}`).setOrigin(0, 0).setDepth(0).setAlpha(0.55);
   }
 
-  private clearLayer() {
+  protected clearLayer() {
     this.layer.removeAll(true);
   }
 
@@ -291,7 +297,7 @@ export class OpeningScene extends Phaser.Scene {
 
   // ---------- 오류·재시도 ----------
 
-  private waitRetry(message: string): Promise<void> {
+  protected waitRetry(message: string): Promise<void> {
     this.clearLayer();
     this.layer.add(feltPanel(this, BOX.x, BOX.y, BOX.w, BOX.h, { radius: 32, fill: PAL.cream, stroke: 0xe9b7c2, strokeW: 6 }));
     this.layer.add(this.add.text(CANVAS_WIDTH / 2, BOX.y + 52, message, { fontSize: '24px', color: TEXT.error, align: 'center', wordWrap: { width: BOX.w - 88 } }).setOrigin(0.5));
@@ -300,7 +306,7 @@ export class OpeningScene extends Phaser.Scene {
     });
   }
 
-  private async retrying<T>(run: () => Promise<T>, message: string): Promise<T> {
+  protected async retrying<T>(run: () => Promise<T>, message: string): Promise<T> {
     for (;;) {
       try {
         return await run();

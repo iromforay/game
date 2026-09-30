@@ -1,4 +1,5 @@
 import { ApiError, createHttp } from './http';
+import type { StoryDelivery, StoryPlay } from '../story/storyFlow';
 import { createMeApi } from './meApi';
 import { SessionManager, type KeyValueStorage } from '../state/session';
 import { getPlayerId } from '../state/player';
@@ -124,6 +125,7 @@ export interface StoryState {
   needsName: boolean;
   playerName: string;
   stages: ServerStageStatus[];
+  delivery: StoryDelivery | null; // M4-C: 전달을 기다리는 목표(서버 인벤토리 수량)
 }
 
 export function fetchStory(): Promise<StoryState> {
@@ -149,6 +151,18 @@ export function fetchDialogue(chapterCode: string): Promise<unknown> {
 
 export function completeStoryEvent(eventId: string): Promise<{ eventId: string; alreadyCompleted: boolean; story: StoryStateFull }> {
   return me.post(`/story/events/${eventId}/complete`, { requestId: `${eventId}-${Date.now()}` });
+}
+
+// M4-C: 이야기 지점 상호작용(보풀이 전달 등). 서버가 위치·진행·보유 수량을 판정하고 재생할 구간을 돌려준다
+export interface StoryTriggerResult {
+  triggerId: string;
+  play: StoryPlay | null;
+  shortage: { itemCode: string; have: number; need: number } | null;
+  story: StoryStateFull;
+}
+
+export function triggerStory(triggerId: string): Promise<StoryTriggerResult> {
+  return me.post(`/story/triggers/${triggerId}`, {});
 }
 
 export function saveProfileName(name: string): Promise<{ eventId: string; alreadyCompleted: boolean; story: StoryStateFull }> {

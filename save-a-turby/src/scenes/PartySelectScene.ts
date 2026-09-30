@@ -75,7 +75,10 @@ export class PartySelectScene extends Phaser.Scene {
 
   private exit(outcome: 'cancelled' | null) {
     const d = returnDestination(this.initData.returnTo, { scene: 'Map', data: { stageCode: this.initData.stageCode, capturedIndices: this.initData.capturedIndices, removedIndices: this.initData.removedIndices } }, outcome && this.snap.story ? { encounterKey: this.snap.story.encounterKey, outcome } : null);
-    this.scene.start(d.scene, d.data);
+    if (d.mode === 'wake') {
+      this.scene.wake(d.scene, d.data);
+      this.scene.stop();
+    } else this.scene.start(d.scene, d.data);
   }
 
   preload() {
@@ -304,7 +307,7 @@ export class PartySelectScene extends Phaser.Scene {
     } catch (err) {
       this.submitted = false;
       showToast(this, err instanceof RoomApiError ? err.message : '서버에 연결할 수 없습니다.', { y: 600, error: true });
-      if (err instanceof RoomApiError && err.code === 'BATTLE_EXPIRED') this.time.delayedCall(1500, () => this.scene.start('StageSelect'));
+      if (err instanceof RoomApiError && err.code === 'BATTLE_EXPIRED') this.time.delayedCall(1500, () => (this.initData.returnTo ? this.exit('cancelled') : this.scene.start('StageSelect')));
     } finally {
       this.submitting = false;
     }
