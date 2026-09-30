@@ -1,5 +1,6 @@
 import { ApiError, createHttp } from './http';
 import type { StoryDelivery, StoryPlay } from '../story/storyFlow';
+import type { InventoryList } from '../inventory/inventoryView';
 import { createMeApi } from './meApi';
 import { SessionManager, type KeyValueStorage } from '../state/session';
 import { getPlayerId } from '../state/player';
@@ -126,7 +127,7 @@ export interface StoryState {
   playerName: string;
   stages: ServerStageStatus[];
   delivery: StoryDelivery | null; // M4-C: 전달을 기다리는 목표(서버 인벤토리 수량)
-  storyNubi?: { turbyId: string; growthStage: number } | null;
+  storyNubi?: { turbyId: string; growthStage: number; slots: { slotKey: string; itemCode: string; name: string }[] } | null;
 }
 
 export function fetchStory(): Promise<StoryState> {
@@ -168,4 +169,19 @@ export function triggerStory(triggerId: string): Promise<StoryTriggerResult> {
 
 export function saveProfileName(name: string): Promise<{ eventId: string; alreadyCompleted: boolean; story: StoryStateFull }> {
   return me.post('/profile/name', { name });
+}
+
+// ---- 인벤토리(v3 M4-D) — 수량·잠금·장착 가능 여부는 서버가 정본 ----
+export function fetchInventory(): Promise<InventoryList> {
+  return me.get('/inventory');
+}
+
+// 상세를 연 아이템 하나만 신규 표시 해제
+export function markItemSeen(itemCode: string): Promise<{ itemCode: string; cleared: boolean }> {
+  return me.post(`/inventory/items/${itemCode}/seen`, {});
+}
+
+// 누비에게 장착: 유물 코드만 보낸다(이벤트·대상 터비는 서버가 정함). 새로 장착하면 play = 장착 장면
+export function equipRelicToNubi(itemCode: string): Promise<{ eventId: string; alreadyCompleted: boolean; story: StoryStateFull; play: StoryPlay | null }> {
+  return me.post(`/story/relics/${itemCode}/equip`, {});
 }

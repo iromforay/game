@@ -3,6 +3,9 @@ import { apiStoryClient } from '../story/apiStoryClient';
 import { getPlayerId } from '../state/player';
 import type { StoryDialogueData } from './StoryDialogueScene';
 import { chapterOfStage } from '../story/storyFlow';
+import { InventoryWindow } from '../ui/InventoryWindow';
+import { displayScaleOf, fontPx, MIN_BUTTON_PX } from '../ui/responsive';
+import { playStory } from '../story/playStory';
 import { CANVAS_WIDTH, CANVAS_HEIGHT, AVATAR_SPEED } from '../config/constants';
 import { AVATAR_IMAGE, BACKGROUND_TILES } from '../assets/registry';
 import { loadWorldImages } from '../assets/loader';
@@ -193,6 +196,20 @@ ${storyHint}` : it.hint,
 
     this.add.image(CANVAS_WIDTH / 2, 16, 'hud-area-panel').setOrigin(0.5, 0).setDisplaySize(240, 48).setDepth(DEPTH_HUD);
     this.add.text(CANVAS_WIDTH / 2, 40, '마을', { fontSize: '22px', color: HUD_TEXT }).setOrigin(0.5).setDepth(DEPTH_HUD + 1);
+
+    // v3 M4-D: 아이템 인벤토리(창이 열린 동안 이동 멈춤). 버튼 글자는 실제 표시 배율에 맞춰 14px 이상
+    const hudFont = fontPx(displayScaleOf(this.scale.displaySize.width), 18, MIN_BUTTON_PX);
+    const invWindow = new InventoryWindow(this, { onClose: () => (this.locked = false), onPlay: (play) => playStory(this, play, 'forest') });
+    this.add
+      .text(16, coinPanel.y + 66, '인벤토리', { fontSize: `${hudFont}px`, color: '#ffffff', backgroundColor: '#5a3a8a', padding: { x: 12, y: 6 } })
+      .setDepth(DEPTH_HUD + 1)
+      .setScrollFactor(0)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        if (invWindow.isVisible) return;
+        this.locked = true;
+        void invWindow.open();
+      });
 
     this.add
       .text(16, CANVAS_HEIGHT - 20, `플레이어: ${inventory.getPlayerId().slice(0, 8)}`, { fontSize: '11px', color: '#ffffff' })

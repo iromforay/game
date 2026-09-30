@@ -1,7 +1,7 @@
 // 개발용 1장 흐름 미리보기(M4-C 캡처용) — 배포 번들에 들어가지 않는다(dev/).
 // M1 SQL 적용 전이라 새 BE를 원격 DB에 붙일 수 없어서, 서버 대신 브라우저 메모리에서 돌린다. 판정은 흉내가 아니라
 // BE의 순수 규칙(story-data·story-rules의 이벤트/트리거/복귀 구간)과 실제 전투 엔진(battle-engine)을 그대로 불러 쓴다.
-// 개발 픽스처(운영 API에는 없음): ?start=forest|clue|compass  &dust=0..99(빛나는 실가루 보유)  &nubiHp=1..(패배 재현)
+// 개발 픽스처(운영 API에는 없음): ?start=forest|clue|compass|knot  &dust=0..99(빛나는 실가루 보유)  &nubiHp=1..(패배 재현)  &devDelivery=1(임시 전달 버튼)
 import { applyAction, createBattle, submitParty, toSnapshot } from '../../BE/src/turby/battle/battle-engine';
 import { BattleError, type BattleDefinition, type BattleRules, type BattleState } from '../../BE/src/turby/battle/battle-types';
 import { ENCOUNTER_BY_KEY, EVENT_BY_ID, SEGMENT_AFTER_EVENT, SEGMENT_CHAIN_END, STORY_TRIGGERS, TRIGGER_BY_ID, type Checkpoint } from '../../BE/src/turby/story/story-data';
@@ -12,6 +12,7 @@ import ambush from '../../BE/story-data/save-a-turby/battles/forest_stitchling_a
 import knot from '../../BE/story-data/save-a-turby/battles/forest_giant_knot.json';
 import { roomClient, RoomApiError, type RoomState } from '../src/net/roomClient';
 import type { BattleSnapshot } from '../src/net/battleTypes';
+import { devFlags } from '../src/story/devFlags';
 
 const params = new URLSearchParams(location.search);
 const BASE = import.meta.env.VITE_TURBY_SERVER_URL ?? 'http://localhost:3002';
@@ -21,13 +22,26 @@ const PRESETS: Record<string, { checkpoint: Checkpoint; events: string[] }> = {
   forest: { checkpoint: 'OPENING_COMPLETE', events: OPENING_DONE },
   clue: { checkpoint: 'CH01_BOPUL_RESCUED', events: [...OPENING_DONE, 'forest_first_path_started', 'forest_stitchling_battle_won', 'forest_bopul_rescued', 'forest_dansuring_clue_learned'] },
   compass: { checkpoint: 'CH01_COMPASS_ACQUIRED', events: [...OPENING_DONE, 'forest_first_path_started', 'forest_stitchling_battle_won', 'forest_bopul_rescued', 'forest_dansuring_clue_learned', 'forest_compass_granted'] },
+  // 첫 매듭 각성까지 끝남(장착 전) — 인벤토리·누비 장착 캡처용
+  knot: { checkpoint: 'CH01_COMPASS_ACQUIRED', events: [...OPENING_DONE, 'forest_first_path_started', 'forest_stitchling_battle_won', 'forest_bopul_rescued', 'forest_dansuring_clue_learned', 'forest_compass_granted', 'forest_giant_knot_defeated', 'forest_first_knot_awakened'] },
 };
 const preset = PRESETS[params.get('start') ?? 'forest'] ?? PRESETS.forest;
 
 // ---------- 서버 상태(메모리) ----------
 let checkpoint: Checkpoint = preset.checkpoint;
 const events = new Set(preset.events);
-const items: Record<string, number> = { glowing_yarn_dust: Number(params.get('dust') ?? 0) };
+const items: Record<string, number> = { glowing_yarn_dust: Number(params.get('dust') ?? 0), knit_needle: 1, wool_glove: 1 };
+if (preset === PRESETS.knot) Object.assign(items, { yarn_tremor_compass: 1, first_knot: 1 });
+// 아이템 정의 — BE/prisma/sql/2026-09-29_turby_story_m1_items.sql·2026-09-21_shop_equipment.sql의 값 그대로(분류·최대 중첩·이야기 슬롯)
+const ITEM_DEFS: Record<string, { id: number; name: string; category: string; description: string; maxStack: number; storySlot: string | null }> = {
+  glowing_yarn_dust: { id: 101, name: '빛나는 실가루', category: 'mission', description: '오래된 실의 떨림에 반응하는 가루. 보풀이에게 열 개를 가져가면 무언가를 만들 수 있다.', maxStack: 99, storySlot: null },
+  yarn_tremor_compass: { id: 102, name: '실의 떨림을 찾는 나침판', category: 'mission', description: '감춰진 실오라기 길을 가리키는 나침판.', maxStack: 1, storySlot: null },
+  first_knot: { id: 103, name: '첫 매듭', category: 'relic', description: '첫 만남의 크림색 매듭이 매듭심과 결속해 깨어난 이야기 장식.', maxStack: 1, storySlot: 'story_1' },
+  knit_needle: { id: 1, name: '뜨개바늘', category: 'equipment', description: '공격력이 오르는 작은 바늘', maxStack: 1, storySlot: null },
+  wool_glove: { id: 2, name: '털장갑', category: 'equipment', description: '방어력이 오르는 포근한 장갑', maxStack: 1, storySlot: null },
+};
+const seen = new Set<string>();
+const nubiSlots: { slotKey: string; itemCode: string; name: string }[] = [];
 const nubiHp = Number(params.get('nubiHp') ?? 30);
 let room: RoomState | null = null;
 let battle: { state: BattleState; key: string; settled: boolean } | null = null;
@@ -72,7 +86,7 @@ function story() {
     playerName: '하늘',
     completedEvents: [...events],
     objectives: {},
-    storyNubi: { turbyId: '1', growthStage: 0 },
+    storyNubi: { turbyId: '1', growthStage: nubiSlots.length ? 1 : 0, slots: nubiSlots },
     storyNubiMissing: false,
     openingRequired: !done,
     openingAvailable: !done,
@@ -111,6 +125,36 @@ function trigger(id: string) {
   return out(def.play === 'resume' ? resume() : r.already ? null : playOf(def.play));
 }
 
+// 서버 InventoryService.list와 같은 규칙(스토리 분류 잠금·max_stack 칸·누비 장착 가능 판정)
+const STORY_CATS = new Set(['mission', 'relic', 'memento']);
+const TAB: Record<string, string> = { equipment: 'equipment', consumable: 'consumable', material: 'material', upgrade: 'material', mission: 'story', relic: 'story', memento: 'story' };
+const TAB_LABEL: Record<string, string> = { material: '재료', consumable: '소비', equipment: '장비', story: '스토리' };
+function inventoryList() {
+  const list = Object.entries(items)
+    .filter(([code, q]) => q > 0 && ITEM_DEFS[code])
+    .map(([code, quantity]) => {
+      const d = ITEM_DEFS[code];
+      const isStory = STORY_CATS.has(d.category);
+      const tab = TAB[d.category] ?? 'material';
+      const onNubi = nubiSlots.some((s) => s.itemCode === code);
+      const relicEvent = code === 'first_knot' ? 'forest_first_knot_equipped' : null;
+      const fail = relicEvent && !onNubi ? checkEvent(EVENT_BY_ID.get(relicEvent)!, snap()) : null;
+      const stacks: number[] = [];
+      if (isStory) stacks.push(quantity);
+      else for (let left = quantity; left > 0; left -= Math.max(1, d.maxStack)) stacks.push(Math.min(Math.max(1, d.maxStack), left));
+      return {
+        recordId: String(d.id), itemDefinitionId: d.id, itemCode: code, iconKey: code, name: d.name, description: d.description,
+        tab, tabLabel: TAB_LABEL[tab], category: d.category, storySlot: d.storySlot, quantity, maxStack: d.maxStack, stacks,
+        slotsUsed: isStory ? 0 : stacks.length, equipped: onNubi ? 1 : 0, equippedOnStoryNubi: onNubi, isNew: !seen.has(code),
+        isLocked: isStory, usedAt: null, firstAcquiredAt: '2026-09-30T01:00:00.000Z', lastAcquiredAt: code === 'first_knot' ? '2026-09-30T03:00:00.000Z' : '2026-09-30T02:00:00.000Z',
+        permissions: { sell: !isStory, discard: !isStory, trade: !isStory, consume: false, unequip: !isStory },
+        lockReason: isStory ? '이야기에 필요한 물건이라 팔거나 버리거나 해제할 수 없어요' : null,
+        storyAction: relicEvent && !onNubi ? { kind: 'equip_story_nubi', label: '누비에게 장착', available: !fail, reason: fail ? '아직 장착할 때가 아니에요' : null } : null,
+      };
+    });
+  return { bag: { capacity: 40, used: list.reduce((n, i) => n + i.slotsUsed, 0) }, overflowCount: 0, items: list };
+}
+
 // ---------- REST(/player/*) ----------
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const realFetch = window.fetch.bind(window);
@@ -125,6 +169,22 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     if (path === '/player/identify') return json(200, { playerId: ME, nickname: '하늘', tareBalance: 100, turbys: [nubi, mujigae], sessionToken: 'preview-session-token' });
     if (path === '/shop' || path === '/player/me/items') return json(200, []);
     if (path === '/player/me/story') return json(200, story());
+    if (path === '/player/me/inventory') return json(200, inventoryList());
+    const seenM = path.match(/^\/player\/me\/inventory\/items\/([a-z_]+)\/seen$/);
+    if (seenM) {
+      const cleared = !seen.has(seenM[1]);
+      seen.add(seenM[1]);
+      return json(200, { itemCode: seenM[1], cleared });
+    }
+    const relic = path.match(/^\/player\/me\/story\/relics\/([a-z_]+)\/equip$/);
+    if (relic) {
+      if (relic[1] !== 'first_knot') return json(404, { code: 'RELIC_UNKNOWN', message: '이야기 누비에게 장착할 수 있는 유물이 아닙니다.' });
+      if ((items.first_knot ?? 0) < 1) return json(409, { code: 'STORY_PREREQUISITE_MISSING', message: '유물을 가지고 있지 않습니다.' });
+      const r = runEvent('forest_first_knot_equipped'); // 서버 경로(체크포인트 검증 포함)
+      if (!r.already) nubiSlots.push({ slotKey: 'story_1', itemCode: 'first_knot', name: '첫 매듭' });
+      seen.add('first_knot');
+      return json(200, { eventId: 'forest_first_knot_equipped', alreadyCompleted: r.already, grants: [], consumed: [], story: story(), play: r.already ? null : playOf(SEGMENT_AFTER_EVENT.forest_first_knot_equipped) });
+    }
     if (path === '/player/me/story/dialogue/opening') return json(200, opening);
     if (path === '/player/me/story/dialogue/ch01') return json(200, ch01);
     const tr = path.match(/^\/player\/me\/story\/triggers\/([a-z_]+)$/);
@@ -228,8 +288,54 @@ if (!params.get('device')) {
   params.set('device', 'preview-ch01');
   history.replaceState(null, '', `${location.pathname}?${params}`);
 }
+// 임시 원격 전달 버튼은 개발 미리보기에서 ?devDelivery=1 일 때만(기본은 운영 화면과 같이 숨김)
+devFlags.remoteDelivery = params.get('devDelivery') === '1';
 // 미리보기 창이 숨겨져도 캡처 자동화가 멈추지 않게(개발용): 브라우저가 rAF를 멈추면 Phaser 루프도 멈추므로 타이머로 대신
 window.requestAnimationFrame = (cb: FrameRequestCallback) => window.setTimeout(() => cb(performance.now()), 16);
 window.cancelAnimationFrame = (id: number) => window.clearTimeout(id);
 const { mountGame } = await import('../src/game');
 (window as unknown as { __game?: unknown }).__game = await mountGame('app');
+
+// ---------- 캡처·조작 도우미(개발용) ----------
+// cap(name): 게임 캔버스를 실제 표시 크기로 저장(로컬 캡처 수신기 127.0.0.1:5199, 없으면 실패만 반환)
+// tap(x, y): 캔버스 좌표(1280×720)에서 가장 위에 있는 입력 대상에 pointerdown — 뷰포트 에뮬레이션에서 화면 좌표가 어긋날 때용
+const devGame = () => (window as unknown as { __game: import('phaser').Game }).__game;
+(window as unknown as { __dev?: unknown }).__dev = {
+  cap: (name: string) =>
+    new Promise((resolve, reject) => {
+      const g = devGame();
+      g.renderer.snapshot((img) => {
+        const w = Math.round(g.scale.displaySize.width);
+        const h = Math.round(g.scale.displaySize.height);
+        const c = document.createElement('canvas');
+        c.width = w;
+        c.height = h;
+        c.getContext('2d')!.drawImage(img as HTMLImageElement, 0, 0, w, h);
+        fetch('http://127.0.0.1:5199/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: `${w}x${h}_${name}.jpg`, dataUrl: c.toDataURL('image/jpeg', 0.9) }) })
+          .then((r) => r.json())
+          .then((j) => resolve(j.file), reject);
+      }, 'image/png');
+    }),
+  tap: (x: number, y: number) => {
+    const g = devGame();
+    const hits: { o: import('phaser').GameObjects.GameObject; depth: number; order: number }[] = [];
+    let order = 0;
+    for (const scene of g.scene.getScenes(true)) {
+      const walk = (list: import('phaser').GameObjects.GameObject[], base: number) => {
+        for (const o of list) {
+          order++;
+          const any = o as unknown as { input?: { enabled: boolean }; getBounds?: () => import('phaser').Geom.Rectangle; depth?: number; visible?: boolean; list?: import('phaser').GameObjects.GameObject[] };
+          if (any.visible === false) continue;
+          if (any.list) walk(any.list, base + (any.depth ?? 0));
+          if (any.input?.enabled && any.getBounds?.().contains(x, y)) hits.push({ o, depth: base + (any.depth ?? 0), order });
+        }
+      };
+      walk(scene.children.list, g.scene.getIndex(scene) * 100000);
+    }
+    hits.sort((a, b) => b.depth - a.depth || b.order - a.order);
+    const top = hits[0]?.o;
+    top?.emit('pointerdown');
+    return top ? (top as unknown as { text?: string; type: string }).text ?? top.type : null;
+  },
+  active: () => devGame().scene.getScenes(true).map((s) => s.scene.key),
+};

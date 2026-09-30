@@ -4,6 +4,10 @@ import { getStage } from '../config/stages';
 import type { WildSpawn } from '../config/stages';
 import { VirtualJoystick } from '../ui/VirtualJoystick';
 import { InventoryPanel } from '../ui/InventoryPanel';
+import { InventoryWindow } from '../ui/InventoryWindow';
+import { displayScaleOf, fontPx, MIN_BUTTON_PX } from '../ui/responsive';
+import { devFlags } from '../story/devFlags';
+import { playStory } from '../story/playStory';
 import { MiniMap } from '../ui/MiniMap';
 import type { MapMarker, MapView } from '../ui/MiniMap';
 import { loadWorldImages } from '../assets/loader';
@@ -18,10 +22,7 @@ import type { Facing, MapPlayer } from '../net/roomClient';
 import charactersData from '../data/characters.json';
 import { AVATAR_IMAGE, CHARACTER_IMAGES, BACKGROUND_TILES } from '../assets/registry';
 import { fetchStory, triggerStory } from '../api/client';
-import { apiStoryClient } from '../story/apiStoryClient';
-import { getPlayerId } from '../state/player';
 import { deliveryGoalText, shortageText, type StoryDelivery, type StoryPlay } from '../story/storyFlow';
-import type { StoryDialogueData } from './StoryDialogueScene';
 
 interface WildMarker {
   spawn: WildSpawn;
@@ -48,6 +49,7 @@ interface MapInitData {
 export class MapScene extends Phaser.Scene {
   private joystick!: VirtualJoystick;
   private inventoryPanel!: InventoryPanel;
+  private inventoryWindow!: InventoryWindow;
   private avatar!: Phaser.GameObjects.Image;
   private markers: WildMarker[] = [];
   private stageWidth = 0;
@@ -161,8 +163,22 @@ export class MapScene extends Phaser.Scene {
       });
 
     this.inventoryPanel = new InventoryPanel(this, () => this.joystick.setEnabled(true));
+    // v3 M4-D: 아이템 인벤토리(공용 창)와 보유 터비 창을 나눈다. 버튼 글자는 실제 표시 배율에 맞춰 14px 이상
+    const hudFont = fontPx(displayScaleOf(this.scale.displaySize.width), 16, MIN_BUTTON_PX);
+    this.inventoryWindow = new InventoryWindow(this, { onClose: () => this.joystick.setEnabled(true), onPlay: (play) => this.launchStory(play) });
+    const invBtn = this.add
+      .text(CANVAS_WIDTH - 16, 192, '인벤토리', { fontSize: `${hudFont}px`, color: '#ffffff', backgroundColor: '#5a3a8a', padding: { x: 10, y: 6 } })
+      .setOrigin(1, 0)
+      .setScrollFactor(0)
+      .setDepth(2000)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        if (this.inventoryWindow.isVisible) return;
+        this.joystick.setEnabled(false);
+        void this.inventoryWindow.open();
+      });
     this.add
-      .text(CANVAS_WIDTH - 16, 192, '인벤토리', { fontSize: '16px', color: '#ffffff', backgroundColor: '#5a3a8a', padding: { x: 10, y: 6 } })
+      .text(CANVAS_WIDTH - 16, invBtn.y + invBtn.height + 8, '터비', { fontSize: `${hudFont}px`, color: '#ffffff', backgroundColor: '#5a3a8a', padding: { x: 10, y: 6 } })
       .setOrigin(1, 0)
       .setScrollFactor(0)
       .setDepth(2000)
@@ -186,19 +202,8 @@ export class MapScene extends Phaser.Scene {
   // ----- M4-C: 1장 이야기 연결(서버가 정한 구간만 재생) -----
 
   private launchStory(play: StoryPlay) {
-    const data: StoryDialogueData = {
-      client: apiStoryClient,
-      seenKey: `turby_seen_segments:${getPlayerId()}`,
-      stageCode: this.stageCode,
-      play,
-      onDone: (s) => {
-        s.scene.wake('Map');
-        s.scene.stop();
-      },
-    };
     this.joystick.setEnabled(false);
-    this.scene.launch('StoryDialogue', data);
-    this.scene.sleep();
+    playStory(this, play, this.stageCode);
   }
 
   private async refreshDelivery() {
@@ -209,22 +214,29 @@ export class MapScene extends Phaser.Scene {
     }
   }
 
-  // 전달 목표(빛나는 실가루 n/10, 서버 인벤토리 수량)와 보풀이 전달 버튼. 좌표가 없으므로 지도 NPC 대신 화면 상단 패널로 둔다(임시 도형)
+  // 퀘스트 추적(빛나는 실가루 n/10, 서버 인벤토리 수량). 운영 화면에는 추적 정보만 — 원격 전달 버튼은 좌표·보풀이 NPC 확정 전이라
+  // 개발 미리보기(devFlags.remoteDelivery)에서만 보인다(v3 §4). 서버 npc_bopuli 트리거와 검증은 그대로다.
   private showDelivery(delivery: StoryDelivery | null) {
     this.deliveryLayer.forEach((o) => o.destroy());
     this.deliveryLayer = [];
     if (!delivery) return;
     const cx = CANVAS_WIDTH / 2;
-    const panel = this.add.rectangle(cx, 44, 440, 72, 0x241a3d, 0.9).setStrokeStyle(2, 0xffd27f, 0.9).setScrollFactor(0).setDepth(2000);
-    const goal = this.add.text(cx, 26, deliveryGoalText(delivery), { fontSize: '17px', color: '#ffe9a8' }).setOrigin(0.5).setScrollFactor(0).setDepth(2001);
+    const scale = displayScaleOf(this.scale.displaySize.width);
+    const goalFont = fontPx(scale, 17, 13);
+    const withButton = devFlags.remoteDelivery;
+    const panelH = withButton ? goalFont * 2 + 44 : goalFont + 26;
+    const panel = this.add.rectangle(cx, 8 + panelH / 2, Math.max(440, goalFont * 17), panelH, 0x241a3d, 0.9).setStrokeStyle(2, 0xffd27f, 0.9).setScrollFactor(0).setDepth(2000);
+    const goal = this.add.text(cx, 8 + (withButton ? goalFont * 0.9 + 6 : panelH / 2), deliveryGoalText(delivery), { fontSize: `${goalFont}px`, color: '#ffe9a8' }).setOrigin(0.5).setScrollFactor(0).setDepth(2001);
+    this.deliveryLayer.push(panel, goal);
+    if (!withButton) return;
     const button = this.add
-      .text(cx, 58, '보풀이에게 실가루 전달', { fontSize: '15px', color: '#ffffff', backgroundColor: '#5a3a8a', padding: { x: 12, y: 5 } })
+      .text(cx, 8 + panelH - goalFont * 0.9 - 8, '보풀이에게 실가루 전달(개발용)', { fontSize: `${goalFont}px`, color: '#ffffff', backgroundColor: '#5a3a8a', padding: { x: 12, y: 5 } })
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(2001)
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => void this.deliver(delivery.triggerId));
-    this.deliveryLayer.push(panel, goal, button);
+    this.deliveryLayer.push(button);
   }
 
   // 서버가 수량·진행·위치를 판정한다. 부족하면 부족 수량만, 충분하면 서버가 소비·지급을 확정한 뒤 제작 장면을 재생한다
