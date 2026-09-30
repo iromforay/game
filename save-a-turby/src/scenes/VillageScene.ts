@@ -4,7 +4,8 @@ import { AVATAR_IMAGE, BACKGROUND_TILES } from '../assets/registry';
 import { loadWorldImages } from '../assets/loader';
 import { ensureVillagePlaceholders } from '../assets/placeholders';
 import { getVillageLayout, getVillagePaths } from '../config/village';
-import { getStoryChapters, getChapterStatuses, getCurrentChapter } from '../config/story';
+import { loadChapterStatuses, getCurrentChapter } from '../config/story';
+import { OPENING_REQUIRED_MESSAGE, openingLocked } from '../story/storyClient';
 import type { Rect, VillageInteraction, VillageLayout } from '../config/village';
 import { VirtualJoystick } from '../ui/VirtualJoystick';
 import { MiniMap } from '../ui/MiniMap';
@@ -108,10 +109,18 @@ export class VillageScene extends Phaser.Scene {
     this.createPrompt();
 
     // 미니맵의 현재 목적지는 스토리 진행(docs/Turby_story.md)에서 온다 — 지금 열려 있는 장의 맵으로 가는 출구
-    const current = getCurrentChapter(getChapterStatuses(await getStoryChapters(), inventory.getAll()));
-    const storyHint = current
-      ? `${current.chapter.titleKo}: ${current.stageName}에서 '${current.clearCharacterName}'를 직접 포획해 보세요.`
-      : '모든 장을 완료했어요. 다음 이야기를 기다려 주세요.';
+    const { ok: storyOk, statuses } = await loadChapterStatuses();
+    const current = getCurrentChapter(statuses);
+    // 안내 문구: 구 판정(롤백)에서만 포획 안내. 서버 상태를 못 받으면 완료로 오해하지 않게 따로 안내한다.
+    const storyHint = !storyOk
+      ? '지역 정보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.'
+      : openingLocked(statuses)
+        ? OPENING_REQUIRED_MESSAGE
+        : current
+        ? current.legacyTargetCode
+          ? `${current.chapter.titleKo}: ${current.stageName}에서 '${current.clearCharacterName}'를 직접 포획해 보세요.`
+          : `${current.chapter.titleKo}: ${current.stageName} 탐험`
+        : '모든 장을 완료했어요. 다음 이야기를 기다려 주세요.';
     const markers: MapMarker[] = layout.interactions.map((it) => ({
       id: it.id,
       type: it.type,

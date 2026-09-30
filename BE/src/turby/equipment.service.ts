@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from './prisma.service';
 import { INSTANCE_INCLUDE, gameError, toTurbyDto } from './turby-dto';
+import { STORY_SLOT_PREFIX } from './story/story-data';
 
 // 3.1: 아이템 착용 — 스탯 보너스만 있고 외형 변화는 없음. 터비 1마리당 슬롯 종류(item_definition.equip_slot)마다 1개.
 // 보유 수량은 player_item.quantity, 장착 중인 수량은 turby_equipment 행 수로 계산해서 초과 장착을 막는다.
@@ -43,6 +44,7 @@ export class EquipmentService {
     const item = await this.prisma.item_definition.findUnique({ where: { code: itemCode } });
     if (!item) throw new NotFoundException('item not found');
     if (item.category !== 'equipment' || !item.equip_slot) throw gameError(400, 'NOT_EQUIPPABLE', '장착할 수 없는 아이템입니다.');
+    if (item.equip_slot.startsWith(STORY_SLOT_PREFIX)) throw gameError(400, 'STORY_SLOT_RESERVED', '이야기 장식 슬롯은 여기서 바꿀 수 없습니다.');
     const slotKey = item.equip_slot;
 
     await this.prisma.$transaction(async (tx) => {
@@ -64,6 +66,9 @@ export class EquipmentService {
   }
 
   async unequip(playerIdStr: string, turbyIdStr: string, slotKey: string) {
+    // 이야기 유물(story_1~5)은 스토리 이벤트 트랜잭션만 바꾼다 — 일반 해제로 빠지지 않게(m0_design 9.4)
+    if (typeof slotKey !== 'string' || slotKey.length === 0) throw gameError(400, 'INVALID_SLOT', '슬롯 정보가 올바르지 않습니다.');
+    if (slotKey.startsWith(STORY_SLOT_PREFIX)) throw gameError(400, 'STORY_SLOT_RESERVED', '이야기 장식 슬롯은 여기서 바꿀 수 없습니다.');
     const playerId = BigInt(playerIdStr);
     const turbyId = BigInt(turbyIdStr);
     await this.requireOwnedTurby(playerId, turbyId);

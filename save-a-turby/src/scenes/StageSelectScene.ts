@@ -2,9 +2,8 @@ import Phaser from 'phaser';
 import { CANVAS_WIDTH } from '../config/constants';
 import { CHARACTER_IMAGES, BACKGROUND_TILES } from '../assets/registry';
 import { loadWorldImages } from '../assets/loader';
-import { getStoryChapters, getChapterStatuses } from '../config/story';
+import { loadChapterStatuses } from '../config/story';
 import type { ChapterStatus } from '../config/story';
-import { inventory } from '../state/inventory';
 import { roomClient, RoomApiError } from '../net/roomClient';
 import { PAL, TEXT, feltPanel, pillButton, creamOverlay, showToast, ellipsize } from '../ui/kit';
 
@@ -17,11 +16,13 @@ const CARD_Y = 104;
 const STATE_STYLE = {
   cleared: { badge: '완료', badgeFill: PAL.lavender, badgeText: TEXT.body },
   current: { badge: '진행 중', badgeFill: PAL.mint, badgeText: TEXT.onMint },
+  // M2: 백필 입장 권한으로 들어갈 수는 있지만 이전 장 이야기를 마치기 전(도형 배지, 에셋 없음)
+  open: { badge: '탐험 가능', badgeFill: PAL.cream, badgeText: TEXT.body },
   locked: { badge: '잠김', badgeFill: PAL.cream2, badgeText: TEXT.disabled },
 } as const;
 
-// docs/Turby_story.md: 마을 출구에서 들어오는 지역 선택 — 이전 장의 대표 터비를 직접 포획해야 다음 지역이 열린다.
-// 도형 UI(에셋 적용 전). 잠금 판정은 config/story.ts 순수 함수가 하고 이 화면은 결과만 그린다.
+// 마을 출구에서 들어오는 지역 선택. 개방·진행 상태는 서버가 판정하고(M2, story.stageAccessV2) 이 화면은 결과만 그린다.
+// 서버 상태를 받지 못하면 모든 지역을 잠그고 다시 시도 버튼을 보여 준다(추측으로 열지 않음).
 export class StageSelectScene extends Phaser.Scene {
   private busy = false;
 
@@ -51,7 +52,8 @@ export class StageSelectScene extends Phaser.Scene {
     pillButton(this, CANVAS_WIDTH / 2, 670, 240, 64, '마을로 돌아가기', 'back', () => this.scene.start('Village'));
     this.input.keyboard?.on('keydown-ESC', () => this.scene.start('Village'));
 
-    const statuses = getChapterStatuses(await getStoryChapters(), inventory.getAll());
+    const { ok, statuses } = await loadChapterStatuses();
+    if (!ok) pillButton(this, CANVAS_WIDTH / 2, 600, 200, 52, '다시 시도', 'primary', () => this.scene.restart());
     const startX = (CANVAS_WIDTH - (statuses.length * CARD_W + (statuses.length - 1) * GAP)) / 2;
     statuses.forEach((st, i) => this.renderCard(st, startX + i * (CARD_W + GAP), CARD_Y));
   }
@@ -90,10 +92,11 @@ export class StageSelectScene extends Phaser.Scene {
     }
     this.add.text(x + 96, ty - 14, '대표 터비', { fontSize: '12px', color: TEXT.sub });
     this.add.text(x + 96, ty + 2, ellipsize(st.clearCharacterName, 8), { fontSize: '16px', color: locked ? TEXT.sub : TEXT.body });
-    this.add.text(x + 16, y + 318, '직접 포획하면 장 완료', { fontSize: '13px', color: TEXT.sub });
+    // 구 판정(롤백 상태)에서만 참인 안내 — 신 판정에서는 포획이 장을 열지 않는다
+    if (st.legacyTargetCode) this.add.text(x + 16, y + 318, '직접 포획하면 장 완료', { fontSize: '13px', color: TEXT.sub });
 
-    // 잠금 이유는 읽을 수 있게 유지한다
-    if (locked && st.unlockHint) {
+    // 잠금 이유(또는 백필 지역의 이야기 대기 안내)는 읽을 수 있게 유지한다
+    if ((locked || st.state === 'open') && st.unlockHint) {
       this.add.text(x + 16, y + 342, st.unlockHint, { fontSize: '12px', color: TEXT.sub, wordWrap: { width: CARD_W - 32 }, lineSpacing: 2 });
     }
 
@@ -120,7 +123,7 @@ export class StageSelectScene extends Phaser.Scene {
       .setOrigin(0, 0)
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => {
-        if (locked) showToast(this, st.unlockHint ?? '아직 열리지 않았습니다.', { y: 600 });
+        if (!st.enterable) showToast(this, st.unlockHint ?? '아직 열리지 않았습니다.', { y: 600 });
         else void this.enterStage(st.chapter.stageCode);
       });
   }

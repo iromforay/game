@@ -1,0 +1,218 @@
+// M4-B 스토리 전투 어댑터 테스트(Codex v15 8.5) — 실제 RoomsService·BattleService·StoryService + 메모리 Prisma
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { FakeDb } from './helpers/fake-prisma';
+import { StageAccessService } from '../src/turby/story/stage-access.service';
+import { StoryService } from '../src/turby/story/story.service';
+import { StoryContentService } from '../src/turby/story/story-content.service';
+import { SessionService } from '../src/turby/session.service';
+import { RoomsService } from '../src/turby/rooms/rooms.service';
+import { BattleService } from '../src/turby/battle/battle.service';
+import { BattleError } from '../src/turby/battle/battle-types';
+import { applyAction, createBattle, submitParty } from '../src/turby/battle/battle-engine';
+import type { BattleDefinition, BattleRules, BattleState } from '../src/turby/battle/battle-types';
+
+const P = 1n;
+const OTHER = 2n;
+const NUMBERS: Record<string, number> = {
+  'battle.gridCols': 12, 'battle.gridRows': 8, 'battle.maxAlliedUnits': 3, 'battle.partyStartCol': 1, 'battle.wildStartCol': 10, 'battle.wildStartRow': 4,
+  'battle.minDamage': 1, 'battle.defenseDivisor': 2, 'battle.wildHpMult.1': 1, 'battle.wildHpMult.2': 1.5, 'battle.wildHpMult.3': 2, 'battle.wildHpMult.4': 2.5, 'battle.wildHpMult.5': 3,
+  'battle.inviteSeconds': 30, 'battle.partySelectSeconds': 30, 'battle.subturnSeconds': 30, 'battle.resolvedRetentionSeconds': 60, 'room.reconnectGraceMs': 45000,
+};
+const EASY: BattleDefinition = { key: 'forest_stitchling_ambush', cornerEscape: false, units: [{ unitId: 'weak', side: 'wild', characterCode: 'stitchling', name: '실밥이', col: 2, row: 4, attack: 1, defense: 0, actionPower: 0, maxHp: 1, canAct: false }] };
+
+function setup(opts: { checkpoint?: string; events?: string[]; nubi?: 'mine' | 'other' | 'none'; easy?: boolean } = {}) {
+  const db = new FakeDb();
+  db.seed('player', { id: P, device_uuid: 'dev-test-story-battle', nickname: '하늘' });
+  db.seed('player', { id: OTHER, device_uuid: 'dev-test-other', nickname: '남' });
+  db.seed('story_chapter', { chapter_order: 1, stage_code: 'forest', clear_character_code: 'nubi', title: '1장 — 숲', map_width: 2000, map_height: 2000 });
+  db.seed('turby_grade', { id: 1, name: '일반', base_attack: 30, base_defense: 6, base_action_power: 4, base_hp: 200 });
+  const nubiChar = db.seed('turby_character', { code: 'nubi', name: '누비', grade_id: 1, atk_mod: 0, def_mod: 0, ap_mod: 0, hp_mod: 0 });
+  const shelf = db.seed('player_base_slot', { player_id: P, slot_index: 0 });
+  const myNubi = db.seed('turby_instance', { owner_player_id: P, character_id: nubiChar.id, acquired_via: 'starter', is_story_companion: true, base_slot_id: shelf.id, atk_bonus: 0, def_bonus: 0, ap_bonus: 0, hp_bonus: 0 }); // 선반 보관 중
+  const bag1 = db.seed('turby_instance', { owner_player_id: P, character_id: nubiChar.id, acquired_via: 'shop', atk_bonus: 0, def_bonus: 0, ap_bonus: 0, hp_bonus: 0 });
+  const bag2 = db.seed('turby_instance', { owner_player_id: P, character_id: nubiChar.id, acquired_via: 'shop', atk_bonus: 0, def_bonus: 0, ap_bonus: 0, hp_bonus: 0 });
+  const otherNubi = db.seed('turby_instance', { owner_player_id: OTHER, character_id: nubiChar.id, acquired_via: 'starter', is_story_companion: true, atk_bonus: 0, def_bonus: 0, ap_bonus: 0, hp_bonus: 0 });
+  const nubiLink = opts.nubi === 'none' ? null : opts.nubi === 'other' ? otherNubi.id : myNubi.id;
+  db.seed('player_story_progress', { player_id: P, checkpoint: opts.checkpoint ?? 'CH01_STARTED', story_nubi_turby_instance_id: nubiLink, nubi_growth_stage: 0 });
+  for (const e of opts.events ?? ['opening_fall_completed', 'opening_name_saved', 'story_nubi_granted', 'forest_first_path_started']) db.seed('player_story_event', { player_id: P, event_id: e });
+
+  const settings = { numberOr: (_k: string, d: number) => d, flag: (_k: string, d: boolean) => d, number: (k: string) => NUMBERS[k] };
+  const access = new StageAccessService(db.client(), settings as never);
+  const session = new SessionService(db.client(), settings as never);
+  const rooms = new RoomsService(db.client(), settings as never, session, access);
+  const realContent = new StoryContentService();
+  const content = opts.easy ? { ...realContent, stage: () => null, dialogue: () => null, bannedNameWords: () => [], battle: (k: string) => (k === 'forest_stitchling_ambush' ? EASY : realContent.battle(k)) } : realContent;
+  const story = new StoryService(db.client(), rooms, settings as never, content as never, access);
+  const battles = new BattleService(db.client(), settings as never, rooms, access, story, content as never);
+  battles.onModuleInit();
+  return { db, rooms, battles, story, ids: { myNubi: String(myNubi.id), bag1: String(bag1.id), bag2: String(bag2.id), otherNubi: String(otherNubi.id) } };
+}
+
+async function enterForest(s: ReturnType<typeof setup>, socket = 's1') {
+  await s.rooms.identify(socket, 'dev-test-story-battle');
+  await s.rooms.createRoom('1', 'forest');
+  s.rooms.startRoom('1');
+  s.rooms.enterMap('1', 100, 100, 'down');
+}
+
+async function code(p: Promise<unknown>): Promise<string> {
+  try {
+    await p;
+  } catch (e) {
+    if (e instanceof BattleError) return e.code;
+    throw e;
+  }
+  return 'NO_ERROR';
+}
+const events = (s: ReturnType<typeof setup>, id: string) => s.db.rows('player_story_event', { player_id: P, event_id: id }).length;
+
+test('1. 잘못된 체크포인트·알 수 없는 전투·탐험 세션 밖에서는 시작 거부', async () => {
+  const outside = setup();
+  assert.equal(await code(outside.battles.startStory('1', 'forest_stitchling_ambush')), 'NOT_IN_ROOM', '탐험 세션 안에서만');
+  const s = setup();
+  await enterForest(s);
+  assert.equal(await code(s.battles.startStory('1', 'forest_giant_knot')), 'STORY_ENCOUNTER_NOT_AVAILABLE', 'CH01_STARTED에서 보스전 불가');
+  assert.equal(await code(s.battles.startStory('1', 'no_such_battle')), 'STORY_ENCOUNTER_UNKNOWN');
+  assert.equal(await code(s.battles.startStory('1', '../x')), 'INVALID_PAYLOAD');
+  const late = setup({ checkpoint: 'CH01_BOPUL_RESCUED', events: ['story_nubi_granted', 'forest_first_path_started', 'forest_bopul_rescued', 'forest_dansuring_clue_learned'] });
+  await enterForest(late);
+  assert.equal(await code(late.battles.startStory('1', 'forest_stitchling_ambush')), 'STORY_ENCOUNTER_NOT_AVAILABLE', '이미 지난 체크포인트');
+});
+
+test('2·3. 이야기 누비 자동 편성(선반 보관 중이어도)·파티 한 칸 사용', async () => {
+  const s = setup();
+  await enterForest(s);
+  const snap = await s.battles.startStory('1', 'forest_stitchling_ambush');
+  assert.equal(snap.phase, 'party_select');
+  const res = await s.battles.party('1', snap.battleId, [s.ids.bag1]);
+  const party = res.snapshot.units.filter((u) => u.side === 'party');
+  assert.equal(party.length, 2, '누비 + 고른 1마리');
+  assert.equal(party[0].unitId, 'p1-0');
+  assert.equal(res.snapshot.units.some((u) => u.unitId === 'bopuli' && u.side === 'neutral'), true, '정의 데이터의 보풀이 NPC');
+  // 상한 3: 누비가 한 칸을 쓰므로 고를 수 있는 건 2마리
+  const s2 = setup();
+  await enterForest(s2);
+  const snap2 = await s2.battles.startStory('1', 'forest_stitchling_ambush');
+  assert.equal(await code(s2.battles.party('1', snap2.battleId, [s2.ids.bag1, s2.ids.bag2, s2.ids.myNubi])), 'NO_ERROR', '누비를 직접 골라도 한 칸');
+  const s3 = setup();
+  await enterForest(s3);
+  const snap3 = await s3.battles.startStory('1', 'forest_stitchling_ambush');
+  assert.equal(await code(s3.battles.party('1', snap3.battleId, [s3.ids.bag1, s3.ids.bag2, s3.ids.bag1 + '0'])), 'PARTY_NOT_OWNED');
+});
+
+test('4. 이야기 누비가 없거나 다른 사람 것이면 시작 거부, 남의 터비는 편성 거부', async () => {
+  for (const nubi of ['none', 'other'] as const) {
+    const s = setup({ nubi });
+    await enterForest(s);
+    assert.equal(await code(s.battles.startStory('1', 'forest_stitchling_ambush')), 'STORY_NUBI_MISSING', nubi);
+  }
+  const s = setup();
+  await enterForest(s);
+  const snap = await s.battles.startStory('1', 'forest_stitchling_ambush');
+  assert.equal(await code(s.battles.party('1', snap.battleId, [s.ids.otherNubi])), 'PARTY_NOT_OWNED');
+});
+
+test('5·6. 승리하면 승리 이벤트를 서버 경로로 1회만 기록, 재요청해도 중복 없음, 포획·야생 보상 없음', async () => {
+  const s = setup({ easy: true });
+  await enterForest(s);
+  const before = s.db.rows('turby_instance', { owner_player_id: P }).length;
+  const snap = await s.battles.startStory('1', 'forest_stitchling_ambush');
+  await s.battles.party('1', snap.battleId, []);
+  const res = await s.battles.action('1', { battleId: snap.battleId, actionId: 'a1', expectedVersion: (await s.battles.snapshot('1', snap.battleId)).version, type: 'attack', unitId: 'p1-0', targetUnitId: 'weak' });
+  assert.equal(res.snapshot.outcome, 'win');
+  assert.deepEqual(res.ended, { outcome: 'win', rewards: [], settled: true }, '포획·보상 없음');
+  assert.equal(events(s, 'forest_stitchling_battle_won'), 1);
+  assert.equal(events(s, 'forest_bopul_rescued'), 1, '동반 이벤트');
+  // 같은 행동 재전송·스냅샷 재요청(정산 재시도 경로)
+  await s.battles.action('1', { battleId: snap.battleId, actionId: 'a1', expectedVersion: 0, type: 'attack', unitId: 'p1-0', targetUnitId: 'weak' });
+  await s.battles.snapshot('1', snap.battleId);
+  assert.equal(events(s, 'forest_stitchling_battle_won'), 1, '중복 기록 없음');
+  assert.equal(s.db.rows('turby_instance', { owner_player_id: P }).length, before, '포획 터비 없음');
+  assert.equal(await code(s.battles.startStory('1', 'forest_stitchling_ambush')), 'STORY_ENCOUNTER_DONE', '이긴 전투는 다시 시작 불가');
+  assert.equal((await s.story.getState(P)).resume.segmentId, 'ch01.bopul_clue', '다음 재생 구간');
+});
+
+test('7. 접속이 끊겨도 유예 안에 돌아오면 같은 전투로 복귀, 세션이 만료되면 전투는 취소되고 전투 직전부터 다시 시작', async () => {
+  const s = setup();
+  await enterForest(s);
+  const snap = await s.battles.startStory('1', 'forest_stitchling_ambush');
+  await s.battles.party('1', snap.battleId, []);
+  s.rooms.disconnect('s1');
+  await s.rooms.identify('s2', 'dev-test-story-battle'); // 유예 시간 안 재접속
+  assert.equal((await s.battles.activeSnapshotOf('1'))?.battleId, snap.battleId);
+  assert.equal(await code(s.battles.startStory('1', 'forest_stitchling_ambush')), 'NO_ERROR', '재요청은 같은 전투');
+  assert.equal((await s.battles.startStory('1', 'forest_stitchling_ambush')).battleId, snap.battleId);
+  // 유예 만료와 같은 경로(방에서 제거) → 전투 취소, 이벤트 기록 없음
+  s.rooms.leaveRoom('1');
+  await new Promise((r) => setTimeout(r, 10));
+  assert.equal(await s.battles.activeSnapshotOf('1'), null);
+  assert.equal(events(s, 'forest_stitchling_battle_won'), 0);
+  await s.rooms.createRoom('1', 'forest');
+  s.rooms.startRoom('1');
+  s.rooms.enterMap('1', 100, 100, 'down');
+  const again = await s.battles.startStory('1', 'forest_stitchling_ambush');
+  assert.notEqual(again.battleId, snap.battleId, '전투 직전부터 새 전투');
+  s.rooms.leaveRoom('1');
+});
+
+// ---- 8. 임시 전투 정의가 M4-A 엔진 계약으로 끝까지 완료 가능한지(간단한 자동 플레이) ----
+const RULES: BattleRules = { gridCols: 12, gridRows: 8, maxAlliedUnits: 5, partyStartCol: 1, wildStartCol: 10, wildStartRow: 4, minDamage: 1, defenseDivisor: 2, wildHpMult: [0, 1, 1.5, 2, 2.5, 3] };
+
+function tryAct(s: BattleState, req: Parameters<typeof applyAction>[2]): boolean {
+  try {
+    applyAction(s, 'a', req);
+    return true;
+  } catch (e) {
+    if (e instanceof BattleError) return false;
+    throw e;
+  }
+}
+
+// 매 차례: 공격 가능한 적이 인접하면 공격, 아니면 가장 가까운 적 옆 칸 중 갈 수 있는 곳으로 이동, 할 게 없으면 턴 종료
+function autoPlay(s: BattleState, maxRounds = 60) {
+  const d = (a: { col: number; row: number }, b: { col: number; row: number }) => Math.abs(a.col - b.col) + Math.abs(a.row - b.row);
+  while (s.phase === 'player_subturn' && s.round <= maxRounds) {
+    const me = s.units.find((u) => u.side === 'party' && !u.stunned)!;
+    let acted = false;
+    const foes = s.units.filter((u) => u.side === 'wild' && !u.stunned).sort((a, b) => d(me, a) - d(me, b));
+    for (const f of foes) if (d(me, f) === 1 && tryAct(s, { type: 'attack', unitId: me.unitId, targetUnitId: f.unitId })) { acted = true; break; }
+    if (!acted && me.ap > 0) {
+      outer: for (const f of foes) {
+        const cells = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dc, dr]) => ({ col: f.col + dc, row: f.row + dr })).sort((a, b) => d(me, a) - d(me, b));
+        for (const c of cells) {
+          for (let step = me.ap; step >= 1; step--) {
+            // 목표 칸까지 한 번에 못 가면 그 방향으로 가능한 만큼 다가간다
+            const tc = me.col + Math.sign(c.col - me.col) * Math.min(Math.abs(c.col - me.col), step);
+            const tr = me.row + Math.sign(c.row - me.row) * Math.min(Math.abs(c.row - me.row), Math.max(0, step - Math.abs(tc - me.col)));
+            if ((tc !== me.col || tr !== me.row) && tryAct(s, { type: 'move', unitId: me.unitId, targetCol: tc, targetRow: tr })) { acted = true; break outer; }
+          }
+        }
+      }
+    }
+    if (!acted && s.phase === 'player_subturn') applyAction(s, 'a', { type: 'end' });
+  }
+}
+
+function runDefinition(def: BattleDefinition) {
+  const s = createBattle({ battleId: 'b', roomCode: 'R', stageCode: 'forest', spawnIndex: -1, encounterPlayerId: 'a', wild: { code: def.key, name: def.key, stats: { attack: 0, defense: 0, actionPower: 0, maxHp: 1 } }, rules: RULES, participants: [{ playerId: 'a', nickname: 'a', slot: 1, connected: true }], definition: def });
+  submitParty(s, 'a', [{ turbyId: 'nubi', characterCode: 'nubi', name: '누비', attack: 30, defense: 6, actionPower: 4, maxHp: 200 }]);
+  autoPlay(s);
+  return s;
+}
+
+test('8. 두 임시 전투 정의(데이터 파일)가 엔진 계약으로 끝까지 완료 가능', () => {
+  const content = new StoryContentService();
+  const ambush = content.battle('forest_stitchling_ambush')!;
+  const knot = content.battle('forest_giant_knot')!;
+  assert.ok(ambush && knot, '정의 파일 로드');
+
+  const a = runDefinition(ambush);
+  assert.deepEqual([a.phase, a.outcome], ['resolved', 'win'], '매복 전투 승리');
+  assert.equal(a.units.find((u) => u.unitId === 'bopuli')!.stunned, false, '보풀이 무사');
+  assert.ok(a.units.some((u) => u.fled), '일부 도주 연출');
+
+  const k = runDefinition(knot);
+  assert.deepEqual([k.phase, k.outcome], ['resolved', 'win'], '거대 매듭 승리(부위 순서대로 → 중심부)');
+  assert.ok(['outer_strand_1', 'outer_strand_2', 'outer_strand_3'].every((id) => k.units.find((u) => u.unitId === id)!.stunned));
+});

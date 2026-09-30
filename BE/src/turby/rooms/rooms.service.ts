@@ -2,6 +2,9 @@ import { Injectable } from '@nestjs/common';
 import { EventEmitter } from 'events';
 import { PrismaService } from '../prisma.service';
 import { SettingsService } from './settings.service';
+import { SessionService } from '../session.service';
+import { StageAccessService } from '../story/stage-access.service';
+import { OPENING_REQUIRED_HINT } from '../story/stage-access';
 import { FACINGS, MAX_PLAYERS, ROOM_CODE_LENGTH, RoomError } from './types';
 import type { Facing, MapPlayerDto, Room, RoomMember, RoomStateDto, WildDto, WildRuntime, WildState } from './types';
 
@@ -23,21 +26,33 @@ export class RoomsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly settings: SettingsService,
+    private readonly session: SessionService,
+    private readonly stageAccess: StageAccessService,
   ) {}
 
   // ---------- 신원 ----------
 
   // 클라이언트가 보낸 playerId는 믿지 않고, 서버가 device_uuid로 찾은 플레이어에 소켓을 묶는다
-  async identify(socketId: string, deviceUuid: unknown) {
+  async identify(socketId: string, deviceUuid: unknown, sessionToken?: unknown) {
     if (typeof deviceUuid !== 'string' || deviceUuid.length < 8 || deviceUuid.length > 64) throw new RoomError('INVALID_PAYLOAD', '기기 식별자가 올바르지 않습니다.');
     const player = await this.prisma.player.findUnique({ where: { device_uuid: deviceUuid } });
     if (!player) throw new RoomError('PLAYER_NOT_FOUND', '등록되지 않은 플레이어입니다.');
+    // 스토리 M1: 토큰이 오면 반드시 일치해야 하고, 없으면 auth.requireSession 설정에 따른다(전환 기간)
+    if (!this.session.socketTokenOk(player.session_token, sessionToken)) throw new RoomError('SESSION_INVALID', '접속 정보가 올바르지 않습니다. 다시 시작해 주세요.');
     const playerId = player.id.toString();
 
     const previousSocketId = this.socketOfPlayer.get(playerId) ?? null;
     if (previousSocketId && previousSocketId !== socketId) this.playerOfSocket.delete(previousSocketId);
     this.playerOfSocket.set(socketId, playerId);
     this.socketOfPlayer.set(playerId, socketId);
+
+    // v15: 오프닝 미완료 계정은 남아 있던 탐험 세션을 이어받지 않고 마을로 돌려보낸다(진행 데이터는 지우지 않음)
+    let returnToVillage = false;
+    const stale = this.roomOf(playerId);
+    if (stale && !(await this.stageAccess.openingComplete(player.id))) {
+      this.removeMember(stale, playerId, 'left');
+      returnToVillage = true;
+    }
 
     // 유예 중이거나 다른 탭에서 열려 있던 방 세션을 새 소켓으로 이어받는다
     const room = this.roomOf(playerId);
@@ -51,7 +66,7 @@ export class RoomsService {
       this.events.emit('room:state', room);
     }
     // 같은 소켓이 hello를 다시 보낸 경우는 '이전 소켓'이 아니다(자기 자신을 끊지 않도록)
-    return { playerId, nickname: player.nickname, previousSocketId: previousSocketId === socketId ? null : previousSocketId, room: room ?? null };
+    return { playerId, nickname: player.nickname, previousSocketId: previousSocketId === socketId ? null : previousSocketId, room: room ?? null, returnToVillage };
   }
 
   socketIdOf(playerId: string): string | null {
@@ -89,7 +104,10 @@ export class RoomsService {
   async createRoom(playerId: string, stageCodeRaw: unknown) {
     if (this.roomOf(playerId)) throw new RoomError('ALREADY_IN_ROOM', '이미 방에 참여 중입니다.');
     const stage = await this.requireStage(stageCodeRaw);
-    await this.requireUnlocked(playerId, stage.chapter_order);
+    // M2: 지역 입장 판정은 StageAccessService 한 곳(story.stageAccessV2로 신·구 전환)
+    const denial = await this.stageAccess.entryDenial(BigInt(playerId), stage.stage_code, stage.chapter_order);
+    if (denial === 'OPENING_REQUIRED') throw new RoomError('OPENING_REQUIRED', OPENING_REQUIRED_HINT);
+    if (denial) throw new RoomError('STAGE_LOCKED', '아직 열리지 않은 지역입니다.');
 
     const player = await this.prisma.player.findUnique({ where: { id: BigInt(playerId) } });
     if (!player) throw new RoomError('PLAYER_NOT_FOUND', '등록되지 않은 플레이어입니다.');
@@ -111,6 +129,11 @@ export class RoomsService {
     this.rooms.set(room.code, room);
     this.roomOfPlayer.set(playerId, room.code);
     return room;
+  }
+
+  // v15: 방 시작·맵 입장 직전에도 다시 확인(오래된 화면 상태나 직접 호출로 우회하지 못하게)
+  async requireOpening(playerId: string) {
+    if (!(await this.stageAccess.openingComplete(BigInt(playerId)))) throw new RoomError('OPENING_REQUIRED', OPENING_REQUIRED_HINT);
   }
 
   leaveRoom(playerId: string) {
@@ -283,17 +306,6 @@ export class RoomsService {
     const stage = await this.prisma.story_chapter.findUnique({ where: { stage_code: stageCode } });
     if (!stage) throw new RoomError('INVALID_STAGE', '존재하지 않는 지역입니다.');
     return stage;
-  }
-
-  // 이전 장의 대표 터비를 직접 포획(acquired_via='wild_capture')했어야 열림 — docs/Turby_story.md 3.2, FE와 같은 규칙을 서버가 다시 검증
-  private async requireUnlocked(playerId: string, chapterOrder: number) {
-    if (chapterOrder <= 1) return;
-    const previous = await this.prisma.story_chapter.findUnique({ where: { chapter_order: chapterOrder - 1 } });
-    if (!previous) return;
-    const captured = await this.prisma.turby_instance.count({
-      where: { owner_player_id: BigInt(playerId), acquired_via: 'wild_capture', turby_character: { code: previous.clear_character_code } },
-    });
-    if (captured === 0) throw new RoomError('STAGE_LOCKED', '아직 열리지 않은 지역입니다.');
   }
 
   private validatePosition(room: Room, x: unknown, y: unknown) {

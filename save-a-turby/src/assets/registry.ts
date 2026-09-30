@@ -54,6 +54,15 @@ export const WORLD_IMAGES: Record<string, string> = {
   ...buildKeyMap(import.meta.glob('./ui/**/*.png', { eager: true, query: '?url', import: 'default' }) as Record<string, string>),
 };
 
+// 초상화(docs/asset/integration_contract.md 2절): portraits/{인물}/{표정}.png → portrait-{인물}-{표정}.
+// 폴더마다 neutral.png가 반복되므로 파일명만이 아니라 경로로 키를 만든다. 아직 없는 초상화는 대사 재생기가 기존 캐릭터 그림으로 대체한다.
+export const PORTRAIT_IMAGES: Record<string, string> = Object.fromEntries(
+  Object.entries(import.meta.glob('./portraits/*/*.png', { eager: true, query: '?url', import: 'default' }) as Record<string, string>).map(([path, url]) => {
+    const [, who, file] = path.match(/portraits\/([^/]+)\/([^/]+)\.png$/) ?? [];
+    return [`portrait-${who}-${file}`, url];
+  }),
+);
+
 // 스프라이트시트(96x96 프레임) 키 — 나머지는 일반 이미지로 로드
 export const SPRITESHEET_KEYS = ['child-walk', 'child-idle', 'villager-a-walk', 'villager-b-walk', 'merchant-idle', 'nubi-field'];
 

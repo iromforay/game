@@ -1,11 +1,12 @@
 import { io } from 'socket.io-client';
 import type { Socket } from 'socket.io-client';
-import { BASE_URL } from '../api/client';
+import { BASE_URL, session } from '../api/client';
 import { getPlayerId } from '../state/player';
+import { helloPayload } from '../state/session';
 import type { BattleInvite, BattleSnapshot, BattleUpdate, WildInfo, WildState } from './battleTypes';
 
 // 4-A: 방·맵 위치 동기화 클라이언트(docs/save_a_turby_coop_spec.md 5절 계약). 화면과 분리된 연결 계층이라
-// 최종 방 UI가 나와도 이 클래스는 그대로 쓴다. 서버가 device_uuid로 플레이어를 확정하므로 playerId를 보내지 않는다.
+// 최종 방 UI가 나와도 이 클래스는 그대로 쓴다. 서버가 device_uuid와 세션 토큰으로 플레이어를 확정하므로 playerId를 보내지 않는다.
 
 export type Facing = 'down' | 'left' | 'right' | 'up';
 
@@ -59,6 +60,7 @@ interface Events {
   battleInvite: (invite: BattleInvite) => void;
   wildChanged: (wild: WildInfo) => void;
   reconnected: () => void; // 끊겼다가 다시 붙어 hello까지 끝난 뒤(진행 중 전투 등을 다시 맞출 시점)
+  returnToVillage: () => void; // v15: 서버가 오프닝 미완료로 남은 탐험 세션을 닫았다 — 마을로
 }
 
 class RoomClient {
@@ -120,8 +122,12 @@ class RoomClient {
       }
       const hello = async () => {
         try {
-          const res = (await socket.timeout(5000).emitWithAck('presence:hello', { deviceUuid: getPlayerId() })) as Ack<{ playerId: string; room: RoomState | null; players: MapPlayer[]; battle: BattleSnapshot | null; wilds?: WildInfo[] }>;
-          if (!res.ok) throw new RoomApiError(res.code, res.message);
+          // HTTP /player/me/* 와 같은 세션 토큰을 보낸다. 토큰이 거부되면 session.run이 재식별을 한 번만 하고 다시 보낸다.
+          const res = await session.run(async (token) => {
+            const ack = (await socket.timeout(5000).emitWithAck('presence:hello', helloPayload(getPlayerId(), token))) as Ack<{ playerId: string; room: RoomState | null; players: MapPlayer[]; battle: BattleSnapshot | null; wilds?: WildInfo[]; returnToVillage?: boolean }>;
+            if (!ack.ok) throw new RoomApiError(ack.code, ack.message);
+            return ack;
+          });
           this.playerId = res.playerId;
           this.room = res.room;
           this.activeBattle = res.battle ?? null;
@@ -130,6 +136,7 @@ class RoomClient {
           this.others.clear();
           res.players.forEach((p) => this.others.set(p.playerId, p));
           this.emitLocal('state', this.room);
+          if (res.returnToVillage) this.emitLocal('returnToVillage');
           resolve();
         } catch (err) {
           reject(err);

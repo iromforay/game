@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from './prisma.service';
+import { SessionService } from './session.service';
 import { INSTANCE_INCLUDE, toTurbyDto } from './turby-dto';
 
 // 4.4: 선반 슬롯 수 제안(8열×5행) — 문서 5.2-4 최종 확정 전까지 이 값 사용
@@ -9,7 +10,10 @@ const STARTING_TARE = 100;
 
 @Injectable()
 export class PlayerService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly session: SessionService,
+  ) {}
 
   // 8번 스키마: 로그인 시스템이 없어 device_uuid로 플레이어를 식별(없으면 새로 생성)
   async identify(deviceUuid: string) {
@@ -19,19 +23,13 @@ export class PlayerService {
       create: { device_uuid: deviceUuid, nickname: '터비 탐험가', tare_balance: STARTING_TARE },
     });
 
-    let turbys = await this.getInventory(player.id);
-    if (turbys.length === 0) {
-      // 보유 터비가 하나도 없는 플레이어(신규) — 스타터 누비를 DB에 실제로 지급(acquired_via='starter').
-      const starter = await this.prisma.turby_character.findUnique({ where: { code: 'nubi' } });
-      if (starter) {
-        await this.prisma.turby_instance.create({
-          data: { owner_player_id: player.id, character_id: starter.id, acquired_via: 'starter' },
-        });
-        turbys = await this.getInventory(player.id);
-      }
-    }
+    // 스토리 M3: 스타터 누비 자동 지급을 없앴다. 이야기 누비는 오프닝 완료 이벤트(story_nubi_granted)가
+    // 이름 입력 뒤에 한 트랜잭션으로 지급·연결한다(기존 계정은 가장 오래된 스타터를 재사용, 없으면 그때 생성).
+    const turbys = await this.getInventory(player.id);
 
-    return { playerId: player.id.toString(), nickname: player.nickname, tareBalance: player.tare_balance, turbys };
+    // 스토리 M1: 세션 토큰 발급(이미 있으면 그대로). 이후 /player/me/* 헤더(X-Turby-Session)와 소켓 hello에 쓴다.
+    const sessionToken = await this.session.ensureToken(player.id, player.session_token);
+    return { playerId: player.id.toString(), nickname: player.nickname, tareBalance: player.tare_balance, turbys, sessionToken };
   }
 
   async getInventory(playerId: bigint) {

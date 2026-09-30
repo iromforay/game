@@ -12,7 +12,8 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/main.js",
     "start:turby": "node dist/turby-main.js",
-    "start:kirby": "node dist/kirby-main.js"
+    "start:kirby": "node dist/kirby-main.js",
+    "test": "node --test -r ts-node/register/transpile-only test/*.test.ts"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.15",

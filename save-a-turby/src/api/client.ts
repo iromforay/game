@@ -1,3 +1,11 @@
+import { ApiError, createHttp } from './http';
+import { createMeApi } from './meApi';
+import { SessionManager, type KeyValueStorage } from '../state/session';
+import { getPlayerId } from '../state/player';
+import type { ServerStageStatus } from '../state/stageView';
+
+export { ApiError };
+
 // 터비 전용 BE(3.5.3, 포트 3002)와 통신하는 최소 REST 클라이언트.
 // 접속 주소는 .env(VITE_TURBY_SERVER_URL)에서 읽음. 배포는 hub에서 빌드하므로 hub/.env에 설정.
 export const BASE_URL: string = import.meta.env.VITE_TURBY_SERVER_URL ?? 'http://localhost:3002';
@@ -52,79 +60,97 @@ export interface OwnedItem {
   available: number;
 }
 
-// 서버가 { code, message }로 내려주는 게임 규칙 위반(잔액 부족 등)과 네트워크 실패를 구분하기 위한 에러
-export class ApiError extends Error {
-  readonly status: number;
-  readonly code: string | null;
-
-  constructor(status: number, code: string | null, message: string) {
-    super(message);
-    this.status = status;
-    this.code = code;
-  }
-}
-
 export interface IdentifyResponse {
   playerId: string;
   nickname: string;
   tareBalance: number;
   turbys: ServerTurby[];
+  sessionToken?: string; // 스토리 M1: /player/me/* 헤더와 소켓 hello에 쓰는 세션 토큰(구 BE는 없음)
 }
 
-async function postJson<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  return parse(path, res);
-}
+const http = createHttp(BASE_URL, (url, init) => fetch(url, init));
 
-async function getJson<T>(path: string): Promise<T> {
-  return parse(path, await fetch(`${BASE_URL}${path}`));
-}
-
-async function parse<T>(path: string, res: Response): Promise<T> {
-  if (!res.ok) {
-    let body: { code?: string; message?: string } = {};
-    try {
-      body = await res.json();
-    } catch {
-      // 본문이 JSON이 아니면 상태코드만 사용
-    }
-    throw new ApiError(res.status, body.code ?? null, body.message ?? `${path} failed: ${res.status}`);
+function browserStorage(): KeyValueStorage | null {
+  try {
+    return typeof localStorage === 'undefined' ? null : localStorage;
+  } catch {
+    return null;
   }
-  return res.json();
 }
 
-export function identifyPlayer(deviceUuid: string): Promise<IdentifyResponse> {
-  return postJson('/player/identify', { deviceUuid });
-}
+// 기기 식별자(device_uuid)별 세션. 토큰 거부 시 identify를 한 번만 다시 부른다(state/session.ts).
+export const session = new SessionManager(getPlayerId(), browserStorage(), () => identifyPlayer(getPlayerId()));
+const me = createMeApi(http, session);
 
-export function moveToShelf(playerId: string, turbyId: string, slotIndex: number): Promise<ServerTurby> {
-  return postJson(`/player/${playerId}/turby/${turbyId}/shelf`, { slotIndex });
-}
-
-export function moveToBag(playerId: string, turbyId: string): Promise<ServerTurby> {
-  return postJson(`/player/${playerId}/turby/${turbyId}/bag`, {});
+export async function identifyPlayer(deviceUuid: string): Promise<IdentifyResponse> {
+  const res = await http.postJson<IdentifyResponse>('/player/identify', { deviceUuid });
+  session.accept(res.sessionToken);
+  return res;
 }
 
 export function fetchShop(): Promise<ShopProduct[]> {
-  return getJson('/shop');
+  return http.getJson('/shop');
 }
 
-export function purchaseProduct(playerId: string, productId: number, requestId: string): Promise<PurchaseResult> {
-  return postJson(`/player/${playerId}/shop/purchase`, { productId, requestId });
+// 아래는 세션 토큰 기반 /player/me/* (스토리 M1-B). 구 경로 /player/:playerId/* 는 서버에 호환용으로만 남아 있다.
+export function moveToShelf(turbyId: string, slotIndex: number): Promise<ServerTurby> {
+  return me.post(`/turby/${turbyId}/shelf`, { slotIndex });
 }
 
-export function fetchItems(playerId: string): Promise<OwnedItem[]> {
-  return getJson(`/player/${playerId}/items`);
+export function moveToBag(turbyId: string): Promise<ServerTurby> {
+  return me.post(`/turby/${turbyId}/bag`, {});
 }
 
-export function equipItem(playerId: string, turbyId: string, itemCode: string): Promise<ServerTurby> {
-  return postJson(`/player/${playerId}/turby/${turbyId}/equip`, { itemCode });
+export function purchaseProduct(productId: number, requestId: string): Promise<PurchaseResult> {
+  return me.post('/shop/purchase', { productId, requestId });
 }
 
-export function unequipItem(playerId: string, turbyId: string, slotKey: string): Promise<ServerTurby> {
-  return postJson(`/player/${playerId}/turby/${turbyId}/unequip`, { slotKey });
+export function fetchItems(): Promise<OwnedItem[]> {
+  return me.get('/items');
+}
+
+export function equipItem(turbyId: string, itemCode: string): Promise<ServerTurby> {
+  return me.post(`/turby/${turbyId}/equip`, { itemCode });
+}
+
+export function unequipItem(turbyId: string, slotKey: string): Promise<ServerTurby> {
+  return me.post(`/turby/${turbyId}/unequip`, { slotKey });
+}
+
+// 스토리 상태(M2: 지역 입장·표시 상태 포함). 판정은 서버만 한다.
+export interface StoryState {
+  checkpoint: string;
+  chapterCode: string;
+  needsName: boolean;
+  playerName: string;
+  stages: ServerStageStatus[];
+}
+
+export function fetchStory(): Promise<StoryState> {
+  return me.get('/story');
+}
+
+// ---- 스토리(M3 오프닝) ----
+export interface StoryStateFull extends StoryState {
+  openingRequired: boolean;
+  openingAvailable: boolean;
+  openingStarted: boolean;
+  resume: { segmentId: string | null; tutorial: 'relic_equip' | null };
+  completedEvents: string[];
+}
+
+export function fetchStoryFull(): Promise<StoryStateFull> {
+  return me.get('/story');
+}
+
+export function fetchDialogue(chapterCode: string): Promise<unknown> {
+  return me.get(`/story/dialogue/${chapterCode}`);
+}
+
+export function completeStoryEvent(eventId: string): Promise<{ eventId: string; alreadyCompleted: boolean; story: StoryStateFull }> {
+  return me.post(`/story/events/${eventId}/complete`, { requestId: `${eventId}-${Date.now()}` });
+}
+
+export function saveProfileName(name: string): Promise<{ eventId: string; alreadyCompleted: boolean; story: StoryStateFull }> {
+  return me.post('/profile/name', { name });
 }

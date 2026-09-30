@@ -39,9 +39,9 @@ export class RoomsGateway implements OnGatewayDisconnect, OnModuleInit {
   }
 
   @SubscribeMessage('presence:hello')
-  hello(@ConnectedSocket() client: Socket, @MessageBody() body: { deviceUuid?: unknown }) {
+  hello(@ConnectedSocket() client: Socket, @MessageBody() body: { deviceUuid?: unknown; sessionToken?: unknown }) {
     return this.guard(async () => {
-      const res = await this.rooms.identify(client.id, body?.deviceUuid);
+      const res = await this.rooms.identify(client.id, body?.deviceUuid, body?.sessionToken);
       if (res.previousSocketId) {
         // 같은 플레이어가 다른 탭/기기로 다시 접속 — 이전 소켓은 밀어낸다(방 세션은 새 소켓이 이어받음)
         const old = this.server.sockets.sockets.get(res.previousSocketId);
@@ -59,6 +59,7 @@ export class RoomsGateway implements OnGatewayDisconnect, OnModuleInit {
         playerId: res.playerId,
         nickname: res.nickname,
         room: res.room ? this.rooms.toState(res.room) : null,
+        returnToVillage: res.returnToVillage, // v15: 오프닝 미완료로 남은 탐험 세션을 닫았다 — 클라이언트는 마을로
         players: res.room && inMap ? this.rooms.snapshotOf(res.room, res.playerId) : [],
         wilds: res.room && inMap ? this.rooms.wildsOf(res.room) : [],
         battle: await this.battles.activeSnapshotOf(res.playerId), // 새로고침·재접속 시 진행 중 전투를 이어받는다
@@ -93,7 +94,9 @@ export class RoomsGateway implements OnGatewayDisconnect, OnModuleInit {
   @SubscribeMessage('room:start')
   start(@ConnectedSocket() client: Socket) {
     return this.guard(async () => {
-      const room = this.rooms.startRoom(this.rooms.playerOf(client.id));
+      const playerId = this.rooms.playerOf(client.id);
+      await this.rooms.requireOpening(playerId);
+      const room = this.rooms.startRoom(playerId);
       return { ok: true as const, room: this.rooms.toState(room) };
     });
   }
@@ -102,6 +105,7 @@ export class RoomsGateway implements OnGatewayDisconnect, OnModuleInit {
   enter(@ConnectedSocket() client: Socket, @MessageBody() body: { x?: unknown; y?: unknown; dir?: unknown }) {
     return this.guard(async () => {
       const playerId = this.rooms.playerOf(client.id);
+      await this.rooms.requireOpening(playerId);
       const { room, self, others, wilds } = this.rooms.enterMap(playerId, body?.x, body?.y, body?.dir);
       await client.join(this.rooms.mapChannel(room));
       // 전투 후 복귀처럼 이미 맵에 있던 사람의 재입장도 joined로 알린다 — 클라이언트는 playerId 기준으로 갱신(upsert)한다

@@ -1,4 +1,8 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { StageAccessService } from '../story/stage-access.service';
+import { OPENING_REQUIRED_HINT } from '../story/stage-access';
+import { StoryService } from '../story/story.service';
+import { StoryContentService } from '../story/story-content.service';
 import { randomUUID } from 'crypto';
 import { EventEmitter } from 'events';
 import { PrismaService } from '../prisma.service';
@@ -40,6 +44,8 @@ interface BattleRecord {
   cleanup: NodeJS.Timeout | null;
   timer: NodeJS.Timeout | null; // 초대·파티 선택·서브턴 마감(파티 선택·서브턴은 참전자 2명 이상일 때만)
   timerKey: string | null;
+  // M4-B 스토리 전투: 포획·야생 보상 없음, 승리 시 onWinEvents를 서버 경로로 기록, 이야기 누비 필수 편성
+  story: { encounterKey: string; onWinEvents: string[]; storyNubiId: string } | null;
 }
 
 const ACTION_ID_MAX = 64;
@@ -59,6 +65,9 @@ export class BattleService implements OnModuleInit {
     private readonly prisma: PrismaService,
     private readonly settings: SettingsService,
     private readonly rooms: RoomsService,
+    private readonly stageAccess: StageAccessService,
+    private readonly story: StoryService,
+    private readonly content: StoryContentService,
   ) {}
 
   onModuleInit() {
@@ -80,6 +89,8 @@ export class BattleService implements OnModuleInit {
   // 맵에서 야생 터비와 조우 — 서버가 방의 야생 상태(마커 번호)를 확인해 소유권을 선점하고 전투를 만든다.
   // 같은 방에서 맵에 있는 다른 사람들에게는 참전 초대가 나간다(혼자면 바로 파티 선택).
   async start(playerId: string, spawnIndexRaw: unknown): Promise<BattleSnapshotDto> {
+    // v15: 오프닝 완료 전에는 야생 조우·전투를 시작할 수 없다(탐험 세션이 남아 있어도)
+    if (!(await this.stageAccess.openingComplete(BigInt(playerId)))) throw new BattleError('OPENING_REQUIRED', OPENING_REQUIRED_HINT);
     const existing = this.recordOfPlayer(playerId);
     if (existing) return toSnapshot(existing.state); // 이미 진행 중인 전투(초대 받은 상태 포함)가 있으면 그대로 이어서(중복 요청 안전)
 
@@ -118,13 +129,59 @@ export class BattleService implements OnModuleInit {
       rules: this.rules(),
       participants,
     });
-    const record: BattleRecord = { state, responses: new Map(), ended: null, settled: false, queue: Promise.resolve(), cleanup: null, timer: null, timerKey: null };
+    const record: BattleRecord = { state, responses: new Map(), ended: null, settled: false, queue: Promise.resolve(), cleanup: null, timer: null, timerKey: null, story: null };
     this.battles.set(state.battleId, record);
     for (const p of participants) this.battleOfPlayer.set(p.playerId, state.battleId);
     this.rooms.setWildState(room, wildRow.index, 'engaged', state.battleId);
     this.armTimer(record);
     const invitees = participants.filter((p) => p.invited).map((p) => p.playerId);
     if (invitees.length > 0) this.events.emit('battle:invite', state, invitees);
+    return toSnapshot(state);
+  }
+
+  // ---------- 스토리 전투(M4-B) ----------
+
+  // 탐험 세션 안에서만 시작한다. 시작 가능 여부(체크포인트·선행 이벤트·이미 이긴 전투)와 이야기 누비는 서버가 확인한다.
+  // 같은 전투가 진행 중이면 그대로 이어서 돌려준다(재요청·재접속 안전). 야생 마커·포획과 무관하다.
+  async startStory(playerId: string, encounterKeyRaw: unknown): Promise<BattleSnapshotDto> {
+    if (!(await this.stageAccess.openingComplete(BigInt(playerId)))) throw new BattleError('OPENING_REQUIRED', OPENING_REQUIRED_HINT);
+    if (typeof encounterKeyRaw !== 'string' || !/^[a-z0-9_]{1,64}$/.test(encounterKeyRaw)) throw new BattleError('INVALID_PAYLOAD', '전투 정보가 올바르지 않습니다.');
+    const key = encounterKeyRaw;
+    const existing = this.recordOfPlayer(playerId);
+    if (existing) {
+      if (existing.story?.encounterKey === key) return toSnapshot(existing.state);
+      throw new BattleError('ALREADY_IN_BATTLE', '진행 중인 전투가 있습니다.');
+    }
+
+    const room = this.rooms.roomOf(playerId);
+    if (!room) throw new BattleError('NOT_IN_ROOM', '참여 중인 방이 없습니다.');
+    if (room.phase !== 'playing') throw new BattleError('ROOM_NOT_STARTED', '방이 아직 시작되지 않았습니다.');
+    if (!this.rooms.memberPosition(room, playerId)?.inMap) throw new BattleError('NOT_IN_MAP', '맵에 입장하지 않았습니다.');
+
+    const available = await this.story.encounterAvailability(BigInt(playerId), key);
+    if (!available.ok) throw new BattleError(available.code, available.message);
+    if (room.stageCode !== available.def.stageCode) throw new BattleError('STORY_ENCOUNTER_NOT_AVAILABLE', '이 지역에서 시작할 수 없는 전투입니다.');
+    const definition = this.content.battle(key);
+    if (!definition) throw new BattleError('STORY_DATA_MISSING', '전투 정의 데이터가 없습니다.');
+
+    const raced = this.recordOfPlayer(playerId); // await 사이에 다른 요청이 전투를 만든 경우
+    if (raced) return toSnapshot(raced.state);
+    const member = room.members.find((m) => m.playerId === playerId)!;
+    const state = createBattle({
+      battleId: randomUUID().replace(/-/g, ''),
+      roomCode: room.code,
+      stageCode: room.stageCode,
+      spawnIndex: -1, // 야생 마커 없음
+      encounterPlayerId: playerId,
+      wild: { code: key, name: key, stats: { attack: 0, defense: 0, actionPower: 0, maxHp: 1 } },
+      rules: this.rules(),
+      participants: [{ playerId, nickname: member.nickname, slot: 1, connected: member.connected }],
+      definition,
+    });
+    const record: BattleRecord = { state, responses: new Map(), ended: null, settled: false, queue: Promise.resolve(), cleanup: null, timer: null, timerKey: null, story: { encounterKey: key, onWinEvents: available.def.onWinEvents, storyNubiId: available.storyNubiId.toString() } };
+    this.battles.set(state.battleId, record);
+    this.battleOfPlayer.set(playerId, state.battleId);
+    this.armTimer(record);
     return toSnapshot(state);
   }
 
@@ -142,10 +199,20 @@ export class BattleService implements OnModuleInit {
       const ids = turbyIdsRaw as string[];
       if (new Set(ids).size !== ids.length) throw new BattleError('PARTY_NOT_OWNED', '같은 터비를 두 번 고를 수 없습니다.');
 
-      const owned = await this.prisma.turby_instance.findMany({
-        where: { id: { in: ids.map((i) => BigInt(i)) }, owner_player_id: BigInt(playerId), base_slot_id: null }, // 소지(가방) 중인 내 터비만
-        include: INSTANCE_INCLUDE,
-      });
+      // 스토리 전투: 이야기 누비는 보관(선반) 중이어도 자동으로 맨 앞에 편성되고 파티 한 칸을 쓴다(D6)
+      const nubiId = record.story?.storyNubiId ?? null;
+      if (nubiId && !ids.includes(nubiId)) ids.unshift(nubiId);
+      const others = ids.filter((i) => i !== nubiId);
+      const owned = [
+        ...(nubiId ? await this.prisma.turby_instance.findMany({ where: { id: BigInt(nubiId), owner_player_id: BigInt(playerId), is_story_companion: true }, include: INSTANCE_INCLUDE }) : []),
+        ...(others.length > 0
+          ? await this.prisma.turby_instance.findMany({
+              where: { id: { in: others.map((i) => BigInt(i)) }, owner_player_id: BigInt(playerId), base_slot_id: null }, // 소지(가방) 중인 내 터비만
+              include: INSTANCE_INCLUDE,
+            })
+          : []),
+      ];
+      if (nubiId && !owned.some((o) => o.id.toString() === nubiId)) throw new BattleError('STORY_NUBI_MISSING', '이야기 누비를 찾을 수 없습니다.');
       if (owned.length !== ids.length) throw new BattleError('PARTY_NOT_OWNED', '가방에 없는 터비가 포함되어 있습니다.');
       const dtoById = new Map(owned.map((o) => [o.id.toString(), toTurbyDto(o)]));
       const party = ids.map((id) => {
@@ -196,7 +263,7 @@ export class BattleService implements OnModuleInit {
     const record = this.requireRecord(battleId);
     return this.enqueue(record, async () => {
       this.requireParticipant(record, playerId);
-      if (record.state.phase === 'resolved' && !record.settled) await this.settle(record); // 보상 기록 재시도
+      if (record.state.phase === 'resolved' && !record.settled) await (record.story ? this.settleStory(record) : this.settle(record)); // 보상 기록 재시도
       return { version: record.state.version, events: [], snapshot: toSnapshot(record.state), ended: record.ended };
     });
   }
@@ -259,8 +326,12 @@ export class BattleService implements OnModuleInit {
     if (state.phase === 'resolved') {
       for (const p of state.participants) if (this.battleOfPlayer.get(p.playerId) === state.battleId) this.battleOfPlayer.delete(p.playerId);
       this.clearTimer(record);
-      this.releaseWild(state);
-      await this.settle(record);
+      if (record.story) {
+        await this.settleStory(record);
+      } else {
+        this.releaseWild(state);
+        await this.settle(record);
+      }
       this.scheduleCleanup(record);
     } else {
       this.armTimer(record);
@@ -322,6 +393,25 @@ export class BattleService implements OnModuleInit {
     if (record.cleanup) return;
     record.cleanup = setTimeout(() => this.battles.delete(record.state.battleId), this.settings.number('battle.resolvedRetentionSeconds') * 1000);
     record.cleanup.unref();
+  }
+
+  // 스토리 전투 결과 확정: 포획·야생 보상 없음. 승리면 onWinEvents를 서버 경로로 기록한다.
+  // 이벤트 기록은 (player, event) unique로 멱등이라 재시도·재요청해도 한 번만 반영된다. 실패하면 settled=false로 두고 스냅샷 재요청 때 다시 시도.
+  private async settleStory(record: BattleRecord): Promise<void> {
+    if (record.settled || !record.story) return;
+    const { state } = record;
+    try {
+      if (state.outcome === 'win') {
+        for (const p of state.participants.filter((x) => x.partySubmitted && x.eligibleForReward)) {
+          for (const eventId of record.story.onWinEvents) await this.story.completeEvent(BigInt(p.playerId), eventId, 'server');
+        }
+      }
+      record.ended = { outcome: state.outcome!, rewards: [], settled: true };
+      record.settled = true;
+    } catch (err) {
+      this.log.error(`스토리 전투 결과 기록 실패(재시도 대기) battle=${state.battleId}`, err as Error);
+      record.ended = { outcome: state.outcome!, rewards: [], settled: false };
+    }
   }
 
   // 결과 확정: coop_battle + 참가자별 battle_result + 포획 지급을 한 트랜잭션에서. (battle_id, player_id) 유니크라

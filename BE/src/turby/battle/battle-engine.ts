@@ -1,5 +1,5 @@
 import { BattleError } from './battle-types';
-import type { ActionRequest, BattleEvent, BattleOutcome, BattleRules, BattleSnapshotDto, BattleState, BattleUnit, Participant, PartyEntry, UnitStatsInput } from './battle-types';
+import type { ActionRequest, BattleDefinition, BattleEvent, BattleObjective, BattleOutcome, BattleRules, BattleSnapshotDto, BattleState, BattleUnit, Participant, PartyEntry, StatusEffectDef, UnitStatsInput } from './battle-types';
 
 // 4-B: 서버 권위 전투 엔진(순수 모듈). 규칙은 기존 1인 로컬 전투(BattleScene)를 그대로 옮긴 것이다:
 // 이동=목표 칸까지 맨해튼 거리만큼 AP, 공격=인접 1칸 AP 1, 피해=max(최소피해, 공격-floor(방어/나눗수)), 꼭짓점 도착=즉시 무승부.
@@ -23,6 +23,7 @@ export interface CreateBattleInput {
   rules: BattleRules;
   encounterPlayerId: string;
   participants: { playerId: string; nickname: string; slot: number; connected: boolean; invited?: boolean }[]; // invited=초대받은 사람(응답 전까지 pending)
+  definition?: BattleDefinition | null; // M4-A: 있으면 야생 1마리 대신 정의 데이터로 적·NPC·목표·지형을 만든다
 }
 
 export function createBattle(input: CreateBattleInput): BattleState {
@@ -49,6 +50,7 @@ export function createBattle(input: CreateBattleInput): BattleState {
     outcome: null,
     expiresAt: null,
     pendingParties: {},
+    definition: input.definition ?? null,
   };
 }
 
@@ -178,7 +180,22 @@ function startBattle(state: BattleState, ctx: Ctx) {
     inactive: false,
   }));
 
-  const mult = state.rules.wildHpMult[Math.min(confirmed.length, state.rules.wildHpMult.length - 1)] ?? 1;
+  if (state.definition) {
+    addDefinitionUnits(state, state.definition);
+  } else {
+    pushWildUnit(state, confirmed.length);
+  }
+  state.pendingParties = {};
+  state.round = 1;
+  state.phase = 'player_subturn';
+  state.subturnIndex = roundStartIndex(state);
+  emit(state, ctx, { type: 'started' });
+  emit(state, ctx, { type: 'subturn', phase: state.phase, round: state.round, currentPlayerId: currentPlayerId(state) });
+}
+
+// 기존 야생 전투: 야생 1마리(참전 인원별 HP 배율)
+function pushWildUnit(state: BattleState, participantCount: number) {
+  const mult = state.rules.wildHpMult[Math.min(participantCount, state.rules.wildHpMult.length - 1)] ?? 1;
   const base = state.wildBase;
   const hp = Math.max(1, Math.round(base.maxHp * mult));
   state.units.push({
@@ -201,12 +218,42 @@ function startBattle(state: BattleState, ctx: Ctx) {
     stunned: false,
     inactive: false,
   });
-  state.pendingParties = {};
-  state.round = 1;
-  state.phase = 'player_subturn';
-  state.subturnIndex = roundStartIndex(state);
-  emit(state, ctx, { type: 'started' });
-  emit(state, ctx, { type: 'subturn', phase: state.phase, round: state.round, currentPlayerId: currentPlayerId(state) });
+}
+
+// M4-A 정의 전투: 정의 데이터의 적·NPC를 그대로 배치(HP 배율 없음). 기믹 수치는 전부 정의에서 온다.
+function addDefinitionUnits(state: BattleState, def: BattleDefinition) {
+  for (const d of def.units) {
+    state.units.push({
+      unitId: d.unitId,
+      side: d.side,
+      ownerPlayerId: null,
+      participantSlot: 0,
+      partyOrder: 0,
+      turbyId: null,
+      characterCode: d.characterCode,
+      name: d.name,
+      col: d.col,
+      row: d.row,
+      hp: d.maxHp,
+      maxHp: d.maxHp,
+      ap: d.actionPower,
+      maxAp: d.actionPower,
+      attack: d.attack,
+      defense: d.defense,
+      stunned: false,
+      inactive: false,
+      statuses: [],
+      targetable: d.targetable ?? d.side !== 'neutral',
+      threatened: d.threatened ?? false,
+      canAct: d.canAct ?? d.side !== 'neutral',
+      partOf: d.partOf ?? null,
+      breakOrder: d.breakOrder ?? null,
+      onHit: d.onHit ?? null,
+      exitOnDefeat: d.exitOnDefeat ?? null,
+      fled: false,
+    });
+  }
+  state.blocked = (def.blocked ?? []).map((c) => cellKey(c.col, c.row));
 }
 
 // ---------- 조회 ----------
@@ -223,8 +270,46 @@ function requireActiveParticipant(state: BattleState, playerId: string): Partici
 
 const isLive = (u: BattleUnit) => !u.stunned && !u.inactive;
 const partyUnits = (state: BattleState) => state.units.filter((u) => u.side === 'party');
-const wildUnit = (state: BattleState) => state.units.find((u) => u.side === 'wild')!;
+const enemyUnits = (state: BattleState) => state.units.filter((u) => u.side === 'wild');
 const dist = (a: { col: number; row: number }, b: { col: number; row: number }) => Math.abs(a.col - b.col) + Math.abs(a.row - b.row);
+const cellKey = (col: number, row: number) => `${col},${row}`;
+const isBlockedCell = (state: BattleState, col: number, row: number) => !!state.blocked?.includes(cellKey(col, row));
+// 꼭짓점 도착 = 무승부. 정의 전투는 기본으로 끈다(정의에서 켤 수 있음), 야생은 규칙 기본값 true
+const cornerEscapeOn = (state: BattleState) => (state.definition ? (state.definition.cornerEscape ?? false) : (state.rules.cornerEscape ?? true));
+
+// 이동 가능 AP: 속박 감소량을 빼되 0 미만으로 내려가지 않는다
+function moveAllowance(unit: BattleUnit) {
+  const penalty = (unit.statuses ?? []).reduce((sum, s) => sum + (s.kind === 'bind' ? s.movePenalty : 0), 0);
+  return Math.max(0, unit.ap - penalty);
+}
+
+// 이동 비용: 막힌 칸이 없으면 기존 규칙(맨해튼 거리). 있으면 막힌 칸을 피해 가는 최단 경로(유닛은 기존처럼 경로를 막지 않는다).
+function pathCost(state: BattleState, from: { col: number; row: number }, to: { col: number; row: number }): number {
+  if (!state.blocked || state.blocked.length === 0) return dist(from, to);
+  const seen = new Set([cellKey(from.col, from.row)]);
+  let frontier = [from];
+  for (let steps = 1; frontier.length > 0; steps++) {
+    const next: { col: number; row: number }[] = [];
+    for (const c of frontier) {
+      for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const col = c.col + dc;
+        const row = c.row + dr;
+        if (col < 0 || row < 0 || col >= state.rules.gridCols || row >= state.rules.gridRows) continue;
+        const k = cellKey(col, row);
+        if (seen.has(k) || isBlockedCell(state, col, row)) continue;
+        if (col === to.col && row === to.row) return steps;
+        seen.add(k);
+        next.push({ col, row });
+      }
+    }
+    frontier = next;
+  }
+  return Infinity;
+}
+
+// 부위(partOf)가 하나라도 남아 있으면 중심부는 피해를 받지 않는다
+const hasLiveParts = (state: BattleState, core: BattleUnit) => state.units.some((p) => p.partOf === core.unitId && !p.stunned);
+const hasParts = (state: BattleState, core: BattleUnit) => state.units.some((p) => p.partOf === core.unitId);
 
 function corners(rules: BattleRules) {
   const c = rules.gridCols - 1;
@@ -297,10 +382,11 @@ function move(state: BattleState, unit: BattleUnit, colRaw: unknown, rowRaw: unk
   const col = colRaw as number;
   const row = rowRaw as number;
   if (col < 0 || row < 0 || col >= state.rules.gridCols || row >= state.rules.gridRows) throw new BattleError('INVALID_TARGET', '격자 밖입니다.');
-  const cost = dist(unit, { col, row });
-  if (cost === 0) throw new BattleError('INVALID_TARGET', '같은 칸으로는 이동할 수 없습니다.');
+  if (col === unit.col && row === unit.row) throw new BattleError('INVALID_TARGET', '같은 칸으로는 이동할 수 없습니다.');
+  if (isBlockedCell(state, col, row)) throw new BattleError('TILE_BLOCKED', '지나갈 수 없는 칸입니다.');
+  const cost = pathCost(state, unit, { col, row });
   if (unit.ap < 1) throw new BattleError('NO_ACTION_POWER', '행동력이 없습니다.');
-  if (cost > unit.ap) throw new BattleError('OUT_OF_RANGE', '행동력이 모자라 갈 수 없는 칸입니다.');
+  if (cost > moveAllowance(unit)) throw new BattleError('OUT_OF_RANGE', '행동력이 모자라 갈 수 없는 칸입니다.');
   if (isOccupied(state, col, row, unit)) throw new BattleError('TILE_OCCUPIED', '이미 다른 유닛이 있는 칸입니다.');
 
   const fromCol = unit.col;
@@ -309,7 +395,7 @@ function move(state: BattleState, unit: BattleUnit, colRaw: unknown, rowRaw: unk
   unit.row = row;
   unit.ap -= cost;
   emit(state, ctx, { type: 'move', unitId: unit.unitId, fromCol, fromRow, toCol: col, toRow: row, apLeft: unit.ap });
-  if (atCorner(state, unit)) resolve(state, ctx, 'draw');
+  if (cornerEscapeOn(state) && atCorner(state, unit)) resolve(state, ctx, 'draw');
 }
 
 function atCorner(state: BattleState, unit: BattleUnit) {
@@ -326,14 +412,64 @@ function strike(state: BattleState, attacker: BattleUnit, defender: BattleUnit, 
   if (defender.hp <= 0) defender.stunned = true;
   emit(state, ctx, { type: 'attack', attackerId: attacker.unitId, targetId: defender.unitId, damage, targetHp: defender.hp, targetStunned: defender.stunned });
   if (defender.stunned) {
-    if (defender.side === 'wild') resolve(state, ctx, 'win');
-    else if (!partyUnits(state).some(isLive)) resolve(state, ctx, 'lose');
+    if (defender.exitOnDefeat === 'flee') {
+      defender.fled = true; // 연출 표시만 — 승패는 "쓰러짐"으로 이미 판정된다
+      emit(state, ctx, { type: 'unit_exit', unitId: defender.unitId, mode: 'flee' });
+    }
+    if (defender.partOf) {
+      const core = state.units.find((x) => x.unitId === defender.partOf);
+      emit(state, ctx, { type: 'part_broken', unitId: defender.unitId, coreId: defender.partOf, coreExposed: !!core && !hasLiveParts(state, core) });
+    }
+  } else if (attacker.onHit) {
+    applyStatus(state, defender, attacker.onHit, attacker.unitId, ctx);
   }
+  evaluateOutcome(state, ctx);
+}
+
+function applyStatus(state: BattleState, target: BattleUnit, def: StatusEffectDef, sourceUnitId: string, ctx: Ctx) {
+  const list = (target.statuses ??= []);
+  const existing = list.find((s) => s.kind === def.kind);
+  if (existing) {
+    existing.turnsLeft = Math.max(existing.turnsLeft, def.turns);
+    existing.movePenalty = Math.max(existing.movePenalty, def.movePenalty);
+    existing.appliedRound = state.round;
+  } else {
+    list.push({ kind: def.kind, turnsLeft: def.turns, movePenalty: def.movePenalty, sourceUnitId, appliedRound: state.round });
+  }
+  emit(state, ctx, { type: 'status', unitId: target.unitId, statuses: list.map((s) => ({ ...s })) });
+}
+
+// 승패: 패배 조건을 먼저 본다. 정의가 없으면 기존 규칙(야생 전원 쓰러짐 = 승리, 아군 전원 기절 = 패배)과 같다.
+function objectiveMet(state: BattleState, o: BattleObjective): boolean {
+  const down = (id: string) => !!state.units.find((u) => u.unitId === id)?.stunned;
+  switch (o.kind) {
+    case 'defeat_all':
+      return enemyUnits(state).every((u) => u.stunned || u.inactive);
+    case 'defeat_units':
+      return o.unitIds.every(down);
+    case 'protect':
+      return o.unitIds.some(down); // 패배 조건으로 쓰일 때: 보호 대상이 하나라도 쓰러지면 참
+    case 'party_down':
+      return !partyUnits(state).some(isLive);
+  }
+}
+
+function evaluateOutcome(state: BattleState, ctx: Ctx) {
+  if (state.phase === 'resolved') return;
+  const lose: BattleObjective[] = [{ kind: 'party_down' }, ...(state.definition?.objectives?.lose ?? [])];
+  const win: BattleObjective[] = state.definition?.objectives?.win ?? [{ kind: 'defeat_all' }];
+  if (lose.some((o) => objectiveMet(state, o))) resolve(state, ctx, 'lose');
+  else if (win.every((o) => objectiveMet(state, o))) resolve(state, ctx, 'win');
 }
 
 function attack(state: BattleState, unit: BattleUnit, targetRaw: unknown, ctx: Ctx) {
   const target = typeof targetRaw === 'string' ? state.units.find((u) => u.unitId === targetRaw) : undefined;
-  if (!target || target.side !== 'wild' || !isLive(target)) throw new BattleError('INVALID_TARGET', '공격할 수 없는 대상입니다.');
+  if (!target || target.side !== 'wild' || !isLive(target) || target.targetable === false) throw new BattleError('INVALID_TARGET', '공격할 수 없는 대상입니다.');
+  if (target.partOf) {
+    const firstOrder = Math.min(...state.units.filter((p) => p.partOf === target.partOf && !p.stunned).map((p) => p.breakOrder ?? 0));
+    if ((target.breakOrder ?? 0) !== firstOrder) throw new BattleError('PART_ORDER', '먼저 끊어야 할 부위가 남아 있습니다.');
+  }
+  if (hasLiveParts(state, target)) throw new BattleError('TARGET_PROTECTED', '바깥 부위가 남아 있어 피해를 줄 수 없습니다.');
   if (unit.ap < 1) throw new BattleError('NO_ACTION_POWER', '행동력이 없습니다.');
   if (dist(unit, target) !== 1) throw new BattleError('OUT_OF_RANGE', '인접한 대상만 공격할 수 있습니다.');
   unit.ap -= 1;
@@ -354,7 +490,8 @@ function endSubturn(state: BattleState, ctx: Ctx) {
 }
 
 function nearestTarget(state: BattleState, wild: BattleUnit): BattleUnit | null {
-  const alive = partyUnits(state).filter(isLive);
+  // 아군 + 적이 노릴 수 있는(threatened) NPC. 공격 불가 NPC(붙잡힌 보풀이 등)는 대상이 아니다
+  const alive = state.units.filter((u) => isLive(u) && (u.side === 'party' || (u.side === 'neutral' && u.threatened === true)));
   if (alive.length === 0) return null;
   // 가장 가까운 유닛, 동률이면 participantSlot → partyOrder → unitId 순
   return alive.reduce((best, u) => {
@@ -370,16 +507,24 @@ function nearestTarget(state: BattleState, wild: BattleUnit): BattleUnit | null 
 function runWildTurn(state: BattleState, ctx: Ctx) {
   state.phase = 'wild_turn';
   emit(state, ctx, { type: 'subturn', phase: 'wild_turn', round: state.round, currentPlayerId: null });
-  const wild = wildUnit(state);
-  wild.ap = wild.maxAp;
+  // 야생 전투는 적 1마리. 정의 전투는 행동 가능한(canAct) 적이 배치 순서대로 행동한다
+  for (const wild of enemyUnits(state)) {
+    if (wild.canAct === false || !isLive(wild)) continue;
+    if (!runOneEnemy(state, wild, ctx)) return;
+  }
+  startNextRound(state, ctx);
+}
 
+// 적 한 마리의 행동. 전투가 끝났으면 false
+function runOneEnemy(state: BattleState, wild: BattleUnit, ctx: Ctx): boolean {
+  wild.ap = wild.maxAp;
   while (wild.ap > 0 && !wild.stunned) {
     const target = nearestTarget(state, wild);
-    if (!target) return; // 아군이 없으면 이미 lose/cancelled로 끝났어야 함
+    if (!target) return state.phase === 'wild_turn'; // 아군이 없으면 이미 lose/cancelled로 끝났어야 함
     if (dist(wild, target) === 1) {
       wild.ap -= 1;
       strike(state, wild, target, ctx);
-      if (state.phase !== 'wild_turn') return;
+      if (state.phase !== 'wild_turn') return false;
       continue;
     }
     // 가장 가까운 아군 쪽으로 1칸(가로 우선). 막혀 있으면 이동 없이 AP만 소모한다(로컬 규칙과 동일)
@@ -387,7 +532,7 @@ function runWildTurn(state: BattleState, ctx: Ctx) {
     const dRow = Math.sign(target.row - wild.row);
     const nextCol = dCol !== 0 ? wild.col + dCol : wild.col;
     const nextRow = dCol === 0 && dRow !== 0 ? wild.row + dRow : wild.row;
-    const blocked = partyUnits(state).some((u) => isLive(u) && u.col === nextCol && u.row === nextRow);
+    const blocked = state.units.some((u) => u !== wild && isLive(u) && u.col === nextCol && u.row === nextRow) || isBlockedCell(state, nextCol, nextRow);
     wild.ap -= 1;
     if (!blocked) {
       const fromCol = wild.col;
@@ -395,21 +540,63 @@ function runWildTurn(state: BattleState, ctx: Ctx) {
       wild.col = nextCol;
       wild.row = nextRow;
       emit(state, ctx, { type: 'move', unitId: wild.unitId, fromCol, fromRow, toCol: nextCol, toRow: nextRow, apLeft: wild.ap });
-      if (atCorner(state, wild)) {
+      if (cornerEscapeOn(state) && atCorner(state, wild)) {
         resolve(state, ctx, 'draw');
-        return;
+        return false;
       }
     }
   }
-  startNextRound(state, ctx);
+  return true;
 }
 
 function startNextRound(state: BattleState, ctx: Ctx) {
+  const endedRound = state.round;
   state.round += 1;
+  tickStatuses(state, endedRound, ctx);
+  applyTerrainRules(state, ctx);
   for (const u of partyUnits(state)) if (isLive(u)) u.ap = u.maxAp;
   state.phase = 'player_subturn';
   state.subturnIndex = roundStartIndex(state);
   emit(state, ctx, { type: 'subturn', phase: state.phase, round: state.round, currentPlayerId: currentPlayerId(state) });
+}
+
+// 지난 라운드보다 먼저 걸린 상태 이상만 1 줄인다(적 차례에 걸린 속박은 다음 아군 차례에 온전히 적용)
+function tickStatuses(state: BattleState, endedRound: number, ctx: Ctx) {
+  for (const unit of state.units) {
+    if (!unit.statuses || unit.statuses.length === 0) continue;
+    let changed = false;
+    for (const s of unit.statuses) {
+      if (s.appliedRound < endedRound) {
+        s.turnsLeft -= 1;
+        changed = true;
+      }
+    }
+    const kept = unit.statuses.filter((s) => s.turnsLeft > 0);
+    if (changed) {
+      unit.statuses = kept;
+      emit(state, ctx, { type: 'status', unitId: unit.unitId, statuses: kept.map((s) => ({ ...s })) });
+    }
+  }
+}
+
+// 라운드 시작 지형 변화(정의 데이터). 유닛이 서 있는 칸은 막지 않는다(갇힘 방지)
+function applyTerrainRules(state: BattleState, ctx: Ctx) {
+  const rules = state.definition?.terrainRules ?? [];
+  if (rules.length === 0) return;
+  const blocked = new Set(state.blocked ?? []);
+  const before = [...blocked].sort().join('|');
+  for (const rule of rules) {
+    if (rule.everyRounds < 1 || (state.round - 1) % rule.everyRounds !== 0) continue;
+    for (const c of rule.cells) {
+      const k = cellKey(c.col, c.row);
+      const occupied = state.units.some((u) => isLive(u) && u.col === c.col && u.row === c.row);
+      const block = rule.mode === 'block' || (rule.mode === 'toggle' && !blocked.has(k));
+      if (block && !occupied) blocked.add(k);
+      else if (!block) blocked.delete(k);
+    }
+  }
+  state.blocked = [...blocked];
+  if ([...blocked].sort().join('|') !== before) emit(state, ctx, { type: 'terrain', blocked: [...state.blocked] });
 }
 
 // ---------- 종료·이탈 ----------
@@ -509,6 +696,16 @@ export function toSnapshot(state: BattleState): BattleSnapshotDto {
       maxAp: u.maxAp,
       stunned: u.stunned,
       inactive: u.inactive,
+      ...(state.definition
+        ? {
+            statuses: (u.statuses ?? []).map((s) => ({ ...s })),
+            targetable: u.targetable ?? true,
+            invulnerable: hasParts(state, u) ? hasLiveParts(state, u) : undefined,
+            partOf: u.partOf ?? null,
+            fled: u.fled ?? false,
+          }
+        : {}),
     })),
+    ...(state.definition ? { blocked: [...(state.blocked ?? [])] } : {}),
   };
 }

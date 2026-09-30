@@ -53,6 +53,15 @@ export class BattleGateway implements OnModuleInit {
     });
   }
 
+  // M4-B: 스토리 전투 시작(탐험 세션 안). 시작 가능 여부·이야기 누비는 서버가 확인한다
+  @SubscribeMessage('battle:story:start')
+  startStory(@ConnectedSocket() client: Socket, @MessageBody() body: { encounterKey?: unknown }) {
+    return this.guard(async () => {
+      const playerId = this.rooms.playerOf(client.id);
+      return { ok: true as const, snapshot: await this.battles.startStory(playerId, body?.encounterKey) };
+    });
+  }
+
   @SubscribeMessage('battle:respond')
   respond(@ConnectedSocket() client: Socket, @MessageBody() body: { battleId?: unknown; join?: unknown }) {
     return this.guard(async () => {

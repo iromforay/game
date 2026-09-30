@@ -1,0 +1,468 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { HttpException } from '@nestjs/common';
+import { FakeDb } from './helpers/fake-prisma';
+import { StoryService } from '../src/turby/story/story.service';
+import { SessionService } from '../src/turby/session.service';
+import { EquipmentService } from '../src/turby/equipment.service';
+import { EVENT_BY_ID } from '../src/turby/story/story-data';
+import { StoryContentService } from '../src/turby/story/story-content.service';
+import { InventoryService } from '../src/turby/inventory.service';
+import { StageAccessService } from '../src/turby/story/stage-access.service';
+
+const P1 = 1n;
+const P2 = 2n;
+
+type Pos = { stageCode: string; x: number; y: number } | null;
+
+function setup(opts: { nickname?: string; starters?: number; flags?: Record<string, boolean> } = {}) {
+  const db = new FakeDb();
+  db.seed('player', { id: P1, device_uuid: 'dev-test-p1', nickname: opts.nickname ?? '터비 탐험가', session_token: 'token-p1-aaaaaaaa' });
+  db.seed('player', { id: P2, device_uuid: 'dev-test-p2', nickname: '다른사람', session_token: 'token-p2-bbbbbbbb' });
+  const nubi = db.seed('turby_character', { code: 'nubi', name: '누비' });
+  for (const [order, stage, code, title] of [[1, 'forest', 'nubi', '1장 — 숲'], [2, 'lake', 'muldeuli', '2장 — 호수'], [3, 'underground', 'pokshini', '3장 — 지하'], [4, 'ice', 'ganeuri', '4장 — 얼음'], [5, 'desert', 'geumbiti', '5장 — 사막']] as const) {
+    db.seed('story_chapter', { chapter_order: order, stage_code: stage, clear_character_code: code, title, map_width: 1000, map_height: 1000 });
+    if (code !== 'nubi') db.seed('turby_character', { code, name: code });
+  }
+  for (let i = 0; i < (opts.starters ?? 1); i++) {
+    db.seed('turby_instance', { owner_player_id: P1, character_id: nubi.id, acquired_via: 'starter', created_at: new Date(2026, 0, 10 - i), base_slot_id: 7n });
+  }
+  db.seed('item_definition', { code: 'glowing_yarn_dust', name: '빛나는 실가루', category: 'mission', max_stack: 99 });
+  db.seed('item_definition', { code: 'yarn_tremor_compass', name: '실의 떨림을 찾는 나침판', category: 'mission' });
+  db.seed('item_definition', { code: 'first_knot', name: '첫 매듭', category: 'relic', story_slot: 'story_1' });
+  db.seed('item_definition', { code: 'knit_needle', name: '뜨개바늘', category: 'equipment', equip_slot: 'weapon' });
+
+  let pos: Pos = null;
+  const rooms = {
+    roomOf: () => (pos ? { stageCode: pos.stageCode } : undefined),
+    memberPosition: () => (pos ? { x: pos.x, y: pos.y, inMap: true, connected: true } : null),
+  };
+  const flags = opts.flags ?? {};
+  const settings = { numberOr: (_k: string, d: number) => d, flag: (k: string, d: boolean) => flags[k] ?? d };
+  const content = {
+    stage: (code: string) =>
+      code === 'forest'
+        ? {
+            stageCode: 'forest',
+            regions: [{ id: 'forest_first_path_start', x: 100, y: 100, width: 50, height: 50 }],
+            points: [
+              ...Array.from({ length: 10 }, (_, i) => ({ id: `dust_${String(i + 1).padStart(2, '0')}`, x: 1000 + i * 100, y: 500, radius: 20 })),
+              { id: 'npc_bopuli', x: 300, y: 300, radius: 40 },
+              { id: 'dansuring', x: 2000, y: 2000, radius: 40 },
+            ],
+          }
+        : null,
+    dialogue: () => null,
+    bannedNameWords: () => [],
+  };
+  const stageAccess = new StageAccessService(db.client(), settings as never);
+  const service = new StoryService(db.client(), rooms as never, settings as never, content as never, stageAccess);
+  const session = new SessionService(db.client(), settings as never);
+  return { db, service, session, stageAccess, moveTo: (p: Pos) => (pos = p) };
+}
+
+async function codeOf(p: Promise<unknown>): Promise<string> {
+  try {
+    await p;
+  } catch (e) {
+    if (e instanceof HttpException) return (e.getResponse() as { code: string }).code;
+    throw e;
+  }
+  return 'NO_ERROR';
+}
+
+const progressOf = (db: FakeDb) => db.rows('player_story_progress', { player_id: P1 })[0] ?? null;
+const eventsOf = (db: FakeDb) => db.rows('player_story_event', { player_id: P1 }).map((r) => r.event_id as string);
+const qty = (db: FakeDb, code: string) => {
+  const def = db.rows('item_definition', { code })[0];
+  return (db.rows('player_item', { player_id: P1, item_definition_id: def.id })[0]?.quantity as number | undefined) ?? 0;
+};
+
+// 테스트 준비용: 전이표를 거치지 않고 특정 상태를 만든다
+function forceState(db: FakeDb, checkpoint: string, events: string[], extra: Record<string, unknown> = {}) {
+  const existing = progressOf(db);
+  if (existing) Object.assign(existing, { checkpoint, ...extra });
+  else db.seed('player_story_progress', { player_id: P1, checkpoint, ...extra });
+  for (const e of events) if (!eventsOf(db).includes(e)) db.seed('player_story_event', { player_id: P1, event_id: e });
+}
+
+async function finishOpening(s: ReturnType<typeof setup>) {
+  await s.service.completeEvent(P1, 'opening_fall_completed');
+  await s.service.saveName(P1, '하늘');
+  return s.service.completeEvent(P1, 'story_nubi_granted');
+}
+
+test('오프닝 전체: 이름 저장, 가장 오래된 스타터 누비를 이야기 누비로(선반 → 가방)', async () => {
+  const s = setup({ starters: 2 });
+  const res = await finishOpening(s);
+  assert.equal(res.story.checkpoint, 'OPENING_COMPLETE');
+  assert.equal(res.story.playerName, '하늘');
+  const nubis = s.db.rows('turby_instance', { owner_player_id: P1 });
+  assert.equal(nubis.length, 2, '새 누비를 만들지 않고 나머지 스타터도 유지');
+  const oldest = nubis.reduce((a, b) => ((a.created_at as Date) < (b.created_at as Date) ? a : b));
+  assert.equal(String(progressOf(s.db).story_nubi_turby_instance_id), String(oldest.id));
+  assert.equal(oldest.is_story_companion, true);
+  assert.equal(oldest.base_slot_id, null, '가방으로 이동(C8)');
+  assert.equal(nubis.filter((n) => n.is_story_companion).length, 1);
+  assert.deepEqual(eventsOf(s.db).sort(), ['opening_fall_completed', 'opening_name_saved', 'story_nubi_granted']);
+});
+
+test('스타터가 없는 계정은 오프닝 완료 때 이야기 누비를 새로 만든다', async () => {
+  const s = setup({ starters: 0 });
+  await finishOpening(s);
+  const nubis = s.db.rows('turby_instance', { owner_player_id: P1 });
+  assert.equal(nubis.length, 1);
+  assert.equal(nubis[0].is_story_companion, true);
+});
+
+test('같은 이벤트 재요청: 성공 응답, 영구 효과 1회', async () => {
+  const s = setup({ starters: 0 });
+  await finishOpening(s);
+  const again = await s.service.completeEvent(P1, 'story_nubi_granted');
+  assert.equal(again.alreadyCompleted, true);
+  assert.equal(s.db.rows('turby_instance', { owner_player_id: P1 }).length, 1, '누비 중복 생성 없음');
+  assert.equal(s.db.rows('player_story_event', { player_id: P1, event_id: 'story_nubi_granted' }).length, 1);
+});
+
+test('동시 재요청(직렬화 경유 3건): 보상 1회', async () => {
+  const s = setup({ starters: 0 });
+  await s.service.completeEvent(P1, 'opening_fall_completed');
+  await s.service.saveName(P1, '하늘');
+  const results = await Promise.all([1, 2, 3].map(() => s.service.completeEvent(P1, 'story_nubi_granted')));
+  assert.equal(results.filter((r) => !r.alreadyCompleted).length, 1);
+  assert.equal(s.db.rows('turby_instance', { owner_player_id: P1 }).length, 1);
+});
+
+test('동시 재요청(직렬화 우회 — DB unique만으로 방어): 한 건만 반영되고 나머지는 전부 롤백', async () => {
+  const s = setup({ starters: 0 });
+  await s.service.completeEvent(P1, 'opening_fall_completed');
+  await s.service.saveName(P1, '하늘');
+  const def = EVENT_BY_ID.get('story_nubi_granted')!;
+  const results = await Promise.all([s.service.runEvent(P1, def, null), s.service.runEvent(P1, def, null)]);
+  assert.equal(results.filter((r) => !r.alreadyCompleted).length, 1);
+  assert.equal(s.db.rows('player_story_event', { player_id: P1, event_id: 'story_nubi_granted' }).length, 1);
+  assert.equal(s.db.rows('turby_instance', { owner_player_id: P1 }).length, 1, '늦은 트랜잭션이 만든 누비는 롤백');
+  assert.equal(progressOf(s.db).checkpoint, 'OPENING_COMPLETE');
+});
+
+test('잘못된 순서·없는 이벤트·서버 전용 이벤트 거부, 상태 변화 없음', async () => {
+  const s = setup();
+  assert.equal(await codeOf(s.service.completeEvent(P1, 'story_nubi_granted')), 'STORY_EVENT_NOT_ALLOWED');
+  assert.equal(await codeOf(s.service.completeEvent(P1, 'no_such_event')), 'STORY_EVENT_UNKNOWN');
+  assert.equal(await codeOf(s.service.completeEvent(P1, 'forest_giant_knot_defeated')), 'STORY_EVENT_SERVER_ONLY');
+  assert.equal(await codeOf(s.service.completeEvent(P1, 'lake_unlocked')), 'STORY_EVENT_SERVER_ONLY');
+  assert.equal(await codeOf(s.service.completeEvent(P1, 'forest_first_path_started')), 'STORY_EVIDENCE_INVALID', '위치 증거가 먼저 걸린다');
+  assert.equal(progressOf(s.db)?.checkpoint ?? 'OPENING_NOT_STARTED', 'OPENING_NOT_STARTED');
+  assert.deepEqual(eventsOf(s.db), []);
+});
+
+test('이름: 규칙 위반 거부, 같은 이름 재시도는 성공, 다른 이름은 NAME_ALREADY_SET', async () => {
+  const s = setup();
+  await s.service.completeEvent(P1, 'opening_fall_completed');
+  assert.equal(await codeOf(s.service.saveName(P1, '하늘!!')), 'NAME_INVALID');
+  assert.equal(await codeOf(s.service.saveName(P1, '터비 탐험가')), 'NAME_INVALID');
+  const first = await s.service.saveName(P1, '하늘');
+  assert.equal(first.alreadyCompleted, false);
+  assert.equal((await s.service.saveName(P1, ' 하늘 ')).alreadyCompleted, true);
+  assert.equal(await codeOf(s.service.saveName(P1, '바다')), 'NAME_ALREADY_SET');
+  assert.equal(s.db.rows('player', { id: P1 })[0].nickname, '하늘');
+});
+
+test('이름 저장 전 이벤트 직접 요청: 기본 닉네임이면 거부, 기존 계정의 사용자 이름이면 입력 생략', async () => {
+  const fresh = setup();
+  await fresh.service.completeEvent(P1, 'opening_fall_completed');
+  assert.equal(await codeOf(fresh.service.completeEvent(P1, 'opening_name_saved')), 'STORY_PREREQUISITE_MISSING');
+  const legacy = setup({ nickname: '옛날유저' });
+  await legacy.service.completeEvent(P1, 'opening_fall_completed');
+  const state = await legacy.service.getState(P1);
+  assert.equal(state.needsName, false);
+  assert.equal((await legacy.service.completeEvent(P1, 'opening_name_saved')).story.checkpoint, 'OPENING_NAME_SAVED');
+});
+
+test('1장 트리거: 서버 좌표가 구역 밖이면 거부, 안이면 CH01_STARTED', async () => {
+  const s = setup();
+  await finishOpening(s);
+  s.moveTo({ stageCode: 'forest', x: 400, y: 400 });
+  assert.equal(await codeOf(s.service.completeEvent(P1, 'forest_first_path_started')), 'STORY_EVIDENCE_INVALID');
+  s.moveTo({ stageCode: 'lake', x: 120, y: 120 });
+  assert.equal(await codeOf(s.service.completeEvent(P1, 'forest_first_path_started')), 'STORY_EVIDENCE_INVALID', '다른 지역');
+  s.moveTo({ stageCode: 'forest', x: 120, y: 120 });
+  assert.equal((await s.service.completeEvent(P1, 'forest_first_path_started')).story.checkpoint, 'CH01_STARTED');
+});
+
+test('서버 전투 확정 이벤트: 동반 이벤트(보풀이 구조)와 함께 기록', async () => {
+  const s = setup();
+  forceState(s.db, 'CH01_STARTED', ['opening_name_saved', 'story_nubi_granted', 'forest_first_path_started']);
+  const res = await s.service.completeEvent(P1, 'forest_stitchling_battle_won', 'server');
+  assert.ok(res.story.completedEvents.includes('forest_bopul_rescued'));
+  assert.equal(res.story.checkpoint, 'CH01_STARTED', '전투 승리는 체크포인트를 바꾸지 않음');
+  assert.equal(res.story.resume.segmentId, 'ch01.bopul_clue');
+});
+
+test('실가루: 활성 전 거부, 없는 오브젝트·먼 위치 거부, 중복 조사 1회, 10개 전달 후 나침판과 목표 종료', async () => {
+  const s = setup();
+  forceState(s.db, 'CH01_STARTED', ['opening_name_saved', 'story_nubi_granted', 'forest_first_path_started', 'forest_bopul_rescued']);
+  s.moveTo({ stageCode: 'forest', x: 1000, y: 500 });
+  assert.equal(await codeOf(s.service.collectObject(P1, 'forest_glowing_dust', 'dust_01')), 'OBJECTIVE_NOT_ACTIVE', '단서 전');
+
+  await s.service.completeEvent(P1, 'forest_dansuring_clue_learned');
+  assert.equal(await codeOf(s.service.collectObject(P1, 'forest_glowing_dust', 'dust_11')), 'OBJECT_UNKNOWN', '11번째 오브젝트 없음(수량 초과 불가)');
+  assert.equal(await codeOf(s.service.collectObject(P1, 'forest_glowing_dust', -1)), 'OBJECT_UNKNOWN');
+  assert.equal(await codeOf(s.service.collectObject(P1, 'nope', 'dust_01')), 'OBJECTIVE_UNKNOWN');
+  assert.equal(await codeOf(s.service.collectObject(P1, 'forest_glowing_dust', 'dust_02')), 'STORY_EVIDENCE_INVALID', 'dust_02는 100px 떨어져 있음');
+
+  const first = await s.service.collectObject(P1, 'forest_glowing_dust', 'dust_01');
+  const dup = await s.service.collectObject(P1, 'forest_glowing_dust', 'dust_01');
+  assert.equal(first.alreadyCollected, false);
+  assert.equal(dup.alreadyCollected, true);
+  assert.equal(qty(s.db, 'glowing_yarn_dust'), 1, '재조사로 실가루가 늘지 않음');
+
+  s.moveTo({ stageCode: 'forest', x: 300, y: 300 });
+  assert.equal(await codeOf(s.service.completeEvent(P1, 'forest_compass_granted')), 'STORY_PREREQUISITE_MISSING', '1/10');
+
+  for (let i = 2; i <= 10; i++) {
+    const id = `dust_${String(i).padStart(2, '0')}`;
+    s.moveTo({ stageCode: 'forest', x: 1000 + (i - 1) * 100, y: 500 });
+    await s.service.collectObject(P1, 'forest_glowing_dust', id);
+  }
+  assert.equal(qty(s.db, 'glowing_yarn_dust'), 10);
+  s.moveTo({ stageCode: 'forest', x: 300, y: 300 });
+  const res = await s.service.completeEvent(P1, 'forest_compass_granted');
+  assert.equal(res.story.checkpoint, 'CH01_COMPASS_ACQUIRED');
+  assert.equal(qty(s.db, 'glowing_yarn_dust'), 0, '10개 차감');
+  assert.equal(qty(s.db, 'yarn_tremor_compass'), 1);
+  assert.deepEqual(res.grants, [{ itemCode: 'yarn_tremor_compass', quantity: 1, destination: 'story' }]);
+
+  s.moveTo({ stageCode: 'forest', x: 1000, y: 500 });
+  assert.equal(await codeOf(s.service.collectObject(P1, 'forest_glowing_dust', 'dust_01')), 'NO_ERROR', '완료 후 재요청은 이미 수집으로 성공 응답');
+  assert.equal(qty(s.db, 'glowing_yarn_dust'), 0, '완료 후 변경 없음');
+});
+
+test('트랜잭션 실패 시 이벤트·차감·체크포인트 모두 롤백', async () => {
+  const s = setup();
+  forceState(s.db, 'CH01_BOPUL_RESCUED', ['opening_name_saved', 'story_nubi_granted', 'forest_first_path_started', 'forest_bopul_rescued', 'forest_dansuring_clue_learned']);
+  for (let i = 1; i <= 10; i++) s.db.seed('player_story_objective_progress', { player_id: P1, objective_key: 'forest_glowing_dust', object_id: `dust_${String(i).padStart(2, '0')}` });
+  const dust = s.db.rows('item_definition', { code: 'glowing_yarn_dust' })[0];
+  s.db.seed('player_item', { player_id: P1, item_definition_id: dust.id, quantity: 10 });
+  s.moveTo({ stageCode: 'forest', x: 300, y: 300 });
+  s.db.failOn = (table) => table === 'player_item'; // 나침판 지급(create) 단계에서 실패
+  await assert.rejects(s.service.completeEvent(P1, 'forest_compass_granted'));
+  assert.equal(qty(s.db, 'glowing_yarn_dust'), 10, '차감 롤백');
+  assert.equal(qty(s.db, 'yarn_tremor_compass'), 0);
+  assert.equal(progressOf(s.db).checkpoint, 'CH01_BOPUL_RESCUED');
+  assert.ok(!eventsOf(s.db).includes('forest_compass_granted'));
+  s.db.failOn = null;
+  assert.equal((await s.service.completeEvent(P1, 'forest_compass_granted')).alreadyCompleted, false, '실패 뒤 재시도 가능');
+});
+
+test('첫 매듭: 획득(미장착)과 장착은 별개, 장착 때만 성장 단계 1, 동시 장착 1회', async () => {
+  const s = setup();
+  await finishOpening(s);
+  forceState(s.db, 'CH01_COMPASS_ACQUIRED', ['forest_first_path_started', 'forest_bopul_rescued', 'forest_dansuring_clue_learned', 'forest_compass_granted']);
+
+  assert.equal(await codeOf(s.service.completeEvent(P1, 'forest_first_knot_awakened')), 'STORY_PREREQUISITE_MISSING', '보스 승리 전');
+  await s.service.completeEvent(P1, 'forest_giant_knot_defeated', 'server');
+  const awakened = await s.service.completeEvent(P1, 'forest_first_knot_awakened');
+  assert.deepEqual(awakened.grants, [{ itemCode: 'first_knot', quantity: 1, destination: 'story' }]);
+  assert.equal(awakened.story.resume.tutorial, 'relic_equip');
+  assert.equal(progressOf(s.db).nubi_growth_stage, 0, '획득만으로는 성장하지 않음(D2)');
+  assert.equal(s.db.rows('turby_equipment').length, 0);
+
+  const def = EVENT_BY_ID.get('forest_first_knot_equipped')!;
+  const both = await Promise.all([s.service.runEvent(P1, def, null), s.service.runEvent(P1, def, null)]);
+  assert.equal(both.filter((r) => !r.alreadyCompleted).length, 1);
+  const equip = s.db.rows('turby_equipment');
+  assert.equal(equip.length, 1);
+  assert.equal(equip[0].slot_key, 'story_1');
+  assert.equal(String(equip[0].turby_instance_id), String(progressOf(s.db).story_nubi_turby_instance_id));
+  assert.equal(progressOf(s.db).nubi_growth_stage, 1);
+  assert.equal(progressOf(s.db).checkpoint, 'CH01_FIRST_KNOT_EQUIPPED');
+  assert.equal(qty(s.db, 'first_knot'), 1, '장착 후에도 기록으로 남음');
+});
+
+test('1장 완료: 단수링 발견 → 태초의 매듭 → 호수 개방(같은 트랜잭션)', async () => {
+  const s = setup({ flags: { 'story.stageAccessV2': true } });
+  forceState(s.db, 'CH01_FIRST_KNOT_EQUIPPED', ['opening_name_saved', 'story_nubi_granted', 'forest_first_knot_equipped'], { nubi_growth_stage: 1 });
+  assert.equal(await codeOf(s.service.completeEvent(P1, 'forest_primordial_knot_seen')), 'STORY_PREREQUISITE_MISSING', '단수링 발견 전');
+  s.moveTo({ stageCode: 'forest', x: 2000, y: 2010 });
+  await s.service.completeEvent(P1, 'forest_dansuring_found');
+  const res = await s.service.completeEvent(P1, 'forest_primordial_knot_seen');
+  assert.equal(res.story.checkpoint, 'CH01_COMPLETE');
+  assert.equal(res.story.chapterCode, 'ch02');
+  const lake = res.story.stages.find((x) => x.stageCode === 'lake')!;
+  assert.deepEqual([lake.canEnter, lake.canProgress], [true, true]);
+});
+
+test('대화 데이터: 진행할 수 없는 장은 CHAPTER_LOCKED(스포일러 방지), 파일 없으면 DIALOGUE_NOT_FOUND', async () => {
+  const s = setup();
+  assert.equal(await codeOf(s.service.dialogue(P1, 'ch02')), 'CHAPTER_LOCKED');
+  assert.equal(await codeOf(s.service.dialogue(P1, 'opening')), 'DIALOGUE_NOT_FOUND', '가짜 콘텐츠에는 파일 없음');
+  assert.equal(await codeOf(s.service.dialogue(P1, '../etc')), 'DIALOGUE_NOT_FOUND');
+  assert.equal(await codeOf(s.service.stageData(P1, 'lake')), 'STAGE_LOCKED');
+});
+
+test('세션: 토큰으로만 플레이어 결정, 다른 플레이어 번호 사용 거부', async () => {
+  const s = setup();
+  assert.equal(await s.session.require('token-p1-aaaaaaaa'), P1);
+  assert.equal(await codeOf(s.session.require(undefined)), 'SESSION_REQUIRED');
+  assert.equal(await codeOf(s.session.require('forged-token-000')), 'SESSION_INVALID');
+  assert.equal(await codeOf(s.session.checkLegacy('2', 'token-p1-aaaaaaaa')), 'SESSION_PLAYER_MISMATCH', 'P1 토큰으로 P2 경로 조작');
+  assert.equal(await codeOf(s.session.checkLegacy('1', 'token-p1-aaaaaaaa')), 'NO_ERROR');
+  assert.equal(await codeOf(s.session.checkLegacy('2', undefined)), 'NO_ERROR', '전환 기간: 토큰 없는 구 클라이언트 허용');
+  const strict = setup({ flags: { 'auth.requireSession': true } });
+  assert.equal(await codeOf(strict.session.checkLegacy('2', undefined)), 'SESSION_REQUIRED');
+  assert.equal(strict.session.socketTokenOk('token-p1-aaaaaaaa', undefined), false);
+  assert.equal(s.session.socketTokenOk('token-p1-aaaaaaaa', 'wrong-token-xyz'), false);
+  assert.equal(s.session.socketTokenOk('token-p1-aaaaaaaa', 'token-p1-aaaaaaaa'), true);
+  const token = await s.session.ensureToken(P2, null);
+  assert.equal(s.db.rows('player', { id: P2 })[0].session_token, token);
+  assert.equal(await s.session.ensureToken(P1, 'token-p1-aaaaaaaa'), 'token-p1-aaaaaaaa', '기존 토큰 유지');
+});
+
+test('일반 장착 API는 이야기 슬롯을 바꿀 수 없다', async () => {
+  const s = setup();
+  const equipment = new EquipmentService(s.db.client());
+  assert.equal(await codeOf(equipment.unequip('1', '10', 'story_1')), 'STORY_SLOT_RESERVED');
+  assert.equal(await codeOf(equipment.unequip('1', '10', '')), 'INVALID_SLOT');
+  const mine = s.db.rows('turby_instance', { owner_player_id: P1 })[0];
+  assert.equal(await codeOf(equipment.equip('1', String(mine.id), 'first_knot')), 'NOT_EQUIPPABLE', '유물은 일반 장착 불가');
+});
+
+test('일반 보상: 가방 40칸이 차면 넘친 수량만 임시 보관함, 이야기 보상은 항상 지급', async () => {
+  const s = setup();
+  const needle = s.db.rows('item_definition', { code: 'knit_needle' })[0];
+  s.db.seed('player_item', { player_id: P1, item_definition_id: needle.id, quantity: 39 });
+  const tx = s.db.client() as unknown as Parameters<StoryService['grantItem']>[0];
+  const g1 = await s.service.grantItem(tx, P1, { itemCode: 'knit_needle', quantity: 3 }, 'test:a');
+  assert.deepEqual(g1, { itemCode: 'knit_needle', quantity: 2, destination: 'overflow' });
+  assert.equal(qty(s.db, 'knit_needle'), 40);
+  assert.equal(s.db.rows('player_item_overflow', { player_id: P1 })[0].quantity, 2);
+  await assert.rejects(s.service.grantItem(tx, P1, { itemCode: 'knit_needle', quantity: 1 }, 'test:a'), (e: { code?: string }) => e.code === 'P2002', '같은 보상 키는 한 번만');
+  const g2 = await s.service.grantItem(tx, P1, { itemCode: 'glowing_yarn_dust', quantity: 5 }, 'test:b');
+  assert.deepEqual(g2, { itemCode: 'glowing_yarn_dust', quantity: 5, destination: 'story' });
+});
+
+test('최초 세션 토큰 동시 발급: 두 요청 모두 DB에 최종 저장된 같은 토큰을 받는다', async () => {
+  const s = setup();
+  s.db.seed('player', { id: 3n, device_uuid: 'dev-test-p3', nickname: '셋째', session_token: null });
+  const [a, b] = await Promise.all([s.session.ensureToken(3n, null), s.session.ensureToken(3n, null)]);
+  assert.equal(a, b);
+  assert.equal(s.db.rows('player', { id: 3n })[0].session_token, a);
+  assert.equal(await s.session.require(a), 3n, '받은 토큰이 실제로 유효');
+});
+
+test('이벤트가 아닌 다른 unique 충돌은 완료 성공으로 오인하지 않는다(보관함 키 충돌)', async () => {
+  const s = setup();
+  const needle = s.db.rows('item_definition', { code: 'knit_needle' })[0];
+  s.db.seed('player_item', { player_id: P1, item_definition_id: needle.id, quantity: 40 });
+  s.db.seed('player_item_overflow', { player_id: P1, item_definition_id: needle.id, quantity: 1, source_key: 'story:test_general_reward:knit_needle' });
+  const def = { id: 'test_general_reward', chapter: 0, allowedAt: ['OPENING_NOT_STARTED' as const], requires: [], evidence: { kind: 'none' as const }, grant: [{ itemCode: 'knit_needle', quantity: 1 }] };
+  await assert.rejects(s.service.runEvent(P1, def, null), (e: { code?: string }) => e.code === 'P2002', '원래 오류 그대로 전달');
+  assert.equal(s.db.rows('player_story_event', { player_id: P1, event_id: 'test_general_reward' }).length, 0, '이벤트 행도 롤백');
+  assert.equal(qty(s.db, 'knit_needle'), 40);
+});
+
+// ---------- M1-B: 임시 보관함 수령 ----------
+
+function overflowSetup(bagQuantity: number, overflowQuantity: number) {
+  const s = setup();
+  const needle = s.db.rows('item_definition', { code: 'knit_needle' })[0];
+  s.db.seed('player_item', { player_id: P1, item_definition_id: needle.id, quantity: bagQuantity });
+  const row = s.db.seed('player_item_overflow', { player_id: P1, item_definition_id: needle.id, quantity: overflowQuantity, source_key: 'test:ovf' });
+  const settings = { numberOr: (_k: string, d: number) => d, flag: (_k: string, d: boolean) => d };
+  const inventory = new InventoryService(s.db.client(), settings as never);
+  return { ...s, inventory, rowId: String(row.id), row };
+}
+
+test('보관함 전체 수령: 가방 여유가 충분하면 모두 옮기고 claimed_at 기록, 목록에서 사라짐', async () => {
+  const o = overflowSetup(30, 3);
+  assert.equal((await o.inventory.listOverflow(P1)).length, 1);
+  const res = await o.inventory.claimOverflow(P1, o.rowId);
+  assert.deepEqual(res, { id: o.rowId, itemCode: 'knit_needle', claimed: 3, remaining: 0, fullyClaimed: true });
+  assert.equal(qty(o.db, 'knit_needle'), 33);
+  assert.ok(o.row.claimed_at instanceof Date);
+  assert.equal((await o.inventory.listOverflow(P1)).length, 0);
+  assert.equal(await codeOf(o.inventory.claimOverflow(P1, o.rowId)), 'OVERFLOW_NOT_FOUND', '이미 수령한 항목');
+});
+
+test('보관함 부분 수령: 들어가는 만큼만 옮기고 나머지는 보관함에 유지', async () => {
+  const o = overflowSetup(38, 5);
+  const res = await o.inventory.claimOverflow(P1, o.rowId);
+  assert.deepEqual([res.claimed, res.remaining, res.fullyClaimed], [2, 3, false]);
+  assert.equal(qty(o.db, 'knit_needle'), 40);
+  assert.equal(o.row.quantity, 3);
+  assert.equal(o.row.claimed_at, null);
+});
+
+test('보관함: 가방에 빈 칸이 없으면 상태를 바꾸지 않고 BAG_FULL', async () => {
+  const o = overflowSetup(40, 2);
+  assert.equal(await codeOf(o.inventory.claimOverflow(P1, o.rowId)), 'BAG_FULL');
+  assert.equal(o.row.quantity, 2);
+  assert.equal(o.row.claimed_at, null);
+  assert.equal(qty(o.db, 'knit_needle'), 40);
+});
+
+test('보관함: 다른 플레이어의 항목은 조회·수령 불가, 잘못된 번호 거부', async () => {
+  const o = overflowSetup(0, 2);
+  assert.equal((await o.inventory.listOverflow(P2)).length, 0);
+  assert.equal(await codeOf(o.inventory.claimOverflow(P2, o.rowId)), 'OVERFLOW_NOT_FOUND', '존재 여부도 알려 주지 않음');
+  assert.equal(await codeOf(o.inventory.claimOverflow(P1, 'abc')), 'INVALID_OVERFLOW');
+  assert.equal(await codeOf(o.inventory.claimOverflow(P1, '-1')), 'INVALID_OVERFLOW');
+  assert.equal(o.row.quantity, 2);
+});
+
+test('보관함 동시 수령: 같은 항목을 동시에 두 번 수령해도 한 번만 지급', async () => {
+  const full = overflowSetup(10, 4);
+  const r1 = await Promise.allSettled([full.inventory.claimOverflow(P1, full.rowId), full.inventory.claimOverflow(P1, full.rowId)]);
+  assert.equal(r1.filter((r) => r.status === 'fulfilled').length, 1);
+  assert.equal(qty(full.db, 'knit_needle'), 14, '4개만 지급');
+
+  const partial = overflowSetup(37, 6); // 3칸만 비어 있음
+  await Promise.allSettled([partial.inventory.claimOverflow(P1, partial.rowId), partial.inventory.claimOverflow(P1, partial.rowId)]);
+  assert.equal(qty(partial.db, 'knit_needle'), 40, '가방을 넘치게 채우지 않음');
+  assert.equal((partial.row.quantity as number) + qty(partial.db, 'knit_needle'), 43, '보관함+가방 합계 보존(중복 지급·유실 없음)');
+});
+
+// ---------- M1-B: 오프닝 런타임 대화 ----------
+
+test('오프닝 대화 API: 런타임 파일이 검증된 4구간 39항목을 그대로 반환', async () => {
+  const s = setup();
+  const settings = { numberOr: (_k: string, d: number) => d, flag: (_k: string, d: boolean) => d };
+  const rooms = { roomOf: () => undefined, memberPosition: () => null };
+  const service = new StoryService(s.db.client(), rooms as never, settings as never, new StoryContentService(), s.stageAccess);
+  const data = (await service.dialogue(P1, 'opening')) as { chapterCode: string; segments: { segmentId: string; entries: unknown[] }[] };
+  assert.equal(data.chapterCode, 'opening');
+  assert.deepEqual(data.segments.map((x) => x.segmentId), ['opening.fall', 'opening.meeting', 'opening.name_echo', 'opening.promise']);
+  assert.equal(data.segments.reduce((n, x) => n + x.entries.length, 0), 39);
+  assert.equal(await codeOf(service.dialogue(P1, 'ch01')), 'CHAPTER_LOCKED', '다른 장은 오프닝 완료 전 잠김');
+});
+
+// ---------- M3: 스타터 지급을 오프닝 완료 이벤트로 이전 ----------
+
+test('신규 계정: identify는 스타터를 주지 않고, 오프닝 완료 때 이야기 누비가 정확히 하나 생긴다', async () => {
+  const s = setup({ starters: 0 });
+  const { PlayerService } = await import('../src/turby/player.service');
+  // getInventory의 include(캐릭터·등급·장비)는 가짜 DB가 지원하지 않으므로 여기서는 개체 수만 본다
+  const players = new PlayerService(s.db.client(), s.session);
+  (players as unknown as { getInventory: (id: bigint) => Promise<unknown[]> }).getInventory = async (id: bigint) => s.db.rows('turby_instance', { owner_player_id: id });
+
+  const first = await players.identify('dev-test-newcomer');
+  assert.deepEqual(first.turbys, [], '이름 입력 전 스타터 없음');
+  const again = await players.identify('dev-test-newcomer');
+  assert.equal(again.sessionToken, first.sessionToken, '재식별해도 같은 토큰');
+  const newId = BigInt(first.playerId);
+  assert.equal(s.db.rows('turby_instance', { owner_player_id: newId }).length, 0);
+
+  await s.service.completeEvent(newId, 'opening_fall_completed');
+  assert.equal(s.db.rows('turby_instance', { owner_player_id: newId }).length, 0, '이름 입력 전 스타터 없음');
+  await s.service.saveName(newId, '새싹');
+  await s.service.completeEvent(newId, 'story_nubi_granted');
+  await s.service.completeEvent(newId, 'story_nubi_granted');
+  const nubis = s.db.rows('turby_instance', { owner_player_id: newId });
+  assert.equal(nubis.length, 1, '재요청해도 하나');
+  assert.equal(nubis[0].is_story_companion, true);
+  assert.equal(nubis[0].acquired_via, 'starter');
+  await players.identify('dev-test-newcomer');
+  assert.equal(s.db.rows('turby_instance', { owner_player_id: newId }).length, 1, 'identify가 다시 지급하지 않음');
+});
+

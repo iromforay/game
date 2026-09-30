@@ -8,8 +8,7 @@ import { MiniMap } from '../ui/MiniMap';
 import type { MapMarker, MapView } from '../ui/MiniMap';
 import { loadWorldImages } from '../assets/loader';
 import { ensureUiPlaceholders } from '../assets/placeholders';
-import { getStoryChapters, getChapterStatuses, getCurrentChapter } from '../config/story';
-import { inventory } from '../state/inventory';
+import { loadChapterStatuses, getCurrentChapter } from '../config/story';
 import { roomClient, RoomApiError } from '../net/roomClient';
 import { battleClient } from '../net/battleClient';
 import type { BattleSnapshot, BattleUpdate, WildState } from '../net/battleTypes';
@@ -96,12 +95,15 @@ export class MapScene extends Phaser.Scene {
   }
 
   async create() {
+    // v15: 재접속 시 서버가 오프닝 미완료로 탐험 세션을 닫으면 마을로 돌아간다(오래된 화면 상태로 머물지 않음)
+    const offReturn = roomClient.on('returnToVillage', () => this.scene.start('Village'));
+    this.events.once('shutdown', offReturn);
     // Phaser는 scene.start()로 재진입해도 같은 씬 인스턴스를 재사용하므로, 여기서 초기화 안 하면
     // 맵 복귀할 때마다(전투 후 등) 마커가 중복 누적됨(실제로 겪은 버그) — 매번 새로 채움
     this.markers = [];
 
     const stage = getStage(this.stageCode);
-    const current = getCurrentChapter(getChapterStatuses(await getStoryChapters(), inventory.getAll()));
+    const current = getCurrentChapter((await loadChapterStatuses()).statuses);
     ensureUiPlaceholders(this);
     this.stageWidth = stage.width;
     this.stageHeight = stage.height;
@@ -120,11 +122,11 @@ export class MapScene extends Phaser.Scene {
 
     this.joystick = new VirtualJoystick(this);
 
-    // 스토리 목적지(docs/Turby_story.md 3.4): 지금 열린 장이 이 맵이면 대표 터비 스폰 위치를 별로 표시
+    // 구 판정(롤백 상태)일 때만: 지금 열린 장이 이 맵이면 대표 터비 스폰 위치를 별로 표시. 신 판정에서는 포획이 장을 열지 않아 표시하지 않는다.
     const targets: MapMarker[] = [];
-    if (current && current.chapter.stageCode === stage.code) {
+    if (current && current.legacyTargetCode && current.chapter.stageCode === stage.code) {
       stage.wildSpawns.forEach((spawn, index) => {
-        if (spawn.characterCode !== current.chapter.clearCharacterCode || ['captured', 'removed'].includes(roomClient.wilds.get(index) ?? 'free')) return;
+        if (spawn.characterCode !== current.legacyTargetCode || ['captured', 'removed'].includes(roomClient.wilds.get(index) ?? 'free')) return;
         targets.push({ id: `target-${index}`, type: 'target', name: `대표 터비 ${current.clearCharacterName}`, x: spawn.x, y: spawn.y, hint: `${current.chapter.titleKo}: '${current.clearCharacterName}'를 조우해 직접 포획하면 다음 지역이 열려요.` });
       });
     }
