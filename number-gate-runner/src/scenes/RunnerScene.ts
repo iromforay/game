@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { applyGate, gateLabel } from '../model';
+import { applyGate, gateLabel, swarmPenetration } from '../model';
 import type { GateRule } from '../model';
 import heroCommanderUrl from '../assets/units/hero-commander.png';
 import advancingSquadUrl from '../assets/units/advancing-squad.png';
@@ -48,6 +48,19 @@ interface CombatVisual {
   used: boolean;
 }
 
+interface SwarmUnit {
+  sprite: Phaser.GameObjects.Image;
+  distance: number;
+  laneY: number;
+  alive: boolean;
+}
+
+interface SwarmWave {
+  title: string;
+  units: SwarmUnit[];
+  resolved: boolean;
+}
+
 export class RunnerScene extends Phaser.Scene {
   private runDistance = 0;
   private squadY = 360;
@@ -60,13 +73,16 @@ export class RunnerScene extends Phaser.Scene {
   private progressBar!: Phaser.GameObjects.Rectangle;
   private statusText!: Phaser.GameObjects.Text;
   private choiceText!: Phaser.GameObjects.Text;
+  private comboText!: Phaser.GameObjects.Text;
   private gates: GateVisual[] = [];
   private combats: CombatVisual[] = [];
+  private swarms: SwarmWave[] = [];
   private obstacles: Phaser.GameObjects.Container[] = [];
   private activeCombat: CombatVisual | null = null;
   private nextShotAt = 0;
   private nextEnemyHitAt = 0;
   private dragging = false;
+  private combo = 0;
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys;
 
   constructor() {
@@ -90,11 +106,13 @@ export class RunnerScene extends Phaser.Scene {
     this.state = 'running';
     this.gates = [];
     this.combats = [];
+    this.swarms = [];
     this.obstacles = [];
     this.activeCombat = null;
     this.nextShotAt = 0;
     this.nextEnemyHitAt = 0;
     this.dragging = false;
+    this.combo = 0;
     this.cursors = this.input.keyboard?.createCursorKeys();
 
     this.drawBackground();
@@ -127,14 +145,31 @@ export class RunnerScene extends Phaser.Scene {
   }
 
   private createCourse() {
-    this.addGatePair({ distance: 650, upper: { operation: 'add', value: 120 }, lower: { operation: 'add', value: 60 } });
-    this.addCombat({ distance: 1320, strength: 95, title: '태엽 돌격병', sprite: 'clockwork-grunt' });
-    this.addObstacle(1740, 490, 50);
-    this.addGatePair({ distance: 2200, upper: { operation: 'multiply', value: 2 }, lower: { operation: 'add', value: 180 } });
-    this.addCombat({ distance: 2860, strength: 180, title: '태엽 강습대', sprite: 'clockwork-grunt' });
-    this.addCombat({ distance: 3570, strength: 360, title: '공성 전차', sprite: 'siege-tank' });
-    this.addGatePair({ distance: 4200, upper: { operation: 'add', value: 350 }, lower: { operation: 'multiply', value: 2 } });
+    this.addGatePair({ distance: 520, upper: { operation: 'add', value: 120 }, lower: { operation: 'add', value: 60 } });
+    this.addSwarm(1050, 40, '태엽 병정 선발대');
+    this.addObstacle(1580, 490, 50);
+    this.addGatePair({ distance: 1980, upper: { operation: 'multiply', value: 2 }, lower: { operation: 'add', value: 180 } });
+    this.addSwarm(2520, 60, '태엽 병정 대군');
+    this.addCombat({ distance: 3260, strength: 360, title: '공성 전차', sprite: 'siege-tank' });
+    this.addSwarm(3850, 80, '태엽 병정 총공세');
+    this.addGatePair({ distance: 4300, upper: { operation: 'add', value: 350 }, lower: { operation: 'multiply', value: 2 } });
     this.addCombat({ distance: 5000, strength: 760, title: '장난감 성문', boss: true });
+  }
+
+  private addSwarm(distance: number, count: number, title: string) {
+    const units: SwarmUnit[] = [];
+    for (let i = 0; i < count; i += 1) {
+      const column = Math.floor(i / 8);
+      const row = i % 8;
+      const laneY = 190 + row * 51 + Phaser.Math.Between(-12, 12);
+      const unitDistance = distance + column * 54 + Phaser.Math.Between(-18, 18);
+      const size = Phaser.Math.Between(30, 39);
+      const sprite = this.add.image(WIDTH + 240, laneY, 'clockwork-grunt')
+        .setDisplaySize(size, Math.round(size * 0.83))
+        .setDepth(14 + row);
+      units.push({ sprite, distance: unitDistance, laneY, alive: true });
+    }
+    this.swarms.push({ title, units, resolved: false });
   }
 
   private addGatePair(def: GatePairDef) {
@@ -230,6 +265,7 @@ export class RunnerScene extends Phaser.Scene {
     this.progressBar = this.add.rectangle(880, 30, 0, 12, 0x38bdf8).setOrigin(0, 0.5).setDepth(102);
     this.statusText = this.add.text(1045, 51, '결승까지 전진', { fontSize: '14px', color: '#cbd5e1' }).setOrigin(0.5).setDepth(102);
     this.choiceText = this.add.text(WIDTH / 2, 102, '', { fontSize: '24px', color: '#ffffff', backgroundColor: '#0f172acc', padding: { x: 16, y: 8 } }).setOrigin(0.5).setDepth(110).setAlpha(0);
+    this.comboText = this.add.text(1215, 105, '', { fontFamily: 'Arial Black, sans-serif', fontSize: '26px', color: '#fef08a', stroke: '#7c2d12', strokeThickness: 6 }).setOrigin(1, 0.5).setDepth(112);
   }
 
   private bindInput() {
@@ -258,10 +294,13 @@ export class RunnerScene extends Phaser.Scene {
     this.countText.setPosition(PLAYER_X, this.squadY - 95);
 
     if (this.state === 'running') this.runDistance += RUN_SPEED * dt;
+    else if (this.state === 'combat') this.runDistance += RUN_SPEED * (this.activeCombat?.def.boss ? 0.12 : 0.3) * dt;
     this.updateCoursePositions();
     if (this.state === 'running') this.updateGateFire(time);
+    if (this.state === 'running') this.updateSwarmFire(time);
     this.checkGates();
     this.checkObstacles();
+    this.checkSwarmCollisions();
     this.checkCombatStart();
     if (this.state === 'combat') this.updateCombat(time);
     this.progressBar.width = 330 * Phaser.Math.Clamp(this.runDistance / FINISH_DISTANCE, 0, 1);
@@ -275,6 +314,13 @@ export class RunnerScene extends Phaser.Scene {
     }
     for (const obstacle of this.obstacles) obstacle.x = PLAYER_X + Number(obstacle.getData('distance')) - this.runDistance;
     for (const combat of this.combats) combat.container.x = PLAYER_X + combat.def.distance - this.runDistance;
+    for (const wave of this.swarms) {
+      for (const unit of wave.units) {
+        if (!unit.alive) continue;
+        unit.sprite.x = PLAYER_X + unit.distance - this.runDistance;
+        unit.sprite.y = unit.laneY + Math.sin((this.runDistance + unit.distance) * 0.025) * 5;
+      }
+    }
   }
 
   private checkGates() {
@@ -315,6 +361,81 @@ export class RunnerScene extends Phaser.Scene {
     text.setText(gateLabel(rule)).setScale(1.18).setColor('#fef08a');
     this.time.delayedCall(55, () => text.setScale(1).setColor('#ffffff'));
     this.spawnBullet(target.x - 8, target.y);
+  }
+
+  private updateSwarmFire(time: number) {
+    if (time < this.nextShotAt) return;
+    const candidates = this.swarms
+      .flatMap((wave) => wave.units)
+      .filter((unit) => unit.alive && unit.sprite.x >= PLAYER_X + 70 && unit.sprite.x <= 1020)
+      .sort((a, b) => a.sprite.x - b.sprite.x);
+    if (candidates.length === 0) return;
+
+    this.nextShotAt = time + 82;
+    const penetration = swarmPenetration(this.actualCount);
+    const victims = candidates.slice(0, penetration);
+    const targetX = victims.reduce((sum, unit) => sum + unit.sprite.x, 0) / victims.length;
+    const targetY = victims.reduce((sum, unit) => sum + unit.sprite.y, 0) / victims.length;
+    this.spawnBullet(targetX, targetY);
+    for (const victim of victims) this.destroySwarmUnit(victim);
+    this.statusText.setText(`관통 사격  ${penetration}연속 파괴`);
+  }
+
+  private destroySwarmUnit(unit: SwarmUnit) {
+    if (!unit.alive) return;
+    unit.alive = false;
+    this.combo += 1;
+    this.comboText.setText(`${this.combo} COMBO`).setScale(1.18);
+    this.tweens.add({ targets: this.comboText, scale: 1, duration: 90 });
+    this.spawnToyDebris(unit.sprite.x, unit.sprite.y);
+    this.tweens.add({
+      targets: unit.sprite,
+      scale: 1.8,
+      angle: Phaser.Math.Between(-120, 120),
+      alpha: 0,
+      duration: 105,
+      onComplete: () => unit.sprite.setVisible(false),
+    });
+  }
+
+  private spawnToyDebris(x: number, y: number) {
+    for (let i = 0; i < 4; i += 1) {
+      const part = i % 2 === 0
+        ? this.add.circle(x, y, Phaser.Math.Between(2, 4), 0xfbbf24).setDepth(45)
+        : this.add.rectangle(x, y, Phaser.Math.Between(4, 8), 3, 0xb91c1c).setDepth(45);
+      this.tweens.add({
+        targets: part,
+        x: x + Phaser.Math.Between(-34, 34),
+        y: y + Phaser.Math.Between(-38, 32),
+        angle: Phaser.Math.Between(-180, 180),
+        alpha: 0,
+        duration: Phaser.Math.Between(160, 260),
+        onComplete: () => part.destroy(),
+      });
+    }
+  }
+
+  private checkSwarmCollisions() {
+    for (const wave of this.swarms) {
+      if (wave.resolved) continue;
+      const alive = wave.units.filter((unit) => unit.alive);
+      if (alive.length === 0) {
+        wave.resolved = true;
+        this.flashChoice(`${wave.title} 완전 격파!  ${this.combo} COMBO`);
+        this.cameras.main.flash(90, 255, 226, 120, false);
+        continue;
+      }
+      const collided = alive.filter((unit) => unit.sprite.x <= PLAYER_X + 35);
+      if (collided.length === 0) continue;
+      for (const unit of collided) {
+        unit.alive = false;
+        unit.sprite.setVisible(false);
+      }
+      this.actualCount = Math.max(0, this.actualCount - collided.length);
+      this.cameras.main.shake(90, 0.004);
+      this.flashChoice(`잔존 병정 충돌  −${collided.length}`);
+      this.refreshCount();
+    }
   }
 
   private checkObstacles() {

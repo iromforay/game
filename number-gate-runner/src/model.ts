@@ -32,3 +32,7 @@ export function representativeCount(actualCount: number): number {
   if (actualCount < 800) return 16;
   return 20;
 }
+
+export function swarmPenetration(actualCount: number): number {
+  return Math.min(12, Math.max(3, 3 + Math.floor(Math.max(0, actualCount) / 280)));
+}
