@@ -525,3 +525,110 @@ test('신규 계정: identify는 스타터를 주지 않고, 오프닝 완료 �
   assert.equal(s.db.rows('turby_instance', { owner_player_id: newId }).length, 1, 'identify가 다시 지급하지 않음');
 });
 
+
+// ---------- v3 M4-D: 인벤토리 기본 기능·첫 매듭 장착 ----------
+
+const settingsStub = { numberOr: (_k: string, d: number) => d, flag: (_k: string, d: boolean) => d };
+const knotReady = (s: ReturnType<typeof setup>) =>
+  forceState(s.db, 'CH01_COMPASS_ACQUIRED', ['opening_name_saved', 'story_nubi_granted', 'forest_first_path_started', 'forest_bopul_rescued', 'forest_dansuring_clue_learned', 'forest_compass_granted', 'forest_giant_knot_defeated']);
+
+test('v3 인벤토리 조회: 분류(재료·소비·장비·스토리)·필수 필드·중첩(max_stack 초과는 다음 칸)·스토리 아이템 잠금', async () => {
+  const s = setup();
+  await finishOpening(s);
+  const dust = s.db.rows('item_definition', { code: 'glowing_yarn_dust' })[0];
+  dust.category = 'material'; // 재료로 쓰는 경우의 중첩 확인(정의 max_stack 99)
+  s.db.seed('item_definition', { code: 'tonic', name: '회복 실타래', category: 'consumable', max_stack: 5, description: '체력 회복' });
+  const tonic = s.db.rows('item_definition', { code: 'tonic' })[0];
+  const needle = s.db.rows('item_definition', { code: 'knit_needle' })[0];
+  s.db.seed('player_item', { player_id: P1, item_definition_id: dust.id, quantity: 150, is_new: true, first_acquired_at: new Date(2026, 8, 1), last_acquired_at: new Date(2026, 8, 2) });
+  s.db.seed('player_item', { player_id: P1, item_definition_id: tonic.id, quantity: 7, is_new: false });
+  s.db.seed('player_item', { player_id: P1, item_definition_id: needle.id, quantity: 1, is_new: false });
+  knotReady(s);
+  await s.service.completeEvent(P1, 'forest_first_knot_awakened'); // 첫 매듭 지급(스토리 아이템 → 지급 때 잠금 기록)
+
+  const inv = new InventoryService(s.db.client(), settingsStub as never);
+  const { items } = await inv.list(P1);
+  const by = (code: string) => items.find((i) => i.itemCode === code)!;
+  assert.deepEqual(items.map((i) => [i.itemCode, i.tabLabel]).sort(), [['first_knot', '스토리'], ['glowing_yarn_dust', '재료'], ['knit_needle', '장비'], ['tonic', '소비']]);
+  const d = by('glowing_yarn_dust');
+  assert.deepEqual([d.recordId, d.itemDefinitionId, d.iconKey, d.name, d.quantity, d.maxStack, d.isNew], [String(dust.id), dust.id, 'glowing_yarn_dust', '빛나는 실가루', 150, 99, true]);
+  assert.deepEqual(d.stacks, [99, 51], '한 칸은 max_stack까지');
+  assert.equal(d.firstAcquiredAt, new Date(2026, 8, 1).toISOString());
+  assert.deepEqual(by('tonic').stacks, [5, 2]);
+  const knot = by('first_knot');
+  assert.equal(knot.isLocked, true, '스토리 아이템 잠금');
+  assert.equal(s.db.rows('player_item', { player_id: P1, item_definition_id: s.db.rows('item_definition', { code: 'first_knot' })[0].id })[0].is_locked, true, 'DB에도 잠금 기록');
+  assert.deepEqual(knot.permissions, { sell: false, discard: false, trade: false, consume: false, unequip: false }, '판매·폐기·일반 소비·해제 불가');
+  assert.ok(knot.lockReason);
+  assert.equal(knot.storySlot, 'story_1');
+  assert.deepEqual(knot.storyAction, { kind: 'equip_story_nubi', label: '누비에게 장착', available: true, reason: null });
+  assert.equal(by('knit_needle').isLocked, false);
+  assert.equal(by('tonic').permissions.consume, true);
+});
+
+test('v3 신규 표시: 상세를 연 아이템 하나만 읽음 처리, 다른 항목은 유지, 재접속(새 서비스) 후에도 유지', async () => {
+  const s = setup();
+  const dust = s.db.rows('item_definition', { code: 'glowing_yarn_dust' })[0];
+  const needle = s.db.rows('item_definition', { code: 'knit_needle' })[0];
+  s.db.seed('player_item', { player_id: P1, item_definition_id: dust.id, quantity: 3, is_new: true });
+  s.db.seed('player_item', { player_id: P1, item_definition_id: needle.id, quantity: 1, is_new: true });
+  const inv = new InventoryService(s.db.client(), settingsStub as never);
+  await inv.list(P1); // 화면을 여는 것만으로는 읽음 처리하지 않음
+  assert.deepEqual((await inv.list(P1)).items.map((i) => i.isNew), [true, true]);
+  assert.deepEqual(await inv.markItemSeen(P1, 'glowing_yarn_dust'), { itemCode: 'glowing_yarn_dust', cleared: true });
+  assert.deepEqual(await inv.markItemSeen(P1, 'glowing_yarn_dust'), { itemCode: 'glowing_yarn_dust', cleared: false }, '재요청은 변화 없음');
+  const again = new InventoryService(s.db.client(), settingsStub as never);
+  const items = (await again.list(P1)).items;
+  assert.equal(items.find((i) => i.itemCode === 'glowing_yarn_dust')!.isNew, false);
+  assert.equal(items.find((i) => i.itemCode === 'knit_needle')!.isNew, true, '다른 항목은 그대로');
+  assert.equal(await codeOf(inv.markItemSeen(P1, '../x')), 'INVALID_ITEM');
+  assert.equal(await codeOf(inv.markItemSeen(P1, 'no_such_item')), 'ITEM_NOT_FOUND');
+});
+
+test('v3 첫 매듭 장착 거부: 알 수 없는 유물·잘못된 체크포인트·미보유·서버 전용 이벤트 직접 요청·다른 터비(일반 장착 API)', async () => {
+  const s = setup();
+  await finishOpening(s);
+  assert.equal(await codeOf(s.service.equipRelic(P1, 'knit_needle')), 'RELIC_UNKNOWN', '유물 코드만(이벤트 ID를 보내지 않음)');
+  assert.equal(await codeOf(s.service.equipRelic(P1, 'first_knot')), 'STORY_EVENT_NOT_ALLOWED', '1장 나침판 전');
+  knotReady(s);
+  assert.equal(await codeOf(s.service.equipRelic(P1, 'first_knot')), 'STORY_PREREQUISITE_MISSING', '각성 전(선행 이벤트 없음)');
+  forceState(s.db, 'CH01_COMPASS_ACQUIRED', ['forest_first_knot_awakened']); // 이벤트만 있고 아이템은 없음
+  assert.equal(await codeOf(s.service.equipRelic(P1, 'first_knot')), 'STORY_PREREQUISITE_MISSING', '첫 매듭 미보유');
+  assert.equal(await codeOf(s.service.completeEvent(P1, 'forest_first_knot_equipped')), 'STORY_EVENT_SERVER_ONLY');
+  const other = s.db.seed('turby_instance', { owner_player_id: P1, character_id: s.db.rows('turby_character', { code: 'nubi' })[0].id, acquired_via: 'wild_capture' });
+  assert.equal(await codeOf(new EquipmentService(s.db.client()).equip('1', String(other.id), 'first_knot')), 'NOT_EQUIPPABLE', '다른 터비·일반 슬롯 장착 불가');
+  assert.equal(s.db.rows('turby_equipment').length, 0);
+  assert.ok(!eventsOf(s.db).includes('forest_first_knot_equipped'));
+});
+
+test('v3 첫 매듭 장착: 이야기 누비 story_1에 1회(동시 3건), 아이템은 소비 없이 보유·잠금, 장착 장면 재생 지시, 재요청은 현재 상태, 재접속 후 유지', async () => {
+  const s = setup();
+  await finishOpening(s);
+  knotReady(s);
+  await s.service.completeEvent(P1, 'forest_first_knot_awakened');
+  const results = await Promise.all([1, 2, 3].map(() => s.service.equipRelic(P1, 'first_knot')));
+  const fresh = results.filter((r) => !r.alreadyCompleted);
+  assert.equal(fresh.length, 1);
+  assert.deepEqual(fresh[0].play, { segmentId: 'ch01.first_knot_equipped', endAfter: 'ch01.first_knot_equipped' });
+  assert.ok(results.filter((r) => r.alreadyCompleted).every((r) => r.play === null), '재요청은 장면을 다시 틀지 않음');
+  assert.equal(s.db.rows('turby_equipment').length, 1);
+  assert.equal(eventsOf(s.db).filter((e) => e === 'forest_first_knot_equipped').length, 1);
+  assert.equal(qty(s.db, 'first_knot'), 1, '소비 없이 보유');
+  assert.equal(progressOf(s.db).checkpoint, 'CH01_FIRST_KNOT_EQUIPPED');
+
+  // 재접속: 새 서비스 인스턴스로 같은 DB를 읽어도 장착 상태 유지
+  const again = setupSameDb(s);
+  const state = await again.getState(P1);
+  assert.deepEqual(state.storyNubi!.slots, [{ slotKey: 'story_1', itemCode: 'first_knot', name: '첫 매듭' }]);
+  const knot = (await new InventoryService(s.db.client(), settingsStub as never).list(P1)).items.find((i) => i.itemCode === 'first_knot')!;
+  assert.deepEqual([knot.equippedOnStoryNubi, knot.storyAction, knot.isLocked, knot.permissions.unequip], [true, null, true, false]);
+  assert.equal(await codeOf(new EquipmentService(s.db.client()).unequip('1', String(progressOf(s.db).story_nubi_turby_instance_id), 'story_1')), 'STORY_SLOT_RESERVED', '해제 불가');
+  const later = await again.equipRelic(P1, 'first_knot');
+  assert.deepEqual([later.alreadyCompleted, later.play], [true, null]);
+});
+
+function setupSameDb(s: ReturnType<typeof setup>) {
+  const content = { stage: () => null, dialogue: () => null, bannedNameWords: () => [] };
+  const rooms = { roomOf: () => undefined, memberPosition: () => null };
+  return new StoryService(s.db.client(), rooms as never, settingsStub as never, content as never, new StageAccessService(s.db.client(), settingsStub as never));
+}

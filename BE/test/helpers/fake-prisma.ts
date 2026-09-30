@@ -96,6 +96,7 @@ export class FakeDb {
         if ('gte' in c) return (row[k] as number) >= (c.gte as number);
         if ('in' in c) return (c.in as unknown[]).some((x) => same(x, row[k]));
         if ('not' in c) return !same(row[k], c.not);
+        if ('startsWith' in c) return typeof row[k] === 'string' && (row[k] as string).startsWith(c.startsWith as string);
         throw new Error(`fake-prisma: 지원하지 않는 조건 ${k}`);
       }
       return same(row[k], cond);

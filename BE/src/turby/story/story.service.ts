@@ -12,6 +12,7 @@ import {
   DEFAULT_NICKNAME,
   ENCOUNTER_BY_KEY,
   EVENT_BY_ID,
+  RELIC_EQUIP_EVENT,
   OBJECTIVE_BY_KEY,
   SEGMENT_AFTER_EVENT,
   SEGMENT_CHAIN_END,
@@ -20,6 +21,7 @@ import {
   TRIGGER_BY_ID,
   STORY_CATEGORIES,
   STORY_NUBI_CHARACTER,
+  STORY_SLOT_PREFIX,
   type Checkpoint,
   type Evidence,
   type ItemGrant,
@@ -66,7 +68,8 @@ export interface StoryStateDto {
   playerName: string;
   completedEvents: string[];
   objectives: Record<string, string[]>;
-  storyNubi: { turbyId: string; growthStage: number } | null;
+  // slots: 이야기 누비에 장착된 유물(장착 전 슬롯은 클라이언트가 보유 유물의 story_slot으로 빈 칸 표시)
+  storyNubi: { turbyId: string; growthStage: number; slots: { slotKey: string; itemCode: string; name: string }[] } | null;
   storyNubiMissing: boolean;
   stages: StageStatusDto[]; // 지역 입장·표시 상태(M2: story.stageAccessV2에 따라 신·구 판정)
   // 지금 전달을 기다리는 수집 목표(서버 인벤토리 수량 기준, Codex v2 §2.3). 없으면 null
@@ -142,7 +145,9 @@ export class StoryService {
       playerName: player.nickname,
       completedEvents: [...snap.events].sort(),
       objectives: Object.fromEntries([...snap.objectives].map(([k, v]) => [k, [...v].sort()])),
-      storyNubi: progress?.story_nubi_turby_instance_id ? { turbyId: progress.story_nubi_turby_instance_id.toString(), growthStage: progress.nubi_growth_stage } : null,
+      storyNubi: progress?.story_nubi_turby_instance_id
+        ? { turbyId: progress.story_nubi_turby_instance_id.toString(), growthStage: progress.nubi_growth_stage, slots: await this.storySlotsOf(progress.story_nubi_turby_instance_id) }
+        : null,
       storyNubiMissing,
       stages: await this.stageAccess.statuses(playerId),
       delivery: await this.deliveryOf(playerId, snap),
@@ -193,7 +198,7 @@ export class StoryService {
         for (const g of def.grant ?? []) grants.push(await this.grantItem(tx, playerId, g, `story:${def.id}:${g.itemCode}`));
         for (const code of def.markUsed ?? []) await this.markUsed(tx, playerId, code);
         if (def.grantStoryNubi) await this.grantStoryNubi(tx, playerId, progress.story_nubi_turby_instance_id);
-        if (def.equipRelic) await this.equipRelic(tx, playerId, progress.story_nubi_turby_instance_id, def.equipRelic.itemCode, def.equipRelic.slotKey);
+        if (def.equipRelic) await this.equipRelicTx(tx, playerId, progress.story_nubi_turby_instance_id, def.equipRelic.itemCode, def.equipRelic.slotKey);
 
         const growth = def.equipRelic ? Math.max(snap.growthStage, def.equipRelic.growthStage) : snap.growthStage;
         const to = nextCheckpoint(snap.checkpoint, def.to);
@@ -214,6 +219,16 @@ export class StoryService {
       else throw err;
     }
     return { eventId: def.id, alreadyCompleted: already, grants: already ? [] : grants, consumed: already ? [] : consumed, story: await this.getState(playerId), play: already ? null : playOf(SEGMENT_AFTER_EVENT[def.id]) };
+  }
+
+  // ---------- 유물 장착(v3 §3) ----------
+
+  // 인벤토리 "누비에게 장착": 클라이언트는 유물 코드만 보낸다. 이벤트·대상(이야기 누비)·체크포인트·보유는 서버가 정하고 검증한다.
+  // 재요청은 중복 장착·중복 이벤트 없이 현재 상태(alreadyCompleted)를 돌려준다.
+  async equipRelic(playerId: bigint, itemCodeRaw: unknown): Promise<StoryEventResultDto> {
+    const eventId = typeof itemCodeRaw === 'string' ? RELIC_EQUIP_EVENT.get(itemCodeRaw) : undefined;
+    if (!eventId) throw gameError(404, 'RELIC_UNKNOWN', '이야기 누비에게 장착할 수 있는 유물이 아닙니다.');
+    return this.serialize(playerId, () => this.runEvent(playerId, EVENT_BY_ID.get(eventId)!, null));
   }
 
   // ---------- 트리거(M4-C) ----------
@@ -342,6 +357,11 @@ export class StoryService {
   }
 
   // ---------- 내부: 상태 ----------
+
+  private async storySlotsOf(nubiId: bigint) {
+    const rows = await this.prisma.turby_equipment.findMany({ where: { turby_instance_id: nubiId, slot_key: { startsWith: STORY_SLOT_PREFIX } }, include: { item_definition: true } });
+    return rows.map((r) => ({ slotKey: r.slot_key, itemCode: r.item_definition.code, name: r.item_definition.name })).sort((a, b) => a.slotKey.localeCompare(b.slotKey));
+  }
 
   private async readSnapshot(playerId: bigint): Promise<StorySnapshot> {
     const [progress, events, objectives] = await Promise.all([
@@ -484,7 +504,7 @@ export class StoryService {
     }
     const overflow = isStory ? 0 : g.quantity - toBag;
 
-    if (toBag > 0) await addToPlayerItem(tx, playerId, def.id, toBag, now);
+    if (toBag > 0) await addToPlayerItem(tx, playerId, def.id, toBag, now, isStory);
     if (overflow > 0) {
       await tx.player_item_overflow.create({ data: { player_id: playerId, item_definition_id: def.id, quantity: overflow, source_key: sourceKey } });
       return { itemCode: g.itemCode, quantity: overflow, destination: 'overflow' };
@@ -529,7 +549,7 @@ export class StoryService {
     await tx.player_story_progress.update({ where: { player_id: playerId }, data: { story_nubi_turby_instance_id: instanceId } });
   }
 
-  private async equipRelic(tx: Tx, playerId: bigint, nubiId: bigint | null, itemCode: string, slotKey: string) {
+  private async equipRelicTx(tx: Tx, playerId: bigint, nubiId: bigint | null, itemCode: string, slotKey: string) {
     if (!nubiId) throw gameError(409, 'STORY_NUBI_MISSING', '이야기 누비를 찾을 수 없습니다.');
     const nubi = await tx.turby_instance.findUnique({ where: { id: nubiId } });
     if (!nubi || nubi.owner_player_id !== playerId || !nubi.is_story_companion) throw gameError(409, 'STORY_NUBI_MISSING', '이야기 누비를 찾을 수 없습니다.');

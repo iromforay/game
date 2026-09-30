@@ -75,9 +75,10 @@ export class MeController {
     return this.inventory.claimOverflow(await this.session.require(token), id);
   }
 
-  @Post('inventory/seen')
+  // 상세를 연 아이템 하나만 신규 표시 해제(v3 §2.3)
+  @Post('inventory/items/:itemCode/seen')
   @HttpCode(200)
-  async inventorySeen(@Headers(SESSION_HEADER) token: string, @Body('tab') tab: unknown) {
-    return this.inventory.markSeen(await this.session.require(token), tab);
+  async inventorySeen(@Headers(SESSION_HEADER) token: string, @Param('itemCode') itemCode: string) {
+    return this.inventory.markItemSeen(await this.session.require(token), itemCode);
   }
 }

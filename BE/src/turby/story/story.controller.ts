@@ -28,6 +28,13 @@ export class StoryController {
     return this.story.collectObject(await this.session.require(token), objectiveKey, objectId);
   }
 
+  // 인벤토리 "누비에게 장착": 유물 코드만 받는다(이벤트·대상 터비는 서버가 정함). 응답 play = 장착 장면
+  @Post('story/relics/:itemCode/equip')
+  @HttpCode(200)
+  async equipRelic(@Headers(SESSION_HEADER) token: string, @Param('itemCode') itemCode: string) {
+    return this.story.equipRelic(await this.session.require(token), itemCode);
+  }
+
   // 이야기 지점 상호작용(보풀이 전달 등). 서버가 위치·진행·보유 수량을 판정하고 재생할 구간을 돌려준다
   @Post('story/triggers/:triggerId')
   @HttpCode(200)

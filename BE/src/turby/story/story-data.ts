@@ -127,6 +127,8 @@ export const STORY_EVENTS: StoryEventDef[] = [
     chapter: 1,
     allowedAt: ['CH01_COMPASS_ACQUIRED'],
     requires: ['forest_first_knot_awakened'],
+    // 인벤토리 "누비에게 장착"(POST /player/me/story/relics/:itemCode/equip)만 기록 — 이벤트 ID·터비를 클라이언트가 고르지 않는다(v3 §3)
+    serverOnly: true,
     evidence: { kind: 'none' },
     equipRelic: { itemCode: 'first_knot', slotKey: 'story_1', growthStage: 1 }, // Codex D2: 성장 단계는 장착 트랜잭션에서만 올린다
     to: 'CH01_FIRST_KNOT_EQUIPPED',
@@ -160,7 +162,7 @@ export const STORY_OBJECTIVES: StoryObjectiveDef[] = [
 export const EVENT_BY_ID = new Map(STORY_EVENTS.map((e) => [e.id, e]));
 export const OBJECTIVE_BY_KEY = new Map(STORY_OBJECTIVES.map((o) => [o.key, o]));
 
-// 인벤토리의 "누비에게 장착" 버튼이 호출할 이벤트(유물 전용 장착 API를 따로 두지 않는다)
+// 인벤토리의 "누비에게 장착"이 서버에서 실행할 이벤트(유물 코드 → 이벤트). 대상은 언제나 이야기 누비
 export const RELIC_EQUIP_EVENT = new Map(STORY_EVENTS.filter((e) => e.equipRelic).map((e) => [e.equipRelic!.itemCode, e.id]));
 
 // 이야기 탭(가방 40칸에 포함하지 않음)
