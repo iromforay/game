@@ -7,6 +7,8 @@
 // - nameInput은 이름 저장 성공 전에는 넘어가지 않는다. 이미 이름이 있는 계정은 입력 없이 opening_name_saved만 요청.
 // - 건너뛰기는 이미 본 구간에서만 허용하며, nameInput과 구간 완료 이벤트는 건너뛰지 않는다.
 // - 문구는 JSON 그대로 쓴다. {playerName} 토큰만 치환한다.
+// - storyBattle은 서버 스토리 전투(battle:story:start)를 연다. 이기거나 이미 이긴 전투면 다음 항목으로, 지면 다시 도전한다.
+//   승리 이벤트는 서버가 기록하므로 여기서 completeEvent를 보내지 않는다. 전투는 건너뛰지 않는다.
 
 export type Portrait = 'player' | 'nubi' | 'bopuli' | 'dansuring';
 export type Expression = 'neutral' | 'worried' | 'happy' | 'weak' | 'relieved' | 'counting';
@@ -44,7 +46,12 @@ export interface StoryEventEntry {
   dialogueId: string;
   eventId: string;
 }
-export type DialogueEntry = LineEntry | NarrationEntry | TitleEntry | NameInputEntry | StoryEventEntry;
+export interface StoryBattleEntry {
+  kind: 'storyBattle';
+  dialogueId: string;
+  encounterKey: string;
+}
+export type DialogueEntry = LineEntry | NarrationEntry | TitleEntry | NameInputEntry | StoryEventEntry | StoryBattleEntry;
 
 export interface DialogueSegment {
   segmentId: string;
@@ -70,6 +77,8 @@ export interface ShownLine {
 }
 
 export type Advance = 'next' | 'skip';
+// won: 이번에 이김 / already_won: 서버가 이미 이긴 전투라고 답함(STORY_ENCOUNTER_DONE) / lost: 패배·무승부·취소
+export type StoryBattleResult = 'won' | 'already_won' | 'lost';
 export type NameSubmitResult = { ok: true } | { ok: false; message: string };
 
 export interface RunnerPorts {
@@ -84,9 +93,11 @@ export interface RunnerPorts {
   isSeen(segmentId: string): boolean;
   markSeen(segmentId: string): void;
   onSegment?(segmentId: string): void;
+  startBattle?(encounterKey: string): Promise<StoryBattleResult>; // 전투가 있는 장만 제공. 전투 화면을 열고 끝날 때 resolve, 통신 실패는 throw
 }
 
 export const PLAYER_NAME_TOKEN = '{playerName}';
+export const STORY_BATTLE_RETRY_MESSAGE = '전투에서 졌어요. 다시 도전해 볼까요?';
 
 export function fillName(text: string, playerName: string): string {
   return text.split(PLAYER_NAME_TOKEN).join(playerName);
@@ -145,6 +156,20 @@ export async function runDialogue(file: DialogueFile, startSegmentId: string, po
             return { ok: false, message: (err as { message?: string }).message ?? '이름을 저장하지 못했어요.' };
           }
         });
+        continue;
+      }
+      if (entry.kind === 'storyBattle') {
+        skipping = false; // 전투는 건너뛰지 않는다
+        const startBattle = ports.startBattle;
+        if (!startBattle) throw new Error(`전투 포트 없이 전투 항목을 만났습니다: ${entry.dialogueId}`);
+        for (;;) {
+          let result: StoryBattleResult = 'lost';
+          await withRetry(ports, async () => {
+            result = await startBattle(entry.encounterKey);
+          }, '전투를 시작하지 못했어요. 다시 시도해 주세요.');
+          if (result !== 'lost') break;
+          await ports.waitRetry(STORY_BATTLE_RETRY_MESSAGE);
+        }
         continue;
       }
       if (entry.kind === 'storyEvent') {
