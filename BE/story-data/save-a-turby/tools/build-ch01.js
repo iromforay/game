@@ -6,8 +6,10 @@
 const fs = require('fs');
 const path = require('path');
 
+const { docsRoot } = require('./docs-root');
+
 const ROOT = path.resolve(__dirname, '../../../..');
-const MD = path.join(ROOT, 'docs/scene/1장.md');
+const MD = path.join(docsRoot(ROOT), 'docs/scene/1장.md');
 const OUT = path.join(ROOT, 'BE/story-data/save-a-turby/dialogue/ch01.json');
 const lines = fs.readFileSync(MD, 'utf8').split(/\r?\n/);
 const L = (n) => {

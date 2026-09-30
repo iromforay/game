@@ -7,7 +7,9 @@ import { resumeOf } from '../src/turby/story/story-rules';
 import type { Checkpoint } from '../src/turby/story/story-data';
 
 const ROOT = resolve(__dirname, '../..');
-const schema = JSON.parse(readFileSync(join(ROOT, 'docs/dev/save-a-turby/m0/dialogue.schema.json'), 'utf8'));
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const DOCS = (require(join(ROOT, 'BE/story-data/save-a-turby/tools/docs-root.js')) as { docsRoot: (root: string) => string }).docsRoot(ROOT);
+const schema = JSON.parse(readFileSync(join(DOCS, 'docs/dev/save-a-turby/m0/dialogue.schema.json'), 'utf8'));
 const load = (code: string) => JSON.parse(readFileSync(join(ROOT, `BE/story-data/save-a-turby/dialogue/${code}.json`), 'utf8'));
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { EXCLUDED } = require(join(ROOT, 'BE/story-data/save-a-turby/tools/build-ch01.js')) as { EXCLUDED: Record<number, string> };
@@ -44,7 +46,7 @@ function checkSchema(file: { segments: Segment[] } & Record<string, unknown>) {
 
 // MD의 대사 영역을 순서대로 읽어 JSON 항목(대사·지문·제목)과 한 줄씩 대조. 제외 목록 외의 줄이 빠지거나 바뀌면 실패
 function compareWithMd(file: { segments: Segment[] }, mdPath: string, fromHeading: string, excluded: Record<number, string>) {
-  const raw = readFileSync(join(ROOT, mdPath), 'utf8').split(/\r?\n/);
+  const raw = readFileSync(join(DOCS, mdPath), 'utf8').split(/\r?\n/);
   const start = raw.findIndex((l) => l.trim() === fromHeading);
   assert.ok(start >= 0, `시작 제목 ${fromHeading}`);
   const md: { line: number; kind: 'line' | 'text'; label?: string; text: string }[] = [];
@@ -107,7 +109,7 @@ test('오프닝 대화: 같은 검증기로 스키마·MD 대조 통과(회귀)'
   const file = load('opening');
   checkSchema(file);
   const excluded: Record<number, string> = {};
-  const md = readFileSync(join(ROOT, 'docs/scene/오프닝.md'), 'utf8').split(/\r?\n/);
+  const md = readFileSync(join(DOCS, 'docs/scene/오프닝.md'), 'utf8').split(/\r?\n/);
   md.forEach((l, i) => {
     const s = l.trim();
     // 연출 지시문 2줄과 이름 입력값 자리 표시(빈 {playerName} 줄)
