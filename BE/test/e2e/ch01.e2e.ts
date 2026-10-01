@@ -109,6 +109,7 @@ test('1장 E2E ①: 신규 계정 오프닝 → 오프닝 전 이탈 차단 → 
       await g.until('결과 확정', 's.battle && s.battle.settled === true && s.battle.resultButton');
       await g.capture('09_story_battle_result');
       await g.clickResult("s.scenes.includes('StoryDialogue')");
+      await g.page.setViewportSize({ width: 1280, height: 720 }); // 장면 재개(대화 화면 wake)와 창 크기 변경이 겹쳐도 다음 입력이 한 번에 반영된다
       await g.advanceDialogue("!s.scenes.includes('StoryDialogue')");
       assert.equal(checkpointOf(device), 'CH01_BOPUL_RESCUED');
     },
