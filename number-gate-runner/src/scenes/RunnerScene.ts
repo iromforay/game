@@ -367,7 +367,12 @@ export class RunnerScene extends Phaser.Scene {
     if (time < this.nextShotAt) return;
     const candidates = this.swarms
       .flatMap((wave) => wave.units)
-      .filter((unit) => unit.alive && unit.sprite.x >= PLAYER_X + 70 && unit.sprite.x <= 1020)
+      .filter((unit) => (
+        unit.alive
+        && unit.sprite.x >= PLAYER_X + 70
+        && unit.sprite.x <= 1020
+        && Math.abs(unit.sprite.y - this.squadY) <= 42
+      ))
       .sort((a, b) => a.sprite.x - b.sprite.x);
     if (candidates.length === 0) return;
 
@@ -375,8 +380,7 @@ export class RunnerScene extends Phaser.Scene {
     const penetration = swarmPenetration(this.actualCount);
     const victims = candidates.slice(0, penetration);
     const targetX = victims.reduce((sum, unit) => sum + unit.sprite.x, 0) / victims.length;
-    const targetY = victims.reduce((sum, unit) => sum + unit.sprite.y, 0) / victims.length;
-    this.spawnBullet(targetX, targetY);
+    this.spawnBullet(targetX, this.squadY);
     for (const victim of victims) this.destroySwarmUnit(victim);
     this.statusText.setText(`관통 사격  ${penetration}연속 파괴`);
   }
@@ -466,7 +470,9 @@ export class RunnerScene extends Phaser.Scene {
   private updateCombat(time: number) {
     const combat = this.activeCombat;
     if (!combat) return;
-    if (time >= this.nextShotAt) {
+    const isAimed = Math.abs(this.squadY - combat.container.y) <= 68;
+    if (!isAimed) this.statusText.setText('상하 이동으로 적을 조준하세요');
+    if (time >= this.nextShotAt && isAimed) {
       this.nextShotAt = time + 90;
       const damage = Math.max(3, Math.ceil(this.actualCount / 38));
       combat.health = Math.max(0, combat.health - damage);
@@ -474,6 +480,7 @@ export class RunnerScene extends Phaser.Scene {
       this.spawnBullet(combat.container.x - 55, combat.container.y);
       combat.container.setScale(0.98);
       this.time.delayedCall(45, () => combat.container.setScale(1));
+      this.statusText.setText(combat.def.boss ? '결승 요새 집중사격!' : '정예 적 집중사격');
     }
     if (time >= this.nextEnemyHitAt && combat.health > 0) {
       this.nextEnemyHitAt = time + (combat.def.boss ? 420 : 650);
@@ -501,7 +508,7 @@ export class RunnerScene extends Phaser.Scene {
 
   private spawnBullet(targetX: number, targetY: number) {
     const armyScale = Math.log2(Math.max(1, this.actualCount) / 50 + 1);
-    const volleySize = Phaser.Math.Clamp(Math.ceil(10 + armyScale * 13), 12, 56);
+    const volleySize = Phaser.Math.Clamp(Math.ceil(6 + armyScale * 7), 8, 32);
     const muzzleCount = Phaser.Math.Clamp(Math.ceil(volleySize / 8), 2, 7);
 
     for (let i = 0; i < muzzleCount; i += 1) {
@@ -534,11 +541,9 @@ export class RunnerScene extends Phaser.Scene {
     this.cameras.main.shake(35, 0.0012 + volleySize * 0.000015);
 
     for (let i = 0; i < volleySize; i += 1) {
-      const rowSpread = ((i % 13) - 6) * 9;
+      const rowSpread = ((i % 9) - 4) * 7;
       const fromX = PLAYER_X + Phaser.Math.Between(-48, 72);
-      const fromY = this.squadY + rowSpread + Phaser.Math.Between(-15, 15);
-      const hitY = targetY + Phaser.Math.Between(-62, 62);
-      const angle = Phaser.Math.RadToDeg(Phaser.Math.Angle.Between(fromX, fromY, targetX, hitY));
+      const fromY = this.squadY + rowSpread + Phaser.Math.Between(-4, 4);
       const tracer = this.add.rectangle(
         fromX,
         fromY,
@@ -548,16 +553,14 @@ export class RunnerScene extends Phaser.Scene {
         Phaser.Math.FloatBetween(0.72, 1),
       )
         .setOrigin(0.5)
-        .setAngle(angle)
         .setDepth(40);
       this.tweens.add({
         targets: tracer,
         x: targetX,
-        y: hitY,
         duration: Phaser.Math.Between(65, 115),
         delay: (i % 8) * 4,
         onComplete: () => {
-          if (i % 6 === 0) this.spawnImpactSpark(targetX, hitY);
+          if (i % 7 === 0) this.spawnImpactSpark(targetX, fromY);
           tracer.destroy();
         },
       });
