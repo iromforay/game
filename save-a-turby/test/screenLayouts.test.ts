@@ -3,6 +3,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { clampPage, equipPanelLayout, homeLayout, marketLayout, nameInputLayout, pageOf, stageSelectLayout, toastFont, villageHudLayout, type Rect } from '../src/ui/screenLayouts.ts';
 import { finalPx, MIN_BODY_PX, MIN_BUTTON_PX } from '../src/ui/responsive.ts';
+import { compareDrawPaths } from '../src/ui/drawOrder.ts';
+import { buyLabel, buyStateOf, equipRows, stageBadgeLabel } from '../src/ui/screenStates.ts';
 
 const inCanvas = (r: Rect) => r.x >= 0 && r.y >= 0 && r.x + r.w <= 1280 && r.y + r.h <= 720;
 const overlap = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
@@ -136,4 +138,30 @@ test('마을 HUD: 재화·인벤토리 버튼·지역 이름·미니맵이 화�
     // 버튼 글자("인벤토리" 4자)가 버튼 폭 안
     assert.ok(4 * L.font.button <= L.inventory.w - 16, `${scale}: 인벤토리 버튼 폭`);
   }
+});
+
+test('입력 맨 위 판정(그리기 순서): 뒤에 그려진 것이 위, 같은 컨테이너에서는 뒤 자식이 위, 컨테이너와 그 자식이면 자식이 위 — 한 번도 그려지지 않은 새 대상도 같은 기준', () => {
+  const order = (paths: number[][]) => [...paths].sort(compareDrawPaths);
+  // 창(컨테이너 7) 안의 뒤판[7,0]·탭[7,3]·칸[7,9]과, 그 아래 HUD 버튼[4]
+  assert.deepEqual(order([[7, 0], [4], [7, 9], [7, 3]])[0], [7, 9], '가장 나중에 그려진 창 안 요소가 맨 위');
+  assert.deepEqual(order([[4], [7, 0]])[0], [7, 0], '창 뒤판이 그 아래 HUD 버튼보다 위(뒤 화면 입력을 막는다)');
+  assert.deepEqual(order([[7], [7, 2]])[0], [7, 2], '컨테이너 자체보다 그 안의 자식이 위');
+  assert.deepEqual(order([[2, 1, 5], [2, 1, 4], [2, 0, 9]])[0], [2, 1, 5]);
+  assert.equal(compareDrawPaths([3], [3]), 0);
+});
+
+test('화면 상태 글자: 지역 배지(입장 가능·잠김), 상점 구매 버튼(구매 중·잔액 부족·다른 구매 중), 장비 창 줄(이야기 슬롯은 장착한 유물만)', () => {
+  assert.equal(stageBadgeLabel('current', true), '진행 중 · 입장');
+  assert.equal(stageBadgeLabel('cleared', true), '완료 · 입장');
+  assert.equal(stageBadgeLabel('locked', false), '잠김');
+  assert.equal(buyStateOf(1, 30, 100, null), 'ready');
+  assert.equal(buyStateOf(1, 150, 100, null), 'short');
+  assert.equal(buyStateOf(1, 30, 100, 1), 'buying');
+  assert.equal(buyStateOf(2, 30, 100, 1), 'locked', '다른 상품 구매 중에는 누를 수 없음');
+  assert.equal(buyLabel(150, 'short'), '150 타레 · 부족');
+  assert.equal(buyLabel(30, 'ready'), '30 타레');
+  const slots = [{ key: 'weapon', label: '무기' }, { key: 'armor', label: '방어구' }];
+  assert.deepEqual(equipRows([], slots).map((r) => r.kind), ['general', 'general'], '일반 터비·유물 장착 전 누비: 이야기 줄 없음');
+  const rows = equipRows([{ slotKey: 'weapon', itemName: '뜨개바늘' }, { slotKey: 'story_1', itemName: '첫 매듭' }], slots);
+  assert.deepEqual(rows.map((r) => [r.kind, r.slotKey]), [['general', 'weapon'], ['general', 'armor'], ['story', 'story_1']]);
 });

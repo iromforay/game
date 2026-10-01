@@ -9,21 +9,20 @@ import { PAL, TEXT, feltPanel, pillButton, creamOverlay, showToast, ellipsize } 
 import { displayScaleOf } from '../ui/responsive';
 import { watchLayout } from '../ui/relayout';
 import { clampPage, pageOf, stageSelectLayout, type StageSelectLayout } from '../ui/screenLayouts';
+import { stageBadgeLabel } from '../ui/screenStates';
 
 // stage-card-frame.png(240×480)은 좌우 25px가 투명 — 그대로 카드 폭에 늘리면 보이는 틀이 좁아져 안쪽 내용이 틀 밖으로 넘쳤다(v2 §4 재현).
 // 보이는 틀 = 카드 폭이 되도록 투명 여백만큼 넓혀 그리고, 내용은 안쪽 폭에 맞춘다. 좌표·글자는 stageSelectLayout(표시 배율별).
 const FRAME_ART = { width: 240, left: 25, right: 25 };
 
 const STATE_STYLE = {
-  cleared: { badge: '완료', badgeFill: PAL.lavender, badgeText: TEXT.body },
-  current: { badge: '진행 중', badgeFill: PAL.mint, badgeText: TEXT.onMint },
+  // 배지 문구는 ui/screenStates.ts(stageBadgeLabel): 상태 + 할 수 있는 행동. 색만으로 구분하지 않는다
+  cleared: { badgeFill: PAL.lavender, badgeText: TEXT.body },
+  current: { badgeFill: PAL.mint, badgeText: TEXT.onMint },
   // M2: 백필 입장 권한으로 들어갈 수는 있지만 이전 장 이야기를 마치기 전(도형 배지, 에셋 없음)
-  open: { badge: '탐험 가능', badgeFill: PAL.cream, badgeText: TEXT.body },
-  locked: { badge: '잠김', badgeFill: PAL.cream2, badgeText: TEXT.sub },
+  open: { badgeFill: PAL.cream, badgeText: TEXT.body },
+  locked: { badgeFill: PAL.cream2, badgeText: TEXT.sub },
 } as const;
-
-// 배지 문구: 상태 + 할 수 있는 행동. 색만으로 구분하지 않는다 — 들어갈 수 있으면 "… · 입장", 잠긴 지역은 자물쇠 아이콘·"잠김"·이유 문구
-export const stageBadgeLabel = (state: keyof typeof STATE_STYLE, enterable: boolean) => (enterable ? `${STATE_STYLE[state].badge} · 입장` : STATE_STYLE[state].badge);
 
 // 마을 출구에서 들어오는 지역 선택. 개방·진행 상태는 서버가 판정하고(M2, story.stageAccessV2) 이 화면은 결과만 그린다.
 // 서버 상태를 받지 못하면 모든 지역을 잠그고 다시 시도 버튼을 보여 준다(추측으로 열지 않음).

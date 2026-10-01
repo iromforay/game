@@ -68,6 +68,7 @@ export class MapScene extends Phaser.Scene {
   private lastSentAt = 0;
   private lastSent = { x: -1, y: -1 };
   private roomLabel?: Phaser.GameObjects.Text;
+  private generation = 0; // 화면을 다시 만들 때마다 증가 — 응답을 기다리던 이전 create가 새 화면에 덧그리거나 리스너를 중복 등록하지 않게
   private pendingInvite: BattleSnapshot | null = null;
   private inviteLayer: Phaser.GameObjects.Container | null = null;
   private inviteTimer: Phaser.Time.TimerEvent | null = null;
@@ -92,6 +93,8 @@ export class MapScene extends Phaser.Scene {
     this.inviteBattleId = null;
     this.deliveryLayer = [];
     this.delivering = false;
+    this.roomLabel = undefined; // 같은 씬 인스턴스를 다시 쓰므로 이전 화면의 글자 참조를 비운다(파괴된 객체에 setText 방지)
+    this.generation++;
   }
 
   preload() {
@@ -114,7 +117,9 @@ export class MapScene extends Phaser.Scene {
     this.markers = [];
 
     const stage = getStage(this.stageCode);
+    const gen = this.generation;
     const current = getCurrentChapter((await loadChapterStatuses()).statuses);
+    if (gen !== this.generation || !this.sys.isActive()) return; // 기다리는 사이 화면이 바뀜(마을 복귀 등)
     ensureUiPlaceholders(this);
     this.stageWidth = stage.width;
     this.stageHeight = stage.height;
@@ -207,8 +212,11 @@ export class MapScene extends Phaser.Scene {
   }
 
   private async refreshDelivery() {
+    const gen = this.generation;
     try {
-      this.showDelivery((await fetchStory()).delivery);
+      const story = await fetchStory();
+      if (gen !== this.generation || !this.sys.isActive()) return; // 기다리는 사이 화면이 바뀜 — 끝난 화면에 그리지 않는다
+      this.showDelivery(story.delivery);
     } catch (err) {
       console.warn('[story] 목표를 불러오지 못했습니다:', err);
     }
@@ -243,13 +251,15 @@ export class MapScene extends Phaser.Scene {
   private async deliver(triggerId: string) {
     if (this.delivering) return; // 이중 클릭(서버도 멱등)
     this.delivering = true;
+    const gen = this.generation;
     try {
       const res = await triggerStory(triggerId);
+      if (gen !== this.generation || !this.sys.isActive()) return;
       this.showDelivery(res.story.delivery);
       if (res.shortage) showToast(this, shortageText(res.shortage), { y: 660, fixed: true });
       if (res.play) this.launchStory(res.play);
     } catch (err) {
-      showToast(this, err instanceof Error && err.message ? err.message : '서버에 연결할 수 없습니다.', { y: 660, error: true, fixed: true });
+      if (gen === this.generation && this.sys.isActive()) showToast(this, err instanceof Error && err.message ? err.message : '서버에 연결할 수 없습니다.', { y: 660, error: true, fixed: true });
     } finally {
       this.delivering = false;
     }

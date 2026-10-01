@@ -10,6 +10,7 @@ import { loadWorldImages } from '../assets/loader';
 import { displayScaleOf } from '../ui/responsive';
 import { watchLayout } from '../ui/relayout';
 import { clampPage, marketLayout, pageOf, type MarketLayout } from '../ui/screenLayouts';
+import { BUY_NOTE, buyLabel, buyStateOf } from '../ui/screenStates';
 
 // short: 폭이 모자랄 때의 짧은 표기(공30 방6 …) — 카드 밖으로 넘치지 않게
 function statText(p: ShopProduct, short = false) {
@@ -21,17 +22,6 @@ function statText(p: ShopProduct, short = false) {
   }
   return parts.join(short ? ' ' : '  ');
 }
-
-// 구매 버튼 상태(색만으로 구분하지 않는다 — 글자로도 알린다). 순수 판정: 테스트 대상
-export type BuyState = 'buying' | 'locked' | 'short' | 'ready';
-export function buyStateOf(productId: number, price: number, balance: number, pendingId: number | null): BuyState {
-  if (pendingId === productId) return 'buying';
-  if (pendingId !== null) return 'locked'; // 다른 상품을 구매하는 중 — 끝날 때까지 누를 수 없다
-  return balance >= price ? 'ready' : 'short';
-}
-export const BUY_NOTE: Record<BuyState, string | null> = { buying: '구매 중…', locked: null, short: '부족', ready: null };
-// 버튼 글자: 가격은 늘 보이고, 잔액이 모자라면 "… · 부족"을 붙인다
-export const buyLabel = (price: number, state: BuyState) => (state === 'short' ? `${price} 타레 · ${BUY_NOTE.short}` : `${price} 타레`);
 
 // 4.1: 마을 장터 — 기본 NPC 상점(누비/보풀이 등 터비 + 장착 아이템). 가격·잔액·지급은 서버(shop_product)가 판정하고
 // 이 화면은 서버가 내려준 상품 목록을 그대로 보여주기만 한다. 좌표·글자는 marketLayout(표시 배율별), 넘치면 페이지.
@@ -96,10 +86,10 @@ export class MarketScene extends Phaser.Scene {
 
   // 머리말·잔액·돌아가기·페이지 버튼(상품 수가 정해지면 다시 그린다)
   private chrome: Phaser.GameObjects.GameObject[] = [];
-  private buildChrome(count: number) {
+  private buildChrome(count: number, loaded = false) {
     this.chrome.forEach((o) => o.destroy());
     const L = (this.L = marketLayout(displayScaleOf(this.scale.displaySize.width), count));
-    this.page = clampPage(this.page, L.pager?.pages ?? 1);
+    if (loaded) this.page = clampPage(this.page, L.pager?.pages ?? 1); // 목록을 받은 뒤에만 보정(받기 전에 보정하면 보던 쪽을 잃는다)
     const objs: Phaser.GameObjects.GameObject[] = [];
     objs.push(feltPanel(this, L.header.x, L.header.y, L.header.w, L.header.h, { radius: 28 }));
     objs.push(this.add.text(CANVAS_WIDTH / 2, L.header.y + L.header.h / 2, '장터 — NPC 상점', { fontSize: `${L.font.header}px`, color: TEXT.body }).setOrigin(0.5));
@@ -139,7 +129,7 @@ export class MarketScene extends Phaser.Scene {
     }
     if (gen !== this.generation || !this.sys.isActive()) return; // 응답을 기다리는 사이 화면이 바뀜
     this.products = products;
-    this.buildChrome(products.length);
+    this.buildChrome(products.length, true);
     this.renderCards();
   }
 

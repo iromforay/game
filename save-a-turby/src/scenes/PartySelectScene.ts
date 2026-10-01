@@ -54,6 +54,7 @@ export class PartySelectScene extends Phaser.Scene {
   private offUpdate: (() => void) | null = null;
   private offReconnect: (() => void) | null = null;
   private relayoutPending = false;
+  private generation = 0; // 화면을 다시 만들 때마다 증가 — 응답을 기다리던 이전 create가 새 화면에 카드를 덧그리지 않게
 
   constructor() {
     super('PartySelect');
@@ -72,6 +73,7 @@ export class PartySelectScene extends Phaser.Scene {
     this.titleText = undefined;
     this.startButton = undefined;
     this.startLabel = undefined;
+    this.generation++;
     this.cardBorders = new Map();
     this.cardLayer = [];
     this.chips = [];
@@ -115,7 +117,9 @@ export class PartySelectScene extends Phaser.Scene {
     // 스토리 전투: 이야기 누비는 서버가 자동으로 편성하므로 고르는 목록에서 빼고, 맨 앞 "자동 참가" 카드로 보여 준다. 조회 실패 시 그대로 둔다(서버가 중복을 걸러 냄)
     let autoNubi: OwnedTurby | null = null;
     if (this.story) {
+      const gen = this.generation;
       const nubiId = (await fetchStory().catch(() => null))?.storyNubi?.turbyId;
+      if (gen !== this.generation || !this.sys.isActive()) return; // 기다리는 사이 다시 배치(재시작)됨 — 새 create가 그린다
       autoNubi = bag.find((t) => t.id === nubiId) ?? { id: 'story-nubi', characterCode: 'nubi', characterName: '누비', locationType: 'bag', slotIndex: null, equipment: [], stats: { attack: 0, defense: 0, actionPower: 0, maxHp: 0 } };
       if (nubiId) bag = bag.filter((t) => t.id !== nubiId);
     }

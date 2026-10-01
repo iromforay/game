@@ -11,6 +11,7 @@
 // 있는지와 무관한 실제 그리기 순서(표시 목록의 깊이 순서 → 컨테이너 안 순서)로 한다. 새 UI가 상호작용 가능해지는
 // 시점이 이 한곳에서 정해지므로, 화면마다 지연·재클릭 같은 우회를 두지 않는다. 파괴된 대상은 같은 시점에 목록에서 빠진다.
 import Phaser from 'phaser';
+import { compareDrawPaths } from './drawOrder';
 
 type InputInternals = {
   _list: Phaser.GameObjects.GameObject[];
@@ -34,11 +35,6 @@ function drawPath(o: Phaser.GameObjects.GameObject, root: Phaser.GameObjects.Gam
   return path;
 }
 
-// 위에 그려지는 것이 앞에 오도록 정렬(순수 비교 — 테스트 대상)
-export function compareDrawPaths(a: number[], b: number[]): number {
-  for (let i = 0; i < Math.min(a.length, b.length); i++) if (a[i] !== b[i]) return b[i] - a[i];
-  return b.length - a.length; // 같은 줄기면 더 안쪽(자식)이 위
-}
 
 // 대기 중인 제거·추가를 입력 판정 목록에 반영(Phaser InputPlugin.preUpdate의 목록 처리와 동일)
 export function commitPendingInput(input: Phaser.Input.InputPlugin) {

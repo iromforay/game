@@ -7,6 +7,7 @@ import { NUBI_FIXED_NOTE } from '../inventory/inventoryView';
 import { PAL, TEXT, feltPanel, pillButton, ellipsize, itemIconKey } from './kit';
 import { displayScaleOf } from './responsive';
 import { equipPanelLayout, type EquipPanelLayout } from './screenLayouts';
+import { STORY_SLOT_LABEL, STORY_SLOT_LOCK, equipRows } from './screenStates';
 
 const DEPTH = 100;
 const STAT_KEYS = [
@@ -15,18 +16,6 @@ const STAT_KEYS = [
   ['actionPower', '행동'],
   ['maxHp', '체력'],
 ] as const;
-
-// 장비 창에 그릴 줄: 일반 슬롯(무기·방어구·장신구) + 이야기 슬롯(누비가 장착한 이야기 유물만 — 장착 전 슬롯은 보이지 않음)
-// 순수 판정: 테스트 대상(test/screenLayouts.test.ts)
-export type EquipRowKind = { kind: 'general'; slotKey: string; label: string; iconKey?: string } | { kind: 'story'; slotKey: string; itemName: string };
-export const isStorySlot = (slotKey: string) => slotKey.startsWith('story_');
-export function equipRows(equipment: { slotKey: string; itemName: string }[], slots: { key: string; label: string; iconKey?: string }[]): EquipRowKind[] {
-  const general: EquipRowKind[] = slots.map((s) => ({ kind: 'general', slotKey: s.key, label: s.label, iconKey: s.iconKey }));
-  const story: EquipRowKind[] = equipment.filter((e) => isStorySlot(e.slotKey)).map((e) => ({ kind: 'story', slotKey: e.slotKey, itemName: e.itemName }));
-  return [...general, ...story];
-}
-export const STORY_SLOT_LABEL = '이야기 슬롯';
-export const STORY_SLOT_LOCK = '해제 불가';
 
 // 3.1: 터비별 장착 상태창 — 슬롯(무기/방어구/장신구)마다 장착·해제하고 서버가 계산한 최종 스탯을 바로 보여준다.
 // 서버가 소유권·보유 수량·슬롯을 검증하므로 여기서는 결과 메시지만 표시. 좌표·글자는 equipPanelLayout(표시 배율별).

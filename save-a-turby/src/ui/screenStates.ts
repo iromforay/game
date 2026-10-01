@@ -1,0 +1,28 @@
+// 화면 상태 판정(순수 계산 — test/screenLayouts.test.ts). 색만으로 구분하지 않도록 상태마다 글자를 정한다.
+
+// ----- 지역 선택: 상태 배지 문구(상태 + 할 수 있는 행동) -----
+export const STAGE_BADGE = { cleared: '완료', current: '진행 중', open: '탐험 가능', locked: '잠김' } as const;
+export type StageBadgeState = keyof typeof STAGE_BADGE;
+export const stageBadgeLabel = (state: StageBadgeState, enterable: boolean) => (enterable ? `${STAGE_BADGE[state]} · 입장` : STAGE_BADGE[state]);
+
+// ----- 상점: 구매 버튼 상태 -----
+export type BuyState = 'buying' | 'locked' | 'short' | 'ready';
+export function buyStateOf(productId: number, price: number, balance: number, pendingId: number | null): BuyState {
+  if (pendingId === productId) return 'buying';
+  if (pendingId !== null) return 'locked'; // 다른 상품을 구매하는 중 — 끝날 때까지 누를 수 없다
+  return balance >= price ? 'ready' : 'short';
+}
+export const BUY_NOTE: Record<BuyState, string | null> = { buying: '구매 중…', locked: null, short: '부족', ready: null };
+// 버튼 글자: 가격은 늘 보이고, 잔액이 모자라면 "… · 부족"을 붙인다
+export const buyLabel = (price: number, state: BuyState) => (state === 'short' ? `${price} 타레 · ${BUY_NOTE.short}` : `${price} 타레`);
+
+// ----- 장비 창: 그릴 줄(일반 슬롯 + 누비가 장착한 이야기 유물 슬롯 — 장착 전 이야기 슬롯은 보이지 않음) -----
+export type EquipRowKind = { kind: 'general'; slotKey: string; label: string; iconKey?: string } | { kind: 'story'; slotKey: string; itemName: string };
+export const isStorySlot = (slotKey: string) => slotKey.startsWith('story_');
+export function equipRows(equipment: { slotKey: string; itemName: string }[], slots: { key: string; label: string; iconKey?: string }[]): EquipRowKind[] {
+  const general: EquipRowKind[] = slots.map((s) => ({ kind: 'general', slotKey: s.key, label: s.label, iconKey: s.iconKey }));
+  const story: EquipRowKind[] = equipment.filter((e) => isStorySlot(e.slotKey)).map((e) => ({ kind: 'story', slotKey: e.slotKey, itemName: e.itemName }));
+  return [...general, ...story];
+}
+export const STORY_SLOT_LABEL = '이야기 슬롯';
+export const STORY_SLOT_LOCK = '해제 불가';
