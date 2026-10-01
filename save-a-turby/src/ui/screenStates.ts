@@ -26,3 +26,22 @@ export function equipRows(equipment: { slotKey: string; itemName: string }[], sl
 }
 export const STORY_SLOT_LABEL = '이야기 슬롯';
 export const STORY_SLOT_LOCK = '해제 불가';
+
+// ----- 지도 범례: 색이 아니라 모양·표식으로 구분한다. 지도에 실제로 있는 종류만 보여 준다 -----
+export type MarkerType = 'home' | 'market' | 'exit' | 'target';
+export type LegendKey = 'player' | 'peer' | MarkerType;
+export const LEGEND_LABEL: Record<LegendKey, string> = {
+  player: '내 위치 — 화살표(가는 방향)',
+  peer: '함께 온 친구 — 동그라미와 번호',
+  home: '내 집',
+  market: '장터',
+  exit: '야생 출구',
+  target: '목적지 — 별',
+};
+export function legendEntries(markerTypes: MarkerType[], hasPeers: boolean): LegendKey[] {
+  const order: MarkerType[] = ['target', 'home', 'market', 'exit'];
+  return ['player', ...(hasPeers ? (['peer'] as const) : []), ...order.filter((t) => markerTypes.includes(t))];
+}
+
+// ----- 탐험 맵 HUD 글자 -----
+export const capturedLabel = (count: number) => `포획: ${count}`;

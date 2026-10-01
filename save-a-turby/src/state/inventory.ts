@@ -1,6 +1,7 @@
 import { getPlayerId } from './player';
 import {
   ApiError,
+  fetchTurbys,
   identifyPlayer,
   moveToShelf as apiMoveToShelf,
   moveToBag as apiMoveToBag,
@@ -107,28 +108,43 @@ class InventoryStore {
   }
 
   // 4.2: 가방(소지) → 선반(기지 보관) 특정 슬롯으로 이동
-  async moveToShelf(turbyId: string, slotIndex: number): Promise<{ ok: true } | { ok: false; error: string }> {
-    if (!this.dbPlayerId) return { ok: false, error: 'offline' };
+  // 서버가 거절하면(예: SHELF_SLOT_OCCUPIED — 다른 기기·탭이 먼저 그 칸을 씀) 서버 목록으로 다시 맞춘다
+  async moveToShelf(turbyId: string, slotIndex: number): Promise<{ ok: true } | { ok: false; error: string; code: string | null }> {
+    if (!this.dbPlayerId) return { ok: false, error: 'offline', code: null };
     try {
       const updated = await apiMoveToShelf(turbyId, slotIndex);
       this.replace(updated);
       return { ok: true };
     } catch (err) {
       console.warn('[inventory] 선반 이동 실패:', err);
-      return { ok: false, error: String(err) };
+      const code = err instanceof ApiError ? err.code : null;
+      if (err instanceof ApiError) await this.refreshTurbys();
+      return { ok: false, error: String(err), code };
+    }
+  }
+
+  // 보유 터비를 서버 정본으로 다시 받는다(실패하면 지금 상태 유지)
+  async refreshTurbys(): Promise<void> {
+    try {
+      this.owned = await fetchTurbys();
+      saveCache(this.deviceUuid, this.owned);
+    } catch (err) {
+      console.warn('[inventory] 터비 목록 재조회 실패:', err);
     }
   }
 
   // 4.2: 선반(기지 보관) → 가방(소지)으로 이동
-  async moveToBag(turbyId: string): Promise<{ ok: true } | { ok: false; error: string }> {
-    if (!this.dbPlayerId) return { ok: false, error: 'offline' };
+  async moveToBag(turbyId: string): Promise<{ ok: true } | { ok: false; error: string; code: string | null }> {
+    if (!this.dbPlayerId) return { ok: false, error: 'offline', code: null };
     try {
       const updated = await apiMoveToBag(turbyId);
       this.replace(updated);
       return { ok: true };
     } catch (err) {
       console.warn('[inventory] 가방 이동 실패:', err);
-      return { ok: false, error: String(err) };
+      const code = err instanceof ApiError ? err.code : null;
+      if (err instanceof ApiError) await this.refreshTurbys();
+      return { ok: false, error: String(err), code };
     }
   }
 

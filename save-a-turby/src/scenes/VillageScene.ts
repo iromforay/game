@@ -128,6 +128,7 @@ export class VillageScene extends Phaser.Scene {
     watchLayout(this, () => {
       this.createHud();
       this.createPrompt();
+      this.miniMap?.relayout(); // 미니맵·전체 지도도 새 배율로(열려 있으면 열린 채)
     });
 
     // 미니맵의 현재 목적지는 스토리 진행(docs/Turby_story.md)에서 온다 — 지금 열려 있는 장의 맵으로 가는 출구

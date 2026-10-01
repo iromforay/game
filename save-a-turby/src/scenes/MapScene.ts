@@ -5,7 +5,10 @@ import type { WildSpawn } from '../config/stages';
 import { VirtualJoystick } from '../ui/VirtualJoystick';
 import { InventoryPanel } from '../ui/InventoryPanel';
 import { InventoryWindow } from '../ui/InventoryWindow';
-import { displayScaleOf, fontPx, MIN_BUTTON_PX } from '../ui/responsive';
+import { displayScaleOf } from '../ui/responsive';
+import { watchLayout } from '../ui/relayout';
+import { mapHudLayout, type MapHudLayout } from '../ui/screenLayouts';
+import { capturedLabel } from '../ui/screenStates';
 import { devFlags } from '../story/devFlags';
 import { playStory } from '../story/playStory';
 import { MiniMap } from '../ui/MiniMap';
@@ -68,6 +71,13 @@ export class MapScene extends Phaser.Scene {
   private lastSentAt = 0;
   private lastSent = { x: -1, y: -1 };
   private roomLabel?: Phaser.GameObjects.Text;
+  private hud!: MapHudLayout;
+  private hudObjs: Phaser.GameObjects.GameObject[] = [];
+  private areaName = '';
+  private roomJoined = false;
+  private leaving = false;
+  private lastDelivery: StoryDelivery | null = null;
+  private goalTextOverride: string | null = null; // 개발·시험용: 긴 목표 문구 표시 확인(운영 코드는 설정하지 않는다)
   private generation = 0; // 화면을 다시 만들 때마다 증가 — 응답을 기다리던 이전 create가 새 화면에 덧그리거나 리스너를 중복 등록하지 않게
   private pendingInvite: BattleSnapshot | null = null;
   private inviteLayer: Phaser.GameObjects.Container | null = null;
@@ -94,6 +104,11 @@ export class MapScene extends Phaser.Scene {
     this.deliveryLayer = [];
     this.delivering = false;
     this.roomLabel = undefined; // 같은 씬 인스턴스를 다시 쓰므로 이전 화면의 글자 참조를 비운다(파괴된 객체에 setText 방지)
+    this.hudObjs = [];
+    this.roomJoined = false;
+    this.leaving = false;
+    this.lastDelivery = null;
+    this.goalTextOverride = null;
     this.generation++;
   }
 
@@ -151,48 +166,13 @@ export class MapScene extends Phaser.Scene {
       this.joystick.setEnabled(!open);
     });
 
-    this.add
-      .text(16, 16, `포획: ${this.capturedIndices.length}`, { fontSize: '18px', color: '#ffffff', backgroundColor: '#00000080', padding: { x: 8, y: 4 } })
-      .setScrollFactor(0)
-      .setDepth(2000);
-
-    // 4.1: 마을(입구) — 야생 맵에서 언제든 안전지대로 복귀 가능
-    this.add
-      .text(16, 54, '마을로', { fontSize: '14px', color: '#ffffff', backgroundColor: '#4a7a3a', padding: { x: 8, y: 4 } })
-      .setScrollFactor(0)
-      .setDepth(2000)
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => {
-        // 4.1/방: 마을로 나가는 것은 방 퇴장 — 서버 연결이 안 돼도 마을로는 돌아간다
-        roomClient.leaveRoom().catch(() => undefined).finally(() => this.scene.start('Village'));
-      });
-
+    // 창은 한 번만 만든다(HUD를 다시 그려도 열린 창·리스너가 늘지 않게). v3 M4-D: 아이템 인벤토리(공용 창)와 보유 터비 창을 나눈다
     this.inventoryPanel = new InventoryPanel(this, () => this.joystick.setEnabled(true));
-    // v3 M4-D: 아이템 인벤토리(공용 창)와 보유 터비 창을 나눈다. 버튼 글자는 실제 표시 배율에 맞춰 14px 이상
-    const hudFont = fontPx(displayScaleOf(this.scale.displaySize.width), 16, MIN_BUTTON_PX);
     this.inventoryWindow = new InventoryWindow(this, { onClose: () => this.joystick.setEnabled(true), onPlay: (play) => this.launchStory(play) });
-    const invBtn = this.add
-      .text(CANVAS_WIDTH - 16, 192, '인벤토리', { fontSize: `${hudFont}px`, color: '#ffffff', backgroundColor: '#5a3a8a', padding: { x: 10, y: 6 } })
-      .setOrigin(1, 0)
-      .setScrollFactor(0)
-      .setDepth(2000)
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => {
-        if (this.inventoryWindow.isVisible) return;
-        this.joystick.setEnabled(false);
-        void this.inventoryWindow.open();
-      });
-    this.add
-      .text(CANVAS_WIDTH - 16, invBtn.y + invBtn.height + 8, '터비', { fontSize: `${hudFont}px`, color: '#ffffff', backgroundColor: '#5a3a8a', padding: { x: 10, y: 6 } })
-      .setOrigin(1, 0)
-      .setScrollFactor(0)
-      .setDepth(2000)
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => {
-        const opening = !this.inventoryPanel.isVisible;
-        this.inventoryPanel.toggle();
-        if (opening) this.joystick.setEnabled(false); // 닫을 때는 InventoryPanel의 onClose 콜백이 다시 켜줌
-      });
+    this.areaName = stage.name;
+    this.buildHud();
+    // 창 크기가 바뀌면 맵을 다시 시작하지 않고 HUD·미니맵·목표 표시만 새 배율로 다시 그린다(위치·탐험 세션·목표 상태 유지)
+    watchLayout(this, () => this.relayoutHud());
     this.ready = true;
     // M4-C: 이야기 대화가 끝나 이 화면이 깨어나면 전달 목표를 서버 기준으로 다시 그린다
     const onWake = () => {
@@ -202,6 +182,64 @@ export class MapScene extends Phaser.Scene {
     this.events.on('wake', onWake);
     this.events.once('shutdown', () => this.events.off('wake', onWake));
     this.setupRoom();
+  }
+
+  // ----- 탐험 HUD(10-01 v2 §3): 지역 이름·포획 수·마을로·인벤토리·터비 — mapHudLayout(표시 배율별), 화면 위쪽 띠 안 -----
+
+  private buildHud() {
+    this.hudObjs.forEach((o) => o.destroy());
+    this.hudObjs = [];
+    const L = (this.hud = mapHudLayout(displayScaleOf(this.scale.displaySize.width)));
+    const fix = <T extends Phaser.GameObjects.GameObject>(o: T) => {
+      (o as unknown as Phaser.GameObjects.Image).setScrollFactor(0);
+      this.hudObjs.push(o);
+      return o;
+    };
+    // 글자 상자: 영역 높이에 맞춘 반투명 배경 + 글자(긴 지역 이름은 자르지 않고 글자를 줄여 폭에 맞춘다)
+    const label = (r: { x: number; y: number; w: number; h: number }, text: string, font: number, minFont: number) => {
+      const t = fix(this.add.text(r.x + 8, r.y + r.h / 2, text, { fontSize: `${font}px`, color: '#ffffff' }).setOrigin(0, 0.5).setDepth(2001));
+      for (let size = font - 1; t.width > r.w - 16 && size >= minFont; size--) t.setFontSize(size);
+      fix(this.add.rectangle(r.x, r.y, Math.min(r.w, t.width + 16), r.h, 0x000000, 0.5).setOrigin(0, 0).setDepth(2000));
+      return t;
+    };
+    const button = (r: { x: number; y: number; w: number; h: number }, text: string, color: number, onClick: () => void) => {
+      const box = fix(this.add.rectangle(r.x, r.y, r.w, r.h, color).setOrigin(0, 0).setStrokeStyle(2, 0xffffff, 0.3).setDepth(2000));
+      fix(this.add.text(r.x + r.w / 2, r.y + r.h / 2, text, { fontSize: `${L.font.button}px`, color: '#ffffff' }).setOrigin(0.5).setDepth(2001));
+      box.setInteractive({ useHandCursor: true }).on('pointerdown', onClick);
+    };
+    label(L.area, this.areaName, L.font.area, Math.round(L.font.room));
+    label(L.captured, capturedLabel(this.capturedIndices.length), L.font.label, L.font.label);
+    // 4.1: 마을(입구) — 야생 맵에서 언제든 안전지대로 복귀 가능
+    button(L.home, '마을로', 0x4a7a3a, () => {
+      if (this.leaving) return; // 한 번만
+      this.leaving = true;
+      // 4.1/방: 마을로 나가는 것은 방 퇴장 — 서버 연결이 안 돼도 마을로는 돌아간다
+      roomClient.leaveRoom().catch(() => undefined).finally(() => this.scene.start('Village'));
+    });
+    button(L.inventory, '인벤토리', 0x5a3a8a, () => {
+      if (this.inventoryWindow.isVisible || this.inventoryPanel.isVisible || this.miniMap.isOpen) return;
+      this.joystick.setEnabled(false);
+      void this.inventoryWindow.open();
+    });
+    button(L.turbys, '터비', 0x5a3a8a, () => {
+      if (this.inventoryWindow.isVisible || this.miniMap.isOpen) return;
+      const opening = !this.inventoryPanel.isVisible;
+      this.inventoryPanel.toggle();
+      if (opening) this.joystick.setEnabled(false); // 닫을 때는 InventoryPanel의 onClose 콜백이 다시 켜줌
+    });
+    // 방·참가자 상태(방에 있을 때만)
+    this.roomLabel = undefined;
+    if (this.roomJoined) {
+      this.roomLabel = fix(this.add.text(L.room.x, L.room.y, '', { fontSize: `${L.font.room}px`, color: '#ffffff', backgroundColor: '#00000080', padding: { x: 6, y: 3 } }).setDepth(2000));
+      this.refreshRoomLabel();
+    }
+  }
+
+  private relayoutHud() {
+    this.buildHud();
+    this.miniMap.relayout();
+    this.showDelivery(this.lastDelivery);
+    this.inventoryPanel.relayout();
   }
 
   // ----- M4-C: 1장 이야기 연결(서버가 정한 구간만 재생) -----
@@ -224,22 +262,26 @@ export class MapScene extends Phaser.Scene {
 
   // 퀘스트 추적(빛나는 실가루 n/10, 서버 인벤토리 수량). 운영 화면에는 추적 정보만 — 원격 전달 버튼은 좌표·보풀이 NPC 확정 전이라
   // 개발 미리보기(devFlags.remoteDelivery)에서만 보인다(v3 §4). 서버 npc_bopuli 트리거와 검증은 그대로다.
+  // 목표가 없으면 패널을 남기지 않는다. 긴 목표 문구는 왼쪽 HUD와 미니맵 사이 폭 안에서 줄바꿈한다(자르지 않음)
   private showDelivery(delivery: StoryDelivery | null) {
+    this.lastDelivery = delivery;
     this.deliveryLayer.forEach((o) => o.destroy());
     this.deliveryLayer = [];
     if (!delivery) return;
-    const cx = CANVAS_WIDTH / 2;
-    const scale = displayScaleOf(this.scale.displaySize.width);
-    const goalFont = fontPx(scale, 17, 13);
+    const G = this.hud.goal;
+    const goalFont = this.hud.font.goal;
+    const cx = G.x + G.w / 2;
     const withButton = devFlags.remoteDelivery;
-    const panelH = withButton ? goalFont * 2 + 44 : goalFont + 26;
-    const panel = this.add.rectangle(cx, 8 + panelH / 2, Math.max(440, goalFont * 17), panelH, 0x241a3d, 0.9).setStrokeStyle(2, 0xffd27f, 0.9).setScrollFactor(0).setDepth(2000);
-    const goal = this.add.text(cx, 8 + (withButton ? goalFont * 0.9 + 6 : panelH / 2), deliveryGoalText(delivery), { fontSize: `${goalFont}px`, color: '#ffe9a8' }).setOrigin(0.5).setScrollFactor(0).setDepth(2001);
+    const goal = this.add.text(cx, G.y + 10, this.goalTextOverride ?? deliveryGoalText(delivery), { fontSize: `${goalFont}px`, color: '#ffe9a8', align: 'center', wordWrap: { width: G.w - 28, useAdvancedWrap: true } }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(2001);
+    const btnH = withButton ? Math.round(goalFont * 1.25 + 10) + 8 : 0;
+    const panelW = Math.min(G.w, Math.max(Math.min(G.w, 440), goal.width + 28));
+    const panelH = goal.height + 20 + btnH;
+    const panel = this.add.rectangle(cx, G.y + panelH / 2, panelW, panelH, 0x241a3d, 0.9).setStrokeStyle(2, 0xffd27f, 0.9).setScrollFactor(0).setDepth(2000);
     this.deliveryLayer.push(panel, goal);
     if (!withButton) return;
     const button = this.add
-      .text(cx, 8 + panelH - goalFont * 0.9 - 8, '보풀이에게 실가루 전달(개발용)', { fontSize: `${goalFont}px`, color: '#ffffff', backgroundColor: '#5a3a8a', padding: { x: 12, y: 5 } })
-      .setOrigin(0.5)
+      .text(cx, G.y + 10 + goal.height + 8, '보풀이에게 실가루 전달(개발용)', { fontSize: `${goalFont}px`, color: '#ffffff', backgroundColor: '#5a3a8a', padding: { x: 12, y: 5 } })
+      .setOrigin(0.5, 0)
       .setScrollFactor(0)
       .setDepth(2001)
       .setInteractive({ useHandCursor: true })
@@ -256,10 +298,10 @@ export class MapScene extends Phaser.Scene {
       const res = await triggerStory(triggerId);
       if (gen !== this.generation || !this.sys.isActive()) return;
       this.showDelivery(res.story.delivery);
-      if (res.shortage) showToast(this, shortageText(res.shortage), { y: 660, fixed: true });
+      if (res.shortage) showToast(this, shortageText(res.shortage), { y: this.hud.toastY, fixed: true });
       if (res.play) this.launchStory(res.play);
     } catch (err) {
-      if (gen === this.generation && this.sys.isActive()) showToast(this, err instanceof Error && err.message ? err.message : '서버에 연결할 수 없습니다.', { y: 660, error: true, fixed: true });
+      if (gen === this.generation && this.sys.isActive()) showToast(this, err instanceof Error && err.message ? err.message : '서버에 연결할 수 없습니다.', { y: this.hud.toastY, error: true, fixed: true });
     } finally {
       this.delivering = false;
     }
@@ -270,8 +312,8 @@ export class MapScene extends Phaser.Scene {
   private setupRoom() {
     const room = roomClient.room;
     if (!room || room.stageCode !== this.stageCode) return;
-    this.roomLabel = this.add.text(16, 84, '', { fontSize: '12px', color: '#ffffff', backgroundColor: '#00000080', padding: { x: 6, y: 3 } }).setScrollFactor(0).setDepth(2000);
-    this.refreshRoomLabel();
+    this.roomJoined = true;
+    this.buildHud(); // 방 상태 줄을 포함해 다시 그린다
 
     this.roomUnsubs.push(
       roomClient.on('state', (r) => {

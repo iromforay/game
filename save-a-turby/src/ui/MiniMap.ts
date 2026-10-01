@@ -1,6 +1,9 @@
 import Phaser from 'phaser';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../config/constants';
 import type { Rect } from '../config/village';
+import { displayScaleOf } from './responsive';
+import { miniMapLayout, type MiniMapLayout } from './screenLayouts';
+import { LEGEND_LABEL, legendEntries, type MarkerType } from './screenStates';
 
 // 미니맵/전체화면 지도가 그릴 지역 — 마을은 길·광장(paths)이 있고, 야생 맵은 경계(bounds)만 있다
 export interface MapView {
@@ -13,38 +16,35 @@ export interface MapView {
 
 export interface MapMarker {
   id: string;
-  type: 'home' | 'market' | 'exit' | 'target'; // target: 스토리 목적지(별 표시, 맥동)
+  type: MarkerType; // target: 스토리 목적지(별 표시, 맥동)
   name: string;
   x: number;
   y: number;
   hint: string;
 }
 
-// 코덱스 시각 QA(2026-09-21): 파스텔 팔레트, 미니맵 지름 144
+// 코덱스 시각 QA(2026-09-21): 파스텔 팔레트
 const PAL = { mint: 0xcdebdd, cream: 0xfff4df, lavender: 0xdcd3f4, ink: 0x695b67, panelInfo: 0xf3eefb, overlay: 0x4a3f4b };
 const INK = '#695B67';
-const MINI_DIAMETER = 144;
-const MINI_MARGIN = 16;
-const MINI_MAP_WIDTH = 120;
-const MINI_MAP_HEIGHT = 100;
-const FULL = { x: 60, y: 110, w: 800, h: 450 };
-const INFO = { x: 890, y: 110, w: 330, h: 450 };
 const DEPTH_HUD = 4000;
 const DEPTH_MODAL = 5000;
 
-function markerTexture(type: MapMarker['type']) {
+function markerTexture(type: MarkerType) {
   return type === 'target' ? 'marker-current' : `marker-${type}`;
 }
 
-// docs/save_a_turby_asset.md §7.7 — 우측 상단 지름 160 원형 미니맵 + 전체화면 지도(M/Esc/닫기 버튼).
+// docs/save_a_turby_asset.md §7.7 — 우측 상단 원형 미니맵 + 전체화면 지도(M/Esc/닫기 버튼).
 // 마커는 색이 아니라 서로 다른 실루엣(marker-*)으로 구분하고, 위치·목적지는 게임 데이터로 그린다.
+// 크기·글자는 miniMapLayout(표시 배율별). 창 크기가 바뀌면 relayout()으로 다시 그린다(열림 상태·고른 마커 유지).
 export class MiniMap {
   private scene: Phaser.Scene;
   private view: MapView;
   private markers: MapMarker[];
   private destinationId: string;
   private onToggle: (open: boolean) => void;
+  private L!: MiniMapLayout;
 
+  private miniObjs: Phaser.GameObjects.GameObject[] = [];
   private miniPlayer!: Phaser.GameObjects.Image;
   private fullPlayer!: Phaser.GameObjects.Image;
   private miniOrigin = { x: 0, y: 0 };
@@ -52,11 +52,15 @@ export class MiniMap {
   private fullScale = 0;
   private fullOrigin = { x: 0, y: 0 };
   private full!: Phaser.GameObjects.Container;
-  private infoTitle!: Phaser.GameObjects.Text;
-  private infoBody!: Phaser.GameObjects.Text;
+  private infoLayer: Phaser.GameObjects.GameObject[] = [];
   private open = false;
+  private legendOpen = false;
+  private selectedId = '';
+  private hidden = new Set<string>();
   private markerObjs = new Map<string, Phaser.GameObjects.GameObject[]>(); // 마커 id → 미니맵·전체 지도 표시 오브젝트(목적지 별을 즉시 켜고 끄는 데 쓴다)
   private peerViews = new Map<string, { mini: Phaser.GameObjects.Arc | Phaser.GameObjects.Image; full: Phaser.GameObjects.Arc | Phaser.GameObjects.Image; text: Phaser.GameObjects.Text }>();
+  private lastPeers: { id: string; x: number; y: number; color: number; slot: number }[] = [];
+  private lastPos = { x: 0, y: 0, angle: 0 };
 
   constructor(scene: Phaser.Scene, view: MapView, markers: MapMarker[], destinationId: string, onToggle: (open: boolean) => void) {
     this.scene = scene;
@@ -64,15 +68,24 @@ export class MiniMap {
     this.markers = markers;
     this.destinationId = destinationId;
     this.onToggle = onToggle;
-    this.buildMini();
-    this.buildFull();
+    this.selectedId = destinationId || markers[0]?.id || '';
+    this.build();
 
+    // 키 입력은 한 번만 등록한다(relayout으로 다시 그려도 늘지 않음). 씬이 끝나면 Phaser가 지운다
     scene.input.keyboard?.on('keydown-M', () => this.toggle());
     scene.input.keyboard?.on('keydown-ESC', () => this.close());
   }
 
   get isOpen() {
     return this.open;
+  }
+  // 미니맵이 차지하는 영역(HUD 배치용)
+  get rect() {
+    return this.L.mini.rect;
+  }
+  // 진단용 요약(화면 상태만)
+  get debugState() {
+    return { open: this.open, legendOpen: this.legendOpen, mode: this.L.mode, selected: this.selectedId, diameter: this.L.mini.diameter, close: this.L.full.close, legendToggle: this.L.full.legendToggle, openButton: this.L.mini.open, labelsOnMap: this.L.full.labelsOnMap };
   }
 
   toggle() {
@@ -83,6 +96,7 @@ export class MiniMap {
     if (this.open) return;
     this.open = true;
     this.full.setVisible(true);
+    this.syncPlayer();
     this.onToggle(true);
   }
 
@@ -93,24 +107,54 @@ export class MiniMap {
     this.onToggle(false);
   }
 
+  // 표시 배율이 바뀌면 미니맵·전체 지도를 새 크기로 다시 그린다. 열림 상태·범례·고른 마커·동료 표시·숨긴 마커는 그대로
+  relayout() {
+    this.miniObjs.forEach((o) => o.destroy());
+    this.miniObjs = [];
+    this.full.destroy();
+    this.infoLayer = [];
+    this.markerObjs.clear();
+    for (const v of this.peerViews.values()) v.mini.destroy(); // full·text는 full 컨테이너와 함께 파괴됨
+    this.peerViews.clear();
+    this.build();
+    this.full.setVisible(this.open);
+    for (const id of this.hidden) this.setMarkerVisible(id, false);
+    this.setPeers(this.lastPeers);
+    this.syncPlayer();
+  }
+
+  private build() {
+    this.L = miniMapLayout(displayScaleOf(this.scene.scale.displaySize.width));
+    this.buildMini();
+    this.buildFull();
+  }
+
   update(x: number, y: number, angle: number) {
-    const mx = this.miniOrigin.x + x * this.miniScale;
-    const my = this.miniOrigin.y + y * this.miniScale;
-    this.miniPlayer.setPosition(mx, my).setRotation(angle + Math.PI / 2);
+    this.lastPos = { x, y, angle };
+    this.syncPlayer();
+  }
+
+  private syncPlayer() {
+    const { x, y, angle } = this.lastPos;
+    this.miniPlayer.setPosition(this.miniOrigin.x + x * this.miniScale, this.miniOrigin.y + y * this.miniScale).setRotation(angle + Math.PI / 2);
     if (this.open) this.fullPlayer.setPosition(this.fullOrigin.x + x * this.fullScale, this.fullOrigin.y + y * this.fullScale).setRotation(angle + Math.PI / 2);
   }
 
-  // 같은 방 플레이어 표시(미니맵 슬롯색 18px 원+흰 외곽선, 전체 지도 28px 원+슬롯 번호). 내 위치는 기존 방향 삼각형을 유지한다.
+  // 같은 방 플레이어 표시(슬롯색 원 + 전체 지도에는 슬롯 번호 — 색만으로 구분하지 않는다). 내 위치는 방향 화살표를 유지한다.
   setPeers(peers: { id: string; x: number; y: number; color: number; slot: number }[]) {
+    const hadPeers = this.lastPeers.length > 0;
+    this.lastPeers = peers;
+    const M = this.L.mini;
+    const F = this.L.full;
     const seen = new Set<string>();
     for (const p of peers) {
       seen.add(p.id);
       let v = this.peerViews.get(p.id);
       if (!v) {
         const useImage = this.scene.textures.exists('map-marker'); // Codex ui/coop/map-marker.png — 슬롯색으로 tint해 같은 이미지를 재사용
-        const mini = (useImage ? this.scene.add.image(0, 0, 'map-marker').setDisplaySize(20, 20).setTint(p.color) : this.scene.add.circle(0, 0, 9, p.color).setStrokeStyle(2, 0xffffff)).setScrollFactor(0).setDepth(DEPTH_HUD + 3);
-        const full = (useImage ? this.scene.add.image(0, 0, 'map-marker').setDisplaySize(32, 32).setTint(p.color) : this.scene.add.circle(0, 0, 14, p.color).setStrokeStyle(2, 0xffffff)).setScrollFactor(0);
-        const text = this.scene.add.text(0, 0, String(p.slot), { fontSize: '16px', color: '#ffffff' }).setOrigin(0.5).setScrollFactor(0);
+        const mini = (useImage ? this.scene.add.image(0, 0, 'map-marker').setDisplaySize(M.marker, M.marker).setTint(p.color) : this.scene.add.circle(0, 0, M.marker / 2 - 1, p.color).setStrokeStyle(2, 0xffffff)).setScrollFactor(0).setDepth(DEPTH_HUD + 3);
+        const full = (useImage ? this.scene.add.image(0, 0, 'map-marker').setDisplaySize(F.peer, F.peer).setTint(p.color) : this.scene.add.circle(0, 0, F.peer / 2 - 2, p.color).setStrokeStyle(2, 0xffffff)).setScrollFactor(0);
+        const text = this.scene.add.text(0, 0, String(p.slot), { fontSize: `${F.font.label}px`, color: '#ffffff' }).setOrigin(0.5).setScrollFactor(0);
         this.full.add([full, text]); // 전체 지도 컨테이너 안(닫혀 있으면 함께 숨김)
         v = { mini, full, text };
         this.peerViews.set(p.id, v);
@@ -128,6 +172,7 @@ export class MiniMap {
       v.text.destroy();
       this.peerViews.delete(id);
     }
+    if (hadPeers !== peers.length > 0) this.renderInfo(); // 범례의 "함께 온 친구" 줄이 생기거나 사라진다
   }
 
   private trackMarker(id: string, obj: Phaser.GameObjects.GameObject) {
@@ -138,6 +183,8 @@ export class MiniMap {
 
   // 스토리 목적지 별처럼 게임 상태로 사라졌다 돌아오는 마커를 즉시 숨기거나 보인다
   setMarkerVisible(id: string, visible: boolean) {
+    if (visible) this.hidden.delete(id);
+    else this.hidden.add(id);
     this.markerObjs.get(id)?.forEach((o) => (o as Phaser.GameObjects.Image).setVisible(visible));
   }
 
@@ -147,50 +194,64 @@ export class MiniMap {
 
   private buildMini() {
     const s = this.scene;
-    const cx = CANVAS_WIDTH - MINI_MARGIN - MINI_DIAMETER / 2;
-    const cy = MINI_MARGIN + MINI_DIAMETER / 2;
-    this.miniScale = Math.min(MINI_MAP_WIDTH / this.view.width, MINI_MAP_HEIGHT / this.view.height);
+    const M = this.L.mini;
+    const keep = <T extends Phaser.GameObjects.GameObject>(o: T) => {
+      this.miniObjs.push(o);
+      return o;
+    };
+    const { cx, cy, diameter } = M;
+    const mapW = diameter * (120 / 144);
+    const mapH = diameter * (100 / 144);
+    this.miniScale = Math.min(mapW / this.view.width, mapH / this.view.height);
     this.miniOrigin = { x: cx - (this.view.width * this.miniScale) / 2, y: cy - (this.view.height * this.miniScale) / 2 };
     const k = this.miniScale;
     const o = this.miniOrigin;
 
-    const g = s.add.graphics().setScrollFactor(0).setDepth(DEPTH_HUD);
-    g.fillStyle(PAL.cream, 0.6).fillCircle(cx, cy, MINI_DIAMETER / 2 - 4);
+    const g = keep(s.add.graphics().setScrollFactor(0).setDepth(DEPTH_HUD));
+    g.fillStyle(PAL.cream, 0.6).fillCircle(cx, cy, diameter / 2 - 4);
     this.drawTerrain(g, o.x, o.y, k);
 
-    s.add.image(cx, cy, 'minimap-frame').setDisplaySize(MINI_DIAMETER, MINI_DIAMETER).setScrollFactor(0).setDepth(DEPTH_HUD + 1);
+    keep(s.add.image(cx, cy, 'minimap-frame').setDisplaySize(diameter, diameter).setScrollFactor(0).setDepth(DEPTH_HUD + 1));
 
     for (const m of this.markers) {
       const px = o.x + m.x * k;
       const py = o.y + m.y * k;
-      const icon = s.add.image(px, py, markerTexture(m.type)).setDisplaySize(m.type === 'target' ? 26 : 20, m.type === 'target' ? 26 : 20).setScrollFactor(0).setDepth(DEPTH_HUD + 2);
+      const size = m.type === 'target' ? M.target : M.marker;
+      const icon = keep(s.add.image(px, py, markerTexture(m.type)).setDisplaySize(size, size).setScrollFactor(0).setDepth(DEPTH_HUD + 2));
       this.trackMarker(m.id, icon);
       if (m.type === 'target') this.pulse(icon);
       else if (m.id === this.destinationId) {
-        const ring = s.add.image(px, py, 'marker-current').setDisplaySize(30, 30).setScrollFactor(0).setDepth(DEPTH_HUD + 3);
+        const ring = keep(s.add.image(px, py, 'marker-current').setDisplaySize(size * 1.5, size * 1.5).setScrollFactor(0).setDepth(DEPTH_HUD + 3));
         this.pulse(ring);
       }
     }
-    this.miniPlayer = s.add.image(0, 0, 'marker-player').setDisplaySize(16, 16).setScrollFactor(0).setDepth(DEPTH_HUD + 4);
+    this.miniPlayer = keep(s.add.image(0, 0, 'marker-player').setDisplaySize(M.player, M.player).setScrollFactor(0).setDepth(DEPTH_HUD + 4));
 
-    s.add.zone(cx, cy, MINI_DIAMETER, MINI_DIAMETER).setScrollFactor(0).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.openMap());
-    s.add
-      .image(cx + 54, cy + 54, 'map-open')
-      .setDisplaySize(38, 38)
-      .setScrollFactor(0)
-      .setDepth(DEPTH_HUD + 5)
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => this.openMap());
+    // 미니맵 전체와 확대 아이콘 모두 전체 지도를 연다
+    keep(s.add.zone(cx, cy, diameter, diameter).setScrollFactor(0).setDepth(DEPTH_HUD + 1).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.openMap()));
+    keep(
+      s.add
+        .image(M.open.x, M.open.y, 'map-open')
+        .setDisplaySize(M.open.size, M.open.size)
+        .setScrollFactor(0)
+        .setDepth(DEPTH_HUD + 5)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => this.openMap()),
+    );
   }
 
   private buildFull() {
     const s = this.scene;
+    const F = this.L.full;
+    const FULL = F.map;
+    const INFO = F.info;
     this.fullScale = Math.min(FULL.w / this.view.width, FULL.h / this.view.height);
     const k = this.fullScale;
     this.fullOrigin = { x: FULL.x + (FULL.w - this.view.width * k) / 2, y: FULL.y + (FULL.h - this.view.height * k) / 2 };
     const fo = this.fullOrigin;
     const items: Phaser.GameObjects.GameObject[] = [];
 
+    // 뒤 화면 입력을 막는다(지도가 열려 있는 동안 이동·HUD 입력이 새지 않게)
     const dim = s.add.rectangle(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT, PAL.overlay, 0.68).setOrigin(0, 0).setInteractive();
     items.push(dim);
 
@@ -201,39 +262,90 @@ export class MiniMap {
     g.fillStyle(PAL.panelInfo, 1).lineStyle(7, PAL.lavender, 1).fillRoundedRect(INFO.x, INFO.y - 14, INFO.w, INFO.h + 28, 18).strokeRoundedRect(INFO.x, INFO.y - 14, INFO.w, INFO.h + 28, 18);
     items.push(g);
 
-    items.push(s.add.text(FULL.x + 14, FULL.y + 10, `${this.view.title} 지도`, { fontSize: '22px', color: INK }));
-
-    this.infoTitle = s.add.text(INFO.x + 20, INFO.y + 16, '', { fontSize: '22px', color: INK, wordWrap: { width: INFO.w - 100 } });
-    this.infoBody = s.add.text(INFO.x + 20, INFO.y + 60, '', { fontSize: '16px', color: INK, lineSpacing: 6, wordWrap: { width: INFO.w - 40 } });
-    items.push(this.infoTitle, this.infoBody);
-    items.push(
-      s.add.text(INFO.x + 20, INFO.y + INFO.h - 40, 'M 또는 Esc로 닫기', { fontSize: '13px', color: '#9a8d98' }),
-    );
+    items.push(s.add.text(FULL.x + 14, FULL.y + 10, `${this.view.title} 지도`, { fontSize: `${F.font.title}px`, color: INK, backgroundColor: '#FFF4DFCC', padding: { x: 6, y: 2 } }));
 
     for (const m of this.markers) {
       const px = fo.x + m.x * k;
       const py = fo.y + m.y * k;
-      const icon = s.add.image(px, py, markerTexture(m.type)).setDisplaySize(m.type === 'target' ? 48 : 44, m.type === 'target' ? 48 : 44).setInteractive({ useHandCursor: true });
+      const size = m.type === 'target' ? F.target : F.marker;
+      const icon = s.add.image(px, py, markerTexture(m.type)).setDisplaySize(size, size).setInteractive({ useHandCursor: true });
       if (m.type === 'target') this.pulse(icon);
       icon.on('pointerdown', () => this.select(m.id));
       this.trackMarker(m.id, icon);
-      items.push(icon, s.add.text(px, py + 30, m.name, { fontSize: '14px', color: INK, backgroundColor: '#FFF4DFE6', padding: { x: 5, y: 2 } }).setOrigin(0.5, 0));
+      items.push(icon);
+      // 이름표: 보통 화면은 마커 아래에, 작은 화면은 서로 겹치므로 지도에서 빼고 오른쪽 정보·범례 영역에서 보여 준다
+      if (F.labelsOnMap) items.push(s.add.text(px, py + size / 2 + 8, m.name, { fontSize: `${F.font.label}px`, color: INK, backgroundColor: '#FFF4DFE6', padding: { x: 5, y: 2 } }).setOrigin(0.5, 0));
       if (m.type !== 'target' && m.id === this.destinationId) {
-        const ring = s.add.image(px, py, 'marker-current').setDisplaySize(70, 70);
+        const ring = s.add.image(px, py, 'marker-current').setDisplaySize(size * 1.6, size * 1.6);
         this.pulse(ring);
         items.push(ring);
       }
     }
-    this.fullPlayer = s.add.image(0, 0, 'marker-player').setDisplaySize(34, 34);
+    this.fullPlayer = s.add.image(0, 0, 'marker-player').setDisplaySize(F.player, F.player);
     items.push(this.fullPlayer);
 
-    const close = s.add.image(INFO.x + INFO.w - 34, INFO.y + 34, 'map-close').setDisplaySize(48, 48).setInteractive({ useHandCursor: true });
+    const C = F.close;
+    const close = s.add.image(C.x + C.w / 2, C.y + C.h / 2, 'map-close').setDisplaySize(C.w, C.h).setInteractive({ useHandCursor: true });
     close.on('pointerdown', () => this.close());
     items.push(close);
 
     this.full = s.add.container(0, 0, items).setScrollFactor(0).setDepth(DEPTH_MODAL).setVisible(false);
     for (const it of items) (it as Phaser.GameObjects.Image).setScrollFactor?.(0);
-    this.select(this.destinationId || this.markers[0]?.id || '');
+    this.renderInfo();
+  }
+
+  // 오른쪽 정보 영역: 고른 마커의 이름·안내 + 범례. 작은 화면은 범례를 버튼으로 접고 펼친다(펼치면 안내 대신 범례)
+  private renderInfo() {
+    if (!this.full) return;
+    this.infoLayer.forEach((o) => o.destroy());
+    this.infoLayer = [];
+    const s = this.scene;
+    const F = this.L.full;
+    const INFO = F.info;
+    const add = <T extends Phaser.GameObjects.GameObject>(o: T) => {
+      (o as unknown as Phaser.GameObjects.Image).setScrollFactor?.(0);
+      this.infoLayer.push(o);
+      this.full.add(o);
+      return o;
+    };
+    const innerW = INFO.w - 40;
+    const m = this.markers.find((x) => x.id === this.selectedId);
+    const showLegend = F.legendAlways || this.legendOpen;
+    const entries = legendEntries(this.markers.map((x) => x.type), this.lastPeers.length > 0);
+    const legendH = entries.length * F.legendRow + F.font.label * 1.6;
+    const bottom = F.legendToggle ? F.legendToggle.y - 10 : INFO.y + INFO.h - 10;
+
+    if (!this.legendOpen || F.legendAlways) {
+      const title = add(s.add.text(INFO.x + 20, INFO.y + 16, m?.name ?? `${this.view.title}`, { fontSize: `${F.font.infoTitle}px`, color: INK, wordWrap: { width: innerW - F.close.w, useAdvancedWrap: true } }));
+      const isDest = !!m && (m.id === this.destinationId || m.type === 'target');
+      const bodyY = Math.max(title.y + title.height + 12, F.close.y + F.close.h + 8);
+      add(s.add.text(INFO.x + 20, bodyY, m ? `${isDest ? '★ 현재 목적지\n\n' : ''}${m.hint}` : '지도의 표시를 누르면 설명이 나와요.', { fontSize: `${F.font.body}px`, color: INK, lineSpacing: 6, wordWrap: { width: innerW, useAdvancedWrap: true } }));
+    }
+    if (showLegend) {
+      const y0 = F.legendAlways ? bottom - legendH - F.font.hint * 1.8 : Math.max(INFO.y + 16, F.close.y + F.close.h + 12);
+      add(s.add.text(INFO.x + 20, y0, '범례', { fontSize: `${F.font.label}px`, color: '#ffffff', backgroundColor: '#8a7aa8', padding: { x: 8, y: 2 } }));
+      entries.forEach((key, i) => {
+        const y = y0 + F.font.label * 1.6 + i * F.legendRow + F.legendRow / 2;
+        const size = Math.round(F.legendRow * 0.8);
+        if (key === 'peer') {
+          add(s.add.circle(INFO.x + 20 + size / 2, y, size / 2 - 2, 0x9aa9d8).setStrokeStyle(2, 0xffffff));
+          add(s.add.text(INFO.x + 20 + size / 2, y, '1', { fontSize: `${Math.round(F.font.label * 0.8)}px`, color: '#ffffff' }).setOrigin(0.5));
+        } else {
+          add(s.add.image(INFO.x + 20 + size / 2, y, key === 'player' ? 'marker-player' : markerTexture(key)).setDisplaySize(size, size));
+        }
+        add(s.add.text(INFO.x + 20 + size + 12, y, LEGEND_LABEL[key], { fontSize: `${F.font.label}px`, color: INK, wordWrap: { width: innerW - size - 12, useAdvancedWrap: true } }).setOrigin(0, 0.5));
+      });
+    }
+    if (F.legendAlways) add(s.add.text(INFO.x + 20, bottom - F.font.hint * 1.3, 'M 또는 Esc로 닫기', { fontSize: `${F.font.hint}px`, color: '#9a8d98' }));
+    const T = F.legendToggle;
+    if (T) {
+      const box = add(s.add.rectangle(T.x, T.y, T.w, T.h, 0xdcd3f4).setOrigin(0, 0).setStrokeStyle(3, 0xb9a9e0));
+      add(s.add.text(T.x + T.w / 2, T.y + T.h / 2, this.legendOpen ? '범례 접기 ▴' : '범례 보기 ▾', { fontSize: `${F.font.body}px`, color: INK }).setOrigin(0.5));
+      box.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+        this.legendOpen = !this.legendOpen;
+        this.renderInfo();
+      });
+    }
   }
 
   private drawTerrain(g: Phaser.GameObjects.Graphics, ox: number, oy: number, k: number) {
@@ -248,10 +360,9 @@ export class MiniMap {
   }
 
   private select(id: string) {
-    const m = this.markers.find((x) => x.id === id);
-    if (!m) return;
-    const isDest = id === this.destinationId || m.type === 'target';
-    this.infoTitle.setText(m.name);
-    this.infoBody.setText(`${isDest ? '★ 현재 목적지\n\n' : ''}${m.hint}`);
+    if (!this.markers.some((x) => x.id === id)) return;
+    this.selectedId = id;
+    this.legendOpen = false; // 마커를 고르면 그 설명을 보여 준다
+    this.renderInfo();
   }
 }

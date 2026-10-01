@@ -1,10 +1,14 @@
 // 10-01 v1 §2: 지역 선택·상점·기지·장비 창·이름 입력 배치 — 1280×720과 640×360에서 화면 안, 서로 겹치지 않음, 글자·터치 기준
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { clampPage, equipPanelLayout, homeLayout, marketLayout, nameInputLayout, pageOf, stageSelectLayout, toastFont, villageHudLayout, type Rect } from '../src/ui/screenLayouts.ts';
+import { clampPage, equipPanelLayout, homeLayout, keyboardShift, mapHudLayout, marketLayout, miniMapLayout, nameInputLayout, pageOf, stageSelectLayout, toastFont, villageHudLayout, type Rect } from '../src/ui/screenLayouts.ts';
 import { finalPx, MIN_BODY_PX, MIN_BUTTON_PX } from '../src/ui/responsive.ts';
 import { compareDrawPaths } from '../src/ui/drawOrder.ts';
-import { buyLabel, buyStateOf, equipRows, stageBadgeLabel } from '../src/ui/screenStates.ts';
+import { VERIFIED_PHASER_VERSION, inputInternalsProblem } from '../src/ui/phaserCompat.ts';
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+import { LEGEND_LABEL, buyLabel, buyStateOf, capturedLabel, equipRows, legendEntries, stageBadgeLabel } from '../src/ui/screenStates.ts';
 
 const inCanvas = (r: Rect) => r.x >= 0 && r.y >= 0 && r.x + r.w <= 1280 && r.y + r.h <= 720;
 const overlap = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
@@ -169,4 +173,96 @@ test('화면 상태 글자: 지역 배지(입장 가능·잠김), 상점 구매 
   assert.deepEqual(equipRows([], slots).map((r) => r.kind), ['general', 'general'], '일반 터비·유물 장착 전 누비: 이야기 줄 없음');
   const rows = equipRows([{ slotKey: 'weapon', itemName: '뜨개바늘' }, { slotKey: 'story_1', itemName: '첫 매듭' }], slots);
   assert.deepEqual(rows.map((r) => [r.kind, r.slotKey]), [['general', 'weapon'], ['general', 'armor'], ['story', 'story_1']]);
+});
+
+// ---------- 10-01 v2 §2: Phaser 내부 API 의존성 고정 ----------
+
+test('Phaser 버전 고정: package.json은 범위 표기 없는 정확한 버전, lockfile·실제 설치본·확인한 버전이 모두 같다', () => {
+  const read = (rel: string) => JSON.parse(readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8'));
+  const pkg = read('../package.json');
+  assert.equal(pkg.dependencies.phaser, VERIFIED_PHASER_VERSION, 'package.json: ^·~ 없이 정확한 버전');
+  assert.match(pkg.dependencies.phaser, /^\d+\.\d+\.\d+$/);
+  const lock = read('../../package-lock.json');
+  assert.equal(lock.packages['save-a-turby'].dependencies.phaser, VERIFIED_PHASER_VERSION, 'lockfile의 save-a-turby 요구 버전');
+  assert.equal(lock.packages['node_modules/phaser'].version, VERIFIED_PHASER_VERSION, 'lockfile의 설치 버전');
+  const require = createRequire(import.meta.url);
+  const installed = JSON.parse(readFileSync(require.resolve('phaser/package.json'), 'utf8')).version;
+  assert.equal(installed, VERIFIED_PHASER_VERSION, `실제 설치본(${installed}) — 버전을 올렸다면 ui/phaserCompat.ts의 절차를 따른다`);
+});
+
+test('Phaser 내부 구조 검사: 필드가 없거나 배열·함수가 아니면 문제를 알려 패치를 설치하지 않게 한다', () => {
+  const ok = { _list: [], _pendingInsertion: [], _pendingRemoval: [], clear() {}, update() {}, sortGameObjects() {} };
+  assert.equal(inputInternalsProblem(ok), null);
+  assert.match(inputInternalsProblem(undefined)!, /InputPlugin이 없습니다/);
+  assert.match(inputInternalsProblem({ ...ok, _pendingInsertion: undefined })!, /_pendingInsertion/);
+  assert.match(inputInternalsProblem({ ...ok, _list: new Set() })!, /_list.*배열이 아닙니다/);
+  assert.match(inputInternalsProblem({ ...ok, _pendingRemoval: {} })!, /_pendingRemoval/);
+  assert.match(inputInternalsProblem({ ...ok, sortGameObjects: null })!, /sortGameObjects.*함수가 아닙니다/);
+  assert.match(inputInternalsProblem({ ...ok, clear: 1 })!, /clear/);
+});
+
+// ---------- 10-01 v2 §3·§4·§5 ----------
+
+test('탐험 맵 HUD: 지역 이름·포획·마을로·방 상태·목표·미니맵·인벤토리·터비가 화면 안에서 겹치지 않고, 조이스틱 영역(아래쪽)을 침범하지 않음', () => {
+  for (const scale of SCALES) {
+    const L = mapHudLayout(scale);
+    const all = [L.area, L.captured, L.home, L.room, L.goal, L.miniMap, L.inventory, L.turbys];
+    for (const r of all) assert.ok(inCanvas(r), `${scale}: 화면 밖 ${JSON.stringify(r)}`);
+    noOverlap(all, String(scale));
+    for (const r of all) assert.ok(!overlap(r, L.joystickZone), `${scale}: 조이스틱 영역 침범 ${JSON.stringify(r)}`);
+    assert.ok(L.joystickZone.h >= 300 && L.joystickZone.w === 1280, `${scale}: 조이스틱 영역 높이(${L.joystickZone.h})`);
+    assert.ok(finalPx(L.font.button, scale) >= MIN_BUTTON_PX && finalPx(L.font.goal, scale) >= 13 && finalPx(L.font.room, scale) >= MIN_BODY_PX && finalPx(L.font.area, scale) >= 13, `${scale}: 글자`);
+    if (scale < 0.75) for (const r of [L.home, L.inventory, L.turbys]) assert.ok(finalPx(r.h, scale) >= 40, `${scale}: 버튼 터치 높이`);
+    // 목표 문구: 3줄까지 영역 안(긴 문구는 줄바꿈)
+    assert.ok(L.goal.h >= L.font.goal * 1.3 * 3 && L.goal.w >= 600, `${scale}: 목표 영역`);
+    assert.ok(L.toastY > L.joystickZone.y, '토스트는 아래쪽(누르는 대상이 아님)');
+  }
+  assert.equal(capturedLabel(3), '포획: 3');
+});
+
+test('미니맵·전체 지도: 작은 화면은 미니맵·마커·닫기 버튼을 키우고 지도 위 이름표 대신 범례(접기/펼치기), 영역은 화면 안·서로 겹치지 않음', () => {
+  for (const scale of SCALES) {
+    const L = miniMapLayout(scale);
+    const F = L.full;
+    assert.ok(inCanvas(L.mini.rect) && inCanvas(F.map) && inCanvas(F.info) && inCanvas(F.close), `${scale}: 화면 안`);
+    assert.ok(!overlap(F.map, F.info), `${scale}: 지도와 정보 영역`);
+    const inInfo = (r: Rect) => r.x >= F.info.x && r.x + r.w <= F.info.x + F.info.w && r.y + r.h <= F.info.y + F.info.h + 1;
+    assert.ok(inInfo(F.close), `${scale}: 닫기 버튼은 정보 영역 안`);
+    assert.ok(finalPx(F.font.body, scale) >= MIN_BODY_PX && finalPx(F.font.label, scale) >= MIN_BODY_PX && finalPx(F.font.hint, scale) >= MIN_BODY_PX, `${scale}: 글자`);
+    assert.ok(finalPx(F.close.h, scale) >= 40 && finalPx(F.marker, scale) >= 30, `${scale}: 닫기·마커 터치 크기`);
+    assert.ok(finalPx(L.mini.open.size, scale) >= 30, `${scale}: 확대 버튼`);
+    const openBox = { x: L.mini.open.x - L.mini.open.size / 2, y: L.mini.open.y - L.mini.open.size / 2, w: L.mini.open.size, h: L.mini.open.size };
+    assert.ok(openBox.y + openBox.h <= L.mini.rect.y + L.mini.rect.h + 1 && openBox.x + openBox.w <= 1280, `${scale}: 확대 버튼이 미니맵 영역 안`);
+  }
+  const C = miniMapLayout(0.5);
+  const R = miniMapLayout(1);
+  assert.ok(C.mini.diameter > R.mini.diameter && C.full.marker > R.full.marker, '작은 화면은 더 크게');
+  assert.deepEqual([C.full.labelsOnMap, C.full.legendAlways, !!C.full.legendToggle], [false, false, true], '640×360: 이름표는 지도에서 빼고 범례는 접기/펼치기');
+  assert.deepEqual([R.full.labelsOnMap, R.full.legendAlways, R.full.legendToggle], [true, true, null], '1280×720: 이름표와 범례를 늘 표시');
+  assert.ok(!overlap(C.full.legendToggle!, C.full.close) && C.full.legendToggle!.y + C.full.legendToggle!.h <= C.full.info.y + C.full.info.h);
+  assert.ok(finalPx(C.full.legendToggle!.h, 0.5) >= 40);
+  // 범례 6줄(내 위치·친구·목적지·집·장터·출구)이 정보 영역에 들어간다
+  for (const L of [C, R]) assert.ok(6 * L.full.legendRow + L.full.font.label * 1.6 < L.full.info.h - L.full.close.h - 40);
+});
+
+test('지도 범례: 색이 아니라 모양·표식 설명, 지도에 있는 종류만(친구는 함께 있을 때만)', () => {
+  assert.deepEqual(legendEntries(['home', 'market', 'exit'], false), ['player', 'home', 'market', 'exit']);
+  assert.deepEqual(legendEntries(['target'], true), ['player', 'peer', 'target']);
+  assert.deepEqual(legendEntries([], false), ['player']);
+  assert.match(LEGEND_LABEL.player, /화살표/);
+  assert.match(LEGEND_LABEL.peer, /동그라미와 번호/);
+  assert.match(LEGEND_LABEL.target, /별/);
+});
+
+test('가상 키보드: 입력 줄이 보이는 영역 아래로 가려지면 그만큼만 위로, 이미 보이면 그대로, 위로 넘치지는 않게', () => {
+  assert.equal(keyboardShift(37, 77, 0, 360), 0, '키보드 없음');
+  assert.equal(keyboardShift(37, 77, 0, 140), 0, '키보드가 화면 61%를 가려도 위쪽 배치라 그대로 보임');
+  assert.equal(keyboardShift(37, 77, 0, 60), 23, '보이는 영역 60px: 줄 아래 끝(77)+여백 6이 60 안으로');
+  assert.equal(keyboardShift(37, 77, 0, 20), 31, '줄 위쪽이 화면 밖으로 나가지 않는 만큼만(37-6)');
+  assert.equal(keyboardShift(137, 177, 100, 160), 23, '보이는 영역이 아래로 밀린 경우(offsetTop)');
+  assert.equal(keyboardShift(37, 77, 0, 0), 0, '보이는 영역 정보가 비정상이면 옮기지 않음');
+  // 이름 입력 배치의 줄은 640×360에서 보이는 높이 100px(키보드 72%)까지 옮기지 않아도 보인다
+  const L = nameInputLayout(0.5);
+  const bottom = Math.max(L.input.y + L.input.h, L.button.y + L.button.h) * 0.5;
+  assert.ok(bottom + 6 <= 100, `입력 줄 아래 끝 ${bottom}px`);
 });

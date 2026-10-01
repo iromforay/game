@@ -319,7 +319,100 @@ export function villageHudLayout(scale: number): VillageHudLayout {
   const title = compact ? { x: W / 2 - 150, y: 12, w: 300, h: 64 } : { x: W / 2 - 120, y: 16, w: 240, h: 48 };
   const invH = Math.round(font.button * 1.25 + 12);
   const inventory = { x: 16, y: coin.y + coin.h + 8, w: Math.round(font.button * 4 + 24), h: invH };
-  const miniMap = { x: W - 16 - 144, y: 16, w: 144, h: 144 + 22 };
+  const miniMap = miniMapLayout(scale).mini.rect;
   const prompt = compact ? { w: 320, h: touchH(scale, 64), lift: 96 } : { w: 190, h: 64, lift: 84 };
   return { mode, font, coin, title, inventory, miniMap, prompt };
+}
+
+// ---------- 미니맵·전체 지도(10-01 v2 §4) ----------
+// 작은 화면: 미니맵과 마커·글자·닫기 버튼을 키우고, 지도 위 이름표는 겹치므로 빼고 오른쪽 정보 영역의 범례(접기/펼치기)로 옮긴다.
+export interface MiniMapLayout {
+  mode: LayoutMode;
+  mini: { diameter: number; cx: number; cy: number; marker: number; target: number; player: number; open: { x: number; y: number; size: number }; rect: Rect };
+  full: {
+    map: Rect;
+    info: Rect;
+    close: Rect;
+    legendToggle: Rect | null; // 작은 화면만: 범례 접기/펼치기
+    font: { title: number; infoTitle: number; body: number; label: number; hint: number };
+    marker: number;
+    target: number;
+    player: number;
+    peer: number;
+    labelsOnMap: boolean; // 지도 위 마커 이름표(보통 화면만)
+    legendAlways: boolean; // 보통 화면: 정보 영역 아래에 범례를 늘 보여 준다
+    legendRow: number;
+  };
+}
+export function miniMapLayout(scale: number): MiniMapLayout {
+  const mode = layoutModeOf(scale);
+  const compact = mode === 'compact';
+  const d = compact ? 200 : 144;
+  const margin = compact ? 12 : 16;
+  const cx = W - margin - d / 2;
+  const cy = margin + d / 2;
+  const openSize = compact ? Math.max(60, touchH(scale, 60) - 16) : 38;
+  const open = { x: cx + d * 0.375, y: cy + d * 0.375, size: openSize };
+  const rect = { x: W - margin - d, y: margin, w: d, h: Math.ceil(open.y + openSize / 2 - margin) };
+  const font = { title: fontPx(scale, 22, 13), infoTitle: fontPx(scale, 22, 14), body: fontPx(scale, 16, MIN_BODY_PX), label: fontPx(scale, 14, MIN_BODY_PX), hint: fontPx(scale, 13, MIN_BODY_PX) };
+  const map = compact ? { x: 24, y: 24, w: 730, h: 672 } : { x: 60, y: 110, w: 800, h: 450 };
+  const info = compact ? { x: 778, y: 24, w: 478, h: 672 } : { x: 890, y: 110, w: 330, h: 450 };
+  const closeSize = compact ? touchH(scale, 48) : 48;
+  const close = { x: info.x + info.w - 10 - closeSize, y: info.y + 10 - (compact ? 0 : 14), w: closeSize, h: closeSize };
+  const toggleH = compact ? touchH(scale, 48) : 0;
+  const legendToggle = compact ? { x: info.x + 16, y: info.y + info.h - 16 - toggleH, w: info.w - 32, h: toggleH } : null;
+  return {
+    mode,
+    mini: { diameter: d, cx, cy, marker: compact ? 30 : 20, target: compact ? 38 : 26, player: compact ? 24 : 16, open, rect },
+    full: { map, info, close, legendToggle, font, marker: compact ? 68 : 44, target: compact ? 76 : 48, player: compact ? 52 : 34, peer: compact ? 48 : 32, labelsOnMap: !compact, legendAlways: !compact, legendRow: Math.round(font.label * 1.9) },
+  };
+}
+
+// ---------- 탐험 맵 HUD(10-01 v2 §3) ----------
+// 왼쪽 위: 지역 이름 → 포획 수 → 마을로 → 방 상태 / 가운데 위: 스토리 목표(있을 때만) / 오른쪽 위: 미니맵 → 인벤토리·터비 버튼.
+// HUD는 모두 화면 위쪽 띠 안에 두고, 아래쪽(조이스틱 조작 영역)은 비운다.
+export interface MapHudLayout {
+  mode: LayoutMode;
+  font: { area: number; label: number; button: number; goal: number; room: number };
+  area: Rect;
+  captured: Rect;
+  home: Rect;
+  room: Rect;
+  goal: Rect; // 목표 패널이 쓸 수 있는 영역(높이는 최대 — 글이 길면 이 안에서 줄바꿈)
+  miniMap: Rect;
+  inventory: Rect;
+  turbys: Rect;
+  joystickZone: Rect; // 이 영역에는 누를 수 있는 HUD를 두지 않는다
+  toastY: number;
+}
+export function mapHudLayout(scale: number): MapHudLayout {
+  const mode = layoutModeOf(scale);
+  const compact = mode === 'compact';
+  const font = { area: fontPx(scale, 16, 13), label: fontPx(scale, 18, 13), button: fontPx(scale, 16, MIN_BUTTON_PX), goal: fontPx(scale, 17, 13), room: fontPx(scale, 12, MIN_BODY_PX) };
+  const mini = miniMapLayout(scale).mini.rect;
+  const leftW = compact ? 300 : 220;
+  const lineH = (f: number) => Math.round(f * 1.25 + 8);
+  const area = { x: 16, y: compact ? 8 : 12, w: leftW, h: lineH(font.area) };
+  const captured = { x: 16, y: area.y + area.h + 4, w: leftW, h: lineH(font.label) };
+  const btnH = compact ? touchH(scale, 44) : Math.round(font.button * 1.25 + 12);
+  const home = { x: 16, y: captured.y + captured.h + 6, w: compact ? 200 : 110, h: btnH };
+  const room = { x: 16, y: home.y + home.h + 6, w: leftW, h: lineH(font.room) };
+  const goalX = 16 + leftW + 16;
+  const goal = { x: goalX, y: 8, w: mini.x - 16 - goalX, h: Math.round(font.goal * 1.3 * 3 + 20) };
+  const btnW = compact ? 200 : 120;
+  const inventory = { x: W - 16 - btnW, y: mini.y + mini.h + 8, w: btnW, h: btnH };
+  const turbys = { x: W - 16 - btnW, y: inventory.y + btnH + 8, w: btnW, h: btnH };
+  const hudBottom = Math.max(room.y + room.h, turbys.y + turbys.h, goal.y + goal.h);
+  const zoneY = Math.max(H / 2, hudBottom + 8);
+  return { mode, font, area, captured, home, room, goal, miniMap: mini, inventory, turbys, joystickZone: { x: 0, y: zoneY, w: W, h: H - zoneY }, toastY: H - 60 };
+}
+
+// 가상 키보드 대응(10-01 v2 §5): 입력 줄(위·아래, 화면 px)이 보이는 영역(visualViewport) 아래로 가려지면 위로 올릴 양(px).
+// 줄이 이미 보이면 0. 줄의 위쪽이 보이는 영역 위로 나가지 않는 만큼만 올린다.
+export function keyboardShift(rowTop: number, rowBottom: number, visibleTop: number, visibleBottom: number, margin = 6): number {
+  if (!(visibleBottom > visibleTop)) return 0;
+  if (rowBottom + margin <= visibleBottom) return 0;
+  const want = rowBottom + margin - visibleBottom;
+  const room = Math.max(0, rowTop - visibleTop - margin);
+  return Math.round(Math.min(want, room));
 }

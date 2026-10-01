@@ -95,6 +95,11 @@ export function fetchShop(): Promise<ShopProduct[]> {
 }
 
 // 아래는 세션 토큰 기반 /player/me/* (스토리 M1-B). 구 경로 /player/:playerId/* 는 서버에 호환용으로만 남아 있다.
+// 내 터비 목록(서버 정본). 이동이 거절됐을 때 화면을 서버 상태로 다시 맞추는 데 쓴다
+export function fetchTurbys(): Promise<ServerTurby[]> {
+  return me.get('/turby');
+}
+
 export function moveToShelf(turbyId: string, slotIndex: number): Promise<ServerTurby> {
   return me.post(`/turby/${turbyId}/shelf`, { slotIndex });
 }

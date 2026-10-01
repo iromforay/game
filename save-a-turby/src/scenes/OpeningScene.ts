@@ -4,7 +4,7 @@ import { AVATAR_IMAGE, BACKGROUND_TILES, CHARACTER_IMAGES, PORTRAIT_IMAGES } fro
 import { loadWorldImages } from '../assets/loader';
 import { PAL, TEXT, feltPanel, pillButton } from '../ui/kit';
 import { displayScaleOf, fontPx, MIN_BODY_PX, MIN_BUTTON_PX } from '../ui/responsive';
-import { nameInputLayout } from '../ui/screenLayouts';
+import { keyboardShift, nameInputLayout } from '../ui/screenLayouts';
 import { portraitCandidates, runDialogue, type Advance, type DialogueEntry, type DialogueFile, type NameSubmitResult, type RunnerPorts, type ShownLine } from '../story/dialogueRunner';
 import { NAME_RULE_TEXT, nameReasonMessage, precheckName } from '../story/nameRules';
 import type { OpeningStoryState, StoryClient } from '../story/storyClient';
@@ -241,7 +241,8 @@ export class OpeningScene extends Phaser.Scene {
     input.setAttribute('enterkeyhint', 'done');
     const I = L.input;
     input.style.cssText = `width:${I.w}px;height:${I.h}px;box-sizing:border-box;padding:0 24px;font-size:${L.font.input}px;border-radius:${I.h / 2}px;border:4px solid #dcd3f4;background:#fffaf1;color:${TEXT.body};outline:none;text-align:center;font-family:inherit`;
-    const detach = this.overlayElement(input, I.x + I.w / 2, I.y + I.h / 2, I.w, I.h);
+    // 입력창과 확인 버튼이 있는 줄은 가상 키보드가 올라와도 보이는 영역 안에 남긴다(visualViewport가 없으면 위쪽 배치 그대로)
+    const detach = this.overlayElement(input, I.x + I.w / 2, I.y + I.h / 2, I.w, I.h, { top: Math.min(I.y, L.button.y), bottom: Math.max(I.y + I.h, L.button.y + L.button.h) });
     this.layer.add(this.add.text(CANVAS_WIDTH / 2, L.ruleY, NAME_RULE_TEXT, { fontSize: `${L.font.rule}px`, color: TEXT.sub }).setOrigin(0.5));
     const error = this.add.text(CANVAS_WIDTH / 2, L.errorY, '', { fontSize: `${L.font.rule}px`, color: TEXT.error, align: 'center', wordWrap: { width: panel.w - 80, useAdvancedWrap: true } }).setOrigin(0.5, 0);
     this.layer.add(error);
@@ -292,14 +293,26 @@ export class OpeningScene extends Phaser.Scene {
 
   // HTML 입력창을 캔버스 위 지정 좌표(캔버스 좌표계)에 겹친다. Phaser DOM 컨테이너는 부모가 flex 중앙정렬이면
   // 위치가 어긋나서(허브 .game-canvas-container, 640×360에서 확인) 캔버스의 실제 화면 위치·배율을 직접 따라간다.
-  private overlayElement(el: HTMLElement, cx: number, cy: number, w: number, h: number): () => void {
+  // keepVisible(캔버스 좌표의 위·아래): 가상 키보드로 보이는 영역(visualViewport)이 줄어 이 줄이 가려지면 캔버스와 입력창을
+  // 함께 위로 올린다. visualViewport를 지원하지 않는 브라우저에서는 아무것도 옮기지 않는다(위쪽 배치 그대로).
+  private overlayElement(el: HTMLElement, cx: number, cy: number, w: number, h: number, keepVisible?: { top: number; bottom: number }): () => void {
     const canvas = this.game.canvas;
+    const vv = keepVisible ? window.visualViewport : null;
     el.style.position = 'fixed';
     el.style.zIndex = '20';
     el.style.transformOrigin = 'left top';
+    let shifted = false;
     const place = () => {
-      const r = canvas.getBoundingClientRect();
+      if (shifted) canvas.style.transform = '';
+      let r = canvas.getBoundingClientRect();
       const s = r.width / CANVAS_WIDTH;
+      const shift = vv && keepVisible ? keyboardShift(r.top + keepVisible.top * s, r.top + keepVisible.bottom * s, vv.offsetTop, vv.offsetTop + vv.height) : 0;
+      if (shift > 0) {
+        canvas.style.transform = `translateY(${-shift}px)`;
+        r = canvas.getBoundingClientRect();
+      }
+      if (shift > 0 || shifted) this.scale.updateBounds(); // 캔버스가 옮겨졌으면 Phaser의 입력 좌표 기준도 다시 잡는다(버튼이 보이는 자리에서 눌리게)
+      shifted = shift > 0;
       el.style.left = `${r.left + (cx - w / 2) * s}px`;
       el.style.top = `${r.top + (cy - h / 2) * s}px`;
       el.style.transform = `scale(${s})`;
@@ -308,9 +321,20 @@ export class OpeningScene extends Phaser.Scene {
     document.body.appendChild(el);
     window.addEventListener('resize', place);
     this.scale.on('resize', place);
+    vv?.addEventListener('resize', place);
+    vv?.addEventListener('scroll', place);
+    let detached = false;
     const detach = () => {
+      if (detached) return;
+      detached = true;
       window.removeEventListener('resize', place);
       this.scale.off('resize', place);
+      vv?.removeEventListener('resize', place);
+      vv?.removeEventListener('scroll', place);
+      if (shifted) {
+        canvas.style.transform = '';
+        this.scale.updateBounds();
+      }
       el.remove();
     };
     this.events.once('shutdown', detach);

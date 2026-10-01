@@ -12,7 +12,8 @@ import { clampPage, homeLayout, pageOf, type HomeLayout } from '../ui/screenLayo
 
 const SHELF_SLOT_COUNT = 40; // 4.4: 8열x5행 제안
 
-type HomeInit = { pages?: [number, number]; equipFor?: string | null };
+type HomeInit = { pages?: [number, number]; equipFor?: string | null; notice?: string };
+export const SHELF_OCCUPIED_TEXT = '그 칸에는 이미 다른 터비가 있어요. 선반을 다시 불러왔어요.';
 
 // 4.4 기지(집) — 마을(Village) 안 "내 집"에서 진입. 가방(소지)/선반(전시) 구분 표시, 버튼으로 서로 이동, 터비별 장비 창.
 // 좌표·글자는 homeLayout(표시 배율별). 터비가 한 줄을 넘으면 구역마다 페이지로 넘긴다.
@@ -24,6 +25,7 @@ export class HomeScene extends Phaser.Scene {
   private generation = 0; // 화면을 다시 만들 때마다 증가 — 이전 화면의 늦은 응답이 새 화면을 건드리지 않게
   private relayoutPending = false;
   private initEquipFor: string | null = null;
+  private initNotice: string | null = null;
   private busyNote?: Phaser.GameObjects.Text;
 
   constructor() {
@@ -33,6 +35,7 @@ export class HomeScene extends Phaser.Scene {
   init(data: HomeInit) {
     this.pages = data?.pages ? [data.pages[0], data.pages[1]] : [0, 0];
     this.initEquipFor = data?.equipFor ?? null;
+    this.initNotice = data?.notice ?? null;
     this.busy = false;
     this.relayoutPending = false;
     this.busyNote = undefined;
@@ -68,6 +71,7 @@ export class HomeScene extends Phaser.Scene {
     // 창 크기가 바뀌면 보던 페이지·열어 둔 장비 창을 유지한 채 다시 그린다. 이동 요청 중이면 끝난 뒤에
     watchLayout(this, () => this.relayout());
     if (this.initEquipFor && inventory.getAll().some((t) => t.id === this.initEquipFor)) this.equipPanel.open(this.initEquipFor);
+    if (this.initNotice) showToast(this, this.initNotice, { y: L.toastY, error: true });
   }
 
   private relayout() {
@@ -146,15 +150,21 @@ export class HomeScene extends Phaser.Scene {
     this.busyNote = on ? this.add.text(CANVAS_WIDTH / 2, this.L.toastY, '옮기는 중…', { fontSize: `${this.L.font.button}px`, color: '#ffffff', backgroundColor: '#000000a0', padding: { x: 12, y: 6 } }).setOrigin(0.5).setDepth(50) : undefined;
   }
 
-  private async move(run: () => Promise<{ ok: boolean }>, failText: string) {
-    if (this.busy) return; // 한 번의 탭으로 요청은 한 번만
+  private async move(run: () => Promise<{ ok: true } | { ok: false; code: string | null }>, failText: string) {
+    if (this.busy) return; // 한 번의 탭으로 요청은 한 번만(요청 중에는 다른 이동·장비·나가기 버튼도 받지 않는다)
     const gen = this.generation;
     this.setBusy(true);
     const result = await run();
     if (gen !== this.generation || !this.sys.isActive()) return; // 기다리는 사이 화면이 바뀜
     this.setBusy(false);
-    if (result.ok) this.scene.restart({ pages: this.pages } satisfies HomeInit);
-    else showToast(this, failText, { y: this.L.toastY, error: true });
+    if (result.ok) {
+      this.scene.restart({ pages: this.pages } satisfies HomeInit);
+      return;
+    }
+    // 서버가 거절: 상태 저장소는 이미 서버 목록으로 다시 맞춰졌다 — 화면도 그 상태로 다시 그리고 이유를 알린다
+    const notice = result.code === 'SHELF_SLOT_OCCUPIED' ? SHELF_OCCUPIED_TEXT : failText;
+    if (result.code) this.scene.restart({ pages: this.pages, notice } satisfies HomeInit);
+    else showToast(this, notice, { y: this.L.toastY, error: true });
   }
 
   private async onMoveToShelf(turbyId: string) {
