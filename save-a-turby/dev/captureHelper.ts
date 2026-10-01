@@ -105,6 +105,14 @@ function state() {
     const d = g.scene.getScene(key) as unknown as Any;
     if (scenes.includes(key) && d) out.dialogue = { key, waiting: !!d.advanceResolver, typing: !!d.typing, line: String(d.fullText ?? '').slice(0, 40), nameInput: !!document.querySelector('input[aria-label="이름"]') };
   }
+  const sel = g.scene.getScene('StageSelect') as unknown as Any;
+  if (scenes.includes('StageSelect') && sel.L) out.stageSelect = { page: sel.page, pages: sel.L.pager?.pages ?? 1, busy: sel.busy, mode: sel.L.mode, count: sel.statuses.length, shown: sel.L.pager?.perPage ?? sel.L.cards.length };
+  const market = g.scene.getScene('Market') as unknown as Any;
+  if (scenes.includes('Market') && market.L) out.market = { page: market.page, pages: market.L.pager?.pages ?? 1, pending: market.pendingProductId, count: market.products.length, mode: market.L.mode, tare: market.tareText?.text ?? '' };
+  const home = g.scene.getScene('Home') as unknown as Any;
+  if (scenes.includes('Home') && home.L) out.home = { pages: [...home.pages], busy: home.busy, mode: home.L.mode, equip: home.equipPanel?.debugState ?? null };
+  const village = g.scene.getScene('Village') as unknown as Any;
+  if (scenes.includes('Village') && village.hud) out.village = { ready: village.ready, hudMode: village.hud.mode, prompt: village.activeInteraction?.type ?? null, locked: village.locked, paused: village.paused };
   const inv = [...liveInventoryWindows].find((w) => w.isVisible);
   if (inv) out.inventory = inv.debugState;
   return out;

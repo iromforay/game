@@ -37,3 +37,18 @@ export function seedExplorer(device: string) {
   };
 }
 
+
+// 상점: 터비 2종 + 장비 5종(총 7개 — 보통 화면 2쪽, 640×360도 2쪽). 가격은 잔액(100) 안쪽·바깥쪽을 섞는다
+export function seedShop(db: FakeDb) {
+  const extra = [
+    { code: 'wool_glove', name: '털장갑', equip_slot: 'armor', def_bonus: 2, description: '방어력이 오르는 포근한 장갑' },
+    { code: 'yarn_scarf', name: '실뭉치 목도리', equip_slot: 'armor', hp_bonus: 10, description: '생명력이 오르는 두툼한 목도리' },
+    { code: 'lucky_button', name: '행운의 단추', equip_slot: 'accessory', ap_bonus: 1, description: '행동력이 오르는 반짝이는 단추' },
+    { code: 'thimble', name: '골무', equip_slot: 'accessory', def_bonus: 1, description: '방어력이 조금 오르는 작은 골무' },
+  ];
+  for (const e of extra) if (db.rows('item_definition', { code: e.code }).length === 0) db.seed('item_definition', { category: 'equipment', ...e });
+  const needle = db.rows('item_definition', { code: 'knit_needle' })[0] as { description: string | null };
+  needle.description = '공격력이 오르는 작은 바늘';
+  const products: [string, string, number][] = [['turby', 'bopuli', 30], ['item', 'knit_needle', 30], ['item', 'wool_glove', 40], ['item', 'yarn_scarf', 150], ['item', 'lucky_button', 60], ['turby', 'nubi', 500], ['item', 'thimble', 20]];
+  products.forEach(([product_type, ref_code, price_tare], i) => db.seed('shop_product', { product_type, ref_code, price_tare, sort_order: i }));
+}

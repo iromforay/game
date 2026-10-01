@@ -32,7 +32,10 @@ const TABLES: Record<string, TableDef> = {
   story_chapter: { uniques: [['chapter_order'], ['stage_code']] },
   stage_wild_spawn: { uniques: [['stage_code', 'spawn_index']] },
   turby_grade: { uniques: [['id']] },
-  player_base_slot: { uniques: [['id']], autoId: true },
+  player_base_slot: { uniques: [['id'], ['player_id', 'slot_index']], compound: { player_id_slot_index: ['player_id', 'slot_index'] }, autoId: true },
+  // 상점(브라우저 E2E): 상품과 구매 기록(request_id로 중복 구매 방지)
+  shop_product: { uniques: [['id'], ['product_type', 'ref_code']], autoId: true, defaults: () => ({ sort_order: 0, is_active: true }) },
+  shop_purchase: { uniques: [['id'], ['request_id']], autoId: true, defaults: () => ({ turby_instance_id: null, created_at: new Date() }) },
   turby_instance: {
     uniques: [['id']],
     autoId: true,
@@ -85,7 +88,7 @@ export class FakeDb {
 
   private newId(table: string): bigint | number {
     this.nextId += 1n;
-    return table === 'item_definition' || table === 'turby_character' ? Number(this.nextId) : this.nextId;
+    return ['item_definition', 'turby_character', 'shop_product'].includes(table) ? Number(this.nextId) : this.nextId;
   }
 
   private flattenWhere(table: string, where: Row): Row {
@@ -192,9 +195,20 @@ export class FakeDb {
         }
         return list[0] ? { ...list[0] } : null;
       },
-      async findMany(args: { where?: Row; include?: Row } = {}) {
+      async findMany(args: { where?: Row; include?: Row; orderBy?: Row | Row[] } = {}) {
         await tick();
-        return db.rows(table, args.where ?? {}).map((r) => db.include(table, r, args.include));
+        const list = db.rows(table, args.where ?? {}).slice();
+        const orders = args.orderBy ? (Array.isArray(args.orderBy) ? args.orderBy : [args.orderBy]) : [];
+        for (const o of [...orders].reverse()) {
+          const [k, dir] = Object.entries(o)[0];
+          list.sort((a, b) => {
+            const x = a[k] as number | bigint | Date;
+            const y = b[k] as number | bigint | Date;
+            const cmp = x < y ? -1 : x > y ? 1 : 0;
+            return dir === 'desc' ? -cmp : cmp;
+          });
+        }
+        return list.map((r) => db.include(table, r, args.include));
       },
       async count(args: { where?: Row } = {}) {
         await tick();
@@ -212,7 +226,7 @@ export class FakeDb {
         }
         return [...groups.values()];
       },
-      async create(args: { data: Row }) {
+      async create(args: { data: Row; include?: Row }) {
         await tick();
         if (db.failOn?.(table, 'create', args.data)) throw new Error(`fake-prisma: 강제 실패 ${table}.create`);
         const def = TABLES[table];
@@ -224,9 +238,9 @@ export class FakeDb {
           const i = db.tables[table].indexOf(row);
           if (i >= 0) db.tables[table].splice(i, 1);
         });
-        return { ...row };
+        return db.include(table, row, args.include);
       },
-      async update(args: { where: Row; data: Row }) {
+      async update(args: { where: Row; data: Row; include?: Row }) {
         await tick();
         const row = db.rows(table, args.where)[0];
         if (!row) throw new Error(`${table} update: not found`);
@@ -236,7 +250,7 @@ export class FakeDb {
         db.checkUnique(table, next, row);
         Object.assign(row, next);
         undo?.push(() => Object.assign(row, before));
-        return { ...row };
+        return db.include(table, row, args.include);
       },
       async upsert(args: { where: Row; update: Row; create: Row }) {
         await tick();
