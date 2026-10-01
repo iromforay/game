@@ -3,14 +3,14 @@ import type { EnemyChoice, PublicEnemyChoice, RouteWidth, ScoreUpdate, StageConf
 export const STAGES: StageConfig[] = [
   { id:1,title:'장난감 탑의 입구',theme:'BLOCK',bossName:'블록 드래곤',bossKind:'block',startPower:12,floorCount:6,bossAttack:49,bossReward:14,rewardMin:4,rewardMax:10,attackBase:3,attackStep:6,seed:103001,accent:'#f0bd4f' },
   { id:2,title:'태엽 장난감 공방',theme:'CLOCKWORK',bossName:'태엽 폭군',bossKind:'robot',startPower:14,floorCount:6,bossAttack:55,bossReward:16,rewardMin:4,rewardMax:11,attackBase:4,attackStep:7,seed:203011,accent:'#e36d54' },
-  { id:3,title:'과자 왕국',theme:'COOKIE',bossName:'쿠키 킹',bossKind:'snack',startPower:16,floorCount:6,bossAttack:61,bossReward:18,rewardMin:5,rewardMax:12,attackBase:5,attackStep:7,seed:303017,accent:'#e7ad58' },
-  { id:4,title:'사탕 마법탑',theme:'CANDY',bossName:'캔디 히드라',bossKind:'snack',startPower:18,floorCount:6,bossAttack:68,bossReward:20,rewardMin:5,rewardMax:13,attackBase:6,attackStep:8,seed:403031,accent:'#ef72b7' },
+  { id:3,title:'과자 가게 놀이',theme:'COOKIE TOY',bossName:'쿠키 킹 인형',bossKind:'snack',startPower:16,floorCount:6,bossAttack:61,bossReward:18,rewardMin:5,rewardMax:12,attackBase:5,attackStep:7,seed:303017,accent:'#e7ad58' },
+  { id:4,title:'사탕 마법 장난감',theme:'CANDY TOY',bossName:'캔디 히드라 피규어',bossKind:'snack',startPower:18,floorCount:6,bossAttack:68,bossReward:20,rewardMin:5,rewardMax:13,attackBase:6,attackStep:8,seed:403031,accent:'#ef72b7' },
   { id:5,title:'로봇 장난감 공장',theme:'MECHA',bossName:'메카 티라노',bossKind:'robot',startPower:20,floorCount:6,bossAttack:75,bossReward:22,rewardMin:6,rewardMax:14,attackBase:7,attackStep:8,seed:503041,accent:'#63c7d8' },
   { id:6,title:'해적 장난감 요새',theme:'PIRATE',bossName:'블록 해적왕',bossKind:'block',startPower:22,floorCount:6,bossAttack:82,bossReward:24,rewardMin:6,rewardMax:15,attackBase:8,attackStep:9,seed:603043,accent:'#d68a48' },
-  { id:7,title:'젤리 심해탑',theme:'JELLY',bossName:'젤리 크라켄',bossKind:'snack',startPower:24,floorCount:6,bossAttack:89,bossReward:26,rewardMin:7,rewardMax:16,attackBase:9,attackStep:9,seed:703057,accent:'#8d7be8' },
+  { id:7,title:'젤리 괴수 놀이',theme:'JELLY TOY',bossName:'젤리 크라켄 피규어',bossKind:'snack',startPower:24,floorCount:6,bossAttack:89,bossReward:26,rewardMin:7,rewardMax:16,attackBase:9,attackStep:9,seed:703057,accent:'#8d7be8' },
   { id:8,title:'고장 난 놀이공원',theme:'CHAOS',bossName:'폭주 회전목마',bossKind:'robot',startPower:26,floorCount:6,bossAttack:96,bossReward:28,rewardMin:7,rewardMax:17,attackBase:10,attackStep:10,seed:803069,accent:'#ed5f72' },
   { id:9,title:'황금 장난감 성채',theme:'GOLD',bossName:'황금 골렘',bossKind:'block',startPower:28,floorCount:6,bossAttack:103,bossReward:30,rewardMin:8,rewardMax:18,attackBase:11,attackStep:10,seed:903079,accent:'#ffd454' },
-  { id:10,title:'장난감 세계의 정상',theme:'EMPEROR',bossName:'황제 드래곤',bossKind:'block',startPower:30,floorCount:6,bossAttack:112,bossReward:35,rewardMin:8,rewardMax:19,attackBase:12,attackStep:11,seed:1003091,accent:'#ff725f' },
+  { id:10,title:'장난감 왕의 방',theme:'TOY KING',bossName:'장난감 왕 드래곤',bossKind:'block',startPower:30,floorCount:6,bossAttack:112,bossReward:35,rewardMin:8,rewardMax:19,attackBase:12,attackStep:11,seed:1003091,accent:'#ff725f' },
 ];
 
 export const STAGE_ONE = STAGES[0];
