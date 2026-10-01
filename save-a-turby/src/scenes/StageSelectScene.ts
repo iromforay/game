@@ -134,11 +134,9 @@ export class StageSelectScene extends Phaser.Scene {
       keep(this.add.rectangle(cx, y + P.y + P.h / 2, P.w, P.h, PAL.cream2));
     }
 
-    keep(
-      this.add
-        .text(cx, y + I.nameY, st.stageName, { fontSize: `${L.font.name}px`, color: locked ? TEXT.sub : TEXT.body, align: 'center', wordWrap: { width: iw, useAdvancedWrap: true }, maxLines: L.mode === 'compact' ? 1 : 2 })
-        .setOrigin(0.5, 0),
-    );
+    // 지역 이름: 두 줄 자리 안에서 줄바꿈. 긴 이름("사막 (보일러/라디에이터 옆)")은 자르지 않고 글자를 한 단계씩 줄여 맞춘다
+    const name = keep(this.add.text(cx, y + I.nameY, st.stageName, { fontSize: `${L.font.name}px`, color: locked ? TEXT.sub : TEXT.body, align: 'center', wordWrap: { width: iw, useAdvancedWrap: true } }).setOrigin(0.5, 0));
+    for (let size = L.font.name - 1; name.height > I.nameH && size >= L.font.small - 1; size--) name.setFontSize(size);
 
     // 대표 터비 그림 + 이름
     const R = I.rep;

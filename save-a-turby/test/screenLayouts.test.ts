@@ -26,6 +26,11 @@ test('지역 선택: 카드·돌아가기·페이지 버튼이 화면 안에서 
       const c = L.cards[0];
       const I = L.inner;
       assert.ok(I.titleY < I.preview.y && I.preview.y + I.preview.h <= I.nameY && I.nameY < I.rep.y && I.rep.y + I.rep.size <= I.hintY && I.hintY < I.badge.y, `${tag}: 카드 안 순서`);
+      assert.ok(I.nameH >= L.font.name * 2.2, `${tag}: 지역 이름 두 줄 자리(${I.nameH})`);
+      // 구 판정 안내 1줄 + 가장 긴 잠금 이유가 안쪽 폭에서 차지하는 줄 수까지 들어간다(한글 1자 ≈ 글자 크기)
+      const longest = "3장 — 지하의 대표 터비 '폭신이'를 직접 포획하면 열립니다";
+      const needLines = 1 + Math.ceil([...longest].length / Math.floor(I.preview.w / L.font.small));
+      assert.ok(I.hintLines >= needLines, `${tag}: 잠금 이유 ${needLines}줄 자리(${I.hintLines})`);
       assert.ok(I.badge.y + I.badge.h <= c.h && I.badge.x + I.badge.w <= c.w, `${tag}: 배지가 카드 안`);
       assert.ok(I.hintLines >= 2, `${tag}: 잠금 이유 2줄 이상(${I.hintLines})`);
       assert.ok(finalPx(L.font.small, scale) >= MIN_BODY_PX && finalPx(L.font.name, scale) >= MIN_BODY_PX && finalPx(L.font.button, scale) >= MIN_BUTTON_PX, `${tag}: 글자`);

@@ -44,7 +44,7 @@ export interface StageSelectLayout {
   back: Rect;
   pager: Pager | null;
   // 카드 안쪽(카드 왼쪽 위 기준)
-  inner: { pad: number; titleY: number; preview: Rect; nameY: number; rep: { y: number; size: number }; hintY: number; hintLines: number; badge: Rect };
+  inner: { pad: number; titleY: number; preview: Rect; nameY: number; nameH: number; rep: { y: number; size: number }; hintY: number; hintLines: number; badge: Rect };
   toastY: number;
 }
 export function stageSelectLayout(scale: number, count: number): StageSelectLayout {
@@ -76,10 +76,10 @@ export function stageSelectLayout(scale: number, count: number): StageSelectLayo
   const badge = { x: pad, y: cardH - (compact ? 40 : 15) - badgeH, w: iw, h: badgeH };
   const titleY = compact ? 44 + font.title / 2 : 36;
   const previewY = titleY + font.title / 2 + (compact ? 6 : 12);
-  const previewH = compact ? 92 : Math.round((iw * 126) / 196);
+  const previewH = compact ? 56 : Math.round((iw * 126) / 196); // 작은 화면은 그림을 줄여 잠금 이유 5줄 자리를 낸다
   const nameY = previewY + previewH + (compact ? 6 : 32);
   const repSize = compact ? 52 : 64;
-  const repY = nameY + font.name * (compact ? 1.25 : 2.4) + 4;
+  const repY = nameY + font.name * 2.4 + 4; // 지역 이름 두 줄 자리(긴 이름은 글자를 줄여 두 줄 안에 — 자르지 않는다)
   const hintY = repY + repSize + (compact ? 4 : 6);
   const hintLines = Math.max(1, Math.floor((badge.y - 6 - hintY) / (font.small * 1.2)));
   return {
@@ -89,7 +89,7 @@ export function stageSelectLayout(scale: number, count: number): StageSelectLayo
     cards,
     back: bar.center,
     pager: bar.pager,
-    inner: { pad, titleY, preview: { x: pad, y: previewY, w: iw, h: previewH }, nameY, rep: { y: repY, size: repSize }, hintY, hintLines, badge },
+    inner: { pad, titleY, preview: { x: pad, y: previewY, w: iw, h: previewH }, nameY, nameH: repY - 4 - nameY, rep: { y: repY, size: repSize }, hintY, hintLines, badge },
     toastY: bar.center.y - 44,
   };
 }

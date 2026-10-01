@@ -32,6 +32,9 @@ const requests = (g: Game, what: string) => g.net.filter((n) => n.kind === 'http
 const villageReady = (g: Game) => g.until('마을 준비', 's.village && s.village.ready');
 const SMALL = { width: 640, height: 360 };
 const BIG = { width: 1280, height: 720 };
+// 가장 긴 지역 이름이 잘리지 않고(글자 전부) 이름 자리 높이 안에 들어갔는지
+const longNameFits = (g: Game) =>
+  g.page.evaluate("(() => { const s = window.__game.scene.getScene('StageSelect'); const t = s.children.list.find((o) => o.text === '사막 (보일러/라디에이터 옆)'); return !!t && t.height <= s.L.inner.nameH + 1; })()") as Promise<boolean>;
 
 // 마을에서 걸어가 안내 버튼으로 들어간다(실제 방향키 입력 + 실제 클릭)
 async function enterFromVillage(g: Game, type: 'home' | 'market' | 'exit', scene: string) {
@@ -55,6 +58,7 @@ test('화면 ①: 지역 선택 — 입장 가능·이전 장 잠금 표시, 640
     let t = await texts(g);
     assert.ok(t.some((x) => x.includes('· 입장')), '들어갈 수 있는 지역은 "… · 입장" 글자로도 표시');
     assert.equal(t.filter((x) => x === '잠김').length, 4, '잠긴 지역은 "잠김" 글자로 표시(색만이 아님)');
+    assert.ok(await longNameFits(g), '긴 지역 이름이 잘리지 않고 이름 자리 안');
     await g.capture('01a_stage_select_enterable_and_locked');
 
     // 잠긴 카드 한 번 클릭: 이유 안내(토스트)만, 입장하지 않음
@@ -69,6 +73,7 @@ test('화면 ①: 지역 선택 — 입장 가능·이전 장 잠금 표시, 640
     await g.until('작은 화면 배치', "s.stageSelect && s.stageSelect.mode === 'compact' && s.stageSelect.pages === 2 && s.stageSelect.cards.length === 3");
     await g.capture('02a_stage_cards_page1');
     await g.clickLabel('▶', { exact: true, expect: 's.stageSelect.page === 1 && s.stageSelect.cards.length === 2' });
+    assert.ok(await longNameFits(g), '640×360에서도 긴 지역 이름이 잘리지 않음');
     await g.capture('02b_stage_cards_page2');
     s = (await g.state()).stageSelect;
     assert.deepEqual(s.cards.map((c: { code: string }) => c.code), ['ice', 'desert']);
