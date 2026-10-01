@@ -110,13 +110,15 @@ export function creamOverlay(scene: Phaser.Scene, alpha = 0.78) {
 export function showToast(scene: Phaser.Scene, message: string, opts: { y?: number; error?: boolean; width?: number; fixed?: boolean } = {}) {
   // 글자는 실제 표시 배율에 맞춘다(작은 화면에서도 최종 13px 이상). 여러 줄이면 상자 높이를 글자에 맞춘다
   const font = toastFont(displayScaleOf(scene.scale.displaySize.width));
-  const width = Math.max(opts.width ?? 720, Math.min(1200, font * 30));
+  // 틀 그림(toast-panel)은 양 끝 장식과 테두리가 있어 안쪽 여백을 더 둔다 — 두 줄 문구도 틀 안에 들어가게
+  const framed = scene.textures.exists('toast-panel');
+  const width = Math.max(opts.width ?? 720, Math.min(1200, font * (framed ? 36 : 30)));
   const y = opts.y ?? 600;
   const box = scene.add.container(CANVAS_WIDTH / 2, y).setDepth(1000);
   const text = scene.add
-    .text(0, 0, message, { fontSize: `${font}px`, color: opts.error ? TEXT.error : TEXT.body, wordWrap: { width: width - 48, useAdvancedWrap: true }, align: 'center' })
+    .text(0, 0, message, { fontSize: `${font}px`, color: opts.error ? TEXT.error : TEXT.body, wordWrap: { width: width - (framed ? 150 : 48), useAdvancedWrap: true }, align: 'center' })
     .setOrigin(0.5);
-  const height = Math.max(64, Math.ceil(text.height) + 24);
+  const height = Math.max(64, Math.ceil(text.height) + (framed ? 48 : 24));
   if (scene.textures.exists('toast-panel')) {
     box.add(scene.add.image(0, 0, 'toast-panel').setDisplaySize(width, height));
   } else {
