@@ -69,6 +69,24 @@ export class FakeDb {
   tables: Record<string, Row[]> = Object.fromEntries(Object.keys(TABLES).map((t) => [t, []]));
   private nextId = 1000n;
   failOn: ((table: string, op: string, args: Row) => boolean) | null = null;
+  // 트랜잭션 경계·잠금 쿼리 순서 추적(테스트가 "어떤 순서로 잠갔는지, 쓰기가 같은 트랜잭션 안인지"를 확인)
+  trace: { tx: number | null; op: string; sql?: string; table?: string }[] = [];
+  txSeq = 0;
+  private rowLocks = new Map<string, Promise<void>>();
+
+  // 같은 행을 잠그려는 트랜잭션을 한 줄로 세운다. 이미 내가 잡은 잠금이면 그대로 통과
+  async lockRow(key: string, held: (() => void)[]) {
+    const mine = held as (() => void)[] & { lockedKeys?: Set<string> };
+    mine.lockedKeys ??= new Set();
+    if (mine.lockedKeys.has(key)) return;
+    const prev = this.rowLocks.get(key) ?? Promise.resolve();
+    let release!: () => void;
+    const next = new Promise<void>((r) => (release = r));
+    this.rowLocks.set(key, prev.then(() => next));
+    await prev;
+    mine.lockedKeys.add(key);
+    held.push(release);
+  }
 
   seed(table: string, row: Row): Row {
     const def = TABLES[table];
@@ -167,7 +185,7 @@ export class FakeDb {
     return out;
   }
 
-  private makeClient(undo: Undo[] | null): Row {
+  private makeClient(undo: Undo[] | null, txId: number | null = null, held: (() => void)[] | null = null): Row {
     const db = this;
     const model = (table: string) => ({
       async findUnique(args: { where: Row; include?: Row }) {
@@ -229,6 +247,7 @@ export class FakeDb {
       async create(args: { data: Row; include?: Row }) {
         await tick();
         if (db.failOn?.(table, 'create', args.data)) throw new Error(`fake-prisma: 강제 실패 ${table}.create`);
+        db.trace.push({ tx: txId, op: 'create', table });
         const def = TABLES[table];
         const row = { ...(def.defaults?.() ?? {}), ...args.data };
         if (def.autoId && row.id === undefined) row.id = db.newId(table);
@@ -244,6 +263,8 @@ export class FakeDb {
         await tick();
         const row = db.rows(table, args.where)[0];
         if (!row) throw new Error(`${table} update: not found`);
+        if (db.failOn?.(table, 'update', args.data)) throw new Error(`fake-prisma: 강제 실패 ${table}.update`);
+        db.trace.push({ tx: txId, op: 'update', table });
         const before = { ...row };
         const next = { ...row };
         db.applyData(next, args.data);
@@ -265,6 +286,7 @@ export class FakeDb {
         const created = { ...(def.defaults?.() ?? {}), ...args.create };
         if (def.autoId && created.id === undefined) created.id = db.newId(table);
         db.checkUnique(table, created, null);
+        db.trace.push({ tx: txId, op: 'create', table });
         db.tables[table].push(created);
         undo?.push(() => {
           const i = db.tables[table].indexOf(created);
@@ -300,22 +322,39 @@ export class FakeDb {
       },
     });
     const client: Row = Object.fromEntries(Object.keys(TABLES).map((t) => [t, model(t)]));
-    // 태그드 템플릿 $queryRaw 흉내: 장비 장착의 "SELECT quantity FROM player_item WHERE player_id = ? AND item_definition_id = ? FOR UPDATE"만 지원
+    // 태그드 템플릿 $queryRaw 흉내:
+    //  - 장비 장착의 "SELECT quantity FROM player_item WHERE player_id = ? AND item_definition_id = ? FOR UPDATE"
+    //  - "SELECT … FROM <표> WHERE id = ? FOR UPDATE": 트랜잭션 안이면 그 행에 대한 메모리 잠금을 잡고 트랜잭션이 끝날 때 푼다.
+    //    (실제 InnoDB 행 잠금이 아니다 — "같은 행을 잠근 트랜잭션은 차례로 실행된다"는 순서만 흉내 낸다)
     client.$queryRaw = async (strings: TemplateStringsArray, ...values: unknown[]) => {
       await tick();
-      const sql = strings.join('?');
+      const sql = strings.join('?').replace(/\s+/g, ' ').trim();
+      db.trace.push({ tx: txId, op: 'raw', sql });
       if (/FROM player_item WHERE player_id = \? AND item_definition_id = \?/.test(sql)) {
         return db.tables.player_item.filter((r) => same(r.player_id, values[0]) && same(r.item_definition_id, values[1])).map((r) => ({ quantity: r.quantity }));
+      }
+      const m = /FROM (\w+) WHERE id = \? FOR UPDATE$/.exec(sql);
+      if (m && db.tables[m[1]]) {
+        if (held) await db.lockRow(`${m[1]}:${String(values[0])}`, held);
+        return db.tables[m[1]].filter((r) => same(r.id, values[0])).map((r) => ({ ...r }));
       }
       throw new Error(`fake-prisma: 지원하지 않는 $queryRaw: ${sql}`);
     };
     client.$transaction = async (fn: (tx: unknown) => Promise<unknown>) => {
       const log: Undo[] = [];
+      const locks: (() => void)[] = [];
+      const id = ++db.txSeq;
+      db.trace.push({ tx: id, op: 'begin' });
       try {
-        return await fn(db.makeClient(log));
+        const result = await fn(db.makeClient(log, id, locks));
+        db.trace.push({ tx: id, op: 'commit' });
+        return result;
       } catch (err) {
         for (const u of log.reverse()) u();
+        db.trace.push({ tx: id, op: 'rollback' });
         throw err;
+      } finally {
+        for (const release of locks) release(); // 커밋·롤백 뒤 잠금 해제
       }
     };
     return client;

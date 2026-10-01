@@ -1,7 +1,8 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from './prisma.service';
 import { SessionService } from './session.service';
-import { INSTANCE_INCLUDE, parseId, toTurbyDto } from './turby-dto';
+import { INSTANCE_INCLUDE, gameError, parseId, toTurbyDto } from './turby-dto';
 
 // 4.4: 선반 슬롯 수 제안(8열×5행) — 문서 5.2-4 최종 확정 전까지 이 값 사용
 const SHELF_SLOT_COUNT = 40;
@@ -41,7 +42,10 @@ export class PlayerService {
     return instances.map(toTurbyDto);
   }
 
-  // 4.2/4.4: 소지(가방) → 기지 보관(선반) 특정 슬롯으로 이동
+  // 4.2/4.4: 소지(가방) → 기지 보관(선반) 특정 슬롯으로 이동.
+  // 한 트랜잭션에서 행을 잠근 뒤 점유를 다시 확인한다(10-01 v2 §1) — 같은 칸으로 동시에 온 요청이 둘 다 "빈 칸"으로 보지 못하게.
+  // 잠금 순서는 항상 플레이어 → 터비 → 슬롯(교착 방지). 플레이어 행 잠금이 그 플레이어의 선반·가방 이동을 한 줄로 세운다.
+  // 이야기 누비도 선반에 둘 수 있다(m0_design 9절·checkpoint_spec: 선반에 있어도 스토리 전투에는 서버가 불러온다).
   async moveToShelf(playerIdStr: string, turbyIdStr: string, slotIndex: number) {
     if (!Number.isInteger(slotIndex) || slotIndex < 0 || slotIndex >= SHELF_SLOT_COUNT) {
       throw new BadRequestException(`slotIndex must be 0-${SHELF_SLOT_COUNT - 1}`);
@@ -49,41 +53,46 @@ export class PlayerService {
     const playerId = parseId(playerIdStr, '플레이어');
     const turbyId = parseId(turbyIdStr, '터비');
 
-    const instance = await this.prisma.turby_instance.findUnique({ where: { id: turbyId } });
-    if (!instance) throw new NotFoundException('turby not found');
-    if (instance.owner_player_id !== playerId) throw new ForbiddenException('not your turby');
+    return this.prisma.$transaction(async (tx) => {
+      const turby = await this.lockOwnedTurby(tx, playerId, turbyId);
+      const slot = await tx.player_base_slot.upsert({
+        where: { player_id_slot_index: { player_id: playerId, slot_index: slotIndex } },
+        update: {},
+        create: { player_id: playerId, slot_index: slotIndex },
+      });
+      await tx.$queryRaw`SELECT id FROM player_base_slot WHERE id = ${slot.id} FOR UPDATE`;
 
-    const slot = await this.prisma.player_base_slot.upsert({
-      where: { player_id_slot_index: { player_id: playerId, slot_index: slotIndex } },
-      update: {},
-      create: { player_id: playerId, slot_index: slotIndex },
+      // 잠금 뒤 재확인: 다른 터비가 이 칸에 있으면 거부(원래 위치는 그대로)
+      const occupant = await tx.turby_instance.findFirst({ where: { base_slot_id: slot.id, id: { not: turbyId } } });
+      if (occupant) throw gameError(409, 'SHELF_SLOT_OCCUPIED', '이미 다른 터비가 있는 칸입니다.');
+
+      // 이미 이 칸에 있는 같은 터비의 재요청은 그대로 성공(멱등)
+      if (turby.base_slot_id === null || turby.base_slot_id.toString() !== slot.id.toString()) {
+        await tx.turby_instance.update({ where: { id: turbyId }, data: { base_slot_id: slot.id } });
+      }
+      return toTurbyDto(await tx.turby_instance.findUniqueOrThrow({ where: { id: turbyId }, include: INSTANCE_INCLUDE }));
     });
-
-    const occupant = await this.prisma.turby_instance.findFirst({ where: { base_slot_id: slot.id, id: { not: turbyId } } });
-    if (occupant) throw new ConflictException('slot already occupied');
-
-    const updated = await this.prisma.turby_instance.update({
-      where: { id: turbyId },
-      data: { base_slot_id: slot.id },
-      include: INSTANCE_INCLUDE,
-    });
-    return toTurbyDto(updated);
   }
 
-  // 4.2: 기지 보관(선반) → 소지(가방)로 이동
+  // 4.2: 기지 보관(선반) → 소지(가방)로 이동. 선반 이동과 같은 잠금 순서를 써서 겹쳐 와도 최종 상태는 하나다
   async moveToBag(playerIdStr: string, turbyIdStr: string) {
     const playerId = parseId(playerIdStr, '플레이어');
     const turbyId = parseId(turbyIdStr, '터비');
 
-    const instance = await this.prisma.turby_instance.findUnique({ where: { id: turbyId } });
-    if (!instance) throw new NotFoundException('turby not found');
-    if (instance.owner_player_id !== playerId) throw new ForbiddenException('not your turby');
-
-    const updated = await this.prisma.turby_instance.update({
-      where: { id: turbyId },
-      data: { base_slot_id: null },
-      include: INSTANCE_INCLUDE,
+    return this.prisma.$transaction(async (tx) => {
+      const turby = await this.lockOwnedTurby(tx, playerId, turbyId);
+      if (turby.base_slot_id !== null) await tx.turby_instance.update({ where: { id: turbyId }, data: { base_slot_id: null } });
+      return toTurbyDto(await tx.turby_instance.findUniqueOrThrow({ where: { id: turbyId }, include: INSTANCE_INCLUDE }));
     });
-    return toTurbyDto(updated);
+  }
+
+  // 플레이어 행 → 터비 행 순서로 잠그고 소유권을 확인한다. 값은 모두 바인딩 변수로 넘긴다(문자열을 SQL에 이어 붙이지 않음)
+  private async lockOwnedTurby(tx: Prisma.TransactionClient, playerId: bigint, turbyId: bigint) {
+    const players = await tx.$queryRaw<{ id: bigint }[]>`SELECT id FROM player WHERE id = ${playerId} FOR UPDATE`;
+    if (players.length === 0) throw new NotFoundException('player not found');
+    const rows = await tx.$queryRaw<{ id: bigint; owner_player_id: bigint; base_slot_id: bigint | null }[]>`SELECT id, owner_player_id, base_slot_id FROM turby_instance WHERE id = ${turbyId} FOR UPDATE`;
+    if (rows.length === 0) throw new NotFoundException('turby not found');
+    if (rows[0].owner_player_id.toString() !== playerId.toString()) throw gameError(403, 'NOT_YOUR_TURBY', '내 터비가 아닙니다.');
+    return rows[0];
   }
 }
