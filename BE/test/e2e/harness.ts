@@ -15,13 +15,20 @@ export const ARTIFACTS = process.env.E2E_ARTIFACT_DIR ?? join(__dirname, '.artif
 export const CAPTURE_DIR = process.env.E2E_CAPTURE_DIR ?? null; // 지정하면 캡처(v5 §7)를 여기에 저장
 const nativeImport = new Function('p', 'return import(p)') as (p: string) => Promise<any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
+// 이 프로세스가 이미 내준 포트는 다시 내주지 않는다 — 서버 포트는 before에서 고르고 테스트 본문에서 여는데,
+// 그 사이 Vite가 같은 포트를 받으면 서버 기동이 실패한다(같은 파일의 테스트가 한꺼번에 실패).
+const handedOut = new Set<number>();
 export function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const s = createServer();
     s.once('error', reject);
     s.listen(0, '127.0.0.1', () => {
       const { port } = s.address() as { port: number };
-      s.close(() => resolve(port));
+      s.close(() => {
+        if (handedOut.has(port)) return freePort().then(resolve, reject);
+        handedOut.add(port);
+        resolve(port);
+      });
     });
   });
 }
