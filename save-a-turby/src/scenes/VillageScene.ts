@@ -4,9 +4,11 @@ import { getPlayerId } from '../state/player';
 import type { StoryDialogueData } from './StoryDialogueScene';
 import { chapterOfStage } from '../story/storyFlow';
 import { InventoryWindow } from '../ui/InventoryWindow';
-import { displayScaleOf, fontPx, MIN_BUTTON_PX } from '../ui/responsive';
+import { displayScaleOf } from '../ui/responsive';
+import { watchLayout } from '../ui/relayout';
+import { villageHudLayout, type VillageHudLayout } from '../ui/screenLayouts';
 import { playStory } from '../story/playStory';
-import { CANVAS_WIDTH, CANVAS_HEIGHT, AVATAR_SPEED } from '../config/constants';
+import { CANVAS_HEIGHT, AVATAR_SPEED } from '../config/constants';
 import { AVATAR_IMAGE, BACKGROUND_TILES } from '../assets/registry';
 import { loadWorldImages } from '../assets/loader';
 import { ensureVillagePlaceholders } from '../assets/placeholders';
@@ -67,6 +69,10 @@ export class VillageScene extends Phaser.Scene {
   private ready = false;
   private locked = false;
   private paused = false;
+  private hud!: VillageHudLayout;
+  private hudObjs: Phaser.GameObjects.GameObject[] = [];
+  private invWindow: InventoryWindow | null = null;
+  private generation = 0; // 화면을 다시 만들 때마다 증가 — 이전 화면의 늦은 응답이 새 화면에 덧그리지 않게
 
   constructor() {
     super('Village');
@@ -79,14 +85,18 @@ export class VillageScene extends Phaser.Scene {
   }
 
   async create() {
+    const gen = ++this.generation;
     this.ready = false;
     this.locked = false;
     this.paused = false;
     this.activeInteraction = null;
     this.facing = 'down';
     this.moveAngle = Math.PI / 2;
+    this.hudObjs = [];
+    this.invWindow = null;
 
     this.layout = await getVillageLayout();
+    if (gen !== this.generation || !this.sys.isActive()) return; // 기다리는 사이 화면이 바뀜
     const layout = this.layout;
     ensureVillagePlaceholders(this, layout);
 
@@ -114,9 +124,15 @@ export class VillageScene extends Phaser.Scene {
     this.createAvatar();
     this.createHud();
     this.createPrompt();
+    // 창 크기가 바뀌어 배치 기준이 달라지면 HUD와 안내 버튼만 다시 그린다(걷던 위치·열린 창은 그대로)
+    watchLayout(this, () => {
+      this.createHud();
+      this.createPrompt();
+    });
 
     // 미니맵의 현재 목적지는 스토리 진행(docs/Turby_story.md)에서 온다 — 지금 열려 있는 장의 맵으로 가는 출구
     const { ok: storyOk, statuses } = await loadChapterStatuses();
+    if (gen !== this.generation || !this.sys.isActive()) return;
     const current = getCurrentChapter(statuses);
     // 안내 문구: 구 판정(롤백)에서만 포획 안내. 서버 상태를 못 받으면 완료로 오해하지 않게 따로 안내한다.
     const storyHint = !storyOk
@@ -187,43 +203,50 @@ ${storyHint}` : it.hint,
     this.playAvatarAnim(false);
   }
 
+  // HUD: 재화·지역 이름·인벤토리 버튼(villageHudLayout — 표시 배율별 크기, 서로 겹치지 않음). 창 크기가 바뀌면 HUD만 다시 그린다
   private createHud() {
-    const coinPanel = this.add.image(16, 16, 'hud-coin-panel').setOrigin(0, 0).setDisplaySize(192, 58).setDepth(DEPTH_HUD);
-    this.add
-      .text(coinPanel.x + 96, coinPanel.y + 29, `타레 ${inventory.getTareBalance()}`, { fontSize: '20px', color: HUD_TEXT })
-      .setOrigin(0.5)
-      .setDepth(DEPTH_HUD + 1);
+    this.hudObjs.forEach((o) => o.destroy());
+    const L = (this.hud = villageHudLayout(displayScaleOf(this.scale.displaySize.width)));
+    const fix = <T extends Phaser.GameObjects.GameObject>(o: T) => {
+      (o as unknown as Phaser.GameObjects.Image).setScrollFactor(0);
+      this.hudObjs.push(o);
+      return o;
+    };
+    this.hudObjs = [];
+    fix(this.add.image(L.coin.x, L.coin.y, 'hud-coin-panel').setOrigin(0, 0).setDisplaySize(L.coin.w, L.coin.h).setDepth(DEPTH_HUD));
+    fix(this.add.text(L.coin.x + L.coin.w / 2, L.coin.y + L.coin.h / 2, `타레 ${inventory.getTareBalance()}`, { fontSize: `${L.font.coin}px`, color: HUD_TEXT }).setOrigin(0.5).setDepth(DEPTH_HUD + 1));
+    fix(this.add.image(L.title.x, L.title.y, 'hud-area-panel').setOrigin(0, 0).setDisplaySize(L.title.w, L.title.h).setDepth(DEPTH_HUD));
+    fix(this.add.text(L.title.x + L.title.w / 2, L.title.y + L.title.h / 2, '마을', { fontSize: `${L.font.title}px`, color: HUD_TEXT }).setOrigin(0.5).setDepth(DEPTH_HUD + 1));
 
-    this.add.image(CANVAS_WIDTH / 2, 16, 'hud-area-panel').setOrigin(0.5, 0).setDisplaySize(240, 48).setDepth(DEPTH_HUD);
-    this.add.text(CANVAS_WIDTH / 2, 40, '마을', { fontSize: '22px', color: HUD_TEXT }).setOrigin(0.5).setDepth(DEPTH_HUD + 1);
+    // v3 M4-D: 아이템 인벤토리(창이 열린 동안 이동 멈춤). 창 자체는 한 번만 만든다(HUD를 다시 그려도 열린 창·리스너가 늘지 않게)
+    this.invWindow ??= new InventoryWindow(this, { onClose: () => (this.locked = false), onPlay: (play) => playStory(this, play, 'forest') });
+    const V = L.inventory;
+    const invBox = fix(this.add.rectangle(V.x, V.y, V.w, V.h, 0x5a3a8a).setOrigin(0, 0).setDepth(DEPTH_HUD + 1));
+    fix(this.add.text(V.x + V.w / 2, V.y + V.h / 2, '인벤토리', { fontSize: `${L.font.button}px`, color: '#ffffff' }).setOrigin(0.5).setDepth(DEPTH_HUD + 2));
+    invBox.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+      if (this.invWindow!.isVisible || this.paused) return;
+      this.locked = true;
+      void this.invWindow!.open();
+    });
 
-    // v3 M4-D: 아이템 인벤토리(창이 열린 동안 이동 멈춤). 버튼 글자는 실제 표시 배율에 맞춰 14px 이상
-    const hudFont = fontPx(displayScaleOf(this.scale.displaySize.width), 18, MIN_BUTTON_PX);
-    const invWindow = new InventoryWindow(this, { onClose: () => (this.locked = false), onPlay: (play) => playStory(this, play, 'forest') });
-    this.add
-      .text(16, coinPanel.y + 66, '인벤토리', { fontSize: `${hudFont}px`, color: '#ffffff', backgroundColor: '#5a3a8a', padding: { x: 12, y: 6 } })
-      .setDepth(DEPTH_HUD + 1)
-      .setScrollFactor(0)
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => {
-        if (invWindow.isVisible) return;
-        this.locked = true;
-        void invWindow.open();
-      });
-
-    this.add
-      .text(16, CANVAS_HEIGHT - 20, `플레이어: ${inventory.getPlayerId().slice(0, 8)}`, { fontSize: '11px', color: '#ffffff' })
-      .setOrigin(0, 1)
-      .setAlpha(0.45)
-      .setDepth(DEPTH_HUD);
+    fix(
+      this.add
+        .text(16, CANVAS_HEIGHT - 20, `플레이어: ${inventory.getPlayerId().slice(0, 8)}`, { fontSize: '11px', color: '#ffffff' })
+        .setOrigin(0, 1)
+        .setAlpha(0.45)
+        .setDepth(DEPTH_HUD),
+    );
   }
 
+  // 상호작용 안내 버튼(들어가기 등): 아바타 머리 위. 크기·글자는 표시 배율에 맞춘다
   private createPrompt() {
-    const bg = this.add.image(0, 0, 'prompt-interact').setDisplaySize(190, 64);
-    this.promptLabel = this.add.text(0, 0, '', { fontSize: '19px', color: HUD_TEXT }).setOrigin(0.5);
-    this.prompt = this.add.container(0, 0, [bg, this.promptLabel]).setDepth(DEPTH_PROMPT).setVisible(false);
+    this.prompt?.destroy();
+    const P = this.hud.prompt;
+    const bg = this.add.image(0, 0, 'prompt-interact').setDisplaySize(P.w, P.h);
+    this.promptLabel = this.add.text(0, 0, this.activeInteraction?.prompt ?? '', { fontSize: `${this.hud.font.prompt}px`, color: HUD_TEXT }).setOrigin(0.5);
+    this.prompt = this.add.container(0, 0, [bg, this.promptLabel]).setDepth(DEPTH_PROMPT).setVisible(!!this.activeInteraction);
     bg.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
-      if (this.activeInteraction && !this.paused) this.triggerInteraction(this.activeInteraction);
+      if (this.activeInteraction && !this.paused && !this.locked) this.triggerInteraction(this.activeInteraction);
     });
   }
 
@@ -295,7 +318,7 @@ ${storyHint}` : it.hint,
 
     const hit = this.layout.interactions.find((it) => Phaser.Geom.Rectangle.Contains(new Phaser.Geom.Rectangle(it.zone.x, it.zone.y, it.zone.w, it.zone.h), this.avatar.x, this.avatar.y));
     this.setActiveInteraction(hit ?? null);
-    if (hit) this.prompt.setPosition(this.avatar.x, this.avatar.y - 84 - 44); // 문·입구 그림을 가리지 않게 캐릭터 머리 위에 표시
+    if (hit) this.prompt.setPosition(this.avatar.x, this.avatar.y - this.hud.prompt.lift - 44); // 문·입구 그림을 가리지 않게 캐릭터 머리 위에 표시
     if (hit && k.interact.some((key) => Phaser.Input.Keyboard.JustDown(key))) this.triggerInteraction(hit);
   }
 

@@ -1,6 +1,8 @@
 import Phaser from 'phaser';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../config/constants';
 import itemIcons from '../data/item-icons.json';
+import { displayScaleOf } from './responsive';
+import { toastFont } from './screenLayouts';
 
 // docs/save_a_turby_ui_spec.md 1절 공통 시각 체계. 이미지 에셋이 들어오기 전까지 도형으로 같은 정보 구조를 그린다.
 export const PAL = {
@@ -106,22 +108,25 @@ export function creamOverlay(scene: Phaser.Scene, alpha = 0.78) {
 
 // 토스트: 1.8초 표시 + 0.4초 페이드. 버튼을 가리지 않도록 호출자가 y를 정한다.
 export function showToast(scene: Phaser.Scene, message: string, opts: { y?: number; error?: boolean; width?: number; fixed?: boolean } = {}) {
-  const width = opts.width ?? 720;
+  // 글자는 실제 표시 배율에 맞춘다(작은 화면에서도 최종 13px 이상). 여러 줄이면 상자 높이를 글자에 맞춘다
+  const font = toastFont(displayScaleOf(scene.scale.displaySize.width));
+  const width = Math.max(opts.width ?? 720, Math.min(1200, font * 30));
   const y = opts.y ?? 600;
   const box = scene.add.container(CANVAS_WIDTH / 2, y).setDepth(1000);
+  const text = scene.add
+    .text(0, 0, message, { fontSize: `${font}px`, color: opts.error ? TEXT.error : TEXT.body, wordWrap: { width: width - 48, useAdvancedWrap: true }, align: 'center' })
+    .setOrigin(0.5);
+  const height = Math.max(64, Math.ceil(text.height) + 24);
   if (scene.textures.exists('toast-panel')) {
-    box.add(scene.add.image(0, 0, 'toast-panel').setDisplaySize(width, 64));
+    box.add(scene.add.image(0, 0, 'toast-panel').setDisplaySize(width, height));
   } else {
     const g = scene.add.graphics();
     g.fillStyle(PAL.cream, 1);
-    g.fillRoundedRect(-width / 2, -28, width, 56, 22);
+    g.fillRoundedRect(-width / 2, -height / 2, width, height, 22);
     g.lineStyle(4, opts.error ? 0xe9b7c2 : PAL.lavender, 1);
-    g.strokeRoundedRect(-width / 2, -28, width, 56, 22);
+    g.strokeRoundedRect(-width / 2, -height / 2, width, height, 22);
     box.add(g);
   }
-  const text = scene.add
-    .text(0, 0, message, { fontSize: '16px', color: opts.error ? TEXT.error : TEXT.body, wordWrap: { width: width - 40 }, align: 'center' })
-    .setOrigin(0.5);
   box.add(text);
   if (opts.fixed) {
     // 스크롤하는 카메라 위에서도 화면에 고정(컨테이너 자식은 각자 scrollFactor가 필요)

@@ -3,6 +3,8 @@ import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../config/constants';
 import { AVATAR_IMAGE, BACKGROUND_TILES, CHARACTER_IMAGES, PORTRAIT_IMAGES } from '../assets/registry';
 import { loadWorldImages } from '../assets/loader';
 import { PAL, TEXT, feltPanel, pillButton } from '../ui/kit';
+import { displayScaleOf, fontPx, MIN_BODY_PX, MIN_BUTTON_PX } from '../ui/responsive';
+import { nameInputLayout } from '../ui/screenLayouts';
 import { portraitCandidates, runDialogue, type Advance, type DialogueEntry, type DialogueFile, type NameSubmitResult, type RunnerPorts, type ShownLine } from '../story/dialogueRunner';
 import { NAME_RULE_TEXT, nameReasonMessage, precheckName } from '../story/nameRules';
 import type { OpeningStoryState, StoryClient } from '../story/storyClient';
@@ -129,7 +131,7 @@ export class OpeningScene extends Phaser.Scene {
       if (entry.kind === 'line' && entry.portrait) this.drawPortrait(portraitKey);
       this.layer.add(feltPanel(this, BOX.x, BOX.y, BOX.w, BOX.h, { radius: 32, image: 'dialogue-box', fill: PAL.cream, stroke: PAL.lavender, strokeW: 6 }));
       if (line.label) {
-        const label = this.add.text(0, 0, line.label, { fontSize: '22px', color: TEXT.body });
+        const label = this.add.text(0, 0, line.label, { fontSize: `${fontPx(displayScaleOf(this.scale.displaySize.width), 22, MIN_BODY_PX)}px`, color: TEXT.body });
         const w = Math.max(120, label.width + 48);
         this.layer.add(feltPanel(this, BOX.x + 28, BOX.y - 24, w, 48, { radius: 24, fill: entry.kind === 'line' && entry.speaker === 'nubi' ? PAL.pink : PAL.lavender, stroke: PAL.cream, strokeW: 4 }));
         label.setPosition(BOX.x + 28 + w / 2, BOX.y).setOrigin(0.5);
@@ -148,7 +150,7 @@ export class OpeningScene extends Phaser.Scene {
     }
 
     if (line.canSkipSegment) {
-      this.layer.add(pillButton(this, CANVAS_WIDTH - 130, 60, 220, 88, '건너뛰기', 'secondary', () => this.resolveAdvance('skip')));
+      this.layer.add(pillButton(this, CANVAS_WIDTH - 130, 60, 220, 88, '건너뛰기', 'secondary', () => this.resolveAdvance('skip'), undefined, fontPx(displayScaleOf(this.scale.displaySize.width), 20, MIN_BUTTON_PX)));
     }
     // 화면 아무 곳이나 누르면 진행(버튼은 자체 처리)
     const hit = this.add.rectangle(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT, 0xffffff, 0).setOrigin(0, 0).setInteractive();
@@ -223,44 +225,64 @@ export class OpeningScene extends Phaser.Scene {
 
   private askName(prompt: string, submit: (name: string) => Promise<NameSubmitResult>): Promise<void> {
     this.clearLayer();
-    // 640×360에서도 입력창·버튼이 44px 이상(캔버스 88px)이 되도록 크게 잡는다
-    const panel = { x: 240, y: 70, w: 800, h: 560 };
+    // 입력창·규칙·오류 문구·확인 버튼을 모두 화면 위쪽 절반에 둔다 — 가상 키보드가 아래쪽을 가려도 보인다(nameInputLayout).
+    // 640×360에서도 입력창·버튼이 40px 이상(캔버스 80px)이다. 안내 문구(대본)는 그대로.
+    const L = nameInputLayout(displayScaleOf(this.scale.displaySize.width));
+    const panel = L.panel;
     this.layer.add(this.add.rectangle(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT, PAL.cream, 0.72).setOrigin(0, 0).setInteractive());
     this.layer.add(feltPanel(this, panel.x, panel.y, panel.w, panel.h, { radius: 36, fill: PAL.cream, stroke: PAL.lavender, strokeW: 6 }));
-    this.layer.add(this.add.text(CANVAS_WIDTH / 2, panel.y + 70, prompt, { fontSize: '32px', color: TEXT.body, align: 'center', wordWrap: { width: panel.w - 80 } }).setOrigin(0.5));
+    this.layer.add(this.add.text(CANVAS_WIDTH / 2, L.promptY, prompt, { fontSize: `${L.font.prompt}px`, color: TEXT.body, align: 'center', wordWrap: { width: panel.w - 80, useAdvancedWrap: true } }).setOrigin(0.5));
 
     const input = document.createElement('input');
     input.type = 'text';
     input.maxLength = 12;
     input.autocomplete = 'off';
     input.setAttribute('aria-label', '이름');
-    input.style.cssText = `width:480px;height:88px;box-sizing:border-box;padding:0 24px;font-size:36px;border-radius:44px;border:4px solid #dcd3f4;background:#fffaf1;color:${TEXT.body};outline:none;text-align:center;font-family:inherit`;
-    const detach = this.overlayElement(input, CANVAS_WIDTH / 2, panel.y + 176, 480, 88);
-    this.layer.add(this.add.text(CANVAS_WIDTH / 2, panel.y + 262, NAME_RULE_TEXT, { fontSize: '24px', color: TEXT.sub }).setOrigin(0.5));
-    const error = this.add.text(CANVAS_WIDTH / 2, panel.y + 320, '', { fontSize: '24px', color: TEXT.error, align: 'center', wordWrap: { width: panel.w - 80 } }).setOrigin(0.5);
+    input.setAttribute('enterkeyhint', 'done');
+    const I = L.input;
+    input.style.cssText = `width:${I.w}px;height:${I.h}px;box-sizing:border-box;padding:0 24px;font-size:${L.font.input}px;border-radius:${I.h / 2}px;border:4px solid #dcd3f4;background:#fffaf1;color:${TEXT.body};outline:none;text-align:center;font-family:inherit`;
+    const detach = this.overlayElement(input, I.x + I.w / 2, I.y + I.h / 2, I.w, I.h);
+    this.layer.add(this.add.text(CANVAS_WIDTH / 2, L.ruleY, NAME_RULE_TEXT, { fontSize: `${L.font.rule}px`, color: TEXT.sub }).setOrigin(0.5));
+    const error = this.add.text(CANVAS_WIDTH / 2, L.errorY, '', { fontSize: `${L.font.rule}px`, color: TEXT.error, align: 'center', wordWrap: { width: panel.w - 80, useAdvancedWrap: true } }).setOrigin(0.5, 0);
     this.layer.add(error);
 
     return new Promise<void>((resolve) => {
       let busy = false;
+      let done = false;
+      const B = L.button;
+      let button: Phaser.GameObjects.Container | null = null;
+      // 확인 버튼: 저장 요청 중에는 "저장 중…"으로 바꾸고 누를 수 없게 한다(한 번의 입력 → 요청 한 번)
+      const drawButton = () => {
+        button?.destroy();
+        button = pillButton(this, B.x + B.w / 2, B.y + B.h / 2, B.w, B.h, busy ? '저장 중…' : '정했어요', busy ? 'disabled' : 'primary', () => void send(), undefined, L.font.button);
+        this.layer.add(button);
+      };
       const send = async () => {
-        if (busy) return;
+        if (busy || done) return;
         const checked = precheckName(input.value);
         if (!checked.ok) {
           error.setText(nameReasonMessage(checked.reason));
           return;
         }
         busy = true;
+        input.disabled = true;
         error.setText('');
+        drawButton();
         const res = await submit(checked.name);
         busy = false;
+        if (!this.sys.isActive() || !error.active) return; // 기다리는 사이 화면이 바뀜
         if (res.ok) {
+          done = true;
           detach();
           resolve();
           return;
         }
+        input.disabled = false;
         error.setText(res.message);
+        drawButton();
+        input.focus();
       };
-      this.layer.add(pillButton(this, CANVAS_WIDTH / 2, panel.y + panel.h - 90, 300, 88, '정했어요', 'primary', () => void send()));
+      drawButton();
       input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') void send();
       });
@@ -302,7 +324,7 @@ export class OpeningScene extends Phaser.Scene {
     this.layer.add(feltPanel(this, BOX.x, BOX.y, BOX.w, BOX.h, { radius: 32, fill: PAL.cream, stroke: 0xe9b7c2, strokeW: 6 }));
     this.layer.add(this.add.text(CANVAS_WIDTH / 2, BOX.y + 52, message, { fontSize: '24px', color: TEXT.error, align: 'center', wordWrap: { width: BOX.w - 88 } }).setOrigin(0.5));
     return new Promise<void>((resolve) => {
-      this.layer.add(pillButton(this, CANVAS_WIDTH / 2, BOX.y + 136, 260, 88, '다시 시도', 'primary', () => resolve()));
+      this.layer.add(pillButton(this, CANVAS_WIDTH / 2, BOX.y + 136, 260, 88, '다시 시도', 'primary', () => resolve(), undefined, fontPx(displayScaleOf(this.scale.displaySize.width), 20, MIN_BUTTON_PX)));
     });
   }
 
