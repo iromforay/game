@@ -12,6 +12,7 @@ import { OpeningScene } from './scenes/OpeningScene';
 import { StoryDialogueScene } from './scenes/StoryDialogueScene';
 import { inventory } from './state/inventory';
 import { session } from './api/client';
+import { installImmediateInput } from './ui/inputReady';
 
 export async function mountGame(parent: HTMLElement | string): Promise<Phaser.Game> {
   // VillageScene이 동기적으로 인벤토리(타레 등)를 읽으므로, 씬 생성 전에 서버 조회를 먼저 끝내둠(오펜스타워의 loadHero 패턴과 동일)
@@ -38,7 +39,9 @@ export async function mountGame(parent: HTMLElement | string): Promise<Phaser.Ga
     scene: [BootScene, VillageScene, HomeScene, MarketScene, StageSelectScene, MapScene, PartySelectScene, BattleScene, OpeningScene, StoryDialogueScene],
   };
 
-  return new Phaser.Game(config);
+  const game = new Phaser.Game(config);
+  installImmediateInput(game); // 다시 그린 직후의 탭도 새 버튼에 닿게(ui/inputReady.ts)
+  return game;
 }
 
 // 스토리 M1-B: 세션 토큰 재식별까지 실패하면(state/session.ts) 요청을 반복하지 않고 재접속 안내를 띄운다.

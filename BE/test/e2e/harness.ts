@@ -165,47 +165,37 @@ export class Game {
     return { x: r.left + (x * r.w) / 1280, y: r.top + (y * r.h) / 720 };
   }
 
-  // 글자로 버튼을 찾아(보일 때까지 기다림) 실제로 누른다. expect를 주면 그 상태가 될 때까지 확인하고,
-  // 화면이 막 다시 그려지는 순간에 눌려 입력이 빠졌으면 다시 누른다(최대 3번 — 고정 지연 없이 상태로 판단)
+  // ----- 단일 클릭 원칙(10-01 v1 §1.3): UI 행동은 한 번만 누른다. 누른 뒤 기대 상태가 오지 않으면 다시 누르지 않고 실패한다 -----
+
+  private async expectAfterClick(what: string, expect: string, timeout = 10_000) {
+    try {
+      await this.page.waitForFunction(`(() => { const s = window.__dev.state(); return (${expect}); })()`, null, { timeout, polling: 50 });
+    } catch {
+      throw new Error(`한 번 눌렀지만 상태가 바뀌지 않음(입력 누락): ${what} → ${expect}`);
+    }
+  }
+
+  // 글자로 버튼을 찾아(보일 때까지 기다림) 실제로 한 번 누른다. expect를 주면 그 상태가 될 때까지 기다린다(다시 누르지 않음)
   async clickLabel(label: string, opts: { exact?: boolean; timeout?: number; expect?: string } = {}) {
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const h = await this.page.waitForFunction(([l, e]) => (window as any).__dev.find(l, e), [label, !!opts.exact] as const, { timeout: opts.timeout ?? 20_000, polling: 100 }).catch(() => null); // eslint-disable-line @typescript-eslint/no-explicit-any
-      if (!h) throw new Error(`버튼을 찾지 못함: ${label}`);
-      const p = (await h.jsonValue()) as { x: number; y: number };
-      await this.click(p.x, p.y);
-      if (!opts.expect) return;
-      const ok = await this.page
-        .waitForFunction(`(() => { const s = window.__dev.state(); return (${opts.expect}); })()`, null, { timeout: 3000, polling: 50 })
-        .then(() => true, () => false);
-      if (ok) return;
-    }
-    throw new Error(`눌렀지만 상태가 바뀌지 않음: ${label} → ${opts.expect}`);
+    const h = await this.page.waitForFunction(([l, e]) => (window as any).__dev.find(l, e), [label, !!opts.exact] as const, { timeout: opts.timeout ?? 20_000, polling: 100 }).catch(() => null); // eslint-disable-line @typescript-eslint/no-explicit-any
+    if (!h) throw new Error(`버튼을 찾지 못함: ${label}`);
+    const p = (await h.jsonValue()) as { x: number; y: number };
+    await this.click(p.x, p.y);
+    if (opts.expect) await this.expectAfterClick(label, opts.expect);
   }
 
-  // 좌표를 눌러 expect 상태가 될 때까지(다시 그려지는 순간에 입력이 빠지면 다시 — 최대 3번)
+  // 좌표를 한 번 누르고 expect 상태를 기다린다
   async clickAt(x: number, y: number, expect: string) {
-    for (let attempt = 0; attempt < 3; attempt++) {
-      await this.click(x, y);
-      const ok = await this.page
-        .waitForFunction(`(() => { const s = window.__dev.state(); return (${expect}); })()`, null, { timeout: 3000, polling: 50 })
-        .then(() => true, () => false);
-      if (ok) return;
-    }
-    throw new Error(`눌렀지만 상태가 바뀌지 않음: (${x}, ${y}) → ${expect}`);
+    await this.click(x, y);
+    await this.expectAfterClick(`(${x}, ${y})`, expect);
   }
 
-  // 전투 결과창의 버튼을 눌러 expect 상태가 될 때까지(입력이 빠지면 다시 — 최대 3번)
+  // 전투 결과창의 버튼을 한 번 누르고 expect 상태를 기다린다
   async clickResult(expect: string) {
-    for (let attempt = 0; attempt < 3; attempt++) {
-      await this.until('결과 버튼', 's.battle && s.battle.resultButton');
-      const btn = (await this.state()).battle.resultButton as { x: number; y: number };
-      await this.click(btn.x, btn.y);
-      const ok = await this.page
-        .waitForFunction(`(() => { const s = window.__dev.state(); return (${expect}); })()`, null, { timeout: 5000, polling: 50 })
-        .then(() => true, () => false);
-      if (ok) return;
-    }
-    throw new Error(`결과 버튼을 눌렀지만 상태가 바뀌지 않음: ${expect}`);
+    await this.until('결과 버튼', 's.battle && s.battle.resultButton');
+    const btn = (await this.state()).battle.resultButton as { x: number; y: number };
+    await this.click(btn.x, btn.y);
+    await this.expectAfterClick('결과 버튼', expect);
   }
 
   // 대화: 입력을 기다리는 동안 화면을 눌러 진행. stop 조건이 참이 되면 멈춘다
@@ -224,26 +214,33 @@ export class Game {
     throw new Error(`대화가 끝나지 않음: ${stop}`);
   }
 
-  // 전투: 내 차례마다 이동·공격·턴 종료를 실제 클릭으로. 결과창이 뜰 때까지.
-  // 누른 뒤 서버 응답·재생이 끝나 상태가 바뀌기를 기다리고, 입력이 빠져 5초 안에 아무것도 바뀌지 않으면 다시 판단해 누른다
+  // 전투: 내 차례마다 이동·공격·턴 종료를 실제 클릭 한 번씩으로. 결과창이 뜰 때까지.
+  // 누른 뒤에는 서버 응답·재생이 끝나 전투 버전이 바뀌기를 기다린다. 바뀌지 않으면 다시 누르지 않고 입력 누락으로 실패한다
   async playBattle(deadlineMs = 120_000) {
     const until = Date.now() + deadlineMs;
+    const changed = (v: number, timeout: number) =>
+      this.page.waitForFunction(
+        (ver) => {
+          const b = (window as any).__game.scene.getScene('Battle'); // eslint-disable-line @typescript-eslint/no-explicit-any
+          return !b?.snap || b.resultShown || (!b.busy && b.snap.version !== ver && (window as any).__dev.battleStep() !== null) || (!b.busy && b.snap.phase === 'resolved'); // eslint-disable-line @typescript-eslint/no-explicit-any
+        },
+        v,
+        { timeout, polling: 50 },
+      );
     while (Date.now() < until) {
       const s = await this.state();
       if (s.battle?.resultShown) return s.battle;
-      const step = (await this.page.evaluate(() => (window as any).__dev.battleStep())) as { x: number; y: number } | null; // eslint-disable-line @typescript-eslint/no-explicit-any
-      const before = await this.page.evaluate(() => (window as any).__game.scene.getScene('Battle').snap?.version ?? -1); // eslint-disable-line @typescript-eslint/no-explicit-any
-      if (step) await this.click(step.x, step.y);
-      await this.page
-        .waitForFunction(
-          (v) => {
-            const b = (window as any).__game.scene.getScene('Battle'); // eslint-disable-line @typescript-eslint/no-explicit-any
-            return !b?.snap || b.resultShown || (!b.busy && b.snap.version !== v && (window as any).__dev.battleStep() !== null) || (!b.busy && b.snap.phase === 'resolved'); // eslint-disable-line @typescript-eslint/no-explicit-any
-          },
-          before,
-          { timeout: step ? 5_000 : 15_000, polling: 50 },
-        )
-        .catch(() => undefined);
+      const step = (await this.page.evaluate(() => (window as any).__dev.battleStep())) as { x: number; y: number; kind: string } | null; // eslint-disable-line @typescript-eslint/no-explicit-any
+      const before = (await this.page.evaluate(() => (window as any).__game.scene.getScene('Battle').snap?.version ?? -1)) as number; // eslint-disable-line @typescript-eslint/no-explicit-any
+      if (!step) {
+        // 내 차례가 아니거나 재생 중 — 누르지 않고 차례가 오기를 기다린다
+        await this.page.waitForFunction(() => { const b = (window as any).__game.scene.getScene('Battle'); return !b?.snap || b.resultShown || (window as any).__dev.battleStep() !== null; }, null, { timeout: 30_000, polling: 50 }); // eslint-disable-line @typescript-eslint/no-explicit-any
+        continue;
+      }
+      await this.click(step.x, step.y);
+      await changed(before, 30_000).catch(() => {
+        throw new Error(`한 번 눌렀지만 전투 상태가 바뀌지 않음(입력 누락): ${step.kind} (${step.x}, ${step.y})`);
+      });
     }
     throw new Error('전투가 끝나지 않음');
   }
