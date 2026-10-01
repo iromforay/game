@@ -363,3 +363,81 @@ test('화면 ⑦: 인벤토리 상세 — 첫 매듭·실가루·일반 장비·
   }, backend, device);
   await g.close();
 });
+
+// ---------- 10-01 v2 §5: 가상 키보드(visualViewport) 모의 ----------
+// 실제 모바일 브라우저·실제 키보드가 아니다. window.visualViewport를 시험용 객체로 바꿔 "보이는 높이가 줄었다"는 신호만 흉내 낸다.
+const MOCK_VV = `(() => {
+  const vv = new EventTarget();
+  Object.assign(vv, { width: innerWidth, height: innerHeight, offsetTop: 0, offsetLeft: 0, pageTop: 0, pageLeft: 0, scale: 1 });
+  Object.defineProperty(window, 'visualViewport', { configurable: true, get: () => vv });
+  window.__setKeyboard = (visibleHeight) => { vv.height = visibleHeight; vv.dispatchEvent(new Event('resize')); };
+})()`;
+const NO_VV = "Object.defineProperty(window, 'visualViewport', { configurable: true, get: () => undefined })";
+
+test('화면 ⑧: 이름 입력 + 가상 키보드 모의 — 보이는 높이가 절반 아래로 줄어도 입력창·확인 버튼이 보이는 영역 안, 입력 값·커서 유지, 제출 요청 한 번', async () => {
+  const device = 'e2e-name-kb';
+  await backend.start();
+  const g = await Game.open(browser, `${vite.url}/?device=${device}`, device, SMALL, MOCK_VV);
+  const NAME = 'POST /player/me/profile/name';
+  const input = () => g.page.locator('input[aria-label="이름"]');
+  // 입력창과 확인 버튼의 화면(px) 위치
+  const row = async () => {
+    const b = (await input().boundingBox())!;
+    const btn = (await g.page.evaluate("window.__dev.find('정했어요', true)")) as { x: number; y: number };
+    const p = await g.canvasToPage(btn.x, btn.y);
+    return { inputTop: b.y, inputBottom: b.y + b.height, buttonY: p.y };
+  };
+  const keyboard = (visible: number) => g.page.evaluate((h) => (window as any).__setKeyboard(h), visible); // eslint-disable-line @typescript-eslint/no-explicit-any
+  await withDiagnosis(g, 'screens-name-keyboard', async () => {
+    await g.waitScene('Opening');
+    await g.advanceDialogue('s.dialogue && s.dialogue.nameInput');
+    await input().click();
+    await g.page.keyboard.type('하늘');
+
+    // 키보드가 화면의 61%를 가림(보이는 높이 140px): 위쪽 배치라 옮기지 않아도 입력창·버튼이 보인다
+    await keyboard(140);
+    let r = await row();
+    assert.ok(r.inputTop >= 0 && r.inputBottom <= 140 && r.buttonY <= 140, `보이는 140px 안: ${JSON.stringify(r)}`);
+    assert.equal(await g.page.evaluate('document.querySelector("canvas").style.transform'), '', '옮길 필요 없음');
+    await g.capture('07a_name_input_keyboard_61');
+
+    // 키보드가 화면의 85%를 가림(보이는 높이 54px): 캔버스와 입력창을 함께 올려 입력창·버튼이 보이는 영역 안에 남는다
+    await keyboard(54);
+    await g.page.waitForFunction(() => document.querySelector('canvas')!.style.transform.includes('translateY'), null, { timeout: 5000, polling: 50 });
+    r = await row();
+    assert.ok(r.inputTop >= 0 && r.inputBottom <= 54 && r.buttonY <= 54, `보이는 54px 안: ${JSON.stringify(r)}`);
+    // 입력 값과 커서는 그대로
+    assert.equal(await input().inputValue(), '하늘');
+    assert.deepEqual(await g.page.evaluate(() => { const i = document.querySelector('input[aria-label="이름"]') as HTMLInputElement; return [document.activeElement === i, i.selectionStart]; }), [true, 2]);
+    await g.page.screenshot({ path: process.env.E2E_CAPTURE_DIR ? join(process.env.E2E_CAPTURE_DIR, '640x360_07b_name_input_keyboard_85_page.png') : undefined });
+
+    // 옮겨진 상태에서 확인 버튼 한 번 → 저장 요청 한 번, 대화 이어짐, 캔버스 위치 원복
+    await g.page.keyboard.type('이');
+    await g.clickLabel('정했어요', { exact: true, expect: 's.dialogue && !s.dialogue.nameInput' });
+    assert.equal(requests(g, NAME), 1, '한 번의 클릭 → 이름 저장 요청 한 번');
+    assert.equal((backend.db.rows('player', { id: backend.playerByDevice(device)!.id })[0] as { nickname: string }).nickname, '하늘이');
+    assert.equal(await g.page.evaluate('document.querySelector("canvas").style.transform'), '', '입력이 끝나면 캔버스를 제자리로');
+    // 원복 뒤에도 입력 좌표가 맞다: 다음 대사를 한 번 눌러 진행
+    await g.advanceDialogue("s.scenes.includes('Village')");
+  }, backend, device);
+  await g.close();
+});
+
+test('화면 ⑨: visualViewport를 지원하지 않는 브라우저 — 위쪽 배치 그대로 동작(옮기지 않음), 제출 한 번', async () => {
+  const device = 'e2e-name-novv';
+  await backend.start();
+  const g = await Game.open(browser, `${vite.url}/?device=${device}`, device, SMALL, NO_VV);
+  await withDiagnosis(g, 'screens-name-no-vv', async () => {
+    assert.equal(await g.page.evaluate('typeof window.visualViewport'), 'undefined');
+    await g.waitScene('Opening');
+    await g.advanceDialogue('s.dialogue && s.dialogue.nameInput');
+    const b = (await g.page.locator('input[aria-label="이름"]').boundingBox())!;
+    assert.ok(b.y >= 0 && b.y + b.height <= 180, '입력창은 화면 위쪽 절반 안');
+    await g.page.locator('input[aria-label="이름"]').click();
+    await g.page.keyboard.type('하늘');
+    await g.clickLabel('정했어요', { exact: true, expect: 's.dialogue && !s.dialogue.nameInput' });
+    assert.equal(requests(g, 'POST /player/me/profile/name'), 1);
+    assert.equal(g.consoleErrors.filter((e) => !e.includes('404')).length, 0, '콘솔 오류 없음');
+  }, backend, device);
+  await g.close();
+});

@@ -63,3 +63,17 @@ export function seedChapters(db: FakeDb) {
     if (db.rows('turby_character', { code }).length === 0) db.seed('turby_character', { code, name, grade_id: 1, atk_mod: 0, def_mod: 0, ap_mod: 0, hp_mod: 0 });
   }
 }
+
+// 보풀이를 구한 직후(실가루 전달 목표가 진행 중)인 계정 — 탐험 맵의 스토리 목표 추적 확인용
+export function seedDelivery(device: string) {
+  return (db: FakeDb) => {
+    const player = db.seed('player', { device_uuid: `dev-device-${device}-account`, nickname: '하늘', tare_balance: 100 }) as { id: bigint };
+    const nubiChar = db.rows('turby_character', { code: 'nubi' })[0] as { id: number };
+    const nubi = db.seed('turby_instance', { owner_player_id: player.id, character_id: nubiChar.id, acquired_via: 'starter', is_story_companion: true }) as { id: bigint };
+    db.seed('player_story_progress', { player_id: player.id, checkpoint: 'CH01_BOPUL_RESCUED', story_nubi_turby_instance_id: nubi.id, origin: 'new' });
+    for (const e of KNOT_READY_EVENTS.slice(0, 7)) db.seed('player_story_event', { player_id: player.id, event_id: e });
+    const dust = (db.rows('item_definition', { code: 'glowing_yarn_dust' })[0] as { id: number }).id;
+    const now = new Date();
+    db.seed('player_item', { player_id: player.id, item_definition_id: dust, quantity: 3, is_new: false, is_locked: true, first_acquired_at: now, last_acquired_at: now });
+  };
+}

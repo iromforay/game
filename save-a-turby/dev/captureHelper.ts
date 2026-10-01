@@ -124,9 +124,25 @@ function state() {
     };
   }
   const home = g.scene.getScene('Home') as unknown as Any;
-  if (scenes.includes('Home') && home.L) out.home = { pages: [...home.pages], busy: home.busy, mode: home.L.mode, equip: home.equipPanel?.debugState ?? null };
+  if (scenes.includes('Home') && home.L) {
+    const texts = home.children.list.filter((o: Any) => typeof o.text === 'string').map((o: Any) => o.text as string);
+    const count = (prefix: string) => Number(/· (\d+)마리/.exec(texts.find((x: string) => x.startsWith(prefix)) ?? '')?.[1] ?? -1);
+    out.home = { pages: [...home.pages], busy: home.busy, mode: home.L.mode, equip: home.equipPanel?.debugState ?? null, bag: count('가방 ('), shelf: count('선반 (') };
+  }
   const village = g.scene.getScene('Village') as unknown as Any;
-  if (scenes.includes('Village') && village.hud) out.village = { ready: village.ready, hudMode: village.hud.mode, prompt: village.activeInteraction?.type ?? null, locked: village.locked, paused: village.paused };
+  if (scenes.includes('Village') && village.hud) out.village = { ready: village.ready, hudMode: village.hud.mode, prompt: village.activeInteraction?.type ?? null, locked: village.locked, paused: village.paused, miniMap: village.miniMap?.debugState ?? null };
+  const map = g.scene.getScene('Map') as unknown as Any;
+  if (scenes.includes('Map') && map.hud) {
+    const center = (r: Any) => ({ x: Math.round(r.x + r.w / 2), y: Math.round(r.y + r.h / 2) });
+    out.map = {
+      ready: map.ready, hudMode: map.hud.mode, avatar: map.avatar ? { x: Math.round(map.avatar.x), y: Math.round(map.avatar.y) } : null,
+      goal: map.deliveryLayer.length > 0, goalHeight: map.deliveryLayer[0] ? Math.round(map.deliveryLayer[0].height) : 0,
+      room: map.roomLabel?.text ?? null, inRoom: map.inRoomMap, turbyPanel: map.inventoryPanel?.isVisible ?? false,
+      miniMap: map.miniMap?.debugState ?? null, joystickZone: map.hud.joystickZone,
+      buttons: { home: center(map.hud.home), inventory: center(map.hud.inventory), turbys: center(map.hud.turbys) },
+      inputPatch: g.registry.get('inputPatch') ?? null,
+    };
+  }
   const inv = [...liveInventoryWindows].find((w) => w.isVisible);
   if (inv) out.inventory = inv.debugState;
   return out;

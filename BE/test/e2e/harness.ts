@@ -90,8 +90,10 @@ export class Game {
   readonly consoleErrors: string[] = [];
   private constructor(readonly ctx: BrowserContext, readonly page: Page, readonly name: string) {}
 
-  static async open(browser: Browser, url: string, name: string, viewport = { width: 1280, height: 720 }): Promise<Game> {
+  // initScript: 페이지 스크립트보다 먼저 실행할 코드(예: visualViewport 모의)
+  static async open(browser: Browser, url: string, name: string, viewport = { width: 1280, height: 720 }, initScript?: string): Promise<Game> {
     const ctx = await browser.newContext({ viewport });
+    if (initScript) await ctx.addInitScript(initScript);
     const page = await ctx.newPage();
     const g = new Game(ctx, page, name);
     g.record();
@@ -318,6 +320,10 @@ export class Game {
   async capture(name: string) {
     if (!CAPTURE_DIR) return;
     mkdirSync(CAPTURE_DIR, { recursive: true });
+    // 화면 전환 페이드가 끝난 뒤에 찍는다(상태 조건 — 고정 지연 아님)
+    await this.page
+      .waitForFunction(() => (window as any).__game.scene.getScenes(true).every((s: any) => !s.cameras?.main?.fadeEffect?.isRunning), null, { timeout: 5000, polling: 50 }) // eslint-disable-line @typescript-eslint/no-explicit-any
+      .catch(() => undefined);
     const box = await this.page.locator('canvas').boundingBox();
     if (!box) return;
     await this.page.screenshot({ path: join(CAPTURE_DIR, `${Math.round(box.width)}x${Math.round(box.height)}_${name}.png`), clip: box });
