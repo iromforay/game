@@ -52,3 +52,14 @@ export function seedShop(db: FakeDb) {
   const products: [string, string, number][] = [['turby', 'bopuli', 30], ['item', 'knit_needle', 30], ['item', 'wool_glove', 40], ['item', 'yarn_scarf', 150], ['item', 'lucky_button', 60], ['turby', 'nubi', 500], ['item', 'thimble', 20]];
   products.forEach(([product_type, ref_code, price_tare], i) => db.seed('shop_product', { product_type, ref_code, price_tare, sort_order: i }));
 }
+
+// 지역 5곳(클라이언트 data/story.json과 같은 순서·코드) — 지역 선택 화면의 잠금 사유·페이지 확인용
+export function seedChapters(db: FakeDb) {
+  const more: [number, string, string, string][] = [[3, 'underground', 'pokshini', '3장 — 지하'], [4, 'ice', 'ganeuri', '4장 — 얼음'], [5, 'desert', 'geumbiti', '5장 — 사막']];
+  for (const [chapter_order, stage_code, clear_character_code, title] of more) {
+    if (db.rows('story_chapter', { stage_code }).length === 0) db.seed('story_chapter', { chapter_order, stage_code, clear_character_code, title, map_width: 2000, map_height: 2000 });
+  }
+  for (const [code, name] of [['muldeuli', '물들이'], ['pokshini', '폭신이'], ['ganeuri', '가느리'], ['geumbiti', '금빛이']]) {
+    if (db.rows('turby_character', { code }).length === 0) db.seed('turby_character', { code, name, grade_id: 1, atk_mod: 0, def_mod: 0, ap_mod: 0, hp_mod: 0 });
+  }
+}

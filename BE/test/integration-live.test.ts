@@ -250,3 +250,38 @@ test('통합 4(회귀): 일반 야생 전투 — 누비 강제 참가·스토리
   assert.deepEqual(inv.body.items.find((i) => i.itemCode === 'knit_needle'), { ...inv.body.items.find((i) => i.itemCode === 'knit_needle'), tabLabel: '장비', isLocked: false }, '일반 아이템은 스토리 잠금이 아님');
   c.close();
 });
+
+test('통합 5(감사): 잘못된 ID는 400, 이야기 슬롯은 일반 해제 거부, 남의 터비·다른 플레이어 세션은 403, 세션 없는 /me 요청은 401', async () => {
+  const c = new Client('dev-test-live-1');
+  await c.identify();
+  const nubiId = String(db.rows('turby_instance', { owner_player_id: pid(c), is_story_companion: true })[0].id);
+  // 숫자가 아닌 ID: 서버 오류(500)가 아니라 400 INVALID_ID
+  for (const path of ['/turby/abc/equip', '/turby/1e3/unequip', '/turby/%20/bag', '/turby/-1/shelf']) {
+    const r = await c.me<{ code: string }>(path, { itemCode: 'knit_needle', slotKey: 'weapon', slotIndex: 0 });
+    assert.deepEqual([r.status, r.body.code], [400, 'INVALID_ID'], path);
+  }
+  // 이야기 슬롯은 일반 해제·장착 경로로 바꿀 수 없다
+  const un = await c.me<{ code: string }>(`/turby/${nubiId}/unequip`, { slotKey: 'story_1' });
+  assert.deepEqual([un.status, un.body.code], [400, 'STORY_SLOT_RESERVED']);
+  assert.equal(db.rows('turby_equipment', { turby_instance_id: BigInt(nubiId), slot_key: 'story_1' }).length, 1, '이야기 유물은 그대로');
+  const relic = await c.me<{ code: string }>(`/turby/${nubiId}/equip`, { itemCode: 'first_knot' });
+  assert.equal(relic.status, 400, '유물은 일반 장착 경로로 장착할 수 없음');
+
+  // 다른 플레이어: 남의 터비 조작 403, URL에 남의 번호를 넣은 구 경로도 403
+  const other = new Client('dev-test-live-2');
+  await other.identify();
+  const theirs = await other.me<{ code: string }>(`/turby/${nubiId}/equip`, { itemCode: 'knit_needle' });
+  assert.deepEqual([theirs.status, theirs.body.code], [403, 'NOT_YOUR_TURBY']);
+  const legacy = await fetch(`${base}/player/${c.playerId}/turby/${nubiId}/bag`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Turby-Session': other.token }, body: '{}' });
+  assert.deepEqual([legacy.status, ((await legacy.json()) as { code: string }).code], [403, 'SESSION_PLAYER_MISMATCH']);
+  const badLegacy = await fetch(`${base}/player/abc/turby`, { headers: { 'X-Turby-Session': '' } });
+  assert.equal(badLegacy.status, 400, '구 경로의 잘못된 플레이어 번호도 400');
+  // 세션 없이 /me: 401
+  const anon = await fetch(`${base}/player/me/inventory`);
+  assert.deepEqual([anon.status, ((await anon.json()) as { code: string }).code], [401, 'SESSION_REQUIRED']);
+  // 서버 전용 이벤트와 체크포인트 직접 쓰기 경로 없음
+  const ev = await other.me<{ code: string }>('/story/events/forest_giant_knot_defeated/complete', {});
+  assert.deepEqual([ev.status, ev.body.code], [403, 'STORY_EVENT_SERVER_ONLY']);
+  const cp = await fetch(`${base}/player/me/story/checkpoint`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Turby-Session': other.token }, body: JSON.stringify({ checkpoint: 'CH01_COMPLETE' }) });
+  assert.equal(cp.status, 404, '체크포인트를 직접 쓰는 경로는 없다');
+});

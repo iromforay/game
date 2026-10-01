@@ -73,7 +73,12 @@ function chromePath(): string | undefined {
 }
 export async function launchBrowser(): Promise<Browser> {
   const executablePath = chromePath();
-  if (!executablePath) throw new Error('Chrome/Edge를 찾지 못했습니다(CHROME_PATH로 지정)');
+  if (!executablePath) {
+    throw new Error(
+      '브라우저 E2E: 설치된 Chrome/Edge를 찾지 못했습니다. 기본 설치 경로에 없으면 실행 파일 경로를 CHROME_PATH 환경 변수로 지정하세요. ' +
+        '예) PowerShell: $env:CHROME_PATH="C:/Program Files/Google/Chrome/Application/chrome.exe"; npm run test:e2e  ·  bash: CHROME_PATH=/usr/bin/google-chrome npm run test:e2e (test/e2e/README.md)',
+    );
+  }
   return chromium.launch({ executablePath, headless: process.env.E2E_HEADED !== '1' });
 }
 

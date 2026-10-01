@@ -106,9 +106,23 @@ function state() {
     if (scenes.includes(key) && d) out.dialogue = { key, waiting: !!d.advanceResolver, typing: !!d.typing, line: String(d.fullText ?? '').slice(0, 40), nameInput: !!document.querySelector('input[aria-label="이름"]') };
   }
   const sel = g.scene.getScene('StageSelect') as unknown as Any;
-  if (scenes.includes('StageSelect') && sel.L) out.stageSelect = { page: sel.page, pages: sel.L.pager?.pages ?? 1, busy: sel.busy, mode: sel.L.mode, count: sel.statuses.length, shown: sel.L.pager?.perPage ?? sel.L.cards.length };
+  if (scenes.includes('StageSelect') && sel.L) {
+    const perPage = sel.L.pager?.perPage ?? sel.L.cards.length;
+    out.stageSelect = {
+      page: sel.page, pages: sel.L.pager?.pages ?? 1, busy: sel.busy, mode: sel.L.mode, count: sel.statuses.length, shown: perPage,
+      // 지금 페이지의 카드: 가운데 좌표와 서버가 준 상태(입장 가능·잠금 사유)
+      cards: sel.statuses.slice(sel.page * perPage, (sel.page + 1) * perPage).map((st: Any, i: number) => ({ code: st.chapter.stageCode, state: st.state, enterable: st.enterable, lockedReason: st.lockedReason, x: Math.round(sel.L.cards[i].x + sel.L.cards[i].w / 2), y: Math.round(sel.L.cards[i].y + sel.L.cards[i].h / 2) })),
+    };
+  }
   const market = g.scene.getScene('Market') as unknown as Any;
-  if (scenes.includes('Market') && market.L) out.market = { page: market.page, pages: market.L.pager?.pages ?? 1, pending: market.pendingProductId, count: market.products.length, mode: market.L.mode, tare: market.tareText?.text ?? '' };
+  if (scenes.includes('Market') && market.L) {
+    const perPage = market.L.pager?.perPage ?? Math.max(1, market.L.cards.length);
+    out.market = {
+      page: market.page, pages: market.L.pager?.pages ?? 1, pending: market.pendingProductId, count: market.products.length, mode: market.L.mode, tare: market.tareText?.text ?? '',
+      // 지금 페이지의 상품: 구매 버튼 가운데 좌표
+      cards: market.products.slice(market.page * perPage, (market.page + 1) * perPage).map((p: Any, i: number) => ({ id: p.id, code: p.code, price: p.price, x: Math.round(market.L.cards[i].x + market.L.inner.buy.x + market.L.inner.buy.w / 2), y: Math.round(market.L.cards[i].y + market.L.inner.buy.y + market.L.inner.buy.h / 2) })),
+    };
+  }
   const home = g.scene.getScene('Home') as unknown as Any;
   if (scenes.includes('Home') && home.L) out.home = { pages: [...home.pages], busy: home.busy, mode: home.L.mode, equip: home.equipPanel?.debugState ?? null };
   const village = g.scene.getScene('Village') as unknown as Any;
@@ -156,5 +170,14 @@ function keepAlive() {
 
 const active = () => game().scene.getScenes(true).map((s) => s.scene.key);
 
-(window as unknown as { __dev?: unknown }).__dev = { cap, tap, find, state, battleStep, keepAlive, active };
+// 화면에 보이는 글자 전부(상태·안내 문구가 실제로 보이는지 확인용)
+function texts(): string[] {
+  const out: string[] = [];
+  walkScenes((o) => {
+    if (typeof o.text === 'string' && o.text.trim() && (o.alpha ?? 1) > 0) out.push(o.text);
+  });
+  return out;
+}
+
+(window as unknown as { __dev?: unknown }).__dev = { cap, tap, find, state, texts, battleStep, keepAlive, active };
 export {};
