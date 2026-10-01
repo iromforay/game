@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { canDefeat, choiceCountFor, createChoices, createScoreUpdate, toPublicChoice } from './engine.ts';
+import { canDefeat, choiceCountFor, createChoices, createScoreUpdate, STAGES, toPublicChoice } from './engine.ts';
 
 test('용사 숫자가 적보다 클 때만 승리한다', () => {
   assert.equal(canDefeat(10, 9), true);
@@ -28,4 +28,14 @@ test('선택 화면 데이터에는 보상과 실제 선택지 수가 없다', (
 
 test('같은 경로는 같은 탑을 만든다', () => {
   assert.deepEqual(createChoices(3, 'root-1', 3), createChoices(3, 'root-1', 3));
+});
+
+test('10개 스테이지 설정이 고유한 보스와 난이도를 가진다', () => {
+  assert.equal(STAGES.length, 10);
+  assert.equal(new Set(STAGES.map((stage) => stage.bossName)).size, 10);
+  assert.ok(STAGES.every((stage, index) => index === 0 || stage.bossAttack > STAGES[index - 1].bossAttack));
+});
+
+test('점수 기록에 선택한 스테이지가 포함된다', () => {
+  assert.deepEqual(createScoreUpdate(88, 6, true, 4), { stageId: 4, currentScore: 88, floorsCleared: 6, cleared: true });
 });

@@ -1,11 +1,21 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { canDefeat, createChoices, createScoreUpdate, newRunId, STAGE_ONE } from './game/engine';
+import { canDefeat, createChoices, createScoreUpdate, newRunId, STAGES } from './game/engine';
 import { reportScoreUpdate } from './game/scoreReporter';
-import type { EnemyChoice, HistoryEntry, RouteWidth, RunPhase } from './game/types';
+import type { EnemyChoice, HistoryEntry, RouteWidth, RunPhase, StageConfig } from './game/types';
 import heroImage from './assets/number-hero-stage1.png';
 import blockGolemImage from './assets/enemy-block-golem-stage1.png';
 import clockworkKnightImage from './assets/enemy-clockwork-knight-stage1.png';
 import snackGuardianImage from './assets/enemy-snack-guardian-stage1.png';
+import boss01 from './assets/boss-01-block-dragon.png';
+import boss02 from './assets/boss-02-clockwork-tyrant.png';
+import boss03 from './assets/boss-03-cookie-king.png';
+import boss04 from './assets/boss-04-candy-hydra.png';
+import boss05 from './assets/boss-05-mecha-tirano.png';
+import boss06 from './assets/boss-06-block-pirate-king.png';
+import boss07 from './assets/boss-07-jelly-kraken.png';
+import boss08 from './assets/boss-08-runaway-carousel.png';
+import boss09 from './assets/boss-09-golden-golem.png';
+import boss10 from './assets/boss-10-emperor-dragon.png';
 import './styles.css';
 
 const BADGES: Record<RouteWidth, { mark: string; name: string; ko: string }> = {
@@ -26,21 +36,81 @@ const ENEMY_IMAGES: Record<EnemyChoice['archetype'], string> = {
   snack: snackGuardianImage,
 };
 
+const BOSS_IMAGES: Record<number, string> = {
+  1: boss01, 2: boss02, 3: boss03, 4: boss04, 5: boss05,
+  6: boss06, 7: boss07, 8: boss08, 9: boss09, 10: boss10,
+};
+
 interface Props {
   onExit?: () => void;
 }
 
 export function NumberHeroTowerGame({ onExit }: Props) {
+  const [selectedStageId, setSelectedStageId] = useState<number | null>(null);
   const [runKey, setRunKey] = useState(0);
-  return <StageOne key={runKey} onExit={onExit} onRestart={() => setRunKey((value) => value + 1)} />;
+  const [unlockedStage, setUnlockedStage] = useState(() => {
+    if (typeof localStorage === 'undefined') return 1;
+    return Math.min(10, Math.max(1, Number(localStorage.getItem('number-hero-tower:unlocked-stage') ?? 1)));
+  });
+
+  const completeStage = (stageId: number) => {
+    const nextUnlocked = Math.min(10, Math.max(unlockedStage, stageId + 1));
+    setUnlockedStage(nextUnlocked);
+    localStorage.setItem('number-hero-tower:unlocked-stage', String(nextUnlocked));
+  };
+
+  if (selectedStageId === null) {
+    return <StageSelect unlockedStage={unlockedStage} onSelect={setSelectedStageId} onExit={onExit} />;
+  }
+
+  const stage = STAGES[selectedStageId - 1];
+  return (
+    <StageRun
+      key={`${selectedStageId}-${runKey}`}
+      stage={stage}
+      onExit={onExit}
+      onComplete={() => completeStage(stage.id)}
+      onRestart={() => setRunKey((value) => value + 1)}
+      onSelectStage={() => setSelectedStageId(null)}
+      onNextStage={stage.id < STAGES.length ? () => { setSelectedStageId(stage.id + 1); setRunKey((value) => value + 1); } : undefined}
+    />
+  );
 }
 
-function StageOne({ onExit, onRestart }: Props & { onRestart: () => void }) {
+function StageSelect({ unlockedStage, onSelect, onExit }: { unlockedStage: number; onSelect: (stageId: number) => void; onExit?: () => void }) {
+  return (
+    <main className="stage-select-screen">
+      <header className="stage-select-header">
+        <div><p>AD GAME 02</p><h1>숫자 용사 탑</h1><span>도전할 탑을 선택하세요</span></div>
+        {onExit && <button type="button" onClick={onExit}>광고게임 목록</button>}
+      </header>
+      <section className="stage-select-grid" aria-label="스테이지 선택">
+        {STAGES.map((stage) => {
+          const unlocked = stage.id <= unlockedStage;
+          const best = typeof localStorage === 'undefined' ? 0 : Number(localStorage.getItem(`number-hero-tower:stage-${stage.id}:best`) ?? 0);
+          return (
+            <button key={stage.id} type="button" className={`stage-select-card theme-${stage.id} ${unlocked ? 'unlocked' : 'locked'}`} disabled={!unlocked} onClick={() => onSelect(stage.id)} style={{ '--stage-accent': stage.accent } as CSSProperties}>
+              <span className="stage-card-number">{String(stage.id).padStart(2, '0')}</span>
+              <img src={BOSS_IMAGES[stage.id]} alt="" />
+              <span className="stage-card-theme">{stage.theme}</span>
+              <strong>{stage.title}</strong>
+              <small>{stage.bossName}</small>
+              <b>{unlocked ? best > 0 ? `최고 ${best} · 다시 도전` : '도전 가능' : 'LOCKED'}</b>
+            </button>
+          );
+        })}
+      </section>
+      <footer className="stage-select-footer">클리어하면 다음 스테이지가 열립니다 · 완료한 스테이지는 언제든 다시 도전할 수 있습니다.</footer>
+    </main>
+  );
+}
+
+function StageRun({ stage, onExit, onRestart, onSelectStage, onNextStage, onComplete }: Props & { stage: StageConfig; onRestart: () => void; onSelectStage: () => void; onNextStage?: () => void; onComplete: () => void }) {
   const runId = useRef(newRunId());
   const timers = useRef<number[]>([]);
   const [floor, setFloor] = useState(1);
   const [path, setPath] = useState('root');
-  const [power, setPower] = useState<number>(STAGE_ONE.startPower);
+  const [power, setPower] = useState<number>(stage.startPower);
   const [choiceCount, setChoiceCount] = useState(3);
   const [phase, setPhase] = useState<RunPhase>('traveling');
   const [selected, setSelected] = useState<EnemyChoice | null>(null);
@@ -49,7 +119,7 @@ function StageOne({ onExit, onRestart }: Props & { onRestart: () => void }) {
   const [battleEnemyPower, setBattleEnemyPower] = useState(0);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [syncText, setSyncText] = useState('첫 보상 합산 후 BE 기록 시작');
-  const choices = useMemo(() => createChoices(floor, path, choiceCount), [floor, path, choiceCount]);
+  const choices = useMemo(() => createChoices(floor, path, choiceCount, stage), [floor, path, choiceCount, stage]);
 
   useEffect(() => () => {
     timers.current.forEach((timer) => window.clearTimeout(timer));
@@ -58,7 +128,7 @@ function StageOne({ onExit, onRestart }: Props & { onRestart: () => void }) {
 
   useEffect(() => {
     if (phase !== 'battling') return;
-    const enemyPower = selected?.attack ?? STAGE_ONE.dragonAttack;
+    const enemyPower = selected?.attack ?? stage.bossAttack;
     const startedAt = performance.now();
     const duration = 1250;
     setBattleHeroPower(power);
@@ -70,15 +140,15 @@ function StageOne({ onExit, onRestart }: Props & { onRestart: () => void }) {
       if (progress === 1) window.clearInterval(timer);
     }, 40);
     return () => window.clearInterval(timer);
-  }, [phase, power, selected]);
+  }, [phase, power, selected, stage.bossAttack]);
 
   useEffect(() => {
     if (phase !== 'traveling') return;
     const timer = window.setTimeout(() => {
-      setPhase(floor > STAGE_ONE.floorCount ? 'dragon' : 'choosing');
+      setPhase(floor > stage.floorCount ? 'dragon' : 'choosing');
     }, 1750);
     return () => window.clearTimeout(timer);
-  }, [floor, phase]);
+  }, [floor, phase, stage.floorCount]);
 
   const later = (callback: () => void, delay: number) => {
     const timer = window.setTimeout(callback, delay);
@@ -86,7 +156,7 @@ function StageOne({ onExit, onRestart }: Props & { onRestart: () => void }) {
   };
 
   const publish = (nextPower: number, floorsCleared: number, final = false) => {
-    reportScoreUpdate(runId.current, createScoreUpdate(nextPower, floorsCleared, final), final);
+    reportScoreUpdate(runId.current, createScoreUpdate(nextPower, floorsCleared, final, stage.id), final);
     setSyncText(final ? `최종 ${nextPower}점 BE 전송 완료` : `${nextPower}점 BE 전송`);
   };
 
@@ -136,45 +206,48 @@ function StageOne({ onExit, onRestart }: Props & { onRestart: () => void }) {
     if (phase !== 'dragon') return;
     setPhase('battling');
     later(() => {
-      if (!canDefeat(power, STAGE_ONE.dragonAttack)) {
+      if (!canDefeat(power, stage.bossAttack)) {
         finishFailed(null);
         return;
       }
       setPhase('revealing');
-      setRevealedReward(STAGE_ONE.dragonReward);
+      setRevealedReward(stage.bossReward);
       later(() => {
-        const finalPower = power + STAGE_ONE.dragonReward;
+        const finalPower = power + stage.bossReward;
         setPower(finalPower);
         setRevealedReward(null);
         setPhase('cleared');
         publish(finalPower, history.length, true);
-        const best = Number(localStorage.getItem('number-hero-tower:stage-1:best') ?? 0);
-        if (finalPower > best) localStorage.setItem('number-hero-tower:stage-1:best', String(finalPower));
+        const bestKey = `number-hero-tower:stage-${stage.id}:best`;
+        const best = Number(localStorage.getItem(bestKey) ?? 0);
+        if (finalPower > best) localStorage.setItem(bestKey, String(finalPower));
+        onComplete();
       }, 700);
     }, 1400);
   };
 
-  const growth = Math.min(5, Math.max(1, Math.floor((power - STAGE_ONE.startPower) / 10) + 1));
-  const progress = floor > STAGE_ONE.floorCount || phase === 'dragon' || phase === 'cleared' ? 7 : floor;
+  const growth = Math.min(5, Math.max(1, Math.floor((power - stage.startPower) / 10) + 1));
+  const progress = floor > stage.floorCount || phase === 'dragon' || phase === 'cleared' ? stage.floorCount + 1 : floor;
 
   return (
-    <main className="hero-tower-game">
+    <main className={`hero-tower-game stage-theme-${stage.id}`} style={{ '--stage-accent': stage.accent } as CSSProperties}>
       <header className="game-header">
         <div>
-          <p className="eyebrow">AD GAME 02 · STAGE 1</p>
-          <h1>{STAGE_ONE.title}</h1>
+          <p className="eyebrow">AD GAME 02 · STAGE {stage.id}</p>
+          <h1>{stage.title}</h1>
         </div>
         <div className="header-actions">
           <span className="sync-status"><i />{syncText}</span>
+          <button className="text-button" onClick={onSelectStage}>스테이지 선택</button>
           {onExit && <button className="text-button" onClick={onExit}>광고게임 목록</button>}
         </div>
       </header>
 
       <section className="tower-shell">
         <aside className="floor-rail" aria-label="탑 진행도">
-          <div className={`floor-step dragon-step ${progress === 7 ? 'active' : ''}`}><b>DRAGON</b><span>최상층</span></div>
-          {[6, 5, 4, 3, 2, 1].map((value) => (
-            <div key={value} className={`floor-step ${value === floor && progress < 7 ? 'active' : ''} ${value < floor ? 'done' : ''}`}>
+          <div className={`floor-step dragon-step ${progress === stage.floorCount + 1 ? 'active' : ''}`}><b>BOSS</b><span>최상층</span></div>
+          {Array.from({ length: stage.floorCount }, (_, index) => stage.floorCount - index).map((value) => (
+            <div key={value} className={`floor-step ${value === floor && progress < stage.floorCount + 1 ? 'active' : ''} ${value < floor ? 'done' : ''}`}>
               <b>{value}F</b><span>{value < floor ? '정복' : value === floor ? '현재' : '잠김'}</span>
             </div>
           ))}
@@ -204,7 +277,7 @@ function StageOne({ onExit, onRestart }: Props & { onRestart: () => void }) {
                   ))}
                   <div className="tower-base" />
                 </div>
-                <p>{floor > STAGE_ONE.floorCount ? '최상층으로 이동' : `${floor}층 진입`}</p>
+                <p>{floor > stage.floorCount ? '최상층으로 이동' : `${floor}층 진입`}</p>
               </div>
             )}
             {phase === 'choosing' && (
@@ -242,8 +315,8 @@ function StageOne({ onExit, onRestart }: Props & { onRestart: () => void }) {
                     </div>
                     <div className="battle-impact"><b>VS</b><i>⚔</i></div>
                     <div className="battle-fighter enemy-side">
-                      {selected ? <img src={ENEMY_IMAGES[selected.archetype]} alt={ENEMY_NAMES[selected.archetype]} /> : <div className="battle-dragon">◆</div>}
-                      <span>{selected ? ENEMY_NAMES[selected.archetype] : '블록 드래곤'}</span>
+                      <img src={selected ? ENEMY_IMAGES[selected.archetype] : BOSS_IMAGES[stage.id]} alt={selected ? ENEMY_NAMES[selected.archetype] : stage.bossName} />
+                      <span>{selected ? ENEMY_NAMES[selected.archetype] : stage.bossName}</span>
                       <strong>{battleEnemyPower}</strong>
                     </div>
                   </div>
@@ -260,20 +333,24 @@ function StageOne({ onExit, onRestart }: Props & { onRestart: () => void }) {
 
             {phase === 'dragon' && (
               <div className="dragon-panel">
-                <div className="dragon-figure"><span className="wing left"/><span className="wing right"/><span className="dragon-head">◆</span><span className="dragon-body"/></div>
-                <p>TOP FLOOR · BOSS</p><h2>블록 드래곤</h2>
-                <div className="dragon-power"><small>ATTACK</small>{STAGE_ONE.dragonAttack}</div>
-                <button onClick={challengeDragon}>드래곤에 도전</button>
+                <img className="boss-figure" src={BOSS_IMAGES[stage.id]} alt={stage.bossName} />
+                <p>TOP FLOOR · BOSS</p><h2>{stage.bossName}</h2>
+                <div className="dragon-power"><small>ATTACK</small>{stage.bossAttack}</div>
+                <button onClick={challengeDragon}>보스에 도전</button>
               </div>
             )}
 
             {(phase === 'cleared' || phase === 'failed') && (
               <div className={`result-panel ${phase}`}>
                 <p>{phase === 'cleared' ? 'TOWER CLEARED' : 'RUN ENDED'}</p>
-                <h2>{phase === 'cleared' ? '드래곤 격파!' : '힘이 부족합니다'}</h2>
+                <h2>{phase === 'cleared' ? `${stage.bossName} 격파!` : '힘이 부족합니다'}</h2>
                 <div className="final-score"><small>저장된 최종 점수</small><strong>{power}</strong></div>
                 <p className="result-note">합산될 때마다 같은 기록이 갱신되어<br/>중간에 종료해도 마지막 점수가 남습니다.</p>
-                <button onClick={onRestart}>스테이지 1 다시 시작</button>
+                <div className="result-actions">
+                  <button onClick={onRestart}>다시 도전</button>
+                  <button onClick={onSelectStage}>스테이지 선택</button>
+                  {phase === 'cleared' && onNextStage && <button className="next-stage" onClick={onNextStage}>다음 스테이지</button>}
+                </div>
               </div>
             )}
           </div>
@@ -281,7 +358,7 @@ function StageOne({ onExit, onRestart }: Props & { onRestart: () => void }) {
       </section>
 
       <footer className="run-footer">
-        <div><span>진행</span><strong>{history.length} / {STAGE_ONE.floorCount}</strong></div>
+        <div><span>진행</span><strong>{history.length} / {stage.floorCount}</strong></div>
         <div className="history-strip">
           {history.length === 0 ? <p>첫 상대를 선택하면 합산 기록이 여기에 표시됩니다.</p> : history.map((entry) => (
             <span key={entry.floor}><small>{entry.floor}F</small>{entry.attack}<i>+{entry.reward}</i><b>{entry.heroPowerAfter}</b></span>
