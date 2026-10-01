@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from './prisma.service';
-import { INSTANCE_INCLUDE, gameError, toTurbyDto } from './turby-dto';
+import { INSTANCE_INCLUDE, gameError, parseId, toTurbyDto } from './turby-dto';
 
 interface ShopProductDto {
   id: number;
@@ -72,7 +72,7 @@ export class ShopService {
   async purchase(playerIdStr: string, productId: number, requestId: string) {
     if (!Number.isInteger(productId) || productId <= 0) throw gameError(400, 'INVALID_PRODUCT', '상품 정보가 올바르지 않습니다.');
     if (typeof requestId !== 'string' || requestId.length < 8 || requestId.length > 64) throw gameError(400, 'INVALID_REQUEST', '요청 정보가 올바르지 않습니다.');
-    const playerId = BigInt(playerIdStr);
+    const playerId = parseId(playerIdStr, '플레이어');
 
     const previous = await this.prisma.shop_purchase.findUnique({ where: { request_id: requestId } });
     if (previous) return this.replay(previous, playerId);

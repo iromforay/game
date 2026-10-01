@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from './prisma.service';
 import { SessionService } from './session.service';
-import { INSTANCE_INCLUDE, toTurbyDto } from './turby-dto';
+import { INSTANCE_INCLUDE, parseId, toTurbyDto } from './turby-dto';
 
 // 4.4: 선반 슬롯 수 제안(8열×5행) — 문서 5.2-4 최종 확정 전까지 이 값 사용
 const SHELF_SLOT_COUNT = 40;
@@ -46,8 +46,8 @@ export class PlayerService {
     if (!Number.isInteger(slotIndex) || slotIndex < 0 || slotIndex >= SHELF_SLOT_COUNT) {
       throw new BadRequestException(`slotIndex must be 0-${SHELF_SLOT_COUNT - 1}`);
     }
-    const playerId = BigInt(playerIdStr);
-    const turbyId = BigInt(turbyIdStr);
+    const playerId = parseId(playerIdStr, '플레이어');
+    const turbyId = parseId(turbyIdStr, '터비');
 
     const instance = await this.prisma.turby_instance.findUnique({ where: { id: turbyId } });
     if (!instance) throw new NotFoundException('turby not found');
@@ -72,8 +72,8 @@ export class PlayerService {
 
   // 4.2: 기지 보관(선반) → 소지(가방)로 이동
   async moveToBag(playerIdStr: string, turbyIdStr: string) {
-    const playerId = BigInt(playerIdStr);
-    const turbyId = BigInt(turbyIdStr);
+    const playerId = parseId(playerIdStr, '플레이어');
+    const turbyId = parseId(turbyIdStr, '터비');
 
     const instance = await this.prisma.turby_instance.findUnique({ where: { id: turbyId } });
     if (!instance) throw new NotFoundException('turby not found');
