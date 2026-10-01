@@ -17,7 +17,7 @@ import { installImmediateInput } from './ui/inputReady';
 export async function mountGame(parent: HTMLElement | string): Promise<Phaser.Game> {
   // VillageScene이 동기적으로 인벤토리(타레 등)를 읽으므로, 씬 생성 전에 서버 조회를 먼저 끝내둠(오펜스타워의 loadHero 패턴과 동일)
   await inventory.init();
-  watchSession(parent);
+  const unwatchSession = watchSession(parent);
 
   const config: Phaser.Types.Core.GameConfig = {
     type: Phaser.AUTO,
@@ -41,13 +41,15 @@ export async function mountGame(parent: HTMLElement | string): Promise<Phaser.Ga
 
   const game = new Phaser.Game(config);
   installImmediateInput(game); // 다시 그린 직후의 탭도 새 버튼에 닿게(ui/inputReady.ts)
+  // 게임을 닫으면 세션 감시도 푼다 — 허브에서 게임을 다시 열 때마다 리스너가 쌓이지 않게(10-01 v1 §5 감사)
+  game.events.once(Phaser.Core.Events.DESTROY, unwatchSession);
   return game;
 }
 
 // 스토리 M1-B: 세션 토큰 재식별까지 실패하면(state/session.ts) 요청을 반복하지 않고 재접속 안내를 띄운다.
-function watchSession(parent: HTMLElement | string) {
+function watchSession(parent: HTMLElement | string): () => void {
   const host = typeof parent === 'string' ? document.getElementById(parent) : parent;
-  session.onChange((state) => {
+  return session.onChange((state) => {
     if (state !== 'reconnect_required' || !host || host.querySelector('.turby-session-lost')) return;
     const box = document.createElement('div');
     box.className = 'turby-session-lost';
