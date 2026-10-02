@@ -55,6 +55,11 @@ type Grant = { itemCode: string; quantity: number; destination: 'bag' | 'story' 
 // 멱등 재요청을 트랜잭션 밖에서 "이미 완료"로 돌려주기 위한 신호
 class AlreadyCompleted extends Error {}
 
+// 위치 증거 오류: 코드는 행동과 무관하게 STORY_EVIDENCE_INVALID, reason은 내부 사유(not_in_stage·too_far·blocked·locked_zone — 좌표 없음)
+function evidenceError(reason: string, message: string) {
+  return new HttpException({ code: 'STORY_EVIDENCE_INVALID', message, reason }, 422);
+}
+
 export function isUniqueViolation(err: unknown): boolean {
   return typeof err === 'object' && err !== null && (err as { code?: unknown }).code === 'P2002';
 }
@@ -394,6 +399,21 @@ export class StoryService {
     return { ok: true, def, storyNubiId: nubiId };
   }
 
+  // 스토리 전투를 새로 만들 때의 위치 증거: 그 전투를 여는 이야기 지점(STORY_TRIGGERS의 encounterKey)에 서 있는가.
+  // 문제없으면 null. 수집·지점과 같은 판정(checkPositionEvidence)을 쓴다
+  encounterEvidence(playerId: bigint, key: string): { reason: string; message: string } | null {
+    const point = STORY_TRIGGERS.find((t) => t.encounterKey === key);
+    if (!point) return null; // 지점에 묶이지 않은 전투(현재 없음)
+    try {
+      this.checkPositionEvidence(playerId, point.evidence);
+      return null;
+    } catch (err) {
+      if (!(err instanceof HttpException)) throw err;
+      const body = err.getResponse() as { code?: string; message?: string; reason?: string };
+      return { reason: body.reason ?? 'not_at_point', message: body.message ?? '해당 장소에 있지 않습니다.' };
+    }
+  }
+
   // ---------- 대화·지역 데이터 ----------
 
   async dialogue(playerId: bigint, chapterCode: string) {
@@ -552,7 +572,7 @@ export class StoryService {
     if (evidence.kind !== 'region' && evidence.kind !== 'point' && evidence.kind !== 'stage') return;
     const room = this.rooms.roomOf(playerId.toString());
     const pos = room ? this.rooms.memberPosition(room, playerId.toString()) : null;
-    if (!room || !pos?.inMap || room.stageCode !== evidence.stageCode) throw gameError(422, 'STORY_EVIDENCE_INVALID', '해당 지역에 있지 않습니다.');
+    if (!room || !pos?.inMap || room.stageCode !== evidence.stageCode) throw evidenceError('not_in_stage', '해당 지역에 있지 않습니다.');
     if (evidence.kind === 'stage') return; // 좌표 확정 전 임시 증거: 그 지역 탐험 세션(맵 입장) 안이면 충분
     const stage = this.content.stage(evidence.stageCode);
     const slack = this.settings.numberOr('story.evidenceSlackPx', 48);
@@ -560,13 +580,14 @@ export class StoryService {
       const r = stage?.regions.find((x) => x.id === evidence.regionId);
       if (!r) throw gameError(500, 'STORY_DATA_MISSING', '지역 스토리 데이터가 없습니다.');
       const inside = pos.x >= r.x - slack && pos.x <= r.x + r.width + slack && pos.y >= r.y - slack && pos.y <= r.y + r.height + slack;
-      if (!inside) throw gameError(422, 'STORY_EVIDENCE_INVALID', '아직 그 장소에 도착하지 않았습니다.');
+      if (!inside) throw evidenceError('too_far', '아직 그 장소에 도착하지 않았습니다.');
     } else {
       const p = stage?.points.find((x) => x.id === evidence.pointId);
       if (!p) throw gameError(500, 'STORY_DATA_MISSING', '지역 스토리 데이터가 없습니다.');
-      if (Math.hypot(pos.x - p.x, pos.y - p.y) > p.radius + slack) throw gameError(422, 'STORY_EVIDENCE_INVALID', '너무 멀리 떨어져 있습니다.');
-      // 거리만 가깝고 벽·닫힌 문 너머에 있으면 닿지 않는다(10-02 v4 §2.3). pos는 서버가 마지막으로 승인한 위치다
-      if (!this.rooms.canReach(room, playerId.toString(), { x: p.x, y: p.y })) throw gameError(422, 'STORY_EVIDENCE_INVALID', '막혀 있어 닿지 않습니다.');
+      if (Math.hypot(pos.x - p.x, pos.y - p.y) > p.radius + slack) throw evidenceError('too_far', '너무 멀리 떨어져 있습니다.');
+      // 거리만 가깝고 벽·닫힌 문 너머에 있으면 닿지 않는다(10-02 v4 §2.3). pos는 서버가 마지막으로 승인한 위치다. 야생 조우·스토리 전투 시작과 같은 함수
+      const reach = this.rooms.reachOf(room, playerId.toString(), { x: p.x, y: p.y });
+      if (reach !== 'ok') throw evidenceError(reach, '막혀 있어 닿지 않습니다.');
     }
   }
 

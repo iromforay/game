@@ -9,7 +9,7 @@ import { FakeDb } from './helpers/fake-prisma';
 import { StoryService } from '../src/turby/story/story.service';
 import { StoryContentService, type StageStoryData } from '../src/turby/story/story-content.service';
 import { StageAccessService } from '../src/turby/story/stage-access.service';
-import { collisionOf, reachable, solidsFor } from '../src/turby/rooms/stage-collision';
+import { collisionOf, lockedZonesFor, reachVerdict, solidsFor } from '../src/turby/rooms/stage-collision';
 import { CHECKPOINTS, EVENT_BY_ID, ENCOUNTER_BY_KEY, OBJECTIVE_BY_KEY, STORY_TRIGGERS, FIRST_PATH_INTRO, type StoryPlayRange } from '../src/turby/story/story-data';
 
 const P1 = 1n;
@@ -37,7 +37,7 @@ function setup(checkpoint = 'CH01_BOPUL_RESCUED', events: string[] = RESCUED) {
   const rooms = {
     roomOf: () => (pos ? { stageCode: pos.stageCode } : undefined),
     memberPosition: () => (pos ? { x: pos.x, y: pos.y, inMap: true, connected: true } : null),
-    canReach: (_room: unknown, _id: string, target: { x: number; y: number }) => !!pos && reachable(solidsFor(C, done()), pos, target),
+    reachOf: (_room: unknown, _id: string, target: { x: number; y: number }) => (pos ? reachVerdict(solidsFor(C, done()), lockedZonesFor(C, done()), pos, target) : 'blocked'),
     noteStoryEvents: () => undefined,
   };
   const settings = { numberOr: (_k: string, d: number) => d, flag: (_k: string, d: boolean) => d };

@@ -75,7 +75,7 @@ test('백필 입장 권한: 지역에는 들어가지만 이전 장 완료 전 �
   assert.equal(checkEvent(ch2Event, snap)?.code, 'CHAPTER_LOCKED');
   // 2장 대화 파일도 내려주지 않는다(스포일러 방지)
   const content = { dialogue: () => ({}), stage: () => null, bannedNameWords: () => [] };
-  const story = new StoryService(s.db.client(), { roomOf: () => undefined, memberPosition: () => null, canReach: () => true, noteStoryEvents: () => undefined } as never, s.settings as never, content as never, s.access);
+  const story = new StoryService(s.db.client(), { roomOf: () => undefined, memberPosition: () => null, reachOf: () => 'ok', noteStoryEvents: () => undefined } as never, s.settings as never, content as never, s.access);
   await assert.rejects(story.dialogue(P, 'ch02'), (e: HttpException) => (e.getResponse() as { code: string }).code === 'CHAPTER_LOCKED');
 });
 

@@ -105,6 +105,9 @@ export class BattleService implements OnModuleInit {
     if (wildRow.state === 'engaged') throw new BattleError('WILD_ENGAGED', '다른 사람이 이미 교전 중인 야생 터비입니다.');
     if (wildRow.state !== 'free') throw new BattleError('WILD_GONE', '이미 사라진 야생 터비입니다.');
     if (Math.hypot(pos.x - wildRow.x, pos.y - wildRow.y) > this.settings.number('battle.encounterRadiusPx')) throw new BattleError('TOO_FAR', '야생 터비와 너무 멀리 떨어져 있습니다.');
+    // 10-02 v5 §1: 거리만 가깝고 벽·닫힌 문 너머거나, 아직 열리지 않은 구역 안의 야생과는 조우하지 않는다(마지막 승인 위치 기준, 수집·지점과 같은 판정 함수)
+    const reach = this.rooms.reachOf(room, playerId, { x: wildRow.x, y: wildRow.y });
+    if (reach !== 'ok') throw new BattleError('WILD_UNREACHABLE', '막혀 있어 야생 터비에게 닿지 않습니다.').because(reach);
 
     const wild = await this.prisma.turby_character.findUnique({ where: { code: wildRow.characterCode }, include: { turby_grade: true } });
     if (!wild) throw new BattleError('INVALID_SPAWN', '야생 터비 정보를 찾을 수 없습니다.');
@@ -162,6 +165,10 @@ export class BattleService implements OnModuleInit {
     if (room.phase !== 'playing') throw new BattleError('ROOM_NOT_STARTED', '방이 아직 시작되지 않았습니다.');
     if (!this.rooms.memberPosition(room, playerId)?.inMap) throw new BattleError('NOT_IN_MAP', '맵에 입장하지 않았습니다.');
     if (room.stageCode !== available.def.stageCode) throw new BattleError('STORY_ENCOUNTER_NOT_AVAILABLE', '이 지역에서 시작할 수 없는 전투입니다.');
+    // 10-02 v5 §2: 새 전투는 그 전투를 여는 이야기 지점에 서 있을 때만 만든다(반경 + 벽·닫힌 문). encounterKey만 보내 멀리서 시작할 수 없다.
+    // 진행 중인 같은 전투의 재요청·재접속과 이미 이긴 전투(DONE)는 위에서 먼저 처리되므로 위치와 무관하다
+    const evidence = this.story.encounterEvidence(BigInt(playerId), key);
+    if (evidence) throw new BattleError('STORY_EVIDENCE_INVALID', evidence.message).because(evidence.reason);
     const definition = this.content.battle(key);
     if (!definition) throw new BattleError('STORY_DATA_MISSING', '전투 정의 데이터가 없습니다.');
 

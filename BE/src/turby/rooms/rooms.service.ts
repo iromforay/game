@@ -8,7 +8,7 @@ import { OPENING_REQUIRED_HINT } from '../story/stage-access';
 import { FACINGS, MAX_PLAYERS, ROOM_CODE_LENGTH, RoomError } from './types';
 import type { Facing, MapPlayerDto, Room, RoomMember, RoomStateDto, WildDto, WildRuntime, WildState } from './types';
 import { StoryContentService } from '../story/story-content.service';
-import { checkMove, collisionOf, lockedZonesFor, reachable, safePosition, solidsFor, type MoveVerdict, type Point } from './stage-collision';
+import { checkMove, collisionOf, lockedZonesFor, reachVerdict, safePosition, solidsFor, type MoveVerdict, type Point, type ReachVerdict } from './stage-collision';
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 헷갈리는 0/O/1/I 제외
 
@@ -200,11 +200,17 @@ export class RoomsService {
     if (member) for (const id of eventIds) member.storyEvents.add(id);
   }
 
-  // 위치 증거용: 마지막으로 승인한 위치에서 대상 지점까지 벽·닫힌 문이 가로막지 않는가
-  canReach(room: Room, playerId: string, target: Point): boolean {
+  // 위치 증거(수집·이야기 지점·야생 조우·스토리 전투 시작 공용): 마지막으로 승인한 위치에서 대상에 닿을 수 있는가.
+  // 문 개방과 구역 잠금은 그 플레이어의 스토리 이벤트 기준
+  reachOf(room: Room, playerId: string, target: Point): ReachVerdict {
     const m = room.members.find((x) => x.playerId === playerId);
-    if (!m) return false;
-    return reachable(solidsFor(room.collision, m.storyEvents), { x: m.x, y: m.y }, target);
+    if (!m) return 'blocked';
+    const c = room.collision;
+    return reachVerdict(solidsFor(c, m.storyEvents), lockedZonesFor(c, m.storyEvents), { x: m.x, y: m.y }, target);
+  }
+
+  canReach(room: Room, playerId: string, target: Point): boolean {
+    return this.reachOf(room, playerId, target) === 'ok';
   }
 
   // 이동 보고 — 검증만 하고 브로드캐스트는 게이트웨이가 한다

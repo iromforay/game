@@ -172,11 +172,17 @@ export type ActionRequest =
 export class BattleError extends Error {
   readonly code: string;
   readonly snapshot: BattleSnapshotDto | null;
+  reason: string | null = null; // 내부 사유(가로막힘 등) — 좌표 같은 정보는 담지 않는다
 
   constructor(code: string, message: string, snapshot: BattleSnapshotDto | null = null) {
     super(message);
     this.code = code;
     this.snapshot = snapshot;
+  }
+
+  because(reason: string): this {
+    this.reason = reason;
+    return this;
   }
 }
 

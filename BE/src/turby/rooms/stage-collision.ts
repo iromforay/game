@@ -107,3 +107,14 @@ export function safePosition(c: StageCollision, solids: Rect[], locked: Rect[], 
 export function reachable(solids: Rect[], from: Point, target: Point): boolean {
   return !segmentBlocked(solids, from, target);
 }
+
+// 대상(수집 오브젝트·이야기 지점·야생 터비·스토리 전투 지점)에 닿을 수 있는가 — 서버의 모든 "거기 있었는가" 판정이 이 함수 하나를 쓴다(10-02 v5 §4).
+// 거리 한도는 행동마다 다르므로 호출 쪽이 따로 본다. 여기서는 벽·닫힌 문과 잠긴 구역만 판정한다.
+//   blocked     = 선분이 막힌 곳·닫힌 문 내부를 지난다
+//   locked_zone = 대상이 아직 열리지 않은 구역 안에 있다(플레이어가 그 구역 밖에 있어야 정상이므로 닿을 수 없다)
+export type ReachVerdict = 'ok' | 'blocked' | 'locked_zone';
+export function reachVerdict(solids: Rect[], locked: Rect[], from: Point, target: Point): ReachVerdict {
+  if (locked.some((z) => inside(z, target, 0))) return 'locked_zone';
+  if (segmentBlocked(solids, from, target)) return 'blocked';
+  return 'ok';
+}

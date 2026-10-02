@@ -44,7 +44,7 @@ function setup(opts: { checkpoint?: string; events?: string[]; nubi?: 'mine' | '
   const session = new SessionService(db.client(), settings as never);
   const rooms = new RoomsService(db.client(), settings as never, session, access, new StoryContentService());
   const realContent = new StoryContentService();
-  const content = opts.easy ? { ...realContent, stage: () => null, dialogue: () => null, bannedNameWords: () => [], battle: (k: string) => (k === 'forest_stitchling_ambush' ? EASY : realContent.battle(k)) } : realContent;
+  const content = opts.easy ? { ...realContent, stage: (code: string) => realContent.stage(code), dialogue: () => null, bannedNameWords: () => [], battle: (k: string) => (k === 'forest_stitchling_ambush' ? EASY : realContent.battle(k)) } : realContent;
   const story = new StoryService(db.client(), rooms, settings as never, content as never, access);
   const battles = new BattleService(db.client(), settings as never, rooms, access, story, content as never);
   battles.onModuleInit();
@@ -56,6 +56,14 @@ async function enterForest(s: ReturnType<typeof setup>, socket = 's1') {
   await s.rooms.createRoom('1', 'forest');
   s.rooms.startRoom('1');
   await s.rooms.enterMap('1', 'down');
+  standAt(s, 'forest_bopuli_ambush');
+}
+
+// 시험 준비: 서버가 아는 내 위치를 그 이야기 지점으로(걷는 과정은 stage-position.test.ts가 확인한다)
+const FOREST_POINTS = (new StoryContentService().stage('forest')!).points;
+function standAt(s: ReturnType<typeof setup>, pointId: string) {
+  const p = FOREST_POINTS.find((x) => x.id === pointId)!;
+  Object.assign(s.rooms.roomOf('1')!.members[0], { x: p.x, y: p.y });
 }
 
 async function code(p: Promise<unknown>): Promise<string> {
@@ -155,6 +163,7 @@ test('7. 접속이 끊겨도 유예 안에 돌아오면 같은 전투로 복귀,
   await s.rooms.createRoom('1', 'forest');
   s.rooms.startRoom('1');
   await s.rooms.enterMap('1', 'down');
+  standAt(s, 'forest_bopuli_ambush');
   const again = await s.battles.startStory('1', 'forest_stitchling_ambush');
   assert.notEqual(again.battleId, snap.battleId, '전투 직전부터 새 전투');
   s.rooms.leaveRoom('1');
@@ -248,7 +257,7 @@ test('v4 회귀: 일반 야생 전투 — 누비 강제 참가 없음·스토리
   NUMBERS['battle.encounterRadiusPx'] = 200;
   const weak = s.db.seed('turby_grade', { id: 2, name: '약함', base_attack: 1, base_defense: 0, base_action_power: 0, base_hp: 1 });
   s.db.seed('turby_character', { code: 'bopuli', name: '보풀이', grade_id: weak.id, atk_mod: 0, def_mod: 0, ap_mod: 0, hp_mod: 0 });
-  s.db.seed('stage_wild_spawn', { stage_code: 'forest', spawn_index: 0, character_code: 'bopuli', x: 1610, y: 1210 }); // 서버가 정하는 시작 지점(1600,1200) 바로 옆
+  s.db.seed('stage_wild_spawn', { stage_code: 'forest', spawn_index: 0, character_code: 'bopuli', x: 1250, y: 1010 }); // 시험이 서 있는 자리(공터 지점) 바로 옆
   await enterForest(s);
   const eventsBefore = s.db.rows('player_story_event', { player_id: P }).length;
   const snap = await s.battles.start('1', 0);
