@@ -4,7 +4,7 @@ import type { GateRule } from '../model';
 import type { RunnerResult } from '../game';
 import { RUNNER_STAGES, type RunnerStage } from '../stages';
 import heroCommanderUrl from '../assets/units/hero-commander-back.png';
-import squadRiflemanUrl from '../assets/units/squad-rifleman-formation.png';
+import squadRiflemanUrl from '../assets/units/squad-rifleman-back.png';
 import numberGateUrl from '../assets/world/number-gate-3d.png';
 import clockworkGruntUrl from '../assets/enemies/clockwork-grunt.png';
 import siegeTankUrl from '../assets/enemies/siege-tank.png';
@@ -348,29 +348,42 @@ export class RunnerScene extends Phaser.Scene {
 
   private redrawFormation() {
     this.formation.removeAll(true);
-    // 한 고리는 50명 기준이다. 12시부터 시계 방향으로 채워져
-    // 12명은 약 1/4원, 25명은 반원, 50명은 완전한 원을 만든다.
-    const unitsPerRing = 50;
-    const visibleUnits = Phaser.Math.Clamp(this.actualCount, 1, 200);
-    const ringTotal = Math.ceil(visibleUnits / unitsPerRing);
-    const soldierSize = Phaser.Math.Linear(27, 21, (ringTotal - 1) / 3);
-    for (let i = 0; i < visibleUnits; i += 1) {
-      const ring = Math.floor(i / unitsPerRing);
-      const ringStart = ring * unitsPerRing;
-      const slot = i - ringStart;
-      const angle = (slot / unitsPerRing) * Math.PI * 2 - Math.PI / 2;
-      // 50명을 넘을 때마다 안쪽 고리를 12시부터 새로 채워 대형을 두껍게 만든다.
-      const radius = 108 - ring * 18;
-      const x = Math.cos(angle) * radius;
-      const y = Math.sin(angle) * radius + 8;
-      const soldier = this.add.image(x, y, 'squad-rifleman')
-        .setDisplaySize(soldierSize, soldierSize)
-        .setAngle(-90)
-        .setOrigin(0.5);
-      this.formation.add(soldier);
+    // 실제 병력 20명당 화면에는 대표 소대원 1명을 표시한다.
+    // 전투 계산은 실제 병력을 그대로 사용하고 시각 밀도만 축소한다.
+    const visibleUnits = Phaser.Math.Clamp(Math.ceil(this.actualCount / 20), 1, 30);
+    const formationProgress = Phaser.Math.Clamp(this.actualCount / 50, 0, 1);
+    const soldierSize = 140; // 영웅(175px)의 80%
+    const outerCount = Math.min(visibleUnits, 14);
+    const outerRadius = visibleUnits <= 6 ? 158 : visibleUnits <= 10 ? 215 : 270;
+
+    for (let i = 0; i < outerCount; i += 1) {
+      const denominator = formationProgress >= 1 ? outerCount : Math.max(1, outerCount - 1);
+      const angle = -Math.PI / 2 + (i / denominator) * Math.PI * 2 * formationProgress;
+      this.addFormationSoldier(Math.cos(angle) * outerRadius, Math.sin(angle) * outerRadius + 8, soldierSize);
+    }
+
+    const remaining = visibleUnits - outerCount;
+    const ringCapacities = [10, 6];
+    const ringRadii = [175, 108];
+    let placed = 0;
+    for (let ring = 0; ring < ringCapacities.length && placed < remaining; ring += 1) {
+      const count = Math.min(ringCapacities[ring], remaining - placed);
+      const radius = ringRadii[ring];
+      for (let slot = 0; slot < count; slot += 1) {
+        const angle = -Math.PI / 2 + (slot / count) * Math.PI * 2 + (ring % 2) * 0.14;
+        this.addFormationSoldier(Math.cos(angle) * radius, Math.sin(angle) * radius + 8, soldierSize);
+      }
+      placed += count;
     }
     this.addHeroToFormation(0);
     this.formation.setDepth(20);
+  }
+
+  private addFormationSoldier(x: number, y: number, size: number) {
+    const soldier = this.add.image(x, y, 'squad-rifleman')
+      .setDisplaySize(size, size)
+      .setOrigin(0.5);
+    this.formation.add(soldier);
   }
 
   private addHeroToFormation(heroX: number) {
