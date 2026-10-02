@@ -107,7 +107,7 @@ test('위치 ①: 시작 지점 배치 → 좌표를 끼운 입장 요청 무시
     // 전체 지도(숨은 길을 열기 전): 길·벽·닫힌 문은 보이고, 문 안쪽 구역·안쪽 벽·안쪽 문은 없다
     await openFullMap(g);
     m = await mapOf(g);
-    assert.deepEqual(m.miniMap.terrain, { zones: 4, paths: 3, blockers: 9, gatesClosed: 1, gatesOpen: 0 });
+    assert.deepEqual(m.miniMap.terrain, { zones: 4, paths: 3, blockers: 10, gatesClosed: 1, gatesOpen: 0 });
     assert.deepEqual(m.miniMap.legend, ['player', 'target', 'story', 'path', 'wall', 'gateClosed']);
     await g.capture('07_full_map_greybox_paths_walls_gate');
     await g.capture('08a_full_map_hidden_zone_before');
@@ -172,7 +172,7 @@ test('위치 ①: 시작 지점 배치 → 좌표를 끼운 입장 요청 무시
     // 전체 지도(숨은 길을 연 뒤): 안쪽 구역·안쪽 벽·닫힌 실뿌리 문이 나타난다. 실뿌리 문 너머 구역은 아직 없다
     await openFullMap(g);
     m = await mapOf(g);
-    assert.deepEqual(m.miniMap.terrain, { zones: 5, paths: 4, blockers: 11, gatesClosed: 1, gatesOpen: 1 });
+    assert.deepEqual(m.miniMap.terrain, { zones: 5, paths: 4, blockers: 12, gatesClosed: 1, gatesOpen: 1 });
     assert.deepEqual(m.miniMap.legend, ['player', 'target', 'story', 'path', 'wall', 'gateClosed', 'gateOpen']);
     await g.capture('08b_full_map_hidden_zone_after');
     await closeFullMap(g);
@@ -197,7 +197,7 @@ test('위치 ②: 첫 매듭 장착 뒤 — 시작 지점에서 출발해 열린
     assert.ok(s.x > 2900, `실뿌리 문 너머: ${JSON.stringify(s)}`);
     await g.capture('06_root_gate_open_after_first_knot');
     await openFullMap(g);
-    assert.deepEqual((await mapOf(g)).miniMap.terrain, { zones: 6, paths: 5, blockers: 11, gatesClosed: 0, gatesOpen: 2 });
+    assert.deepEqual((await mapOf(g)).miniMap.terrain, { zones: 6, paths: 5, blockers: 12, gatesClosed: 0, gatesOpen: 2 });
     await closeFullMap(g);
   }, backend, device);
   await g.close();

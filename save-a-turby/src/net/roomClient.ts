@@ -70,6 +70,7 @@ class RoomClient {
   private helloPromise: Promise<void> | null = null;
   playerId: string | null = null;
   room: RoomState | null = null;
+  resumeInMap = false; // hello 응답: 이어받은 탐험 세션에서 맵 안에 있었는가(새로고침 뒤 Map 복원의 근거 — 서버 응답만 쓴다)
   activeBattle: BattleSnapshot | null = null; // hello 응답으로 받은 진행 중 전투(새로고침·재접속 복구)
   readonly others = new Map<string, MapPlayer>();
   private clockOffset = 0; // 서버 시각 - 브라우저 시각(ms). 카운트다운 표시 보정용이고 만료 판정은 언제나 서버가 한다
@@ -125,13 +126,14 @@ class RoomClient {
         try {
           // HTTP /player/me/* 와 같은 세션 토큰을 보낸다. 토큰이 거부되면 session.run이 재식별을 한 번만 하고 다시 보낸다.
           const res = await session.run(async (token) => {
-            const ack = (await socket.timeout(5000).emitWithAck('presence:hello', helloPayload(getPlayerId(), token))) as Ack<{ playerId: string; room: RoomState | null; players: MapPlayer[]; battle: BattleSnapshot | null; wilds?: WildInfo[]; returnToVillage?: boolean }>;
+            const ack = (await socket.timeout(5000).emitWithAck('presence:hello', helloPayload(getPlayerId(), token))) as Ack<{ playerId: string; room: RoomState | null; players: MapPlayer[]; battle: BattleSnapshot | null; inMap?: boolean; wilds?: WildInfo[]; returnToVillage?: boolean }>;
             if (!ack.ok) throw new RoomApiError(ack.code, ack.message);
             return ack;
           });
           this.playerId = res.playerId;
           this.room = res.room;
           this.activeBattle = res.battle ?? null;
+          this.resumeInMap = res.inMap === true;
           this.observeServerTime(res.battle?.serverNow);
           this.setWilds(res.wilds);
           this.others.clear();

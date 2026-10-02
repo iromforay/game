@@ -1,5 +1,5 @@
 // 개발용 오프닝 미리보기 — 서버·DB 없이 메모리 가짜 StoryClient로 실제 런타임 opening.json을 재생한다.
-// 게임 빌드(index.html)에는 포함되지 않는다. 캡처·UI 확인용(M1 SQL 적용 전이라 실제 서버로 띄울 수 없음).
+// 게임 빌드(index.html)에는 포함되지 않는다. 서버 없이 오프닝 화면만 빠르게 보는 용도(서버 실패 재시도 화면 등). 기능 검증은 실제 서버를 쓰는 E2E가 한다(smoke: BE/test/e2e/previews.e2e.ts).
 // 주소 예: /dev/opening-preview.html?from=OPENING_FALL_COMPLETE&failOnce=opening_fall_completed&existingName=하늘
 import Phaser from 'phaser';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../src/config/constants';

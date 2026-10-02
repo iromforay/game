@@ -112,7 +112,7 @@ test('640×360 전투 HUD: 턴 > 안내 > 목표 크기 순, 목표는 접기, �
 test('운영 맵: 원격 전달 버튼과 그 개발 플래그·1장 개발 미리보기는 제거됐다(전달은 보풀이 지점의 안내 버튼으로만)', () => {
   const root = new URL('../', import.meta.url);
   for (const f of ['src/story/devFlags.ts', 'dev/ch01Preview.ts', 'dev/ch01-preview.html']) assert.equal(existsSync(fileURLToPath(new URL(f, root))), false, `${f} 제거`);
-  for (const f of ['src/scenes/MapScene.ts', 'src/scenes/VillageScene.ts', 'src/game.ts', 'dev/captureHelper.ts', 'dev/gamePreview.ts']) {
+  for (const f of ['src/scenes/MapScene.ts', 'src/scenes/VillageScene.ts', 'src/game.ts', 'dev/captureHelper.ts']) {
     assert.doesNotMatch(readFileSync(fileURLToPath(new URL(f, root)), 'utf8'), /remoteDelivery|devFlags|ch01Preview/, f);
   }
 });

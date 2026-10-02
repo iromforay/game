@@ -68,7 +68,7 @@
       {"id": "bush_05", "label": "먼지풀", "x": 1860, "y": 1180, "width": 44, "height": 200},
       {"id": "bush_06", "label": "먼지풀", "x": 1200, "y": 1360, "width": 200, "height": 44},
       {"id": "bush_07", "label": "먼지풀", "x": 1040, "y": 1180, "width": 44, "height": 200},
-      {"id": "fence_wild_03", "label": "울타리", "x": 2040, "y": 908, "width": 120, "height": 10},
+      {"id": "fence_wild_03", "label": "울타리", "x": 2040, "y": 904, "width": 120, "height": 8},
       {"id": "wall_hidden_top", "label": "", "x": 2300, "y": 1000, "width": 880, "height": 40},
       {"id": "wall_hidden_bottom", "label": "", "x": 2300, "y": 1460, "width": 880, "height": 40},
       {"id": "wall_hidden_right", "label": "", "x": 3140, "y": 1000, "width": 40, "height": 500},

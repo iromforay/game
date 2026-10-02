@@ -82,7 +82,7 @@ const ROUTE: [number, { x: number; y: number }[]][] = [
   [1, []],
   [7, []],
   [9, []],
-  [6, [{ x: 1500, y: 1440 }]],
+  [6, []],
   [10, []],
   [5, [{ x: 1960, y: 1450 }]],
   [8, []],
@@ -169,12 +169,15 @@ test('숲 ②: 구조 뒤 실가루 10개를 각 한 번씩 수집 — 중복 �
       if (n === 5) {
         await goal(5);
         await g.capture('04b_goal_5_of_10_collected_gone');
-        // 재접속(새로고침): 5개 주운 상태 그대로 — 주운 것은 다시 생기지 않는다
+        // 재접속(새로고침): 같은 탐험 세션의 Map으로 복원(10-02 v5) — 5개 주운 상태·서 있던 자리 그대로, 주운 것은 다시 생기지 않는다
         const left = s.objects;
+        const stood = backend.serverPosition(device)!;
+        const room = backend.session(device)!.code;
         await g.reload();
-        await enterForest(g);
+        await g.until('Map 복원', 's.map && s.map.ready && s.map.inRoom && s.map.positioned && s.map.story && s.map.story.greybox === true');
         s = await story(g);
         assert.deepEqual([s.objects, s.objective?.collected], [left, 5]);
+        assert.deepEqual([(await g.state()).map.avatar, backend.session(device)!.code], [stood, room], '같은 자리·같은 탐험 세션');
         await goal(5);
       }
     }

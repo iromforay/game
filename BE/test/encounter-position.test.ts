@@ -93,7 +93,7 @@ async function failure(p: Promise<unknown>): Promise<[string, string | null]> {
   return ['NO_ERROR', null];
 }
 
-// 야생 3번(2100,900)과 그 바로 아래 얇은 울타리(y 908~918)는 실제 회색상자 배치에 있다
+// 야생 3번(2100,900)과 그 바로 아래 얇은 울타리(y 904~912)는 실제 회색상자 배치에 있다
 const WILD3 = { index: 3, x: 2100, y: 900 };
 
 test('야생 조우: 울타리 반대편에서는 가까워도 시작되지 않고(상태 변화 없음), 돌아서 다가가면 시작된다', async () => {

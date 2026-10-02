@@ -27,6 +27,7 @@ import { collectStoryObject, fetchStageView, fetchStory, triggerStory } from '..
 import { DELIVERY_ITEM_NAME, deliveryGoalText, shortageText, type StoryDelivery, type StoryPlay } from '../story/storyFlow';
 import { collectedText, nearestInteractable, promptText, solidRects, stepWithSolids, type Interactable, type StageRect, type StageView } from '../story/storyStage';
 
+const WILD_RECHECK_MS = 1500; // 서버가 "닿지 않는다"고 한 야생을 다시 물어보기까지의 간격
 const AVATAR_HALF = 16; // 막힌 곳 판정에 쓰는 아바타 몸 반지름(px)
 const DEPTH_GROUND = -20;
 const DEPTH_STORY = -5; // 이야기 지점·오브젝트 표식(아바타·야생 터비보다 아래)
@@ -93,6 +94,7 @@ export class MapScene extends Phaser.Scene {
   private positioned = false;
   private corrections = 0; // 서버 보정 횟수(진단용)
   private lastCorrectionReason: string | null = null;
+  private unreachableWilds = 0; // 서버가 가로막힘으로 거부한 조우 요청 수(진단용)
   private lastViewSyncAt = 0;
   private quietWilds = new Set<number>(); // 배치된 자리 바로 옆의 야생 터비 — 한 번 벗어나기 전에는 조우를 다시 시작하지 않는다
   // 10-02 v3: 지역 스토리 화면(서버가 내려 준 남은 오브젝트·활성 지점·문) — 좌표·문구·에셋 키는 전부 서버 데이터
@@ -386,6 +388,7 @@ export class MapScene extends Phaser.Scene {
   private async interact() {
     const it = this.activeTarget;
     if (!it || this.storyBusy || !this.ready || this.encounterLocked) return;
+    if (this.roomJoined && !this.positioned) return; // 복원·입장이 끝나기 전에는 수집·발동 요청을 보내지 않는다
     this.storyBusy = true;
     this.showInteract();
     const gen = this.generation;
@@ -509,7 +512,7 @@ export class MapScene extends Phaser.Scene {
 
   // 진단용 요약(화면 상태만): 서버가 정한 위치에 배치됐는가, 서버 보정 횟수와 마지막 사유
   get debugPosition() {
-    return { positioned: this.positioned, corrections: this.corrections, lastCorrection: this.lastCorrectionReason };
+    return { positioned: this.positioned, corrections: this.corrections, lastCorrection: this.lastCorrectionReason, unreachableWilds: this.unreachableWilds };
   }
 
   // 서버가 확정한 위치에 배치한다(첫 입장 = 시작 지점, 재입장 = 마지막 승인 위치). 그 자리 바로 옆의 야생 터비는 한 번 벗어난 뒤에야 다시 조우한다
@@ -799,6 +802,12 @@ export class MapScene extends Phaser.Scene {
       marker.encountered = false;
       marker.retryAt = Date.now() + 4000;
       this.encounterLocked = false;
+      // 10-02 v5 §1: 벽·닫힌 문 너머라 서버가 거부한 야생 — 전투도 마커도 그대로 두고, 매 프레임 묻지 않게 1.5초 뒤에 다시 확인한다(안내 없음)
+      if (err instanceof RoomApiError && err.code === 'WILD_UNREACHABLE') {
+        marker.retryAt = Date.now() + WILD_RECHECK_MS;
+        this.unreachableWilds++;
+        return;
+      }
       const message = err instanceof RoomApiError ? err.message : '서버에 연결할 수 없어 전투를 시작할 수 없습니다.';
       if (err instanceof RoomApiError && ['WILD_ENGAGED', 'WILD_GONE'].includes(err.code)) marker.retryAt = Date.now() + 1500; // 이미 누가 선점한 야생 — 곧 상태 방송이 표시를 바꾼다
       showToast(this, message, { y: 620, error: true, width: 640, fixed: true });

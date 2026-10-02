@@ -39,10 +39,11 @@ export class Backend {
   db!: FakeDb;
   private app: INestApplication | null = null;
   constructor(readonly port: number) {}
-  async start(seed?: (db: FakeDb) => void) {
+  // settings: game_setting 덮어쓰기. 재접속 유예는 E2E 기본 30초(새로고침이 유예 안에 끝나도록) — 유예 만료를 보는 시험만 짧게 준다
+  async start(seed?: (db: FakeDb) => void, settings: Record<string, unknown> = {}) {
     await this.stop();
     this.db = new FakeDb();
-    seedBase(this.db);
+    seedBase(this.db, { 'room.reconnectGraceMs': 30_000, ...settings });
     seed?.(this.db);
     ({ app: this.app } = await startTurbyApp(this.db, this.port));
   }
@@ -52,6 +53,12 @@ export class Backend {
   }
   playerByDevice(device: string) {
     return this.db.rows('player', { device_uuid: `dev-device-${device}-account` })[0] as { id: bigint } | undefined;
+  }
+  // 그 계정의 탐험 세션(없으면 null): 방 코드와 야생 상태
+  session(device: string): { code: string; wilds: { index: number; state: string }[] } | null {
+    const p = this.playerByDevice(device);
+    const room = p ? this.app?.get(RoomsService).roomOf(p.id.toString()) : undefined;
+    return room ? { code: room.code, wilds: room.wilds.map((w) => ({ index: w.index, state: w.state })) } : null;
   }
   // 서버가 마지막으로 승인한 탐험 위치(탐험 세션이 없으면 null) — 화면의 위치와 서버 위치를 비교하는 데 쓴다
   serverPosition(device: string): { x: number; y: number } | null {

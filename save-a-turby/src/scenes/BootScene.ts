@@ -7,6 +7,9 @@ import { bootRoute, type OpeningStoryState } from '../story/storyClient';
 import { inventory } from '../state/inventory';
 import { getPlayerId } from '../state/player';
 import type { OpeningSceneData } from './OpeningScene';
+import { roomClient } from '../net/roomClient';
+import { restoreRoute } from '../state/restore';
+import { resumeBattle } from './VillageScene';
 
 // 오프닝 시작(Boot의 필수 진입과 마을의 선택 진입이 같은 흐름을 쓴다). 완료되면 이야기 누비를 다시 받아 마을로.
 export function startOpening(scene: Phaser.Scene, state: OpeningStoryState) {
@@ -45,7 +48,18 @@ export class BootScene extends Phaser.Scene {
       pillButton(this, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 70, 260, 88, '다시 시도', 'primary', () => this.scene.restart());
       return;
     }
-    if (bootRoute(state) === 'opening') startOpening(this, state);
+    if (bootRoute(state) === 'opening') {
+      startOpening(this, state);
+      return;
+    }
+    // 10-02 v5 §3: 새로고침·재접속 복원 — 서버의 접속 인증 응답만 근거로 삼는다. 전투 → 탐험 중이던 Map → 마을.
+    // 서버에 닿지 않으면 추측하지 않고 마을로 간다(마을이 다시 연결을 시도한다)
+    status.setText('이어서 불러오는 중…');
+    const connected = await roomClient.connect().then(() => true, () => false);
+    if (!this.sys.isActive()) return;
+    const route = connected ? restoreRoute({ battle: roomClient.activeBattle, room: roomClient.room, inMap: roomClient.resumeInMap }) : ({ to: 'village' } as const);
+    if (route.to === 'battle' && roomClient.activeBattle) resumeBattle(this, roomClient.activeBattle);
+    else if (route.to === 'map') this.scene.start('Map', { stageCode: route.stageCode });
     else this.scene.start('Village');
   }
 }
