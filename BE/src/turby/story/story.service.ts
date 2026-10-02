@@ -4,7 +4,7 @@ import { PrismaService } from '../prisma.service';
 import { RoomsService } from '../rooms/rooms.service';
 import { SettingsService } from '../rooms/settings.service';
 import { gameError } from '../turby-dto';
-import { StoryContentService, type StageRect, type StageZone } from './story-content.service';
+import { StoryContentService, type StageRect } from './story-content.service';
 import { addToPlayerItem, usedBagSlots } from './bag';
 import { StageAccessService } from './stage-access.service';
 import type { StageStatusDto } from './stage-access';
@@ -99,7 +99,7 @@ export interface StageViewDto {
   // 지금 활성화된 이야기 지점만(비활성·완료 지점은 내려 주지 않는다)
   points: { id: string; kind: string; x: number; y: number; radius: number; assetKey: string; label: string; prompt: string }[];
   gates: { id: string; label: string; x: number; y: number; width: number; height: number; open: boolean }[];
-  layout: { zones: StageZone[]; paths: number[][][]; blockers: StageRect[] } | null;
+  layout: { zones: StageRect[]; paths: number[][][]; blockers: StageRect[] } | null;
   objectives: { key: string; collected: number; required: number; active: boolean }[];
 }
 
@@ -197,8 +197,9 @@ export class StoryService {
   }
 
   // 테스트가 프로세스 내 직렬화를 건너뛰고 DB 방어선만 확인할 수 있게 분리
-  async runEvent(playerId: bigint, def: StoryEventDef, name: string | null): Promise<StoryEventResultDto> {
-    this.checkPositionEvidence(playerId, def.evidence);
+  // evidenceChecked: 호출 쪽(지점 발동)이 요청 도착 시점에 이미 위치 증거를 확인했다 — 줄 서는 동안 움직였어도 다시 따지지 않는다
+  async runEvent(playerId: bigint, def: StoryEventDef, name: string | null, evidenceChecked = false): Promise<StoryEventResultDto> {
+    if (!evidenceChecked) this.checkPositionEvidence(playerId, def.evidence);
     const grants: Grant[] = [];
     const consumed: ItemGrant[] = [];
     let already = false;
@@ -243,6 +244,8 @@ export class StoryService {
       else if (isUniqueViolation(err) && (await this.eventExists(playerId, def.id))) already = true;
       else throw err;
     }
+    // 문 개방 같은 이동 판정에 바로 반영(탐험 세션 안에 있을 때)
+    this.rooms.noteStoryEvents(playerId.toString(), [def.id, ...(def.alsoComplete ?? [])]);
     return { eventId: def.id, alreadyCompleted: already, grants: already ? [] : grants, consumed: already ? [] : consumed, story: await this.getState(playerId), play: already ? null : playOf(SEGMENT_AFTER_EVENT[def.id]) };
   }
 
@@ -282,7 +285,7 @@ export class StoryService {
     if (def.auto) {
       const ev = def.event ? EVENT_BY_ID.get(def.event)! : null;
       if (ev && !snap.events.has(ev.id) && !checkEvent(ev, snap)) {
-        const res = await this.runEvent(playerId, ev, null);
+        const res = await this.runEvent(playerId, ev, null, true);
         return { triggerId: def.id, play: rangeOf(await this.readSnapshot(playerId)), shortage: null, story: res.story };
       }
       return done(rangeOf(snap));
@@ -302,7 +305,7 @@ export class StoryService {
         const have = await this.itemQuantity(playerId, def.need.itemCode);
         if (have < def.need.quantity) return done(null, { itemCode: def.need.itemCode, have, need: def.need.quantity });
       }
-      const res = await this.runEvent(playerId, EVENT_BY_ID.get(def.event)!, null);
+      const res = await this.runEvent(playerId, EVENT_BY_ID.get(def.event)!, null, true);
       // 동시에 온 같은 요청은 먼저 기록한 쪽만 장면을 재생한다
       return { triggerId: def.id, play: res.alreadyCompleted ? null : rangeOf(snap), shortage: null, story: res.story };
     }
@@ -345,8 +348,9 @@ export class StoryService {
     const objectId = objectIdRaw;
     // 지역 데이터에 놓여 있는(활성화된) 오브젝트만 — 정의에만 있고 지도에 없는 ID는 수집할 수 없다
     if (!this.content.stage(def.stageCode)?.objects?.some((o) => o.id === objectId && o.objectiveKey === objectiveKey)) throw gameError(404, 'OBJECT_UNKNOWN', '알 수 없는 오브젝트입니다.');
+    // 위치 증거는 요청이 도착한 지금의 승인 위치로 판정한다(같은 플레이어의 앞선 요청을 기다리는 동안의 이동과 무관 — 순서 일관성)
+    this.checkPositionEvidence(playerId, { kind: 'point', stageCode: def.stageCode, pointId: objectId });
     return this.serialize(playerId, async () => {
-      this.checkPositionEvidence(playerId, { kind: 'point', stageCode: def.stageCode, pointId: objectId });
       let already = false;
       let grant: Grant | null = null;
       try {
@@ -439,14 +443,21 @@ export class StoryService {
     }
 
     const layout = data.layout;
+    const shown = (x: { visibleAfter?: string }) => !x.visibleAfter || snap.events.has(x.visibleAfter); // 숨은 구역의 내부 정보는 열린 뒤에만
     return {
       stageCode,
       greybox: data.greybox === true,
       size: data.size ?? null,
       objects,
       points,
-      gates: (layout?.gates ?? []).map((g) => ({ id: g.id, label: g.label, x: g.x, y: g.y, width: g.width, height: g.height, open: snap.events.has(g.openEvent) })),
-      layout: layout ? { zones: layout.zones.filter((z) => !z.visibleAfter || snap.events.has(z.visibleAfter)), paths: layout.paths, blockers: layout.blockers } : null,
+      gates: (layout?.gates ?? []).filter(shown).map((g) => ({ id: g.id, label: g.label, x: g.x, y: g.y, width: g.width, height: g.height, open: snap.events.has(g.openEvent) })),
+      layout: layout
+        ? {
+            zones: layout.zones.filter(shown).map((z) => ({ id: z.id, label: z.label, x: z.x, y: z.y, width: z.width, height: z.height })),
+            paths: layout.paths.filter(shown).map((path) => path.points),
+            blockers: layout.blockers.filter(shown).map((b) => ({ id: b.id, label: b.label, x: b.x, y: b.y, width: b.width, height: b.height })),
+          }
+        : null,
       objectives: defs.map((d) => ({ key: d.key, collected: snap.objectives.get(d.key)?.size ?? 0, required: d.objectIds.length, active: checkObjective(d, snap) === null })),
     };
   }
@@ -554,6 +565,8 @@ export class StoryService {
       const p = stage?.points.find((x) => x.id === evidence.pointId);
       if (!p) throw gameError(500, 'STORY_DATA_MISSING', '지역 스토리 데이터가 없습니다.');
       if (Math.hypot(pos.x - p.x, pos.y - p.y) > p.radius + slack) throw gameError(422, 'STORY_EVIDENCE_INVALID', '너무 멀리 떨어져 있습니다.');
+      // 거리만 가깝고 벽·닫힌 문 너머에 있으면 닿지 않는다(10-02 v4 §2.3). pos는 서버가 마지막으로 승인한 위치다
+      if (!this.rooms.canReach(room, playerId.toString(), { x: p.x, y: p.y })) throw gameError(422, 'STORY_EVIDENCE_INVALID', '막혀 있어 닿지 않습니다.');
     }
   }
 

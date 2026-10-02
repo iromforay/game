@@ -1,3 +1,4 @@
+import type { StageCollision } from './stage-collision';
 export type Facing = 'down' | 'left' | 'right' | 'up';
 export type RoomVisibility = 'private'; // 멀티 제거: 방은 항상 플레이어 1인 전용(공개 목록·참가 없음)
 export type RoomPhase = 'lobby' | 'playing';
@@ -17,6 +18,9 @@ export interface RoomMember {
   dir: Facing;
   lastMoveAt: number;
   graceTimer: NodeJS.Timeout | null;
+  // 10-02 v4: 서버 권위 위치. placed = 이 탐험 세션에서 서버가 위치를 정해 준 적이 있는가(없으면 시작 지점부터)
+  placed: boolean;
+  storyEvents: Set<string>; // 문·구역 판정에 쓰는 이 플레이어의 완료 이벤트(입장 때 읽고, 이벤트가 기록되면 갱신)
 }
 
 export type WildState = 'free' | 'engaged' | 'captured' | 'removed';
@@ -47,6 +51,7 @@ export interface Room {
   phase: RoomPhase;
   members: RoomMember[]; // 입장 순서 — 호스트 승계 기준
   wilds: WildRuntime[];
+  collision: StageCollision; // 지도 경계·시작 지점·막힌 곳·문(지역 데이터)
 }
 
 export interface MemberDto {

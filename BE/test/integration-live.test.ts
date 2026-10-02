@@ -9,6 +9,9 @@ import type { INestApplication } from '@nestjs/common';
 import { io, type Socket } from 'socket.io-client';
 import { FakeDb } from './helpers/fake-prisma';
 import { seedBase, startTurbyApp } from './helpers/turby-app';
+import { routeTo } from './helpers/forest-route';
+import { RoomsService } from '../src/turby/rooms/rooms.service';
+import { solidsFor } from '../src/turby/rooms/stage-collision';
 // 프런트 실제 모듈(순수 — Phaser 없음). 프런트 패키지는 ES 모듈이라 네이티브 import()로 불러온다(ts-node가 require로 바꾸지 않게)
 type Runner = typeof import('../../save-a-turby/src/story/dialogueRunner');
 type View = typeof import('../../save-a-turby/src/battle/battleView');
@@ -24,7 +27,8 @@ before(async () => {
   const { pathToFileURL } = await import('url');
   runDialogue = ((await nativeImport(pathToFileURL(join(__dirname, '../../save-a-turby/src/story/dialogueRunner.ts')).href)) as Runner).runDialogue;
   reachableCells = ((await nativeImport(pathToFileURL(join(__dirname, '../../save-a-turby/src/battle/battleView.ts')).href)) as View).reachableCells;
-  seedBase(db);
+  // 이동 속도 제한만 푼다(걷는 시간을 생략). 충돌·경계·문 검증은 그대로다
+  seedBase(db, { 'move.maxSpeedPxPerSec': 1_000_000, 'move.minIntervalMs': 0, 'move.slackPx': 1_000_000 });
   ({ app, base } = await startTurbyApp(db));
 });
 
@@ -128,8 +132,28 @@ test('통합 1: 오프닝 전 직접 요청 차단(방 생성·스토리 전투�
 type Play = { segmentId: string; endAfter: string; fromEntry?: string; untilEntry?: string };
 const FOREST = JSON.parse(readFileSync(join(__dirname, '../story-data/save-a-turby/stages/forest.json'), 'utf8')) as { points: { id: string; x: number; y: number }[] };
 const pointOf = (id: string) => FOREST.points.find((p) => p.id === id)!;
-// 서버가 아는 내 위치를 그 지점으로(탐험 세션 재진입 — 시험에서는 걷는 시간을 생략한다)
-const goTo = (c: Client, id: string) => c.req<{ story: { play: Play | null } }>('map:enter', { x: pointOf(id).x, y: pointOf(id).y, dir: 'down' });
+// 서버가 승인하는 이동만으로 그 지점까지 간다: 벽·닫힌 문을 돌아가는 경유지를 map:move로 차례로 보고한다(10-02 v4 — 입장 좌표는 서버가 정한다).
+// 갈 수 없는 곳(닫힌 문 너머)이면 false
+const serverPos = (c: Client) => {
+  const rooms = app.get(RoomsService);
+  const room = rooms.roomOf(c.playerId)!;
+  const m = room.members[0];
+  return { room, x: m.x, y: m.y, solids: solidsFor(room.collision, m.storyEvents) };
+};
+async function moveTo(c: Client, to: { x: number; y: number }): Promise<boolean> {
+  const at = serverPos(c);
+  const path = routeTo(at.solids, { x: at.x, y: at.y }, to);
+  if (!path) return false;
+  for (const p of path) c.socket.emit('map:move', { x: p.x, y: p.y, dir: 'down' });
+  // map:move는 응답이 없다 — 서버 위치가 목적지가 될 때까지 기다린다
+  for (let i = 0; i < 200; i++) {
+    const now = serverPos(c);
+    if (now.x === to.x && now.y === to.y) return true;
+    await new Promise((res) => setTimeout(res, 5));
+  }
+  throw new Error(`서버가 이동을 승인하지 않음: ${JSON.stringify(to)} (현재 ${JSON.stringify({ x: serverPos(c).x, y: serverPos(c).y })})`);
+}
+const goTo = async (c: Client, id: string) => assert.equal(await moveTo(c, pointOf(id)), true, `${id}까지 가는 길이 있어야 한다`);
 
 // 서버가 알려 준 범위를 실제 대화 진행기로 재생한다(전투는 소켓으로 끝까지 진행)
 async function runPlay(c: Client, play: Play, battles: string[]) {
@@ -239,6 +263,7 @@ test('통합 3: 실가루 10개 수집(동시 10건·재접속·다른 지역·�
   await c.connect();
   await c.req('room:create', { stageCode: 'forest' });
   await c.req('room:start');
+  await c.req('map:enter', { dir: 'down' });
   await goTo(c, 'forest_dust_01');
   const collect = (id: unknown) => c.me<{ code?: string; alreadyCollected: boolean; collected: number; required: number; grants: unknown[]; stage: StageView }>('/story/objectives/forest_glowing_dust/progress', { objectId: id });
   const dustQty = () => {
@@ -268,6 +293,8 @@ test('통합 3: 실가루 10개 수집(동시 10건·재접속·다른 지역·�
   // 다시 접속해 서로 다른 실가루를 동시에(각자 위치가 달라 한 번에 하나만 범위 안) — 범위 안의 것만 수집된다
   await c.identify();
   await c.connect();
+  const back = await c.req<{ self: { x: number; y: number }; corrected: boolean }>('map:enter', { dir: 'down' });
+  assert.deepEqual([back.self.x, back.self.y, back.corrected], [pointOf('forest_dust_01').x, pointOf('forest_dust_01').y, false], '유예 안 재접속: 마지막 승인 위치 그대로');
   await goTo(c, 'forest_dust_02');
   const mixed = await Promise.all(['forest_dust_02', 'forest_dust_03', 'forest_dust_04'].map((id) => collect(id)));
   assert.deepEqual(mixed.map((r) => r.status), [200, 422, 422]);
@@ -282,6 +309,8 @@ test('통합 3: 실가루 10개 수집(동시 10건·재접속·다른 지역·�
   assert.equal((await viewOf(c)).objectives[0].collected, 5, '숲을 나갔다 와도 5/10');
   await c.req('room:create', { stageCode: 'forest' });
   await c.req('room:start');
+  const fresh = await c.req<{ self: { x: number; y: number } }>('map:enter', { dir: 'down' });
+  assert.deepEqual([fresh.self.x, fresh.self.y], [1600, 1200], '끝난 세션 뒤 새 입장은 시작 지점');
   for (let i = 6; i <= 10; i++) {
     const id = `forest_dust_${String(i).padStart(2, '0')}`;
     await goTo(c, id);
@@ -316,9 +345,17 @@ test('통합 3: 실가루 10개 수집(동시 10건·재접속·다른 지역·�
 
   // 숨은 길 → 거대 매듭 전투 → 첫 매듭 각성
   const battles: string[] = [];
-  await goTo(c, 'forest_giant_knot');
-  assert.equal((await trig(c, 'forest_giant_knot')).body.code, 'STORY_EVENT_NOT_ALLOWED', '숨은 길을 열기 전');
+  // 숨은 길을 열기 전: 문 너머로 가는 길이 없고, 좌표를 끼운 입장 요청·큰 점프로도 넘어갈 수 없다
   await goTo(c, 'forest_hidden_path');
+  assert.equal(await moveTo(c, pointOf('forest_giant_knot')), false, '닫힌 문 너머로는 길이 없다');
+  const here = { x: serverPos(c).x, y: serverPos(c).y };
+  const tampered = await c.req<{ self: { x: number; y: number }; corrected: boolean }>('map:enter', { x: pointOf('forest_giant_knot').x, y: pointOf('forest_giant_knot').y, dir: 'down' });
+  assert.deepEqual([tampered.self.x, tampered.self.y, tampered.corrected], [here.x, here.y, false], '입장 요청의 좌표는 무시되고 서버 위치 그대로');
+  const corrected = new Promise<{ x: number; y: number; reason: string }>((resolve) => c.socket.once('map:correct', resolve));
+  c.socket.emit('map:move', { x: pointOf('forest_giant_knot').x, y: pointOf('forest_giant_knot').y, dir: 'down' });
+  assert.deepEqual(await corrected, { ...here, reason: 'tunnel' }, '벽 너머로의 점프는 거절되고 마지막 승인 위치를 돌려준다');
+  assert.equal((await trig(c, 'forest_giant_knot')).body.code, 'STORY_EVIDENCE_INVALID', '닫힌 문 너머의 지점은 발동되지 않는다');
+  assert.deepEqual({ x: serverPos(c).x, y: serverPos(c).y }, here);
   const hp = await trig(c, 'forest_hidden_path');
   assert.deepEqual(hp.body.play, { segmentId: 'ch01.hidden_path', endAfter: 'ch01.hidden_path', untilEntry: 'ch01.hidden_path.002' });
   await runPlay(c, hp.body.play!, battles);
@@ -358,7 +395,11 @@ test('통합 4(회귀): 일반 야생 전투 — 누비 강제 참가·스토리
   await c.connect();
   await c.req('room:create', { stageCode: 'forest' });
   await c.req('room:start');
-  await c.req('map:enter', { x: 500, y: 500, dir: 'down' });
+  const entered = await c.req<{ self: { x: number; y: number } }>('map:enter', { x: 500, y: 500, dir: 'down' });
+  // 앞 시험의 탐험 세션이 유예 안에 이어진다 → 마지막 승인 위치(거대 매듭 앞). 요청에 넣은 좌표(500,500)는 무시된다
+  assert.deepEqual([entered.self.x, entered.self.y], [pointOf('forest_giant_knot').x, pointOf('forest_giant_knot').y]);
+  assert.equal((await c.req('battle:start', { spawnIndex: 0 })).code, 'TOO_FAR', '야생 터비에게서 멀다');
+  assert.equal(await moveTo(c, { x: 500, y: 500 }), true);
   const start = await c.req<{ snapshot: Snap }>('battle:start', { spawnIndex: 0 });
   assert.equal(start.ok, true);
   assert.equal(start.snapshot.story, undefined, '일반 전투에는 스토리 표식 없음');

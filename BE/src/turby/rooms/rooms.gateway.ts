@@ -105,11 +105,12 @@ export class RoomsGateway implements OnGatewayDisconnect, OnModuleInit {
   }
 
   @SubscribeMessage('map:enter')
-  enter(@ConnectedSocket() client: Socket, @MessageBody() body: { x?: unknown; y?: unknown; dir?: unknown }) {
+  enter(@ConnectedSocket() client: Socket, @MessageBody() body: { dir?: unknown }) {
     return this.guard(async () => {
       const playerId = this.rooms.playerOf(client.id);
       await this.rooms.requireOpening(playerId);
-      const { room, self, others, wilds } = this.rooms.enterMap(playerId, body?.x, body?.y, body?.dir);
+      // 위치는 서버가 정한다(요청의 x·y는 읽지 않는다). self = 서버가 확정한 위치, corrected = 저장돼 있던 위치를 시작 지점으로 보정했는가
+      const { room, self, corrected, others, wilds } = await this.rooms.enterMap(playerId, body?.dir);
       await client.join(this.rooms.mapChannel(room));
       // 전투 후 복귀처럼 이미 맵에 있던 사람의 재입장도 joined로 알린다 — 클라이언트는 playerId 기준으로 갱신(upsert)한다
       client.to(this.rooms.mapChannel(room)).emit('map:joined', { player: self });
@@ -118,7 +119,7 @@ export class RoomsGateway implements OnGatewayDisconnect, OnModuleInit {
         this.log.warn(`story trigger on map:enter failed: ${err instanceof Error ? err.message : String(err)}`);
         return null;
       });
-      return { ok: true as const, self, players: others, wilds, story: story ? { play: story.play, delivery: story.story.delivery } : null };
+      return { ok: true as const, self, corrected, players: others, wilds, story: story ? { play: story.play, delivery: story.story.delivery } : null };
     });
   }
 
@@ -130,7 +131,7 @@ export class RoomsGateway implements OnGatewayDisconnect, OnModuleInit {
       if (result.kind === 'ok') {
         client.to(this.rooms.mapChannel(room)).emit('map:moved', { playerId, x: result.x, y: result.y, dir: result.dir });
       } else if (result.kind === 'corrected') {
-        client.emit('map:correct', { x: result.x, y: result.y });
+        client.emit('map:correct', { x: result.x, y: result.y, reason: result.reason });
       }
       return undefined; // 이동은 빈도가 높아 성공 시 응답을 보내지 않는다
     });

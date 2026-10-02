@@ -36,6 +36,8 @@ function setup(opts: { nickname?: string; starters?: number; flags?: Record<stri
   const rooms = {
     roomOf: () => (pos ? { stageCode: pos.stageCode } : undefined),
     memberPosition: () => (pos ? { x: pos.x, y: pos.y, inMap: true, connected: true } : null),
+    canReach: () => true,
+    noteStoryEvents: () => undefined,
   };
   const flags = opts.flags ?? {};
   const settings = { numberOr: (_k: string, d: number) => d, flag: (k: string, d: boolean) => flags[k] ?? d };
@@ -571,7 +573,7 @@ test('보관함 동시 수령: 같은 항목을 동시에 두 번 수령해도 �
 test('오프닝 대화 API: 런타임 파일이 검증된 4구간 39항목을 그대로 반환', async () => {
   const s = setup();
   const settings = { numberOr: (_k: string, d: number) => d, flag: (_k: string, d: boolean) => d };
-  const rooms = { roomOf: () => undefined, memberPosition: () => null };
+  const rooms = { roomOf: () => undefined, memberPosition: () => null, canReach: () => true, noteStoryEvents: () => undefined };
   const service = new StoryService(s.db.client(), rooms as never, settings as never, new StoryContentService(), s.stageAccess);
   const data = (await service.dialogue(P1, 'opening')) as { chapterCode: string; segments: { segmentId: string; entries: unknown[] }[] };
   assert.equal(data.chapterCode, 'opening');
@@ -713,6 +715,6 @@ test('v3 첫 매듭 장착: 이야기 누비 story_1에 1회(동시 3건), 아�
 
 function setupSameDb(s: ReturnType<typeof setup>) {
   const content = { stage: () => null, dialogue: () => null, bannedNameWords: () => [] };
-  const rooms = { roomOf: () => undefined, memberPosition: () => null };
+  const rooms = { roomOf: () => undefined, memberPosition: () => null, canReach: () => true, noteStoryEvents: () => undefined };
   return new StoryService(s.db.client(), rooms as never, settingsStub as never, content as never, new StageAccessService(s.db.client(), settingsStub as never));
 }

@@ -6,6 +6,7 @@ import { StageAccessService } from '../src/turby/story/stage-access.service';
 import { StoryService } from '../src/turby/story/story.service';
 import { SessionService } from '../src/turby/session.service';
 import { RoomsService } from '../src/turby/rooms/rooms.service';
+import { StoryContentService } from '../src/turby/story/story-content.service';
 import { BattleService } from '../src/turby/battle/battle.service';
 import { RoomError } from '../src/turby/rooms/types';
 import { BattleError } from '../src/turby/battle/battle-types';
@@ -38,7 +39,7 @@ function setup(opts: { legacy?: boolean; v2?: boolean; checkpoint?: string } = {
   const settings = { numberOr: (_k: string, d: number) => d, flag: (k: string, d: boolean) => (k === 'story.stageAccessV2' ? !!opts.v2 : d), number: () => 45000 };
   const access = new StageAccessService(db.client(), settings as never);
   const session = new SessionService(db.client(), settings as never);
-  const rooms = new RoomsService(db.client(), settings as never, session, access);
+  const rooms = new RoomsService(db.client(), settings as never, session, access, new StoryContentService());
   const content = { stage: () => null, dialogue: () => null, battle: () => null, bannedNameWords: () => [] };
   const story = new StoryService(db.client(), rooms, settings as never, content as never, access);
   const battles = new BattleService(db.client(), settings as never, rooms, access, story, content as never);

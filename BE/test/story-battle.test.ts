@@ -42,7 +42,7 @@ function setup(opts: { checkpoint?: string; events?: string[]; nubi?: 'mine' | '
   const settings = { numberOr: (_k: string, d: number) => d, flag: (_k: string, d: boolean) => d, number: (k: string) => NUMBERS[k] };
   const access = new StageAccessService(db.client(), settings as never);
   const session = new SessionService(db.client(), settings as never);
-  const rooms = new RoomsService(db.client(), settings as never, session, access);
+  const rooms = new RoomsService(db.client(), settings as never, session, access, new StoryContentService());
   const realContent = new StoryContentService();
   const content = opts.easy ? { ...realContent, stage: () => null, dialogue: () => null, bannedNameWords: () => [], battle: (k: string) => (k === 'forest_stitchling_ambush' ? EASY : realContent.battle(k)) } : realContent;
   const story = new StoryService(db.client(), rooms, settings as never, content as never, access);
@@ -55,7 +55,7 @@ async function enterForest(s: ReturnType<typeof setup>, socket = 's1') {
   await s.rooms.identify(socket, 'dev-test-story-battle');
   await s.rooms.createRoom('1', 'forest');
   s.rooms.startRoom('1');
-  s.rooms.enterMap('1', 100, 100, 'down');
+  await s.rooms.enterMap('1', 'down');
 }
 
 async function code(p: Promise<unknown>): Promise<string> {
@@ -154,7 +154,7 @@ test('7. 접속이 끊겨도 유예 안에 돌아오면 같은 전투로 복귀,
   assert.equal(events(s, 'forest_stitchling_battle_won'), 0);
   await s.rooms.createRoom('1', 'forest');
   s.rooms.startRoom('1');
-  s.rooms.enterMap('1', 100, 100, 'down');
+  await s.rooms.enterMap('1', 'down');
   const again = await s.battles.startStory('1', 'forest_stitchling_ambush');
   assert.notEqual(again.battleId, snap.battleId, '전투 직전부터 새 전투');
   s.rooms.leaveRoom('1');
@@ -248,7 +248,7 @@ test('v4 회귀: 일반 야생 전투 — 누비 강제 참가 없음·스토리
   NUMBERS['battle.encounterRadiusPx'] = 200;
   const weak = s.db.seed('turby_grade', { id: 2, name: '약함', base_attack: 1, base_defense: 0, base_action_power: 0, base_hp: 1 });
   s.db.seed('turby_character', { code: 'bopuli', name: '보풀이', grade_id: weak.id, atk_mod: 0, def_mod: 0, ap_mod: 0, hp_mod: 0 });
-  s.db.seed('stage_wild_spawn', { stage_code: 'forest', spawn_index: 0, character_code: 'bopuli', x: 110, y: 110 });
+  s.db.seed('stage_wild_spawn', { stage_code: 'forest', spawn_index: 0, character_code: 'bopuli', x: 1610, y: 1210 }); // 서버가 정하는 시작 지점(1600,1200) 바로 옆
   await enterForest(s);
   const eventsBefore = s.db.rows('player_story_event', { player_id: P }).length;
   const snap = await s.battles.start('1', 0);

@@ -30,6 +30,10 @@ export interface StageRect {
   width: number;
   height: number;
 }
+export interface StagePath {
+  points: number[][];
+  visibleAfter?: string;
+}
 export interface StageZone extends StageRect {
   visibleAfter?: string; // 이 이벤트가 끝난 뒤에만 지도에 보인다(숨은 길)
 }
@@ -40,11 +44,13 @@ export interface StageStoryData {
   stageCode: string;
   greybox?: boolean;
   size?: { width: number; height: number };
+  spawnPoint?: { x: number; y: number }; // 서버 권위 시작 지점(입장 요청의 좌표는 쓰지 않는다)
   regions: StageRegion[];
   points: StagePoint[];
   objects?: { id: string; objectiveKey: string; group: string; assetKey: string; label: string; prompt: string }[];
   storyPoints?: { id: string; kind: string; assetKey: string; label: string; prompt: string }[];
-  layout?: { zones: StageZone[]; paths: number[][][]; blockers: StageRect[]; gates: (StageRect & { openEvent: string })[] };
+  // visibleAfter: 그 이벤트 전에는 지도·화면에 내려 주지 않는다(숨은 구역의 내부 정보). 통과 불가 판정은 표시 여부와 무관하게 서버가 한다
+  layout?: { zones: StageZone[]; paths: StagePath[]; blockers: (StageRect & { visibleAfter?: string })[]; gates: (StageRect & { openEvent: string; visibleAfter?: string })[] };
 }
 
 @Injectable()

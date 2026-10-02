@@ -9,6 +9,7 @@ import { FakeDb } from './helpers/fake-prisma';
 import { StoryService } from '../src/turby/story/story.service';
 import { StoryContentService, type StageStoryData } from '../src/turby/story/story-content.service';
 import { StageAccessService } from '../src/turby/story/stage-access.service';
+import { collisionOf, reachable, solidsFor } from '../src/turby/rooms/stage-collision';
 import { CHECKPOINTS, EVENT_BY_ID, ENCOUNTER_BY_KEY, OBJECTIVE_BY_KEY, STORY_TRIGGERS, FIRST_PATH_INTRO, type StoryPlayRange } from '../src/turby/story/story-data';
 
 const P1 = 1n;
@@ -30,7 +31,15 @@ function setup(checkpoint = 'CH01_BOPUL_RESCUED', events: string[] = RESCUED) {
   db.seed('player_story_progress', { player_id: P1, checkpoint, story_nubi_turby_instance_id: inst.id });
   for (const e of events) db.seed('player_story_event', { player_id: P1, event_id: e });
   let pos: { stageCode: string; x: number; y: number } | null = null;
-  const rooms = { roomOf: () => (pos ? { stageCode: pos.stageCode } : undefined), memberPosition: () => (pos ? { x: pos.x, y: pos.y, inMap: true, connected: true } : null) };
+  // 방 서비스 모의: 위치는 시험이 정하고, "닿을 수 있는가"는 실제 충돌 데이터와 이 플레이어의 완료 이벤트로 판정한다
+  const C = collisionOf(FOREST, 3200, 2400);
+  const done = () => new Set(db.rows('player_story_event', { player_id: P1 }).map((r) => r.event_id as string));
+  const rooms = {
+    roomOf: () => (pos ? { stageCode: pos.stageCode } : undefined),
+    memberPosition: () => (pos ? { x: pos.x, y: pos.y, inMap: true, connected: true } : null),
+    canReach: (_room: unknown, _id: string, target: { x: number; y: number }) => !!pos && reachable(solidsFor(C, done()), pos, target),
+    noteStoryEvents: () => undefined,
+  };
   const settings = { numberOr: (_k: string, d: number) => d, flag: (_k: string, d: boolean) => d };
   // 재접속 = 새 서비스 인스턴스(같은 DB)
   const connect = () => new StoryService(db.client(), rooms as never, settings as never, content, new StageAccessService(db.client(), settings as never));
@@ -222,11 +231,11 @@ test('재접속 복원: 0·1·5·9·10개 상태에서 새 접속의 지도·목
 
 test('지도에 보이는 것: 진행에 따라 활성 지점만, 구조 전 실가루는 잠김, 문은 이벤트로 열리고, 숨은 구역은 열린 뒤에만 보인다', async () => {
   const stages: [string, string[], string[], string, boolean[], boolean][] = [
-    ['CH01_STARTED', RESCUED.slice(0, 4), ['forest_cut_thread'], 'locked', [false, false], false],
-    ['CH01_STARTED', RESCUED.slice(0, 5), ['forest_bopuli_ambush'], 'locked', [false, false], false],
-    ['CH01_STARTED', RESCUED.slice(0, 7), ['forest_bopuli_ambush'], 'locked', [false, false], false],
-    ['CH01_BOPUL_RESCUED', RESCUED, ['forest_bopuli_return'], 'available', [false, false], false],
-    ['CH01_COMPASS_ACQUIRED', [...RESCUED, 'forest_compass_granted'], ['forest_hidden_path'], 'none', [false, false], false],
+    ['CH01_STARTED', RESCUED.slice(0, 4), ['forest_cut_thread'], 'locked', [false], false],
+    ['CH01_STARTED', RESCUED.slice(0, 5), ['forest_bopuli_ambush'], 'locked', [false], false],
+    ['CH01_STARTED', RESCUED.slice(0, 7), ['forest_bopuli_ambush'], 'locked', [false], false],
+    ['CH01_BOPUL_RESCUED', RESCUED, ['forest_bopuli_return'], 'available', [false], false],
+    ['CH01_COMPASS_ACQUIRED', [...RESCUED, 'forest_compass_granted'], ['forest_hidden_path'], 'none', [false], false],
     ['CH01_COMPASS_ACQUIRED', [...RESCUED, 'forest_compass_granted', 'forest_hidden_path_opened'], ['forest_giant_knot'], 'none', [true, false], true],
     ['CH01_COMPASS_ACQUIRED', [...RESCUED, 'forest_compass_granted', 'forest_hidden_path_opened', 'forest_giant_knot_defeated'], ['forest_first_knot_awaken'], 'none', [true, false], true],
     ['CH01_COMPASS_ACQUIRED', [...RESCUED, 'forest_compass_granted', 'forest_hidden_path_opened', 'forest_giant_knot_defeated', 'forest_first_knot_awakened'], [], 'none', [true, false], true],
@@ -238,8 +247,15 @@ test('지도에 보이는 것: 진행에 따라 활성 지점만, 구조 전 실
     const label = `${checkpoint} / ${events[events.length - 1]}`;
     assert.deepEqual(view.points.map((p) => p.id), points, `${label}: 활성 지점`);
     assert.deepEqual(dust === 'none' ? view.objects.length : [view.objects.length, [...new Set(view.objects.map((o) => o.state))]], dust === 'none' ? 0 : [10, [dust]], `${label}: 실가루`);
-    assert.deepEqual(view.gates.map((g) => g.open), gates, `${label}: 문`);
+    assert.deepEqual(view.gates.map((g) => g.open), gates, `${label}: 문(실뿌리 문은 숨은 길이 열린 뒤에만 지도에 나온다)`);
     assert.equal(view.layout!.zones.some((z) => z.id === 'zone_hidden'), hiddenZone, `${label}: 숨은 구역 표시`);
+    // 숨은 구역의 내부 정보(안쪽 벽·안쪽 길)는 열리기 전에는 내려 주지 않는다. 바깥 벽은 처음부터 보인다(부딪히는 벽)
+    assert.equal(view.layout!.blockers.some((b) => b.id.startsWith('wall_root')), hiddenZone, `${label}: 안쪽 벽`);
+    assert.ok(view.layout!.blockers.some((b) => b.id === 'wall_hidden_top'), `${label}: 바깥 벽`);
+    const inner = view.layout!.paths.some((path) => path.some(([x]) => x > 2300));
+    assert.equal(inner, hiddenZone, `${label}: 문 안쪽 길`);
+    assert.equal(view.layout!.paths.some((path) => path.some(([x]) => x === 2240)), events.includes('forest_compass_granted'), `${label}: 숨은 길로 가는 길은 나침판 뒤에`);
+    assert.ok(view.layout!.blockers.every((b) => !('visibleAfter' in b)) && view.gates.every((g) => !('openEvent' in g)), '규칙 필드는 내려 주지 않는다');
     for (const p of view.points) assert.deepEqual([p.x, p.y], [pointOf(p.id).x, pointOf(p.id).y]);
   }
 });
