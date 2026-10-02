@@ -61,6 +61,7 @@ const HEROES: Record<HeroClass, Array<{ name: string; attack: number; speed: num
 
 const CLASS_LABEL: Record<HeroClass, string> = { warrior: '검사', archer: '궁사', spellblade: '마검사' };
 const CLASS_ORDER: HeroClass[] = ['warrior', 'archer', 'spellblade'];
+const HERO_RANGE: Record<HeroClass, number> = { warrior: 1.5, archer: 3.25, spellblade: 2.25 };
 const ENEMY_DATA: Record<EnemyKind, { name: string; hp: number; speed: number; reward: number; points: number; image: string }> = {
   swarm: { name: '태엽 꼬마', hp: 24, speed: 4.6, reward: 1, points: 5, image: gruntUrl },
   runner: { name: '질주 태엽병', hp: 34, speed: 6.4, reward: 2, points: 20, image: gruntUrl },
@@ -87,7 +88,7 @@ const GRID_SIZE = 6;
 const PATH_CELLS = [0, 1, 2, 3, 4, 5, 11, 17, 23, 29, 35, 34, 33, 32, 31, 30];
 const PATH_SET = new Set(PATH_CELLS);
 
-function enemyGridPosition(progress: number) {
+function enemyGridCoordinates(progress: number) {
   const clamped = Math.max(0, Math.min(99.9, progress));
   const routePosition = clamped / 100 * (PATH_CELLS.length - 1);
   const fromIndex = Math.floor(routePosition);
@@ -98,10 +99,20 @@ function enemyGridPosition(progress: number) {
   const fromCol = from % GRID_SIZE;
   const toRow = Math.floor(to / GRID_SIZE);
   const toCol = to % GRID_SIZE;
-  return {
-    left: `${((fromCol + (toCol - fromCol) * fraction) + 0.5) / GRID_SIZE * 100}%`,
-    top: `${((fromRow + (toRow - fromRow) * fraction) + 0.5) / GRID_SIZE * 100}%`,
-  };
+  return { row: fromRow + (toRow - fromRow) * fraction, col: fromCol + (toCol - fromCol) * fraction };
+}
+
+function enemyGridPosition(progress: number) {
+  const { row, col } = enemyGridCoordinates(progress);
+  return { left: `${(col + 0.5) / GRID_SIZE * 100}%`, top: `${(row + 0.5) / GRID_SIZE * 100}%` };
+}
+
+function isWithinRange(originIndex: number, targetIndex: number, range: number) {
+  const originRow = Math.floor(originIndex / GRID_SIZE);
+  const originCol = originIndex % GRID_SIZE;
+  const targetRow = Math.floor(targetIndex / GRID_SIZE);
+  const targetCol = targetIndex % GRID_SIZE;
+  return Math.hypot(originRow - targetRow, originCol - targetCol) <= range;
 }
 
 const bestKey = 'merge-defense:stage-1:best';
@@ -184,14 +195,21 @@ function MergeBattle({ onLeave, onScore }: { onLeave: () => void; onScore: (scor
         const next = current.map((enemy) => ({ ...enemy, progress: enemy.progress + enemy.speed * 0.1, hitFlash: Math.max(0, enemy.hitFlash - 0.1) }));
         const active = next.filter((enemy) => enemy.progress >= 0 && enemy.progress < 100 && enemy.hp > 0);
         const board = heroesRef.current.map((hero) => hero ? { ...hero, cooldown: Math.max(0, hero.cooldown - 0.1) } : null);
-        for (const hero of board) {
-          if (!hero || hero.cooldown > 0 || active.length === 0) continue;
-          const target = active.reduce((bestEnemy, enemy) => enemy.progress > bestEnemy.progress ? enemy : bestEnemy);
+        board.forEach((hero, heroIndex) => {
+          if (!hero || hero.cooldown > 0 || active.length === 0) return;
+          const heroRow = Math.floor(heroIndex / GRID_SIZE);
+          const heroCol = heroIndex % GRID_SIZE;
+          const targetsInRange = active.filter((enemy) => {
+            const position = enemyGridCoordinates(enemy.progress);
+            return Math.hypot(heroRow - position.row, heroCol - position.col) <= HERO_RANGE[hero.heroClass];
+          });
+          if (targetsInRange.length === 0) return;
+          const target = targetsInRange.reduce((bestEnemy, enemy) => enemy.progress > bestEnemy.progress ? enemy : bestEnemy);
           const data = HEROES[hero.heroClass][hero.grade - 1];
           target.hp -= data.attack;
           target.hitFlash = 0.2;
           hero.cooldown = 1 / data.speed;
-        }
+        });
         heroesRef.current = board;
         setHeroes(board);
 
@@ -323,6 +341,8 @@ function MergeBattle({ onLeave, onScore }: { onLeave: () => void; onScore: (scor
     setDiscovered({ warrior: 1, archer: 1, spellblade: 1 }); setSelectedSlot(null); setFinished(null); setKills(0); setKillPoints(0); setElapsed(0); setMessage('25코인으로 첫 용사를 스폰하세요!');
   };
 
+  const selectedHero = selectedSlot === null ? null : heroes[selectedSlot];
+
   return (
     <main className="merge-battle-screen">
       <header className="merge-battle-header"><button type="button" onClick={onLeave}>← 스테이지 선택</button><div><small>STAGE 1-1</small><strong>세 갈래의 시작</strong></div><div className="merge-stats"><span>❤️ {baseHp}</span><span>🪙 {coins}</span><span>⚔️ {wave}/10</span><span>🏆 {score.toLocaleString()}</span></div></header>
@@ -331,8 +351,9 @@ function MergeBattle({ onLeave, onScore }: { onLeave: () => void; onScore: (scor
           {heroes.map((hero, index) => {
             const path = PATH_SET.has(index);
             const data = hero ? HEROES[hero.heroClass][hero.grade - 1] : null;
+            const attackRange = selectedHero && selectedSlot !== null && isWithinRange(selectedSlot, index, HERO_RANGE[selectedHero.heroClass]);
             return (
-              <button type="button" key={index} disabled={path} onClick={() => clickSlot(index)} className={`merge-grid-cell ${path ? 'path' : 'build'} ${hero ? hero.heroClass : ''} ${selectedSlot === index ? 'selected' : ''} ${selectedSlot !== null && !hero && !path ? 'move-target' : ''}`}>
+              <button type="button" key={index} disabled={path} onClick={() => clickSlot(index)} className={`merge-grid-cell ${path ? 'path' : 'build'} ${hero ? hero.heroClass : ''} ${attackRange ? 'attack-range' : ''} ${selectedSlot === index ? 'selected' : ''} ${selectedSlot !== null && !hero && !path ? 'move-target' : ''}`}>
                 {path && index === PATH_CELLS[0] && <span className="path-label">입구</span>}
                 {path && index === PATH_CELLS[PATH_CELLS.length - 1] && <span className="grid-gate">🏰<small>기지</small></span>}
                 {hero && data && <span className="grid-hero"><img src={data.image} alt={data.name} /><b>★{hero.grade}</b><small>{data.name}<br />공격 {data.attack}</small></span>}
@@ -344,6 +365,7 @@ function MergeBattle({ onLeave, onScore }: { onLeave: () => void; onScore: (scor
             return <div key={enemy.id} className={`merge-enemy ${enemy.kind} ${enemy.hitFlash > 0 ? 'hit' : ''}`} style={enemyGridPosition(enemy.progress)}><img src={data.image} alt={data.name} /><em>✦</em><div><i style={{ width: `${Math.max(0, enemy.hp / enemy.maxHp * 100)}%` }} /><span>{Math.ceil(enemy.hp)}/{enemy.maxHp}</span></div></div>;
           })}
         </div>
+        {selectedHero && <div className="merge-range-legend"><span className="move">■ 이동 가능</span><span className="attack">■ 공격 범위 · {HERO_RANGE[selectedHero.heroClass]}칸</span></div>}
         <div className="merge-wave-message">{message}</div>
         <button type="button" className="merge-wave-button" disabled={waveRunning || Boolean(finished)} onClick={startWave}>{waveRunning ? '전투 중' : wave >= 10 ? '최종 결과' : `${wave + 1}웨이브 시작`}</button>
       </section>
