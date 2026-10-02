@@ -14,6 +14,15 @@ import spreadMagazineUrl from '../assets/items/spread-magazine.png';
 import penetrationRoundUrl from '../assets/items/penetration-round.png';
 import rapidDrumUrl from '../assets/items/rapid-drum.png';
 import blockGateBossUrl from '../assets/bosses/boss-1-1-block-gate.png';
+import giantTeddyBossUrl from '../assets/bosses/boss-1-2-giant-teddy.png';
+import locomotiveFortressBossUrl from '../assets/bosses/boss-1-3-locomotive-fortress.png';
+import championTruckBossUrl from '../assets/bosses/boss-1-4-champion-truck.png';
+import mechaTiranoBossUrl from '../assets/bosses/boss-1-5-mecha-tirano.png';
+import pirateCannonBossUrl from '../assets/bosses/boss-1-6-pirate-cannon.png';
+import tyrantTrexBossUrl from '../assets/bosses/boss-1-7-tyrant-trex.png';
+import carouselFortressBossUrl from '../assets/bosses/boss-1-8-carousel-fortress.png';
+import goldenGolemBossUrl from '../assets/bosses/boss-1-9-golden-golem.png';
+import toyKingGateBossUrl from '../assets/bosses/boss-1-10-toy-king-gate.png';
 
 const WIDTH = 720;
 const HEIGHT = 1280;
@@ -24,6 +33,19 @@ const LANE_X = [150, 360, 570] as const;
 const RUN_SPEED = 210;
 const FINISH_DISTANCE = 5200;
 const POWER_UP_DURATION = 20_000;
+const PLAYROOM_BOSS_TEXTURES = [
+  'boss-1-1-block-gate',
+  'boss-1-2-giant-teddy',
+  'boss-1-3-locomotive-fortress',
+  'boss-1-4-champion-truck',
+  'boss-1-5-mecha-tirano',
+  'boss-1-6-pirate-cannon',
+  'boss-1-7-tyrant-trex',
+  'boss-1-8-carousel-fortress',
+  'boss-1-9-golden-golem',
+  'boss-1-10-toy-king-gate',
+] as const;
+type PlayroomBossTexture = typeof PLAYROOM_BOSS_TEXTURES[number];
 
 type PowerUpType = 'spread' | 'penetration' | 'rapid';
 
@@ -51,7 +73,7 @@ interface CombatDef {
   strength: number;
   title: string;
   boss?: boolean;
-  sprite?: 'clockwork-grunt' | 'siege-tank' | 'boss-block-gate-1-1';
+  sprite?: 'clockwork-grunt' | 'siege-tank' | PlayroomBossTexture;
   lane?: 0 | 1 | 2;
 }
 
@@ -138,7 +160,16 @@ export class RunnerScene extends Phaser.Scene {
     this.load.image('item-spread-magazine', spreadMagazineUrl);
     this.load.image('item-penetration-round', penetrationRoundUrl);
     this.load.image('item-rapid-drum', rapidDrumUrl);
-    this.load.image('boss-block-gate-1-1', blockGateBossUrl);
+    this.load.image('boss-1-1-block-gate', blockGateBossUrl);
+    this.load.image('boss-1-2-giant-teddy', giantTeddyBossUrl);
+    this.load.image('boss-1-3-locomotive-fortress', locomotiveFortressBossUrl);
+    this.load.image('boss-1-4-champion-truck', championTruckBossUrl);
+    this.load.image('boss-1-5-mecha-tirano', mechaTiranoBossUrl);
+    this.load.image('boss-1-6-pirate-cannon', pirateCannonBossUrl);
+    this.load.image('boss-1-7-tyrant-trex', tyrantTrexBossUrl);
+    this.load.image('boss-1-8-carousel-fortress', carouselFortressBossUrl);
+    this.load.image('boss-1-9-golden-golem', goldenGolemBossUrl);
+    this.load.image('boss-1-10-toy-king-gate', toyKingGateBossUrl);
   }
 
   create() {
@@ -216,7 +247,7 @@ export class RunnerScene extends Phaser.Scene {
       strength: 500 + threat * 62,
       title: this.stage.bossName,
       boss: true,
-      sprite: this.stage.id === 1 ? 'boss-block-gate-1-1' : undefined,
+      sprite: this.stage.chapter === 1 ? PLAYROOM_BOSS_TEXTURES[this.stage.stage - 1] : undefined,
       lane: 1,
     });
   }
@@ -293,14 +324,14 @@ export class RunnerScene extends Phaser.Scene {
   private addCombat(def: CombatDef) {
     const container = this.add.container(LANE_X[def.lane ?? 1], -220);
     const scale = def.boss ? 1.45 : 1;
-    const isBlockGateBoss = def.sprite === 'boss-block-gate-1-1';
-    const shadowWidth = isBlockGateBoss ? 285 : def.sprite === 'siege-tank' ? 230 : 145;
-    const shadow = this.add.ellipse(0, isBlockGateBoss ? 116 : 68 * scale, shadowWidth, isBlockGateBoss ? 45 : 34, 0x0f172a, 0.38);
+    const isPlayroomBoss = def.sprite?.startsWith('boss-1-') ?? false;
+    const shadowWidth = isPlayroomBoss ? 285 : def.sprite === 'siege-tank' ? 230 : 145;
+    const shadow = this.add.ellipse(0, isPlayroomBoss ? 116 : 68 * scale, shadowWidth, isPlayroomBoss ? 45 : 34, 0x0f172a, 0.38);
     let enemy: Phaser.GameObjects.GameObject;
     if (def.sprite) {
-      const enemyWidth = isBlockGateBoss ? 290 : def.sprite === 'siege-tank' ? 245 : 165;
-      const enemyHeight = isBlockGateBoss ? 290 : def.sprite === 'siege-tank' ? 163 : 138;
-      enemy = this.add.image(0, isBlockGateBoss ? -18 : 0, def.sprite).setDisplaySize(enemyWidth, enemyHeight);
+      const enemyWidth = isPlayroomBoss ? 290 : def.sprite === 'siege-tank' ? 245 : 165;
+      const enemyHeight = isPlayroomBoss ? 290 : def.sprite === 'siege-tank' ? 163 : 138;
+      enemy = this.add.image(0, isPlayroomBoss ? -18 : 0, def.sprite).setDisplaySize(enemyWidth, enemyHeight);
     } else {
       enemy = this.add.rectangle(0, 0, 130 * scale, 120 * scale, 0x7c3aed).setStrokeStyle(5, 0xf8fafc, 0.7);
     }
