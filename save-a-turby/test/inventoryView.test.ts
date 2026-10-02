@@ -1,14 +1,13 @@
 // v3 M4-D 인벤토리·저해상도 배치 — 순수 판정 검증
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { EMPTY_TEXT, detailOf, filterItems, gridCells, insideCanvas, inventoryLayout, keepSelection, nubiSlots, overlaps, pageCells, type InventoryItem } from '../src/inventory/inventoryView.ts';
 import { partySelectLayout } from '../src/battle/partySelectLayout.ts';
 import { actionHint, battleHudLayout, clampLabel, goalSummary, resultLayout, unitLabel } from '../src/battle/battleView.ts';
 import { displayScaleOf, finalPx, layoutKey, layoutModeOf, MIN_BODY_PX, MIN_BUTTON_PX } from '../src/ui/responsive.ts';
-import { devFlags } from '../src/story/devFlags.ts';
 import type { BattleUnit } from '../src/net/battleTypes.ts';
 
 const item = (over: Partial<InventoryItem>): InventoryItem => ({
@@ -110,15 +109,12 @@ test('640×360 전투 HUD: 턴 > 안내 > 목표 크기 순, 목표는 접기, �
   assert.equal(battleHudLayout(1).objectivesCollapsible, false);
 });
 
-test('운영 맵: 원격 전달 버튼은 개발 플래그가 꺼져 있으면(기본) 보이지 않는다', () => {
-  assert.equal(devFlags.remoteDelivery, false, '운영 기본값');
-  const map = readFileSync(fileURLToPath(new URL('../src/scenes/MapScene.ts', import.meta.url)), 'utf8');
-  assert.match(map, /const withButton = devFlags\.remoteDelivery;/);
-  assert.match(map, /if \(!withButton\) return;/, '추적 정보만 그리고 버튼 전에 종료');
-  const src = readFileSync(fileURLToPath(new URL('../src/story/devFlags.ts', import.meta.url)), 'utf8');
-  assert.match(src, /remoteDelivery: false/);
-  // 운영 코드 어디에서도 플래그를 켜지 않는다(개발 미리보기만)
-  for (const f of ['scenes/MapScene.ts', 'scenes/VillageScene.ts', 'game.ts']) assert.doesNotMatch(readFileSync(fileURLToPath(new URL(`../src/${f}`, import.meta.url)), 'utf8'), /remoteDelivery\s*=\s*true/);
+test('운영 맵: 원격 전달 버튼과 그 개발 플래그·1장 개발 미리보기는 제거됐다(전달은 보풀이 지점의 안내 버튼으로만)', () => {
+  const root = new URL('../', import.meta.url);
+  for (const f of ['src/story/devFlags.ts', 'dev/ch01Preview.ts', 'dev/ch01-preview.html']) assert.equal(existsSync(fileURLToPath(new URL(f, root))), false, `${f} 제거`);
+  for (const f of ['src/scenes/MapScene.ts', 'src/scenes/VillageScene.ts', 'src/game.ts', 'dev/captureHelper.ts', 'dev/gamePreview.ts']) {
+    assert.doesNotMatch(readFileSync(fileURLToPath(new URL(f, root)), 'utf8'), /remoteDelivery|devFlags|ch01Preview/, f);
+  }
 });
 
 test('v4 전투 HUD(640×360·1280×720): 턴·목표·턴 종료·나가기·안내 영역이 화면 안에서 서로 겹치지 않고, 작은 화면 안내는 한 줄 폭 안, 펼친 목표는 오른쪽 위', () => {

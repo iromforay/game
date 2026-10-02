@@ -10,6 +10,7 @@ import { chromium, type Browser, type BrowserContext, type Page } from 'playwrig
 import { FakeDb } from '../helpers/fake-prisma';
 import { seedBase, startTurbyApp } from '../helpers/turby-app';
 
+import { RoomsService } from '../../src/turby/rooms/rooms.service';
 export const ROOT = join(__dirname, '../../..');
 export const ARTIFACTS = process.env.E2E_ARTIFACT_DIR ?? join(__dirname, '.artifacts');
 export const CAPTURE_DIR = process.env.E2E_CAPTURE_DIR ?? null; // 지정하면 캡처(v5 §7)를 여기에 저장
@@ -51,6 +52,14 @@ export class Backend {
   }
   playerByDevice(device: string) {
     return this.db.rows('player', { device_uuid: `dev-device-${device}-account` })[0] as { id: bigint } | undefined;
+  }
+  // 서버가 마지막으로 승인한 탐험 위치(탐험 세션이 없으면 null) — 화면의 위치와 서버 위치를 비교하는 데 쓴다
+  serverPosition(device: string): { x: number; y: number } | null {
+    const p = this.playerByDevice(device);
+    const rooms = this.app?.get(RoomsService);
+    const room = p && rooms ? rooms.roomOf(p.id.toString()) : undefined;
+    const m = room && p ? rooms!.memberPosition(room, p.id.toString()) : null;
+    return m ? { x: Math.round(m.x), y: Math.round(m.y) } : null;
   }
 }
 

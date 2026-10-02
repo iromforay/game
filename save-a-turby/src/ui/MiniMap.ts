@@ -12,6 +12,14 @@ export interface MapView {
   height: number;
   bounds: Rect;
   paths?: { lines: { x: number; y: number }[][]; plaza: { x: number; y: number; w: number; h: number } };
+  // 회색상자(임시) 지형: 공개된 구역·길·막힌 곳·문. 최종 지도 에셋이 연결되면 넘기지 않는다
+  greybox?: { zones: TerrainRect[]; paths: number[][][]; blockers: TerrainRect[]; gates: (TerrainRect & { open: boolean })[] };
+}
+interface TerrainRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 export interface MapMarker {
@@ -26,6 +34,8 @@ export interface MapMarker {
 // 코덱스 시각 QA(2026-09-21): 파스텔 팔레트
 const PAL = { mint: 0xcdebdd, cream: 0xfff4df, lavender: 0xdcd3f4, ink: 0x695b67, panelInfo: 0xf3eefb, overlay: 0x4a3f4b };
 const INK = '#695B67';
+// 회색상자(임시) 지형 색 — 범례와 지도가 같은 값을 쓴다
+const TERRAIN = { zone: 0xfff4df, path: 0xb7a98f, wall: 0x4a4f4a, gate: 0x8a6fc0, gateLine: 0x5a3a8a };
 const DEPTH_HUD = 4000;
 const DEPTH_MODAL = 5000;
 
@@ -85,7 +95,8 @@ export class MiniMap {
   }
   // 진단용 요약(화면 상태만)
   get debugState() {
-    return { open: this.open, legendOpen: this.legendOpen, mode: this.L.mode, selected: this.selectedId, diameter: this.L.mini.diameter, close: this.L.full.close, legendToggle: this.L.full.legendToggle, openButton: this.L.mini.open, labelsOnMap: this.L.full.labelsOnMap };
+    const gb = this.view.greybox;
+    return { terrain: gb ? { zones: gb.zones.length, paths: gb.paths.length, blockers: gb.blockers.length, gatesClosed: gb.gates.filter((x) => !x.open).length, gatesOpen: gb.gates.filter((x) => x.open).length } : null, legend: this.legendKeys(), open: this.open, legendOpen: this.legendOpen, mode: this.L.mode, selected: this.selectedId, diameter: this.L.mini.diameter, close: this.L.full.close, legendToggle: this.L.full.legendToggle, openButton: this.L.mini.open, labelsOnMap: this.L.full.labelsOnMap };
   }
 
   toggle() {
@@ -123,8 +134,9 @@ export class MiniMap {
     this.syncPlayer();
   }
 
-  // 게임 진행으로 지도에 놓이는 것이 바뀌면(이야기 지점이 열리고 닫힘, 오브젝트 수집) 마커 목록을 바꿔 다시 그린다
-  setMarkers(markers: MapMarker[]) {
+  // 게임 진행으로 지도에 놓이는 것이 바뀌면(이야기 지점이 열리고 닫힘, 오브젝트 수집, 문 개방, 구역 공개) 지형과 마커를 바꿔 다시 그린다
+  setScene(view: MapView, markers: MapMarker[]) {
+    this.view = view;
     this.markers = markers;
     if (!markers.some((m) => m.id === this.selectedId)) this.selectedId = this.destinationId || markers[0]?.id || '';
     this.hidden.clear();
@@ -319,7 +331,7 @@ export class MiniMap {
     const innerW = INFO.w - 40;
     const m = this.markers.find((x) => x.id === this.selectedId);
     const showLegend = F.legendAlways || this.legendOpen;
-    const entries = legendEntries(this.markers.map((x) => x.type), this.lastPeers.length > 0);
+    const entries = this.legendKeys();
     const legendH = entries.length * F.legendRow + F.font.label * 1.6;
     const bottom = F.legendToggle ? F.legendToggle.y - 10 : INFO.y + INFO.h - 10;
 
@@ -335,9 +347,18 @@ export class MiniMap {
       entries.forEach((key, i) => {
         const y = y0 + F.font.label * 1.6 + i * F.legendRow + F.legendRow / 2;
         const size = Math.round(F.legendRow * 0.8);
+        const cxk = INFO.x + 20 + size / 2;
         if (key === 'peer') {
-          add(s.add.circle(INFO.x + 20 + size / 2, y, size / 2 - 2, 0x9aa9d8).setStrokeStyle(2, 0xffffff));
-          add(s.add.text(INFO.x + 20 + size / 2, y, '1', { fontSize: `${Math.round(F.font.label * 0.8)}px`, color: '#ffffff' }).setOrigin(0.5));
+          add(s.add.circle(cxk, y, size / 2 - 2, 0x9aa9d8).setStrokeStyle(2, 0xffffff));
+          add(s.add.text(cxk, y, '1', { fontSize: `${Math.round(F.font.label * 0.8)}px`, color: '#ffffff' }).setOrigin(0.5));
+        } else if (key === 'path') {
+          add(s.add.rectangle(cxk, y, size, Math.max(4, size * 0.22), TERRAIN.path));
+        } else if (key === 'wall') {
+          add(s.add.rectangle(cxk, y, size, size * 0.6, TERRAIN.wall));
+        } else if (key === 'gateClosed') {
+          add(s.add.rectangle(cxk, y, size * 0.5, size, TERRAIN.gate).setStrokeStyle(2, TERRAIN.gateLine));
+        } else if (key === 'gateOpen') {
+          add(s.add.rectangle(cxk, y, size * 0.5, size).setStrokeStyle(3, TERRAIN.gateLine).setFillStyle(0xffffff, 0));
         } else {
           add(s.add.image(INFO.x + 20 + size / 2, y, key === 'player' ? 'marker-player' : markerTexture(key)).setDisplaySize(size, size));
         }
@@ -356,10 +377,32 @@ export class MiniMap {
     }
   }
 
+  private legendKeys() {
+    const gb = this.view.greybox;
+    return legendEntries(this.markers.map((x) => x.type), this.lastPeers.length > 0, gb ? { path: gb.paths.length > 0, wall: gb.blockers.length > 0, gateClosed: gb.gates.some((x) => !x.open), gateOpen: gb.gates.some((x) => x.open) } : undefined);
+  }
+
   private drawTerrain(g: Phaser.GameObjects.Graphics, ox: number, oy: number, k: number) {
     const b = this.view.bounds;
     g.fillStyle(PAL.mint, 1).fillRect(ox + b.x * k, oy + b.y * k, b.w * k, b.h * k);
     g.lineStyle(Math.max(1.5, 3 * k * 4), PAL.lavender, 1).strokeRect(ox + b.x * k, oy + b.y * k, b.w * k, b.h * k);
+    const gb = this.view.greybox;
+    if (gb) {
+      // 회색상자(임시): 공개된 구역 → 길 → 막힌 곳 → 문(닫힘은 채운 사각형, 열림은 테두리만) 순서로 그린다
+      for (const z of gb.zones) g.fillStyle(TERRAIN.zone, 0.55).fillRect(ox + z.x * k, oy + z.y * k, z.width * k, z.height * k);
+      g.lineStyle(Math.max(2, 26 * k), TERRAIN.path, 1);
+      for (const path of gb.paths) {
+        g.beginPath().moveTo(ox + path[0][0] * k, oy + path[0][1] * k);
+        for (const [x, y] of path.slice(1)) g.lineTo(ox + x * k, oy + y * k);
+        g.strokePath();
+      }
+      for (const w of gb.blockers) g.fillStyle(TERRAIN.wall, 1).fillRect(ox + w.x * k, oy + w.y * k, Math.max(2, w.width * k), Math.max(2, w.height * k));
+      for (const gate of gb.gates) {
+        const r = [ox + gate.x * k, oy + gate.y * k, Math.max(3, gate.width * k), Math.max(3, gate.height * k)] as const;
+        if (gate.open) g.lineStyle(2, TERRAIN.gateLine, 1).strokeRect(...r);
+        else g.fillStyle(TERRAIN.gate, 1).fillRect(...r).lineStyle(1.5, TERRAIN.gateLine, 1).strokeRect(...r);
+      }
+    }
     const paths = this.view.paths;
     if (!paths) return;
     g.lineStyle(70 * k, PAL.cream, 1);

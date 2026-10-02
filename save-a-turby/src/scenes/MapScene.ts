@@ -9,7 +9,6 @@ import { displayScaleOf } from '../ui/responsive';
 import { watchLayout } from '../ui/relayout';
 import { mapHudLayout, type MapHudLayout } from '../ui/screenLayouts';
 import { capturedLabel } from '../ui/screenStates';
-import { devFlags } from '../story/devFlags';
 import { playStory } from '../story/playStory';
 import { MiniMap } from '../ui/MiniMap';
 import type { MapMarker, MapView } from '../ui/MiniMap';
@@ -90,7 +89,12 @@ export class MapScene extends Phaser.Scene {
   private inviteBattleId: string | null = null;
   private selfRing?: Phaser.GameObjects.Ellipse | Phaser.GameObjects.Image;
   private deliveryLayer: Phaser.GameObjects.GameObject[] = [];
-  private delivering = false;
+  // 10-02 v4: 서버 권위 위치. positioned = 서버가 정한 위치에 배치됐는가(그 전에는 움직이지 않는다)
+  private positioned = false;
+  private corrections = 0; // 서버 보정 횟수(진단용)
+  private lastCorrectionReason: string | null = null;
+  private lastViewSyncAt = 0;
+  private quietWilds = new Set<number>(); // 배치된 자리 바로 옆의 야생 터비 — 한 번 벗어나기 전에는 조우를 다시 시작하지 않는다
   // 10-02 v3: 지역 스토리 화면(서버가 내려 준 남은 오브젝트·활성 지점·문) — 좌표·문구·에셋 키는 전부 서버 데이터
   private stageView: StageView | null = null;
   private storyLayer: Phaser.GameObjects.GameObject[] = [];
@@ -100,6 +104,7 @@ export class MapScene extends Phaser.Scene {
   private interactBox?: Phaser.GameObjects.Rectangle;
   private interactLabel?: Phaser.GameObjects.Text;
   private baseMarkers: MapMarker[] = [];
+  private mapView!: MapView;
   private keys?: Record<'up' | 'down' | 'left' | 'right' | 'w' | 'a' | 's' | 'd' | 'e' | 'space' | 'enter', Phaser.Input.Keyboard.Key>;
 
   constructor() {
@@ -117,7 +122,8 @@ export class MapScene extends Phaser.Scene {
     this.inviteTimer = null;
     this.inviteBattleId = null;
     this.deliveryLayer = [];
-    this.delivering = false;
+    this.positioned = false;
+    this.quietWilds = new Set();
     this.roomLabel = undefined; // 같은 씬 인스턴스를 다시 쓰므로 이전 화면의 글자 참조를 비운다(파괴된 객체에 setText 방지)
     this.hudObjs = [];
     this.roomJoined = false;
@@ -196,7 +202,7 @@ export class MapScene extends Phaser.Scene {
         targets.push({ id: `target-${index}`, type: 'target', name: `대표 터비 ${current.clearCharacterName}`, x: spawn.x, y: spawn.y, hint: `${current.chapter.titleKo}: '${current.clearCharacterName}'를 조우해 직접 포획하면 다음 지역이 열려요.` });
       });
     }
-    const mapView: MapView = { title: stage.name, width: stage.width, height: stage.height, bounds: { x: 0, y: 0, w: stage.width, h: stage.height } };
+    const mapView: MapView = (this.mapView = { title: stage.name, width: stage.width, height: stage.height, bounds: { x: 0, y: 0, w: stage.width, h: stage.height } });
     this.baseMarkers = targets;
     this.miniMap = new MiniMap(this, mapView, targets, '', (open) => {
       this.joystick.setEnabled(!open);
@@ -340,7 +346,9 @@ export class MapScene extends Phaser.Scene {
       ...(view?.points ?? []).map((pt) => ({ id: pt.id, type: 'story' as const, name: pt.label, x: pt.x, y: pt.y, hint: pt.prompt })),
       ...(view?.objects ?? []).map((o) => ({ id: o.id, type: 'dust' as const, name: o.label, x: o.x, y: o.y, hint: o.state === 'locked' ? '아직 모을 수 없어요' : o.prompt })),
     ];
-    this.miniMap?.setMarkers([...this.baseMarkers, ...storyMarkers]);
+    // 전체 지도·미니맵: 회색상자 모드에서만 길·벽·문·공개된 구역을 임시 도형으로 그린다(최종 지도가 오면 이 임시 배경은 없어진다)
+    const terrain = view?.greybox && view.layout ? { zones: view.layout.zones, paths: view.layout.paths, blockers: view.layout.blockers, gates: view.gates } : undefined;
+    this.miniMap?.setScene({ ...this.mapView, greybox: terrain }, [...this.baseMarkers, ...storyMarkers]);
     this.setActiveTarget(null);
   }
 
@@ -427,8 +435,7 @@ export class MapScene extends Phaser.Scene {
     }
   }
 
-  // 퀘스트 추적(빛나는 실가루 n/10, 서버 인벤토리 수량). 운영 화면에는 추적 정보만 — 원격 전달 버튼은 좌표·보풀이 NPC 확정 전이라
-  // 개발 미리보기(devFlags.remoteDelivery)에서만 보인다(v3 §4). 서버 forest_bopuli_return 지점과 검증은 그대로다.
+  // 퀘스트 추적(빛나는 실가루 n/10, 서버 인벤토리 수량). 전달은 보풀이 지점의 안내 버튼으로 한다(원격 전달 버튼은 없다).
   // 목표가 없으면 패널을 남기지 않는다. 긴 목표 문구는 왼쪽 HUD와 미니맵 사이 폭 안에서 줄바꿈한다(자르지 않음)
   private showDelivery(delivery: StoryDelivery | null) {
     this.lastDelivery = delivery;
@@ -438,40 +445,11 @@ export class MapScene extends Phaser.Scene {
     const G = this.hud.goal;
     const goalFont = this.hud.font.goal;
     const cx = G.x + G.w / 2;
-    const withButton = devFlags.remoteDelivery;
     const goal = this.add.text(cx, G.y + 10, this.goalTextOverride ?? deliveryGoalText(delivery), { fontSize: `${goalFont}px`, color: '#ffe9a8', align: 'center', wordWrap: { width: G.w - 28, useAdvancedWrap: true } }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(2001);
-    const btnH = withButton ? Math.round(goalFont * 1.25 + 10) + 8 : 0;
     const panelW = Math.min(G.w, Math.max(Math.min(G.w, 440), goal.width + 28));
-    const panelH = goal.height + 20 + btnH;
+    const panelH = goal.height + 20;
     const panel = this.add.rectangle(cx, G.y + panelH / 2, panelW, panelH, 0x241a3d, 0.9).setStrokeStyle(2, 0xffd27f, 0.9).setScrollFactor(0).setDepth(2000);
     this.deliveryLayer.push(panel, goal);
-    if (!withButton) return;
-    const button = this.add
-      .text(cx, G.y + 10 + goal.height + 8, '보풀이에게 실가루 전달(개발용)', { fontSize: `${goalFont}px`, color: '#ffffff', backgroundColor: '#5a3a8a', padding: { x: 12, y: 5 } })
-      .setOrigin(0.5, 0)
-      .setScrollFactor(0)
-      .setDepth(2001)
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => void this.deliver(delivery.triggerId));
-    this.deliveryLayer.push(button);
-  }
-
-  // 서버가 수량·진행·위치를 판정한다. 부족하면 부족 수량만, 충분하면 서버가 소비·지급을 확정한 뒤 제작 장면을 재생한다
-  private async deliver(triggerId: string) {
-    if (this.delivering) return; // 이중 클릭(서버도 멱등)
-    this.delivering = true;
-    const gen = this.generation;
-    try {
-      const res = await triggerStory(triggerId);
-      if (gen !== this.generation || !this.sys.isActive()) return;
-      this.showDelivery(res.story.delivery);
-      if (res.shortage) showToast(this, shortageText(res.shortage), { y: this.hud.toastY, fixed: true });
-      if (res.play) this.launchStory(res.play);
-    } catch (err) {
-      if (gen === this.generation && this.sys.isActive()) showToast(this, err instanceof Error && err.message ? err.message : '서버에 연결할 수 없습니다.', { y: this.hud.toastY, error: true, fixed: true });
-    } finally {
-      this.delivering = false;
-    }
   }
 
   // ----- 4-A: 같은 방 플레이어 위치 동기화(개발용 표시 — 최종 표현은 코덱스 디자인 확정 후 교체) -----
@@ -497,7 +475,7 @@ export class MapScene extends Phaser.Scene {
         }
       }),
       roomClient.on('left', ({ playerId }) => this.removePeer(playerId)),
-      roomClient.on('correct', ({ x, y }) => this.avatar.setPosition(x, y)),
+      roomClient.on('correct', (pos) => this.applyCorrection(pos)),
       roomClient.on('wildChanged', (w) => this.applyWildState(w.index, w.state)),
       roomClient.on('battleInvite', (i) => this.showInvite(i.snapshot)),
       roomClient.on('battleUpdate', (u) => this.onBattleUpdate(u)),
@@ -513,8 +491,9 @@ export class MapScene extends Phaser.Scene {
     if (this.inRoomMap) return;
     this.inRoomMap = true;
     try {
-      const players = await roomClient.enterMap(this.avatar.x, this.avatar.y, this.facing);
+      const players = await roomClient.enterMap(this.facing);
       if (!this.inRoomMap) return; // 입장 응답을 기다리는 사이 씬이 끝남
+      this.placeAt(roomClient.selfOnEnter);
       players.forEach((p) => this.upsertPeer(p));
       this.markers.forEach((m) => this.applyWildState(m.index, roomClient.wilds.get(m.index) ?? 'free'));
       if (!this.selfRing) this.selfRing = this.makeRing(this.slotColor(roomClient.slotOf(roomClient.playerId ?? ''))).setDepth(5);
@@ -525,6 +504,37 @@ export class MapScene extends Phaser.Scene {
     } catch (err) {
       this.inRoomMap = false;
       console.warn('[room] 맵 입장 실패:', err);
+    }
+  }
+
+  // 진단용 요약(화면 상태만): 서버가 정한 위치에 배치됐는가, 서버 보정 횟수와 마지막 사유
+  get debugPosition() {
+    return { positioned: this.positioned, corrections: this.corrections, lastCorrection: this.lastCorrectionReason };
+  }
+
+  // 서버가 확정한 위치에 배치한다(첫 입장 = 시작 지점, 재입장 = 마지막 승인 위치). 그 자리 바로 옆의 야생 터비는 한 번 벗어난 뒤에야 다시 조우한다
+  private placeAt(self: { x: number; y: number } | null) {
+    if (self) {
+      this.avatar.setPosition(self.x, self.y);
+      this.lastSent = { x: self.x, y: self.y };
+      this.cameras.main.centerOn(self.x, self.y);
+      for (const m of this.markers) if (Phaser.Math.Distance.Between(self.x, self.y, m.spawn.x, m.spawn.y) <= ENCOUNTER_RADIUS * 1.5) this.quietWilds.add(m.index);
+    }
+    this.positioned = true;
+  }
+
+  // 서버가 이동을 승인하지 않았다: 마지막 승인 위치로 되돌린다. 입력은 막지 않고, 같은 보정을 여러 번 받아도 한 번만 움직인다.
+  // 벽·문 때문이면 화면의 문 상태가 서버와 다를 수 있으므로 지역 화면을 다시 받는다(1초에 한 번까지)
+  private applyCorrection(pos: { x: number; y: number; reason?: string }) {
+    this.lastSent = { x: pos.x, y: pos.y }; // 서버 위치와 다른 값을 다시 보내지 않는다(다시 움직이면 그때 보낸다)
+    this.lastSentAt = 0;
+    if (Math.abs(this.avatar.x - pos.x) < 0.5 && Math.abs(this.avatar.y - pos.y) < 0.5) return;
+    this.avatar.setPosition(pos.x, pos.y);
+    this.corrections++;
+    this.lastCorrectionReason = pos.reason ?? null;
+    if (pos.reason && pos.reason !== 'speed' && this.time.now - this.lastViewSyncAt > 1000) {
+      this.lastViewSyncAt = this.time.now;
+      void this.refreshStageView();
     }
   }
 
@@ -731,6 +741,7 @@ export class MapScene extends Phaser.Scene {
 
   update(_time: number, delta: number) {
     if (!this.ready || this.encounterLocked || this.inventoryPanel.isVisible) return;
+    if (this.roomJoined && !this.positioned) return; // 서버가 위치를 정해 주기 전
     if (this.miniMap.isOpen) {
       this.miniMap.update(this.avatar.x, this.avatar.y, this.moveAngle);
       return;
@@ -765,6 +776,10 @@ export class MapScene extends Phaser.Scene {
     for (const marker of this.markers) {
       if (marker.encountered || marker.state !== 'free' || (marker.retryAt ?? 0) > Date.now()) continue;
       const dist = Phaser.Math.Distance.Between(this.avatar.x, this.avatar.y, marker.spawn.x, marker.spawn.y);
+      if (this.quietWilds.has(marker.index)) {
+        if (dist > ENCOUNTER_RADIUS * 1.5) this.quietWilds.delete(marker.index);
+        continue;
+      }
       if (dist <= ENCOUNTER_RADIUS) {
         this.triggerEncounter(marker);
         break;

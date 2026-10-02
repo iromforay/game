@@ -130,7 +130,7 @@ test('숲 ②: 구조 뒤 실가루 10개를 각 한 번씩 수집 — 중복 �
   await withDiagnosis(g, 'forest-collect', async () => {
     await enterForest(g);
     let s = await story(g);
-    assert.deepEqual([s.objects.length, s.locked, s.points, s.gates], [10, 0, ['forest_bopuli_return'], { gate_hidden_path: false, gate_root: false }]);
+    assert.deepEqual([s.objects.length, s.locked, s.points, s.gates], [10, 0, ['forest_bopuli_return'], { gate_hidden_path: false }]); // 실뿌리 문은 숨은 길이 열린 뒤에만 지도에 나온다
     await goal(0);
     await g.capture('04a_goal_0_of_10');
 
@@ -139,7 +139,7 @@ test('숲 ②: 구조 뒤 실가루 10개를 각 한 번씩 수집 — 중복 �
       const id = dustId(num);
       await walkToTarget(g, id, 'keys', via);
       if (n === 0) {
-        assert.equal((await story(g)).promptText, '실가루 줍기');
+        assert.equal((await story(g)).promptText, '빛나는 실가루 줍기');
         await g.capture('03_dust_collectable_prompt');
       }
       const before = requests(g, COLLECT).length;

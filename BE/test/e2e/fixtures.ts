@@ -84,6 +84,8 @@ const FOREST_STAGE = {
   started: { checkpoint: 'CH01_STARTED', events: 4 },
   cut: { checkpoint: 'CH01_STARTED', events: 5 },
   rescued: { checkpoint: 'CH01_BOPUL_RESCUED', events: 8 },
+  compass: { checkpoint: 'CH01_COMPASS_ACQUIRED', events: 9 }, // 나침판 제작 뒤(숨은 길을 열기 전)
+  equipped: { checkpoint: 'CH01_FIRST_KNOT_EQUIPPED', events: 12 }, // 첫 매듭 장착까지(실뿌리 문이 열림)
 } as const;
 export function seedForest(device: string, stage: keyof typeof FOREST_STAGE, collected: string[] = []) {
   return (db: FakeDb) => {
@@ -93,6 +95,15 @@ export function seedForest(device: string, stage: keyof typeof FOREST_STAGE, col
     const s = FOREST_STAGE[stage];
     db.seed('player_story_progress', { player_id: player.id, checkpoint: s.checkpoint, story_nubi_turby_instance_id: nubi.id, origin: 'new' });
     for (const e of KNOT_READY_EVENTS.slice(0, s.events)) db.seed('player_story_event', { player_id: player.id, event_id: e });
+    const def = (code: string) => (db.rows('item_definition', { code })[0] as { id: number }).id;
+    const at = new Date();
+    if (stage === 'compass' || stage === 'equipped') db.seed('player_item', { player_id: player.id, item_definition_id: def('yarn_tremor_compass'), quantity: 1, is_new: false, is_locked: true, first_acquired_at: at, last_acquired_at: at });
+    if (stage === 'equipped') {
+      db.seed('player_story_event', { player_id: player.id, event_id: 'forest_first_knot_equipped' });
+      db.seed('player_item', { player_id: player.id, item_definition_id: def('first_knot'), quantity: 1, is_new: false, is_locked: true, first_acquired_at: at, last_acquired_at: at });
+      db.seed('turby_equipment', { turby_instance_id: nubi.id, slot_key: 'story_1', item_definition_id: def('first_knot') });
+      (db.rows('player_story_progress', { player_id: player.id })[0] as { nubi_growth_stage: number }).nubi_growth_stage = 1;
+    }
     for (const id of collected) db.seed('player_story_objective_progress', { player_id: player.id, objective_key: 'forest_glowing_dust', object_id: id });
     if (collected.length > 0) {
       const dust = (db.rows('item_definition', { code: 'glowing_yarn_dust' })[0] as { id: number }).id;

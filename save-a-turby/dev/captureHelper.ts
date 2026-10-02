@@ -12,6 +12,7 @@ import { reachableCells, targetState } from '../src/battle/battleView';
 import { liveInventoryWindows } from '../src/ui/InventoryWindow';
 import type { BattleSnapshot, BattleUnit } from '../src/net/battleTypes';
 
+import { roomClient } from '../src/net/roomClient';
 const game = () => (window as unknown as { __game: Phaser.Game }).__game;
 type Any = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -141,6 +142,7 @@ function state() {
       miniMap: map.miniMap?.debugState ?? null, joystickZone: map.hud.joystickZone,
       buttons: { home: center(map.hud.home), inventory: center(map.hud.inventory), turbys: center(map.hud.turbys) },
       inputPatch: g.registry.get('inputPatch') ?? null,
+      ...map.debugPosition, // 10-02 v4: 서버가 정한 위치에 배치됐는가, 서버 보정 횟수
       // 10-02 v3: 지역 스토리 화면(서버가 내려 준 것)과 지금 누를 수 있는 대상
       story: map.stageView ? {
         greybox: map.stageView.greybox, objects: map.stageView.objects.map((o: Any) => o.id), locked: map.stageView.objects.filter((o: Any) => o.state === 'locked').length,
@@ -202,5 +204,8 @@ function texts(): string[] {
   return out;
 }
 
-(window as unknown as { __dev?: unknown }).__dev = { cap, tap, find, state, texts, battleStep, keepAlive, active };
+// 변조한 클라이언트 흉내(시험 전용): 게임 화면을 거치지 않고 같은 소켓으로 임의 요청을 보낸다 — 서버가 무시·거절하는지 확인하는 데만 쓴다
+const rawRequest = (event: string, body?: unknown) => roomClient.request<unknown>(event, body).catch((e: { code?: string; message?: string }) => ({ ok: false, code: e.code ?? null, message: e.message ?? String(e) }));
+
+(window as unknown as { __dev?: unknown }).__dev = { cap, tap, find, state, texts, battleStep, keepAlive, active, rawRequest };
 export {};

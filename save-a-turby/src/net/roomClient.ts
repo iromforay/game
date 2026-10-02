@@ -184,7 +184,7 @@ class RoomClient {
       this.wilds.set(w.index, w.state);
       this.emitLocal('wildChanged', w);
     });
-    socket.on('map:correct', (pos: { x: number; y: number }) => this.emitLocal('correct', pos));
+    socket.on('map:correct', (pos: { x: number; y: number; reason?: string }) => this.emitLocal('correct', pos));
     socket.on('presence:replaced', () => {
       // 다른 탭이 같은 계정으로 접속해 이 탭은 밀려남 — 자동 재연결하지 않는다
       if (this.socket) this.socket.io.opts.reconnection = false;
@@ -247,8 +247,12 @@ class RoomClient {
   // M4-C: 마지막 맵 입장 때 서버가 알려 준 이야기(재생할 구간·전달 목표). 없으면 null
   storyOnEnter: { play: StoryPlay | null; delivery: StoryDelivery | null } | null = null;
 
-  async enterMap(x: number, y: number, dir: Facing): Promise<MapPlayer[]> {
-    const res = await this.request<{ players: MapPlayer[]; wilds: WildInfo[]; story?: { play: StoryPlay | null; delivery: StoryDelivery | null } | null }>('map:enter', { x, y, dir });
+  // 10-02 v4: 입장 위치는 서버가 정한다(좌표를 보내지 않는다). 응답의 self가 서버가 확정한 내 위치, corrected = 저장돼 있던 위치를 시작 지점으로 보정했는가
+  selfOnEnter: { x: number; y: number; corrected: boolean } | null = null;
+
+  async enterMap(dir: Facing): Promise<MapPlayer[]> {
+    const res = await this.request<{ self: { x: number; y: number }; corrected?: boolean; players: MapPlayer[]; wilds: WildInfo[]; story?: { play: StoryPlay | null; delivery: StoryDelivery | null } | null }>('map:enter', { dir });
+    this.selfOnEnter = res.self ? { x: res.self.x, y: res.self.y, corrected: res.corrected === true } : null;
     this.storyOnEnter = res.story ?? null;
     this.setWilds(res.wilds);
     this.others.clear();

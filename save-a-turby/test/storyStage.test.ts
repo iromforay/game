@@ -83,6 +83,11 @@ test('지도 범례: 이야기 지점·실가루는 지도에 있을 때만, 모
   assert.deepEqual(legendEntries(['dust'], false), ['player', 'dust']);
   assert.match(LEGEND_LABEL.dust, /마름모/);
   assert.match(LEGEND_LABEL.story, /겹동그라미/);
+  // 회색상자 지형(10-02 v4): 지도에 실제로 있는 것만 — 닫힌 문만 있으면 열린 문은 범례에 없다
+  assert.deepEqual(legendEntries(['story'], false, { path: true, wall: true, gateClosed: true, gateOpen: false }), ['player', 'story', 'path', 'wall', 'gateClosed']);
+  assert.deepEqual(legendEntries(['story'], false, { path: true, wall: true, gateClosed: true, gateOpen: true }), ['player', 'story', 'path', 'wall', 'gateClosed', 'gateOpen']);
+  assert.deepEqual(legendEntries(['home'], false), ['player', 'home'], '지형이 없는 지도(마을·최종 지도)는 그대로');
+  for (const k of ['path', 'wall', 'gateClosed', 'gateOpen'] as const) assert.ok(LEGEND_LABEL[k].length > 0);
 });
 
 // ---------- 한 구간을 나눠 재생(서버가 알려 준 fromEntry·untilEntry) ----------
