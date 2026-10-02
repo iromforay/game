@@ -163,7 +163,7 @@ function RunnerCanvas({ stage, onLeave, onComplete }: { stage: RunnerStage; onLe
   return (
     <div className="game-screen runner-game-screen">
       <button type="button" className="exit-button" onClick={onLeave}>← 스테이지 선택</button>
-      <div className="game-canvas-wrapper ad-game-canvas-wrapper runner-cropped-game-wrapper"><div ref={containerRef} className="game-canvas-container runner-cropped-game-canvas" /></div>
+      <div className="game-canvas-wrapper ad-game-canvas-wrapper"><div ref={containerRef} className="game-canvas-container" /></div>
     </div>
   );
 }

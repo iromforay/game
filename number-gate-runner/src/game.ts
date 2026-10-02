@@ -21,8 +21,8 @@ export function mountGame(parent: HTMLElement | string, options: RunnerGameOptio
   return new Phaser.Game({
     type: Phaser.AUTO,
     parent,
-    width: 1280,
-    height: 720,
+    width: 720,
+    height: 1280,
     backgroundColor: '#102236',
     scale: {
       mode: Phaser.Scale.FIT,

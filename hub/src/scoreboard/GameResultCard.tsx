@@ -40,6 +40,18 @@ export function GameResultCard({ onOpenRanking }: Props) {
     return () => window.removeEventListener(GAME_RESULT_EVENT, onResult);
   }, []);
 
+  useEffect(() => {
+    if (!detail || detail.game !== 'number_hero_tower' || detail.stats.cleared) return;
+
+    const dismissTimer = window.setTimeout(() => {
+      setDetail(null);
+      setResult(null);
+      setError('');
+    }, 3_000);
+
+    return () => window.clearTimeout(dismissTimer);
+  }, [detail]);
+
   if (!detail) return null;
   const isMarbles = detail.game === 'marbles';
   const roundId = detail.game === 'offense_tower' ? detail.stats.roundId : detail.game === 'number_hero_tower' ? detail.stats.stageId : undefined;
