@@ -203,7 +203,7 @@ test('위치 ②: 첫 매듭 장착 뒤 — 시작 지점에서 출발해 열린
   await g.close();
 });
 
-test('위치 ③: 640×360 — 전체 지도의 범례를 접었다 펼칠 수 있고, 조이스틱 이동도 서버가 승인하며, 벽 반대편의 실가루는 주울 수 없다', async () => {
+test('위치 ③: 640×360 — 전체 지도의 범례를 접었다 펼칠 수 있고, 조이스틱 이동도 서버가 승인하며, 먼지풀 건너편의 실가루는 주울 수 없다', async () => {
   const device = 'e2e-pos-small';
   await backend.start(seedForest(device, 'rescued'));
   const g = await Game.open(browser, `${vite.url}/?device=${device}`, device, SMALL);
@@ -222,16 +222,18 @@ test('위치 ③: 640×360 — 전체 지도의 범례를 접었다 펼칠 수 �
     await g.clickAt(t.x + t.w / 2, t.y + t.h / 2, 's.map.miniMap.legendOpen === false');
     await closeFullMap(g);
 
-    // 조이스틱으로 먼지풀 아래(실가루 04의 벽 반대편)까지: 거리는 가깝지만 안내 버튼도 서버 승인도 없다
+    // 조이스틱으로 먼지풀 아래(실가루 04의 건너편)까지: 안내 버튼이 없고, 직접 요청해도 서버가 거부한다.
+    // (이 배치에서는 먼지풀 두께 때문에 건너편이 거리 한도도 넘는다 — "가까운데 벽에 막힘"은 서버 단위 테스트가 따로 확인한다)
     await g.walkTo('Map', { x: 1760, y: 1000 }, 'joystick');
-    await g.walkTo('Map', { x: 1760, y: 874 }, 'joystick', 'false', 6);
+    await g.walkTo('Map', { x: 1760, y: 910 }, 'joystick');
     const at = await serverCatchesUp(g, device);
-    assert.ok(at.y > 854 && Math.hypot(at.x - 1760, at.y - 760) <= 56 + 48 + 20, `먼지풀 바로 아래: ${JSON.stringify(at)}`);
+    assert.ok(at.y > 854, `먼지풀 아래: ${JSON.stringify(at)}`);
     assert.equal((await mapOf(g)).corrections, 0, '조이스틱 이동은 모두 승인');
+    assert.equal((await mapOf(g)).story.prompt, null, '건너편의 실가루는 누를 대상이 아니다');
     const p = backend.playerByDevice(device)!;
     const token = (backend.db.rows('player', { id: p.id })[0] as { session_token: string }).session_token;
     const direct = await fetch(`http://127.0.0.1:${backend.port}/player/me/story/objectives/forest_glowing_dust/progress`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Turby-Session': token }, body: JSON.stringify({ objectId: 'forest_dust_04' }) });
-    assert.deepEqual([direct.status, ((await direct.json()) as { code: string }).code], [422, 'STORY_EVIDENCE_INVALID'], '벽 반대편에서는 닿지 않는다');
+    assert.deepEqual([direct.status, ((await direct.json()) as { code: string }).code], [422, 'STORY_EVIDENCE_INVALID'], '먼지풀 건너편에서는 주울 수 없다');
     assert.equal(backend.db.rows('player_story_objective_progress', { player_id: p.id }).length, 0);
   }, backend, device);
   await g.close();

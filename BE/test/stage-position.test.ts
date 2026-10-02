@@ -243,17 +243,18 @@ test('위치 증거: 거부된 이동의 좌표는 쓰지 않는다 — 수집�
   await s.enter();
   const collect = (id: string) => s.story.collectObject(1n, 'forest_glowing_dust', id);
   const d4 = pointOf('forest_dust_04'); // 먼지풀(위쪽) 바로 위에 있는 실가루
-  // 먼지풀 아래쪽: 거리는 허용 범위 안이지만 먼지풀이 가로막고 있다
-  assert.equal(s.walk({ x: d4.x, y: 866 }), 'ok');
-  assert.ok(Math.hypot(0, 866 - d4.y) <= d4.radius + 48 + 60, '가까운 거리');
-  assert.equal(await codeOf(collect('forest_dust_04')), 'STORY_EVIDENCE_INVALID', '벽 반대편');
+  // 먼지풀 아래쪽: 거리는 허용 범위(반경 56 + 여유 48 = 104) 안이지만 먼지풀이 가로막고 있다 → 거리가 아니라 "막힘"으로 거부
+  assert.equal(s.walk({ x: d4.x, y: 863 }), 'ok');
+  assert.ok(Math.hypot(0, 863 - d4.y) <= d4.radius + 48, '거리 한도 안');
+  const blockedMsg = await collect('forest_dust_04').then(() => 'NO_ERROR', (e: HttpException) => (e.getResponse() as { code: string; message: string }).message);
+  assert.equal(blockedMsg, '막혀 있어 닿지 않습니다.', '벽 반대편');
   // 실가루 자리로 순간 이동을 보고 → 거절. 직후의 수집 요청도 거부(승인된 위치는 그대로)
   const before = s.pos();
   assert.equal(s.jump({ x: d4.x, y: d4.y }).kind, 'corrected');
   assert.deepEqual(s.pos(), before);
   assert.equal(await codeOf(collect('forest_dust_04')), 'STORY_EVIDENCE_INVALID', '거부된 이동 직후');
   // 돌아서 가면 수집된다
-  assert.equal(s.walk({ x: 1920, y: 866 }), 'ok');
+  assert.equal(s.walk({ x: 1920, y: 880 }), 'ok');
   assert.equal(s.walk({ x: 1920, y: 780 }), 'ok');
   assert.equal(s.walk({ x: d4.x + 20, y: 780 }), 'ok');
   assert.equal((await collect('forest_dust_04')).collected, 1);
