@@ -3,6 +3,7 @@ import { NumberGateRunnerScreen } from './NumberGateRunnerScreen';
 import type { AdGameId } from './adGames';
 import { GameResultCard } from './scoreboard/GameResultCard';
 import type { RankingGame } from './scoreboard/scoreboardClient';
+import { MergeDefenseScreen } from './MergeDefenseScreen';
 
 interface AdGameScreenProps {
   gameId: AdGameId;
@@ -11,6 +12,10 @@ interface AdGameScreenProps {
 }
 
 export function AdGameScreen({ gameId, onExit, onOpenRanking }: AdGameScreenProps) {
+  if (gameId === 'merge-defense') {
+    return <MergeDefenseScreen onExit={onExit} />;
+  }
+
   if (gameId === 'number-hero-tower') {
     return (
       <div className="ad-game-react-screen">

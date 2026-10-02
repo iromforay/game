@@ -1,4 +1,4 @@
-export type AdGameId = 'number-gate-runner' | 'number-hero-tower';
+export type AdGameId = 'number-gate-runner' | 'number-hero-tower' | 'merge-defense';
 
 export interface AdGameMeta {
   id: AdGameId;
@@ -21,6 +21,13 @@ export const AD_GAMES: AdGameMeta[] = [
     number: 2,
     title: '숫자 용사 탑',
     description: '공격 숫자와 경로 폭을 판단하고 숨은 보상을 흡수해 드래곤에 도전하세요.',
+    status: 'available',
+  },
+  {
+    id: 'merge-defense',
+    number: 3,
+    title: '머지 디펜스',
+    description: '검사·궁사·마검사를 스폰하고 합쳐 태엽 군단을 막으세요.',
     status: 'available',
   },
 ];

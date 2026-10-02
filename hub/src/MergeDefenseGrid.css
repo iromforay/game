@@ -1,0 +1,51 @@
+.merge-grid-map {
+  position: relative;
+  width: min(620px, 92vw);
+  aspect-ratio: 1;
+  margin: auto;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  grid-template-rows: repeat(6, 1fr);
+  border: 5px solid #b98743;
+  border-radius: 20px;
+  overflow: hidden;
+  background: #6fa047;
+  box-shadow: 0 20px 60px #0008, inset 0 0 0 3px #ffeab066;
+}
+.merge-grid-map::before { content: ""; position: absolute; inset: 0; z-index: 0; background-image: linear-gradient(#2645221f, #2645221f), var(--battle-bg); background-position: center; background-size: cover; transform: rotate(90deg) scale(1.01); }
+.merge-grid-cell { position: relative; z-index: 1; min-width: 0; border: 1px solid #fff4; background: #74a94a33; padding: 0; overflow: hidden; color: white; }
+.merge-grid-cell.build { cursor: pointer; }
+.merge-grid-cell.path { background: #b784475c; border-color: #f9d7a080; }
+.merge-grid-cell.path::after { content: ""; position: absolute; inset: 42% 0; background: #6e4b2b44; }
+.merge-grid-cell.selected { z-index: 3; box-shadow: inset 0 0 0 4px #ffe15c; }
+.merge-grid-cell.move-target { animation: spawnCellPulse .8s infinite alternate; box-shadow: inset 0 0 0 3px #8ddcff; }
+.grid-hero { position: absolute; inset: 2px; display: flex; align-items: center; justify-content: center; z-index: 2; }
+.grid-hero img { width: 82%; height: 82%; object-fit: contain; filter: drop-shadow(0 4px 3px #0008); }
+.grid-hero b { position: absolute; right: 3px; top: 2px; padding: 2px 5px; border-radius: 8px; background: #15264ddd; color: #ffe471; font-size: 11px; }
+.grid-hero small { position: absolute; left: 2px; right: 2px; bottom: 2px; padding: 2px; border-radius: 6px; background: #071225d9; font-size: 9px; line-height: 1.2; }
+.path-label { position: absolute; z-index: 1; left: 4px; top: 4px; font-size: 9px; font-weight: 900; color: #4e2d15; }
+.grid-gate { position: absolute; inset: 0; z-index: 1; display: grid; place-items: center; font-size: 38px; }
+.grid-gate small { font-size: 9px; margin-top: -20px; }
+.merge-grid-map .merge-enemy { bottom: auto; width: 9%; transform: translate(-50%, -50%); z-index: 5; pointer-events: none; transition: left .1s linear, top .1s linear; }
+.merge-grid-map .merge-enemy img { width: 100%; height: auto; aspect-ratio: 1; object-fit: contain; }
+.merge-grid-map .merge-enemy em { display: none; position: absolute; inset: 5% -8% auto auto; color: #fff6a4; font-size: 25px; font-style: normal; text-shadow: 0 0 8px #fff, 0 0 13px #ffb300; }
+.merge-grid-map .merge-enemy.hit img { animation: enemyHit .2s ease-out; filter: brightness(2) saturate(.4) drop-shadow(0 0 8px #fff4a8); }
+.merge-grid-map .merge-enemy.hit em { display: block; animation: hitSpark .2s ease-out; }
+.merge-grid-map .merge-enemy.boss { width: 15%; }
+.merge-grid-map .merge-enemy > div { height: 8px; }
+.merge-stack button img { width: 38px; height: 38px; object-fit: contain; filter: drop-shadow(0 2px 2px #0008); }
+.merge-modal .new-hero-icon { height: 150px; margin: 8px auto -6px; }
+.merge-modal .new-hero-icon img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 8px 12px #0008); }
+.merge-stack button.active { outline: 3px solid #ffe15c; background: #ffffff2b; }
+.merge-battle-screen .merge-arena { max-width: 660px; }
+.merge-battle-screen .merge-spawn-stacks { max-width: 620px; grid-template-columns: 1fr; }
+.merge-battle-screen .merge-stack > div { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+@keyframes spawnCellPulse { from { filter: brightness(1); } to { filter: brightness(1.35); } }
+@keyframes enemyHit { 0% { transform: translateX(-7px) scale(1.08); } 45% { transform: translateX(6px) scale(.94); } 100% { transform: translateX(0) scale(1); } }
+@keyframes hitSpark { from { transform: scale(.35) rotate(-25deg); opacity: 1; } to { transform: scale(1.6) rotate(20deg); opacity: 0; } }
+@media (max-width: 700px) {
+  .merge-grid-map { width: min(96vw, 560px); border-width: 3px; border-radius: 12px; }
+  .grid-hero small { font-size: 7px; }
+  .grid-gate { font-size: 28px; }
+  .merge-grid-map .merge-enemy > div span { display: none; }
+}
