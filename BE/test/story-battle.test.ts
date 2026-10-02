@@ -37,7 +37,7 @@ function setup(opts: { checkpoint?: string; events?: string[]; nubi?: 'mine' | '
   const otherNubi = db.seed('turby_instance', { owner_player_id: OTHER, character_id: nubiChar.id, acquired_via: 'starter', is_story_companion: true, atk_bonus: 0, def_bonus: 0, ap_bonus: 0, hp_bonus: 0 });
   const nubiLink = opts.nubi === 'none' ? null : opts.nubi === 'other' ? otherNubi.id : myNubi.id;
   db.seed('player_story_progress', { player_id: P, checkpoint: opts.checkpoint ?? 'CH01_STARTED', story_nubi_turby_instance_id: nubiLink, nubi_growth_stage: 0 });
-  for (const e of opts.events ?? ['opening_fall_completed', 'opening_name_saved', 'story_nubi_granted', 'forest_first_path_started']) db.seed('player_story_event', { player_id: P, event_id: e });
+  for (const e of opts.events ?? ['opening_fall_completed', 'opening_name_saved', 'story_nubi_granted', 'forest_first_path_started', 'forest_cut_thread_inspected']) db.seed('player_story_event', { player_id: P, event_id: e });
 
   const settings = { numberOr: (_k: string, d: number) => d, flag: (_k: string, d: boolean) => d, number: (k: string) => NUMBERS[k] };
   const access = new StageAccessService(db.client(), settings as never);

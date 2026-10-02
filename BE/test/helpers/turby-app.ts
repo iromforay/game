@@ -34,7 +34,7 @@ export const TEST_SETTINGS: Record<string, unknown> = {
 // 기본 시드: 장 정의, 등급·캐릭터, M1 아이템 정의(2026-09-29_turby_story_m1_items.sql)와 일반 장비(2026-09-21_shop_equipment.sql) 값
 export function seedBase(db: FakeDb, settings: Record<string, unknown> = {}) {
   for (const [k, v] of Object.entries({ ...TEST_SETTINGS, ...settings })) db.seed('game_setting', { setting_key: k, value_json: JSON.stringify(v) });
-  db.seed('story_chapter', { chapter_order: 1, stage_code: 'forest', clear_character_code: 'nubi', title: '1장 — 숲', map_width: 2000, map_height: 2000 });
+  db.seed('story_chapter', { chapter_order: 1, stage_code: 'forest', clear_character_code: 'nubi', title: '1장 — 숲', map_width: 3200, map_height: 2400 });
   db.seed('story_chapter', { chapter_order: 2, stage_code: 'lake', clear_character_code: 'muldeuli', title: '2장 — 호수', map_width: 2000, map_height: 2000 });
   db.seed('turby_grade', { id: 1, name: '일반', base_attack: 30, base_defense: 6, base_action_power: 4, base_hp: 200 });
   db.seed('turby_grade', { id: 2, name: '약함', base_attack: 1, base_defense: 0, base_action_power: 1, base_hp: 1 });

@@ -124,20 +124,19 @@ test('통합 1: 오프닝 전 직접 요청 차단(방 생성·스토리 전투�
   c.close();
 });
 
-test('통합 2: 숲 진입 응답 story.play → 실제 대화 진행기 → 소켓 스토리 전투 → 결과 → 대화 복귀 → 보풀이 단서, 재진입은 거짓 진행 없음', async () => {
-  const c = new Client('dev-test-live-1');
-  await c.identify();
-  await c.connect();
-  assert.equal((await c.req('room:create', { stageCode: 'forest' })).ok, true);
-  assert.equal((await c.req('room:start')).ok, true);
-  const enter = await c.req<{ story: { play: { segmentId: string; endAfter: string } | null } }>('map:enter', { x: 500, y: 500, dir: 'down' });
-  assert.deepEqual(enter.story.play, { segmentId: 'ch01.first_path', endAfter: 'ch01.bopul_clue' });
+// ---------- 숲 안의 이야기 지점(10-02 v3): 실제 지역 데이터(story-data/stages/forest.json) 좌표로 이동해 발동 ----------
+type Play = { segmentId: string; endAfter: string; fromEntry?: string; untilEntry?: string };
+const FOREST = JSON.parse(readFileSync(join(__dirname, '../story-data/save-a-turby/stages/forest.json'), 'utf8')) as { points: { id: string; x: number; y: number }[] };
+const pointOf = (id: string) => FOREST.points.find((p) => p.id === id)!;
+// 서버가 아는 내 위치를 그 지점으로(탐험 세션 재진입 — 시험에서는 걷는 시간을 생략한다)
+const goTo = (c: Client, id: string) => c.req<{ story: { play: Play | null } }>('map:enter', { x: pointOf(id).x, y: pointOf(id).y, dir: 'down' });
 
-  const battles: string[] = [];
-  const shownAfterBattle: string[] = [];
-  await runDialogue(ch01, enter.story.play!.segmentId, {
+// 서버가 알려 준 범위를 실제 대화 진행기로 재생한다(전투는 소켓으로 끝까지 진행)
+async function runPlay(c: Client, play: Play, battles: string[]) {
+  const shown: string[] = [];
+  await runDialogue(ch01, play.segmentId, {
     show: async (line) => {
-      if (battles.length) shownAfterBattle.push(line.entry.dialogueId);
+      shown.push(line.entry.dialogueId);
       return 'next';
     },
     cue: () => undefined,
@@ -166,60 +165,191 @@ test('통합 2: 숲 진입 응답 story.play → 실제 대화 진행기 → 소
       assert.deepEqual(ended?.rewards, [], '스토리 전투는 포획·보상 없음');
       return snap.outcome === 'win' ? 'won' : 'lost';
     },
-  }, { endAfter: enter.story.play!.endAfter, exact: true });
+  }, { endAfter: play.endAfter, fromEntry: play.fromEntry, untilEntry: play.untilEntry, exact: true });
+  return shown;
+}
 
+type StageView = { greybox: boolean; objects: { id: string; state: string }[]; points: { id: string }[]; gates: { id: string; open: boolean }[]; objectives: { key: string; collected: number; required: number; active: boolean }[] };
+const viewOf = async (c: Client) => (await c.me<StageView>('/story/stages/forest')).body;
+const trig = (c: Client, id: string) => c.me<{ code?: string; play: Play | null; shortage: unknown }>(`/story/triggers/${id}`, {});
+
+test('통합 2: 숲 진입 → 걷는 장면 → 잘린 실 지점 → 공터 지점의 스토리 전투 → 보풀이 단서. 지점은 순서대로만 열리고, 구조 전 실가루는 잠겨 있다', async () => {
+  const c = new Client('dev-test-live-1');
+  await c.identify();
+  await c.connect();
+  assert.equal((await c.req('room:create', { stageCode: 'forest' })).ok, true);
+  assert.equal((await c.req('room:start')).ok, true);
+  const battles: string[] = [];
+  const FP = 'ch01.first_path';
+
+  // 1) 숲 입구: 걷는 장면만(전투는 공터 지점이 연다)
+  const enter = await c.req<{ story: { play: Play | null } }>('map:enter', { x: 1600, y: 1200, dir: 'down' });
+  assert.deepEqual(enter.story.play, { segmentId: FP, endAfter: FP, untilEntry: `${FP}.004` });
+  assert.deepEqual(await runPlay(c, enter.story.play!, battles), [1, 2, 3, 4].map((n) => `${FP}.00${n}`));
+
+  // 지도: 지금 열린 지점은 잘린 실 하나, 실가루 10개는 잠긴 채로 보인다
+  let view = await viewOf(c);
+  assert.equal(view.greybox, true);
+  assert.deepEqual(view.points.map((p) => p.id), ['forest_cut_thread']);
+  assert.deepEqual([view.objects.length, view.objects.every((o) => o.state === 'locked')], [10, true]);
+  // 구조 전 실가루 수집 거부(가까이 있어도), 닫힌 지점·좌표 밖 요청 거부
+  await goTo(c, 'forest_dust_01');
+  const early = await c.me<{ code: string }>('/story/objectives/forest_glowing_dust/progress', { objectId: 'forest_dust_01' });
+  assert.deepEqual([early.status, early.body.code], [409, 'OBJECTIVE_NOT_ACTIVE']);
+  await goTo(c, 'forest_bopuli_ambush');
+  assert.equal((await trig(c, 'forest_bopuli_ambush')).body.code, 'STORY_EVENT_NOT_ALLOWED', '잘린 실을 보기 전');
+  assert.equal((await c.req('battle:story:start', { encounterKey: 'forest_stitchling_ambush' })).code, 'STORY_ENCOUNTER_NOT_AVAILABLE', '전투 직접 시작도 선행 지점을 건너뛸 수 없다');
+  assert.equal((await trig(c, 'forest_cut_thread')).body.code, 'STORY_EVIDENCE_INVALID', '잘린 실에서 멀리');
+
+  // 2) 잘린 실오라기 조사
+  await goTo(c, 'forest_cut_thread');
+  const cut = await trig(c, 'forest_cut_thread');
+  assert.deepEqual(cut.body.play, { segmentId: FP, endAfter: FP, fromEntry: `${FP}.005`, untilEntry: `${FP}.009` });
+  await runPlay(c, cut.body.play!, battles);
+  assert.equal((await trig(c, 'forest_cut_thread')).body.play, null, '완료한 지점은 다시 발동하지 않는다');
+  assert.deepEqual((await viewOf(c)).points.map((p) => p.id), ['forest_bopuli_ambush']);
+
+  // 3)~4) 공터: 매복 전투 → 구조 → 단서. 지점 발동과 전투 시작을 동시에 보내도 전투는 하나
+  await goTo(c, 'forest_bopuli_ambush');
+  const [amb, raced] = await Promise.all([trig(c, 'forest_bopuli_ambush'), c.req<{ snapshot?: Snap }>('battle:story:start', { encounterKey: 'forest_stitchling_ambush' })]);
+  assert.deepEqual(amb.body.play, { segmentId: FP, endAfter: 'ch01.bopul_clue', fromEntry: `${FP}.010` });
+  assert.equal(raced.ok, true);
+  assert.equal(db.rows('player_story_event', { player_id: pid(c), event_id: 'forest_stitchling_battle_won' }).length, 0, '발동·전투 시작만으로는 승리가 기록되지 않는다');
+  const shown = await runPlay(c, amb.body.play!, battles); // 진행기의 battle:story:start는 같은 전투로 이어진다
   assert.deepEqual(battles, ['forest_stitchling_ambush:win']);
-  assert.ok(shownAfterBattle.length > 0, '전투 뒤 대화가 이어짐');
-  const st = await c.me<{ checkpoint: string; delivery: { have: number; need: number } }>('/story');
+  assert.ok(shown.includes('ch01.bopul_clue.013'), '전투 뒤 보풀이 단서 대화까지 이어짐');
+
+  const st = await c.me<{ checkpoint: string; delivery: { have: number; need: number; triggerId: string } }>('/story');
   assert.equal(st.body.checkpoint, 'CH01_BOPUL_RESCUED');
-  assert.deepEqual([st.body.delivery.have, st.body.delivery.need], [0, 10]);
-  // 이긴 전투 재요청은 DONE, 숲 재진입은 재생 구간 없음(거짓 진행 없음)
+  assert.deepEqual([st.body.delivery.have, st.body.delivery.need, st.body.delivery.triggerId], [0, 10, 'forest_bopuli_return']);
+  // 이긴 전투 재요청은 DONE, 끝난 지점 재요청·숲 재진입은 재생 없음(거짓 진행 없음)
   assert.equal((await c.req('battle:story:start', { encounterKey: 'forest_stitchling_ambush' })).code, 'STORY_ENCOUNTER_DONE');
-  const again = await c.req<{ story: { play: unknown } }>('map:enter', { x: 500, y: 500, dir: 'down' });
+  assert.equal((await trig(c, 'forest_bopuli_ambush')).body.play, null);
+  const again = await c.req<{ story: { play: unknown } }>('map:enter', { x: 1600, y: 1200, dir: 'down' });
   assert.equal(again.story.play, null);
+  view = await viewOf(c);
+  assert.deepEqual(view.points.map((p) => p.id), ['forest_bopuli_return']);
+  assert.ok(view.objects.every((o) => o.state === 'available') && view.objects.length === 10, '구조 뒤 실가루 10개 수집 가능');
   c.close();
 });
 
-test('통합 3: 인벤토리 실제 API(스토리 탭·잠금·개별 신규 해제), 보풀이 전달 트리거(동시 2건 → 1회 소비), 첫 매듭 장착 API와 재접속 유지', async () => {
+test('통합 3: 실가루 10개 수집(동시 10건·재접속·다른 지역·먼 거리) → 인벤토리 → 보풀이 전달(동시 2건) → 숨은 길 → 거대 매듭 전투 → 첫 매듭 각성·장착, 재접속 유지', async () => {
   const c = new Client('dev-test-live-1');
   await c.identify();
   await c.connect();
   await c.req('room:create', { stageCode: 'forest' });
   await c.req('room:start');
-  await c.req('map:enter', { x: 500, y: 500, dir: 'down' });
-  // 픽스처: 실가루 10개(테스트 격리 DB)
-  const dust = db.rows('item_definition', { code: 'glowing_yarn_dust' })[0];
-  db.seed('player_item', { player_id: pid(c), item_definition_id: dust.id, quantity: 10, is_new: true, is_locked: true, last_acquired_at: new Date() });
-  const inv = await c.me<{ items: { itemCode: string; tabLabel: string; isLocked: boolean; isNew: boolean; quantity: number }[] }>('/inventory');
-  assert.deepEqual(inv.body.items.map((i) => [i.itemCode, i.tabLabel, i.isLocked, i.isNew, i.quantity]), [['glowing_yarn_dust', '스토리', true, true, 10]]);
-  assert.equal((await c.me<{ cleared: boolean }>('/inventory/items/glowing_yarn_dust/seen', {})).body.cleared, true);
-  assert.equal((await c.me<{ items: { isNew: boolean }[] }>('/inventory')).body.items[0].isNew, false);
+  await goTo(c, 'forest_dust_01');
+  const collect = (id: unknown) => c.me<{ code?: string; alreadyCollected: boolean; collected: number; required: number; grants: unknown[]; stage: StageView }>('/story/objectives/forest_glowing_dust/progress', { objectId: id });
+  const dustQty = () => {
+    const def = db.rows('item_definition', { code: 'glowing_yarn_dust' })[0];
+    return (db.rows('player_item', { player_id: pid(c), item_definition_id: def.id })[0]?.quantity as number | undefined) ?? 0;
+  };
 
-  const [a, b] = await Promise.all([c.me<{ play: { segmentId: string } | null }>('/story/triggers/npc_bopuli', {}), c.me<{ play: unknown }>('/story/triggers/npc_bopuli', {})]);
-  assert.deepEqual([a.body.play, b.body.play].filter(Boolean).length, 1, '제작 장면은 한 번');
-  const after = await c.me<{ items: { itemCode: string; quantity: number }[] }>('/inventory');
-  assert.deepEqual(after.body.items.map((i) => [i.itemCode, i.quantity]), [['yarn_tremor_compass', 1]], '실가루 10개 1회 소비, 나침판 1개');
+  // 같은 실가루 동시 10건: 한 번만 효과
+  const ten = await Promise.all(Array.from({ length: 10 }, () => collect('forest_dust_01')));
+  assert.deepEqual([ten.filter((r) => r.status === 200).length, ten.filter((r) => !r.body.alreadyCollected).length], [10, 1]);
+  assert.deepEqual([dustQty(), ten[0].body.collected, ten[0].body.stage.objects.length], [1, 1, 9]);
+  // 임의 ID·수량, 먼 거리 거부
+  assert.equal((await collect('forest_dust_99')).body.code, 'OBJECT_UNKNOWN');
+  assert.equal((await c.me<{ code: string }>('/story/objectives/forest_glowing_dust/progress', { objectId: 'forest_dust_02', quantity: 10 })).body.code, 'STORY_EVIDENCE_INVALID', '02는 멀리 있다(수량 필드는 무시된다)');
+  assert.equal(dustQty(), 1);
 
-  // 픽스처: 첫 매듭 각성 상태(좌표가 필요한 숨은 길·보스전은 실제 진행으로 위조하지 않음)
-  for (const e of ['forest_giant_knot_defeated', 'forest_first_knot_awakened']) db.seed('player_story_event', { player_id: pid(c), event_id: e });
-  const knot = db.rows('item_definition', { code: 'first_knot' })[0];
-  db.seed('player_item', { player_id: pid(c), item_definition_id: knot.id, quantity: 1, is_new: true, is_locked: true, last_acquired_at: new Date() });
-  const before = (await c.me<{ items: { itemCode: string; storyAction: { available: boolean } | null }[] }>('/inventory')).body.items.find((i) => i.itemCode === 'first_knot')!;
-  assert.equal(before.storyAction?.available, true);
-  const eq = await c.me<{ alreadyCompleted: boolean; play: { segmentId: string } | null }>('/story/relics/first_knot/equip', {});
-  assert.deepEqual([eq.body.alreadyCompleted, eq.body.play?.segmentId], [false, 'ch01.first_knot_equipped']);
+  // 수집 직후 연결 끊김 → 재접속: 주운 것은 사라진 채로, 목표는 1/10
   c.close();
-
-  // 재접속(새 세션·새 소켓): 장착 유지, 재요청은 현재 상태만
   const c2 = new Client('dev-test-live-1');
   await c2.identify();
   await c2.connect();
-  const st = await c2.me<{ checkpoint: string; storyNubi: { slots: { slotKey: string; itemCode: string }[] } }>('/story');
+  const restored = await viewOf(c2);
+  assert.deepEqual([restored.objects.length, restored.objects.some((o) => o.id === 'forest_dust_01'), restored.objectives[0].collected], [9, false, 1]);
+  assert.equal((await c2.me<{ delivery: { have: number } }>('/story')).body.delivery.have, 1);
+  c2.close();
+
+  // 다시 접속해 서로 다른 실가루를 동시에(각자 위치가 달라 한 번에 하나만 범위 안) — 범위 안의 것만 수집된다
+  await c.identify();
+  await c.connect();
+  await goTo(c, 'forest_dust_02');
+  const mixed = await Promise.all(['forest_dust_02', 'forest_dust_03', 'forest_dust_04'].map((id) => collect(id)));
+  assert.deepEqual(mixed.map((r) => r.status), [200, 422, 422]);
+  for (let i = 3; i <= 5; i++) {
+    const id = `forest_dust_0${i}`;
+    await goTo(c, id);
+    const got = await collect(id); assert.equal(got.body.collected, i, JSON.stringify([id, got.status, got.body.code]));
+  }
+  // 5/10 상태에서 다른 지역으로: 호수는 잠겨 있고, 숲 밖에서는 수집할 수 없다
+  await c.req('room:leave');
+  assert.equal((await collect('forest_dust_06')).body.code, 'STORY_EVIDENCE_INVALID', '탐험 세션 밖');
+  assert.equal((await viewOf(c)).objectives[0].collected, 5, '숲을 나갔다 와도 5/10');
+  await c.req('room:create', { stageCode: 'forest' });
+  await c.req('room:start');
+  for (let i = 6; i <= 10; i++) {
+    const id = `forest_dust_${String(i).padStart(2, '0')}`;
+    await goTo(c, id);
+    // 9/10에서 재접속해도 이어서 모을 수 있다
+    if (i === 10) assert.deepEqual([(await viewOf(c)).objects.map((o) => o.id), dustQty()], [['forest_dust_10'], 9]);
+    const got = await collect(id); assert.equal(got.body.collected, i, JSON.stringify([id, got.status, got.body.code]));
+  }
+  const full = await viewOf(c);
+  assert.deepEqual([full.objects.length, full.objectives[0], dustQty()], [0, { key: 'forest_glowing_dust', collected: 10, required: 10, active: true }, 10]);
+  // 10개 뒤 재요청: 늘지 않는다
+  assert.equal((await collect('forest_dust_10')).body.alreadyCollected, true);
+  assert.equal(dustQty(), 10);
+
+  const inv = await c.me<{ items: { itemCode: string; tabLabel: string; isLocked: boolean; isNew: boolean; quantity: number }[] }>('/inventory');
+  assert.deepEqual(inv.body.items.map((i) => [i.itemCode, i.tabLabel, i.isNew, i.quantity]), [['glowing_yarn_dust', '스토리', true, 10]]);
+  assert.equal((await c.me<{ cleared: boolean }>('/inventory/items/glowing_yarn_dust/seen', {})).body.cleared, true);
+  assert.equal((await c.me<{ items: { isNew: boolean }[] }>('/inventory')).body.items[0].isNew, false);
+
+  // 보풀이에게 전달: 멀리서는 거부, 곁에서 동시 2건 → 제작 한 번
+  assert.equal((await trig(c, 'forest_bopuli_return')).body.code, 'STORY_EVIDENCE_INVALID');
+  await goTo(c, 'forest_bopuli_return');
+  const [a, b] = await Promise.all([trig(c, 'forest_bopuli_return'), trig(c, 'forest_bopuli_return')]);
+  assert.deepEqual([a.body.play, b.body.play].filter(Boolean).length, 1, '제작 장면은 한 번');
+  const after = await c.me<{ items: { itemCode: string; quantity: number }[] }>('/inventory');
+  assert.deepEqual(after.body.items.map((i) => [i.itemCode, i.quantity]), [['yarn_tremor_compass', 1]], '실가루 10개 1회 소비, 나침판 1개');
+  // 나침판 제작 후: 수집 요청은 효과 없음, 지도에 실가루 없음
+  await goTo(c, 'forest_dust_01');
+  assert.equal((await collect('forest_dust_01')).body.alreadyCollected, true);
+  assert.equal(dustQty(), 0);
+  let view = await viewOf(c);
+  assert.deepEqual([view.objects.length, view.points.map((p) => p.id), view.gates.find((g) => g.id === 'gate_hidden_path')!.open], [0, ['forest_hidden_path'], false]);
+
+  // 숨은 길 → 거대 매듭 전투 → 첫 매듭 각성
+  const battles: string[] = [];
+  await goTo(c, 'forest_giant_knot');
+  assert.equal((await trig(c, 'forest_giant_knot')).body.code, 'STORY_EVENT_NOT_ALLOWED', '숨은 길을 열기 전');
+  await goTo(c, 'forest_hidden_path');
+  const hp = await trig(c, 'forest_hidden_path');
+  assert.deepEqual(hp.body.play, { segmentId: 'ch01.hidden_path', endAfter: 'ch01.hidden_path', untilEntry: 'ch01.hidden_path.002' });
+  await runPlay(c, hp.body.play!, battles);
+  view = await viewOf(c);
+  assert.deepEqual([view.points.map((p) => p.id), view.gates.find((g) => g.id === 'gate_hidden_path')!.open], [['forest_giant_knot'], true]);
+  await goTo(c, 'forest_giant_knot');
+  const gk = await trig(c, 'forest_giant_knot');
+  assert.deepEqual(gk.body.play, { segmentId: 'ch01.hidden_path', endAfter: 'ch01.first_knot_awaken', fromEntry: 'ch01.hidden_path.003' });
+  await runPlay(c, gk.body.play!, battles);
+  assert.deepEqual(battles, ['forest_giant_knot:win']);
+  assert.equal((await trig(c, 'forest_giant_knot')).body.play, null, '끝난 전투 지점');
+
+  const before = (await c.me<{ items: { itemCode: string; storyAction: { available: boolean } | null }[] }>('/inventory')).body.items.find((i) => i.itemCode === 'first_knot')!;
+  assert.equal(before.storyAction?.available, true);
+  assert.equal((await viewOf(c)).gates.find((g) => g.id === 'gate_root')!.open, false, '장착 전에는 실뿌리 문이 닫혀 있다');
+  const eq = await c.me<{ alreadyCompleted: boolean; play: { segmentId: string } | null }>('/story/relics/first_knot/equip', {});
+  assert.deepEqual([eq.body.alreadyCompleted, eq.body.play?.segmentId], [false, 'ch01.first_knot_equipped']);
+  view = await viewOf(c);
+  assert.deepEqual([view.points.map((p) => p.id), view.gates.find((g) => g.id === 'gate_root')!.open], [['forest_dansuring'], true]);
+  c.close();
+
+  // 재접속(새 세션·새 소켓): 장착 유지, 재요청은 현재 상태만
+  const c3 = new Client('dev-test-live-1');
+  await c3.identify();
+  await c3.connect();
+  const st = await c3.me<{ checkpoint: string; storyNubi: { slots: { slotKey: string; itemCode: string }[] } }>('/story');
   assert.equal(st.body.checkpoint, 'CH01_FIRST_KNOT_EQUIPPED');
   assert.deepEqual(st.body.storyNubi.slots.map((s) => [s.slotKey, s.itemCode]), [['story_1', 'first_knot']]);
-  const again = await c2.me<{ alreadyCompleted: boolean; play: unknown }>('/story/relics/first_knot/equip', {});
+  const again = await c3.me<{ alreadyCompleted: boolean; play: unknown }>('/story/relics/first_knot/equip', {});
   assert.deepEqual([again.body.alreadyCompleted, again.body.play], [true, null]);
-  c2.close();
+  c3.close();
 });
 
 test('통합 4(회귀): 일반 야생 전투 — 누비 강제 참가·스토리 표식 없음, 포획 보상 지급 / 일반 장비 슬롯 장착', async () => {

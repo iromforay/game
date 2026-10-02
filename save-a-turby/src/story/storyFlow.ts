@@ -2,9 +2,12 @@
 // 무엇을 재생할지는 서버가 정한다(map:enter / 트리거 응답의 play). 여기서는 그 결과를 화면 흐름으로 옮기는 규칙만 둔다.
 import type { DialogueFile, StoryBattleResult } from './dialogueRunner';
 
+// fromEntry·untilEntry: 서버가 한 구간을 나눠 재생하라고 알려 준 범위(숲 안의 이야기 지점)
 export interface StoryPlay {
   segmentId: string;
   endAfter: string;
+  fromEntry?: string;
+  untilEntry?: string;
 }
 
 export interface StoryDelivery {

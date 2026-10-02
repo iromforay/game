@@ -140,9 +140,12 @@ async function withRetry(ports: RunnerPorts, run: () => Promise<void>, message: 
 // fromEntry: 복원용 — 시작 구간 안에서 이 항목(dialogueId)부터 재생(스토리 전투 도중 새로고침 → 전투 항목부터). 서버 진행과 무관한 화면 위치일 뿐이다.
 // exact: 서버가 실시간 흐름으로 알려 준 구간(트리거 직후 제작 장면 등)은 replayOnResume=false여도 그 구간부터 재생한다.
 //        기본(false)은 재접속 시작점 규칙 — 실시간 전용 구간이면 다음 구간부터.
+// untilEntry: 마지막 구간을 이 항목(dialogueId)까지만 재생한다(숲 안의 지점이 한 구간을 나눠 재생). 구간을 끝까지 보지 않았으므로
+//             "본 구간" 기록과 구간 완료 이벤트(completesWith)는 하지 않는다 — 그것은 구간의 마지막 부분을 재생할 때 한다.
 export interface RunOptions {
   endAfter?: string | null;
   fromEntry?: string | null;
+  untilEntry?: string | null;
   exact?: boolean;
 }
 
@@ -162,6 +165,13 @@ export async function runDialogue(file: DialogueFile, startSegmentId: string, po
       const at = entries.findIndex((e) => e.dialogueId === opts.fromEntry);
       if (at < 0) throw new Error(`알 수 없는 시작 항목: ${opts.fromEntry}`);
       entries = entries.slice(at);
+    }
+    let partial = false;
+    if (s === last && opts.untilEntry) {
+      const end = entries.findIndex((e) => e.dialogueId === opts.untilEntry);
+      if (end < 0) throw new Error(`알 수 없는 끝 항목: ${opts.untilEntry}`);
+      partial = end < entries.length - 1;
+      entries = entries.slice(0, end + 1);
     }
 
     for (const entry of entries) {
@@ -207,6 +217,7 @@ export async function runDialogue(file: DialogueFile, startSegmentId: string, po
       if (advance === 'skip' && canSkip) skipping = true;
     }
 
+    if (partial) continue; // 구간 중간에서 끝남 — 본 구간 기록·완료 이벤트 없음
     // 대사를 끝까지 봤으면 "본 구간"으로 기록(완료 요청 전에 끊겨 다시 재생될 때 건너뛰기 허용)
     ports.markSeen(seg.segmentId);
     if (seg.completesWith) {

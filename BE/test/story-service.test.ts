@@ -40,18 +40,7 @@ function setup(opts: { nickname?: string; starters?: number; flags?: Record<stri
   const flags = opts.flags ?? {};
   const settings = { numberOr: (_k: string, d: number) => d, flag: (k: string, d: boolean) => flags[k] ?? d };
   const content = {
-    stage: (code: string) =>
-      code === 'forest'
-        ? {
-            stageCode: 'forest',
-            regions: [{ id: 'forest_first_path_start', x: 100, y: 100, width: 50, height: 50 }],
-            points: [
-              ...Array.from({ length: 10 }, (_, i) => ({ id: `dust_${String(i + 1).padStart(2, '0')}`, x: 1000 + i * 100, y: 500, radius: 20 })),
-              { id: 'npc_bopuli', x: 300, y: 300, radius: 40 },
-              { id: 'dansuring', x: 2000, y: 2000, radius: 40 },
-            ],
-          }
-        : null,
+    stage: (code: string) => (code === 'forest' ? FOREST : null),
     dialogue: () => null,
     bannedNameWords: () => [],
   };
@@ -60,6 +49,30 @@ function setup(opts: { nickname?: string; starters?: number; flags?: Record<stri
   const session = new SessionService(db.client(), settings as never);
   return { db, service, session, stageAccess, moveTo: (p: Pos) => (pos = p) };
 }
+
+// 시험용 숲 데이터(좌표는 임의 — 실제 회색상자 좌표는 story-data/stages/forest.json, test/story-forest.test.ts가 검증)
+const DUST = Array.from({ length: 10 }, (_, i) => `forest_dust_${String(i + 1).padStart(2, '0')}`);
+const POINT_AT: Record<string, { x: number; y: number }> = {
+  ...Object.fromEntries(DUST.map((id, i) => [id, { x: 1000 + i * 100, y: 500 }])),
+  forest_cut_thread: { x: 200, y: 200 },
+  forest_bopuli_ambush: { x: 300, y: 300 },
+  forest_bopuli_return: { x: 300, y: 300 },
+  forest_hidden_path: { x: 1500, y: 1500 },
+  forest_giant_knot: { x: 1700, y: 1500 },
+  forest_first_knot_awaken: { x: 1700, y: 1500 },
+  forest_dansuring: { x: 2000, y: 2000 },
+};
+const FOREST = {
+  stageCode: 'forest',
+  greybox: true,
+  size: { width: 3200, height: 2400 },
+  regions: [],
+  points: Object.entries(POINT_AT).map(([id, p]) => ({ id, ...p, radius: 20 })),
+  objects: DUST.map((id) => ({ id, objectiveKey: 'forest_glowing_dust', group: 'test', assetKey: 'placeholder-dust', label: '실가루', prompt: '줍기' })),
+  storyPoints: Object.keys(POINT_AT).filter((id) => !id.startsWith('forest_dust_')).map((id) => ({ id, kind: 'inspect', assetKey: 'placeholder-point', label: id, prompt: '살펴보기' })),
+  layout: { zones: [], paths: [], blockers: [], gates: [{ id: 'gate_hidden_path', label: '', x: 0, y: 0, width: 10, height: 10, openEvent: 'forest_hidden_path_opened' }] },
+};
+const at = (id: string) => ({ stageCode: 'forest', ...POINT_AT[id] });
 
 async function codeOf(p: Promise<unknown>): Promise<string> {
   try {
@@ -180,46 +193,113 @@ test('이름 저장 전 이벤트 직접 요청: 기본 닉네임이면 거부, 
   assert.equal((await legacy.service.completeEvent(P1, 'opening_name_saved')).story.checkpoint, 'OPENING_NAME_SAVED');
 });
 
-test('M4-C 숲 첫 진입: 탐험 세션 밖·다른 지역 거부, 숲 입장 시 1회 기록하고 첫 길~보풀이 단서까지 재생, 재진입·동시 요청은 중복 없음', async () => {
+test('숲 첫 진입: 탐험 세션 밖·다른 지역 거부, 숲 입장 시 1회 기록하고 첫 길의 걷는 장면만 재생, 재진입·동시 요청은 중복 없음', async () => {
   const s = setup();
+  const INTRO = { segmentId: 'ch01.first_path', endAfter: 'ch01.first_path', untilEntry: 'ch01.first_path.004' };
   assert.equal(await codeOf(s.service.trigger(P1, 'forest_entry')), 'OPENING_REQUIRED', '오프닝 전');
   await finishOpening(s);
   assert.equal(await codeOf(s.service.trigger(P1, 'forest_entry')), 'STORY_EVIDENCE_INVALID', '탐험 세션 밖');
   s.moveTo({ stageCode: 'lake', x: 120, y: 120 });
   assert.equal(await codeOf(s.service.trigger(P1, 'forest_entry')), 'STORY_EVIDENCE_INVALID', '다른 지역');
   assert.equal(await s.service.onStageEntered(P1, 'lake'), null, '진입 트리거가 없는 지역');
-  s.moveTo({ stageCode: 'forest', x: 400, y: 400 }); // 좌표 무관(좌표 확정 전 임시 증거)
+  s.moveTo({ stageCode: 'forest', x: 400, y: 400 }); // 숲 어디로 들어와도(입구 지점은 탐험 세션 진입 자체)
   const results = await Promise.all([1, 2, 3].map(() => s.service.onStageEntered(P1, 'forest')));
-  for (const r of results) assert.deepEqual(r!.play, { segmentId: 'ch01.first_path', endAfter: 'ch01.bopul_clue' });
+  for (const r of results) assert.deepEqual(r!.play, INTRO, '전투·보풀이 장면은 숲 안의 지점이 연다');
   assert.equal(results[0]!.story.checkpoint, 'CH01_STARTED');
   assert.equal(eventsOf(s.db).filter((e) => e === 'forest_first_path_started').length, 1, '동시 진입에도 시작 이벤트 1회');
-  // 새로고침·재진입: 같은 장면을 처음부터 다시(재접속 복귀 구간) — 시작 이벤트는 다시 기록하지 않는다
-  const again = await s.service.onStageEntered(P1, 'forest');
-  assert.deepEqual(again!.play, { segmentId: 'ch01.first_path', endAfter: 'ch01.bopul_clue' });
+  // 새로고침·재진입: 잘린 실을 살펴보기 전까지는 걷는 장면을 다시 — 시작 이벤트는 다시 기록하지 않는다
+  assert.deepEqual((await s.service.onStageEntered(P1, 'forest'))!.play, INTRO);
+  // 잘린 실을 살펴본 뒤 재진입: 자동 재생 없음(공터 지점이 이어 간다)
+  forceState(s.db, 'CH01_STARTED', ['forest_cut_thread_inspected']);
+  assert.equal((await s.service.onStageEntered(P1, 'forest'))!.play, null);
   // 보풀이 구조 뒤 재진입은 단서 대화부터, 단서까지 끝났으면 자동 재생 없음(목표만)
   forceState(s.db, 'CH01_STARTED', ['forest_stitchling_battle_won', 'forest_bopul_rescued']);
   assert.deepEqual((await s.service.onStageEntered(P1, 'forest'))!.play, { segmentId: 'ch01.bopul_clue', endAfter: 'ch01.bopul_clue' });
   await s.service.completeEvent(P1, 'forest_dansuring_clue_learned');
   const quiet = await s.service.onStageEntered(P1, 'forest');
   assert.equal(quiet!.play, null, '이미 본 장면을 거짓으로 다시 시작하지 않음');
-  assert.deepEqual(quiet!.story.delivery, { triggerId: 'npc_bopuli', itemCode: 'glowing_yarn_dust', have: 0, need: 10 }, '실가루 목표 0/10(인벤토리 기준)');
+  assert.deepEqual(quiet!.story.delivery, { triggerId: 'forest_bopuli_return', itemCode: 'glowing_yarn_dust', have: 0, need: 10 }, '실가루 목표 0/10(인벤토리 기준)');
   assert.equal(await codeOf(s.service.trigger(P1, 'no_such_trigger')), 'STORY_TRIGGER_UNKNOWN');
 });
 
-test('M4-C 좌표가 필요한 후반 트리거(숨은 길·단수링)는 지역 데이터 없이 진행되지 않고, 데이터가 있으면 서버 조건대로 구간을 연다', async () => {
+test('숲 안의 이야기 지점: 선행 조건 전에는 거부, 좌표 밖 거부, 일회성 지점은 한 번만 기록·재생, 전투 지점은 끝나기 전까지 다시 열린다', async () => {
   const s = setup();
-  forceState(s.db, 'CH01_COMPASS_ACQUIRED', ['opening_name_saved', 'story_nubi_granted', 'forest_first_path_started', 'forest_bopul_rescued', 'forest_dansuring_clue_learned', 'forest_compass_granted']);
-  s.moveTo({ stageCode: 'forest', x: 2000, y: 2000 });
-  assert.equal(await codeOf(s.service.trigger(P1, 'forest_hidden_path')), 'STORY_DATA_MISSING', '숨은 길 지점 좌표가 아직 없음 → 거짓 진행 없음');
+  await finishOpening(s);
+  const play = async (id: string) => (await s.service.trigger(P1, id)).play;
+  const FP = 'ch01.first_path';
+
+  // 숲에 들어오기 전(장 시작 전): 잘린 실 지점은 닫혀 있다
+  s.moveTo(at('forest_cut_thread'));
+  assert.equal(await codeOf(s.service.trigger(P1, 'forest_cut_thread')), 'STORY_EVENT_NOT_ALLOWED');
+  await s.service.onStageEntered(P1, 'forest');
+
+  // 잘린 실오라기: 멀리서는 거부, 가까이서 한 번만 기록(동시 3건 → 재생 1번)
+  s.moveTo({ stageCode: 'forest', x: 900, y: 900 });
+  assert.equal(await codeOf(s.service.trigger(P1, 'forest_cut_thread')), 'STORY_EVIDENCE_INVALID');
+  s.moveTo(at('forest_bopuli_ambush'));
+  assert.equal(await codeOf(s.service.trigger(P1, 'forest_bopuli_ambush')), 'STORY_EVENT_NOT_ALLOWED', '잘린 실을 보기 전에는 공터 지점이 열리지 않는다');
+  s.moveTo(at('forest_cut_thread'));
+  const three = await Promise.all([1, 2, 3].map(() => s.service.trigger(P1, 'forest_cut_thread')));
+  assert.deepEqual(three.filter((r) => r.play).map((r) => r.play), [{ segmentId: FP, endAfter: FP, fromEntry: `${FP}.005`, untilEntry: `${FP}.009` }]);
+  assert.equal(eventsOf(s.db).filter((e) => e === 'forest_cut_thread_inspected').length, 1);
+  assert.equal(progressOf(s.db).checkpoint, 'CH01_STARTED', '지점 진입은 체크포인트를 바꾸지 않는다');
+  assert.equal(await play('forest_cut_thread'), null, '완료한 일회성 지점은 다시 발동하지 않는다');
+
+  // 공터(매복): 이벤트를 기록하지 않고 전투가 든 범위를 연다. 지거나 끊기면 같은 지점에서 다시
+  s.moveTo(at('forest_bopuli_ambush'));
+  const ambush = { segmentId: FP, endAfter: 'ch01.bopul_clue', fromEntry: `${FP}.010` };
+  assert.deepEqual(await play('forest_bopuli_ambush'), ambush);
+  assert.deepEqual(await play('forest_bopuli_ambush'), ambush, '전투에서 이기기 전까지 다시 열린다');
+  assert.ok(!eventsOf(s.db).includes('forest_stitchling_battle_won'), '지점 발동만으로는 승리가 기록되지 않는다');
+  assert.equal(await codeOf(s.service.trigger(P1, 'forest_bopuli_return')), 'STORY_EVENT_NOT_ALLOWED', '구조 전에는 전달 지점이 없다');
+  await s.service.completeEvent(P1, 'forest_stitchling_battle_won', 'server'); // 전투 확정 경로
+  assert.deepEqual(await play('forest_bopuli_ambush'), { segmentId: 'ch01.bopul_clue', endAfter: 'ch01.bopul_clue' }, '이긴 뒤에는 단서 대화부터');
+  await s.service.completeEvent(P1, 'forest_dansuring_clue_learned');
+  assert.equal(await play('forest_bopuli_ambush'), null, '끝난 지점');
+
+  // 숨은 길: 나침판 전에는 거부. 나침판 뒤 한 번 열리고, 그 뒤에야 거대 매듭 지점이 열린다
+  s.moveTo(at('forest_hidden_path'));
+  assert.equal(await codeOf(s.service.trigger(P1, 'forest_hidden_path')), 'STORY_EVENT_NOT_ALLOWED');
+  forceState(s.db, 'CH01_COMPASS_ACQUIRED', ['forest_compass_granted']);
+  s.moveTo(at('forest_giant_knot'));
+  assert.equal(await codeOf(s.service.trigger(P1, 'forest_giant_knot')), 'STORY_EVENT_NOT_ALLOWED', '숨은 길을 열기 전');
+  s.moveTo(at('forest_hidden_path'));
+  const HP = 'ch01.hidden_path';
+  assert.deepEqual(await play('forest_hidden_path'), { segmentId: HP, endAfter: HP, untilEntry: `${HP}.002` });
+  assert.equal(await play('forest_hidden_path'), null);
+  s.moveTo(at('forest_giant_knot'));
+  assert.deepEqual(await play('forest_giant_knot'), { segmentId: HP, endAfter: 'ch01.first_knot_awaken', fromEntry: `${HP}.003` });
+  assert.equal(await codeOf(s.service.trigger(P1, 'forest_first_knot_awaken')), 'STORY_EVENT_NOT_ALLOWED', '보스 승리 전');
+  await s.service.completeEvent(P1, 'forest_giant_knot_defeated', 'server');
+  assert.equal(await play('forest_giant_knot'), null, '이긴 전투 지점은 닫힌다');
+  assert.deepEqual(await play('forest_first_knot_awaken'), { segmentId: 'ch01.first_knot_awaken', endAfter: 'ch01.first_knot_awaken' }, '각성 장면을 끝내지 못했으면 이어 본다');
+  await s.service.completeEvent(P1, 'forest_first_knot_awakened');
+  assert.equal(await play('forest_first_knot_awaken'), null);
+
+  // 단수링: 첫 매듭 장착 전 거부, 멀리서 거부, 발견 기록은 한 번, 장 완료 전까지 장면을 이어 볼 수 있다
+  s.moveTo(at('forest_dansuring'));
   assert.equal(await codeOf(s.service.trigger(P1, 'forest_dansuring')), 'STORY_EVENT_NOT_ALLOWED', '첫 매듭 장착 전');
-  forceState(s.db, 'CH01_FIRST_KNOT_EQUIPPED', ['forest_giant_knot_defeated', 'forest_first_knot_awakened', 'forest_first_knot_equipped'], { nubi_growth_stage: 1 });
+  await s.service.equipRelic(P1, 'first_knot');
   s.moveTo({ stageCode: 'forest', x: 100, y: 100 });
   assert.equal(await codeOf(s.service.trigger(P1, 'forest_dansuring')), 'STORY_EVIDENCE_INVALID', '단수링에서 멀리');
+  s.moveTo(at('forest_dansuring'));
+  const PK = { segmentId: 'ch01.primordial_knot', endAfter: 'ch01.primordial_knot' };
+  assert.deepEqual(await play('forest_dansuring'), PK);
+  assert.deepEqual(await play('forest_dansuring'), PK, '장면이 끊겼으면 같은 지점에서 이어 본다');
+  assert.equal(eventsOf(s.db).filter((e) => e === 'forest_dansuring_found').length, 1);
+  assert.deepEqual((await s.service.onStageEntered(P1, 'forest'))!.play, PK, '재접속 복귀 범위도 같다');
+  await s.service.completeEvent(P1, 'forest_primordial_knot_seen');
+  assert.equal(await play('forest_dansuring'), null, '장 완료 뒤에는 다시 발동하지 않는다');
+  assert.equal(await codeOf(s.service.completeEvent(P1, 'forest_cut_thread_inspected')), 'STORY_EVENT_SERVER_ONLY', '지점 완료 이벤트는 직접 요청할 수 없다');
+});
+
+test('지역 데이터가 없으면 좌표가 필요한 지점·수집은 진행되지 않는다(거짓 진행 없음)', async () => {
+  const s = setup();
+  (s.service as unknown as { content: { stage: () => null } }).content.stage = () => null;
+  forceState(s.db, 'CH01_COMPASS_ACQUIRED', ['opening_name_saved', 'story_nubi_granted', 'forest_first_path_started', 'forest_bopul_rescued', 'forest_dansuring_clue_learned', 'forest_compass_granted']);
   s.moveTo({ stageCode: 'forest', x: 2000, y: 2000 });
-  const found = await s.service.trigger(P1, 'forest_dansuring');
-  assert.deepEqual(found.play, { segmentId: 'ch01.primordial_knot', endAfter: 'ch01.primordial_knot' });
-  assert.equal((await s.service.trigger(P1, 'forest_dansuring')).play, null, '이미 발견 — 트리거로 다시 재생하지 않음(재접속은 숲 진입 복귀 구간)');
-  assert.deepEqual((await s.service.onStageEntered(P1, 'forest'))!.play, { segmentId: 'ch01.primordial_knot', endAfter: 'ch01.primordial_knot' });
+  assert.equal(await codeOf(s.service.trigger(P1, 'forest_hidden_path')), 'STORY_DATA_MISSING');
+  assert.equal(await codeOf(s.service.collectObject(P1, 'forest_glowing_dust', 'forest_dust_01')), 'OBJECT_UNKNOWN');
 });
 
 test('서버 전투 확정 이벤트: 동반 이벤트(보풀이 구조)와 함께 기록', async () => {
@@ -233,83 +313,87 @@ test('서버 전투 확정 이벤트: 동반 이벤트(보풀이 구조)와 함�
 
 test('실가루: 활성 전 거부, 없는 오브젝트·먼 위치 거부, 중복 조사 1회, 10개 전달 후 나침판과 목표 종료', async () => {
   const s = setup();
-  forceState(s.db, 'CH01_STARTED', ['opening_name_saved', 'story_nubi_granted', 'forest_first_path_started', 'forest_bopul_rescued']);
-  s.moveTo({ stageCode: 'forest', x: 1000, y: 500 });
-  assert.equal(await codeOf(s.service.collectObject(P1, 'forest_glowing_dust', 'dust_01')), 'OBJECTIVE_NOT_ACTIVE', '단서 전');
+  forceState(s.db, 'CH01_STARTED', ['opening_name_saved', 'story_nubi_granted', 'forest_first_path_started', 'forest_cut_thread_inspected', 'forest_bopul_rescued']);
+  s.moveTo(at('forest_dust_01'));
+  assert.equal(await codeOf(s.service.collectObject(P1, 'forest_glowing_dust', 'forest_dust_01')), 'OBJECTIVE_NOT_ACTIVE', '단서 전');
 
   await s.service.completeEvent(P1, 'forest_dansuring_clue_learned');
-  assert.equal(await codeOf(s.service.collectObject(P1, 'forest_glowing_dust', 'dust_11')), 'OBJECT_UNKNOWN', '11번째 오브젝트 없음(수량 초과 불가)');
+  assert.equal(await codeOf(s.service.collectObject(P1, 'forest_glowing_dust', 'forest_dust_11')), 'OBJECT_UNKNOWN', '11번째 오브젝트 없음(수량 초과 불가)');
+  assert.equal(await codeOf(s.service.collectObject(P1, 'forest_glowing_dust', 'dust_01')), 'OBJECT_UNKNOWN', '옛 표기 ID는 정의에 없다');
   assert.equal(await codeOf(s.service.collectObject(P1, 'forest_glowing_dust', -1)), 'OBJECT_UNKNOWN');
-  assert.equal(await codeOf(s.service.collectObject(P1, 'nope', 'dust_01')), 'OBJECTIVE_UNKNOWN');
-  assert.equal(await codeOf(s.service.collectObject(P1, 'forest_glowing_dust', 'dust_02')), 'STORY_EVIDENCE_INVALID', 'dust_02는 100px 떨어져 있음');
+  assert.equal(await codeOf(s.service.collectObject(P1, 'nope', 'forest_dust_01')), 'OBJECTIVE_UNKNOWN');
+  assert.equal(await codeOf(s.service.collectObject(P1, 'forest_glowing_dust', 'forest_dust_02')), 'STORY_EVIDENCE_INVALID', '02는 100px 떨어져 있음');
 
-  const first = await s.service.collectObject(P1, 'forest_glowing_dust', 'dust_01');
-  const dup = await s.service.collectObject(P1, 'forest_glowing_dust', 'dust_01');
-  assert.equal(first.alreadyCollected, false);
-  assert.equal(dup.alreadyCollected, true);
+  const first = await s.service.collectObject(P1, 'forest_glowing_dust', 'forest_dust_01');
+  const dup = await s.service.collectObject(P1, 'forest_glowing_dust', 'forest_dust_01');
+  assert.deepEqual([first.alreadyCollected, first.collected, first.required], [false, 1, 10]);
+  assert.deepEqual(first.grants, [{ itemCode: 'glowing_yarn_dust', quantity: 1, destination: 'story' }]);
+  assert.deepEqual([dup.alreadyCollected, dup.collected, dup.grants.length], [true, 1, 0]);
   assert.equal(qty(s.db, 'glowing_yarn_dust'), 1, '재조사로 실가루가 늘지 않음');
+  assert.equal(first.stage.objects.length, 9, '응답의 지역 화면에서 방금 주운 것이 빠진다');
 
-  s.moveTo({ stageCode: 'forest', x: 300, y: 300 });
-  const short = await s.service.trigger(P1, 'npc_bopuli');
+  s.moveTo(at('forest_bopuli_return'));
+  const short = await s.service.trigger(P1, 'forest_bopuli_return');
   assert.deepEqual([short.play, short.shortage], [null, { itemCode: 'glowing_yarn_dust', have: 1, need: 10 }], '1/10 — 부족 수량만 알려 주고 제작하지 않음');
   assert.equal(qty(s.db, 'glowing_yarn_dust'), 1, '부족할 때는 소비 없음');
   assert.equal(short.story.checkpoint, 'CH01_BOPUL_RESCUED');
 
-  for (let i = 2; i <= 10; i++) {
-    const id = `dust_${String(i).padStart(2, '0')}`;
-    s.moveTo({ stageCode: 'forest', x: 1000 + (i - 1) * 100, y: 500 });
+  for (const id of DUST.slice(1)) {
+    s.moveTo(at(id));
     await s.service.collectObject(P1, 'forest_glowing_dust', id);
   }
   assert.equal(qty(s.db, 'glowing_yarn_dust'), 10);
-  s.moveTo({ stageCode: 'forest', x: 300, y: 300 });
-  const res = await s.service.trigger(P1, 'npc_bopuli');
+  s.moveTo({ stageCode: 'forest', x: 900, y: 900 });
+  assert.equal(await codeOf(s.service.trigger(P1, 'forest_bopuli_return')), 'STORY_EVIDENCE_INVALID', '보풀이에게서 멀리 — 전달은 보풀이 곁에서만');
+  s.moveTo(at('forest_bopuli_return'));
+  const res = await s.service.trigger(P1, 'forest_bopuli_return');
   assert.equal(res.story.checkpoint, 'CH01_COMPASS_ACQUIRED');
   assert.deepEqual(res.play, { segmentId: 'ch01.compass_craft', endAfter: 'ch01.compass_craft' }, '제작 연출 구간');
   assert.equal(qty(s.db, 'glowing_yarn_dust'), 0, '10개 차감');
   assert.equal(qty(s.db, 'yarn_tremor_compass'), 1);
   assert.equal(res.story.delivery, null, '전달 목표 종료');
 
-  s.moveTo({ stageCode: 'forest', x: 1000, y: 500 });
-  assert.equal(await codeOf(s.service.collectObject(P1, 'forest_glowing_dust', 'dust_01')), 'NO_ERROR', '완료 후 재요청은 이미 수집으로 성공 응답');
+  s.moveTo(at('forest_dust_01'));
+  assert.equal(await codeOf(s.service.collectObject(P1, 'forest_glowing_dust', 'forest_dust_01')), 'NO_ERROR', '완료 후 재요청은 이미 수집으로 성공 응답');
   assert.equal(qty(s.db, 'glowing_yarn_dust'), 0, '완료 후 변경 없음');
 });
 
 test('트랜잭션 실패 시 이벤트·차감·체크포인트 모두 롤백', async () => {
   const s = setup();
   forceState(s.db, 'CH01_BOPUL_RESCUED', ['opening_name_saved', 'story_nubi_granted', 'forest_first_path_started', 'forest_bopul_rescued', 'forest_dansuring_clue_learned']);
-  for (let i = 1; i <= 10; i++) s.db.seed('player_story_objective_progress', { player_id: P1, objective_key: 'forest_glowing_dust', object_id: `dust_${String(i).padStart(2, '0')}` });
+  for (const id of DUST) s.db.seed('player_story_objective_progress', { player_id: P1, objective_key: 'forest_glowing_dust', object_id: id });
   const dust = s.db.rows('item_definition', { code: 'glowing_yarn_dust' })[0];
   s.db.seed('player_item', { player_id: P1, item_definition_id: dust.id, quantity: 10 });
-  s.moveTo({ stageCode: 'forest', x: 300, y: 300 });
+  s.moveTo(at('forest_bopuli_return'));
   s.db.failOn = (table) => table === 'player_item'; // 나침판 지급(create) 단계에서 실패
-  await assert.rejects(s.service.trigger(P1, 'npc_bopuli'));
+  await assert.rejects(s.service.trigger(P1, 'forest_bopuli_return'));
   assert.equal(qty(s.db, 'glowing_yarn_dust'), 10, '차감 롤백');
   assert.equal(qty(s.db, 'yarn_tremor_compass'), 0);
   assert.equal(progressOf(s.db).checkpoint, 'CH01_BOPUL_RESCUED');
   assert.ok(!eventsOf(s.db).includes('forest_compass_granted'));
   s.db.failOn = null;
-  assert.deepEqual((await s.service.trigger(P1, 'npc_bopuli')).play?.segmentId, 'ch01.compass_craft', '실패 뒤 재시도 가능');
+  assert.deepEqual((await s.service.trigger(P1, 'forest_bopuli_return')).play?.segmentId, 'ch01.compass_craft', '실패 뒤 재시도 가능');
 });
 
-test('M4-C 실가루 전달: 이중 클릭·재전송(동시 3건, 직렬화 우회 2건)에도 10개 한 번만 소비·나침판 한 번만 지급, 제작 뒤 재요청은 재생 없이 완료 상태', async () => {
+test('실가루 전달: 이중 클릭·재전송(동시 3건, 직렬화 우회 2건)에도 10개 한 번만 소비·나침판 한 번만 지급, 제작 뒤 재요청은 재생 없이 완료 상태', async () => {
   for (const bypass of [false, true]) {
     const s = setup();
     forceState(s.db, 'CH01_BOPUL_RESCUED', ['opening_name_saved', 'story_nubi_granted', 'forest_first_path_started', 'forest_bopul_rescued', 'forest_dansuring_clue_learned']);
     const dust = s.db.rows('item_definition', { code: 'glowing_yarn_dust' })[0];
     s.db.seed('player_item', { player_id: P1, item_definition_id: dust.id, quantity: 13 }); // 개발 픽스처: 10개 이상 보유
-    s.moveTo({ stageCode: 'forest', x: 300, y: 300 });
+    s.moveTo(at('forest_bopuli_return'));
     if (bypass) {
       const def = EVENT_BY_ID.get('forest_compass_granted')!;
       const r = await Promise.all([s.service.runEvent(P1, def, null), s.service.runEvent(P1, def, null)]);
       assert.equal(r.filter((x) => !x.alreadyCompleted).length, 1, 'DB 방어선만으로 1회');
     } else {
-      const r = await Promise.all([1, 2, 3].map(() => s.service.trigger(P1, 'npc_bopuli')));
+      const r = await Promise.all([1, 2, 3].map(() => s.service.trigger(P1, 'forest_bopuli_return')));
       assert.equal(r.filter((x) => x.play).length, 1, '제작 연출은 한 번만');
     }
     assert.equal(qty(s.db, 'glowing_yarn_dust'), 3, '10개만 차감');
     assert.equal(qty(s.db, 'yarn_tremor_compass'), 1, '나침판 1개');
     assert.equal(eventsOf(s.db).filter((e) => e === 'forest_compass_granted').length, 1);
-    const later = await s.service.trigger(P1, 'npc_bopuli');
+    const later = await s.service.trigger(P1, 'forest_bopuli_return');
     assert.deepEqual([later.play, later.shortage, later.story.checkpoint], [null, null, 'CH01_COMPASS_ACQUIRED'], '새로고침 뒤: 다시 소비·재생하지 않고 제작 완료 상태');
   }
 });
@@ -343,15 +427,15 @@ test('1장 완료: 단수링 발견 → 태초의 매듭 → 호수 개방(같�
   const s = setup({ flags: { 'story.stageAccessV2': true } });
   forceState(s.db, 'CH01_FIRST_KNOT_EQUIPPED', ['opening_name_saved', 'story_nubi_granted', 'forest_first_knot_equipped'], { nubi_growth_stage: 1 });
   assert.equal(await codeOf(s.service.completeEvent(P1, 'forest_primordial_knot_seen')), 'STORY_PREREQUISITE_MISSING', '단수링 발견 전');
+  assert.equal(await codeOf(s.service.completeEvent(P1, 'forest_dansuring_found')), 'STORY_EVENT_SERVER_ONLY', '발견은 지점 발동으로만 기록');
   s.moveTo({ stageCode: 'forest', x: 2000, y: 2010 });
-  await s.service.completeEvent(P1, 'forest_dansuring_found');
+  await s.service.trigger(P1, 'forest_dansuring');
   const res = await s.service.completeEvent(P1, 'forest_primordial_knot_seen');
   assert.equal(res.story.checkpoint, 'CH01_COMPLETE');
   assert.equal(res.story.chapterCode, 'ch02');
   const lake = res.story.stages.find((x) => x.stageCode === 'lake')!;
   assert.deepEqual([lake.canEnter, lake.canProgress], [true, true]);
 });
-
 test('대화 데이터: 진행할 수 없는 장은 CHAPTER_LOCKED(스포일러 방지), 파일 없으면 DIALOGUE_NOT_FOUND', async () => {
   const s = setup();
   assert.equal(await codeOf(s.service.dialogue(P1, 'ch02')), 'CHAPTER_LOCKED');

@@ -89,8 +89,8 @@ test('전투 결과·오류 → 진행기 결과, 목표·부족 문구, 장 파
   for (const o of ['lose', 'draw', 'cancelled', undefined]) assert.equal(battleResultOf(o), 'lost');
   assert.equal(battleStartErrorResult('STORY_ENCOUNTER_DONE'), 'already_won');
   assert.equal(battleStartErrorResult('NOT_IN_MAP'), null, '그 밖은 재시도');
-  assert.equal(deliveryGoalText({ triggerId: 'npc_bopuli', itemCode: 'glowing_yarn_dust', have: 0, need: 10 }), '빛나는 실가루 모으기 0/10');
-  assert.equal(deliveryGoalText({ triggerId: 'npc_bopuli', itemCode: 'glowing_yarn_dust', have: 13, need: 10 }), '빛나는 실가루 모으기 10/10');
+  assert.equal(deliveryGoalText({ triggerId: 'forest_bopuli_return', itemCode: 'glowing_yarn_dust', have: 0, need: 10 }), '빛나는 실가루 모으기 0/10');
+  assert.equal(deliveryGoalText({ triggerId: 'forest_bopuli_return', itemCode: 'glowing_yarn_dust', have: 13, need: 10 }), '빛나는 실가루 모으기 10/10');
   assert.equal(shortageText({ itemCode: 'glowing_yarn_dust', have: 3, need: 10 }), '빛나는 실가루가 7개 더 필요해요 (3/10)');
   assert.equal(chapterOfSegment('ch01.bopul_clue'), 'ch01');
   assert.equal(chapterOfStage('forest'), 'ch01');

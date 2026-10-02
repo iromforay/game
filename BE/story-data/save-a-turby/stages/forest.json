@@ -1,0 +1,80 @@
+{
+  "stageCode": "forest",
+  "greybox": true,
+  "note": "회색상자(임시) 배치 — 기능과 동선 확인용. 좌표·크기·문구·에셋 키는 최종이 아니다. 오브젝트·지점 ID만 고정이고, 최종 지도가 오면 이 파일의 좌표와 assetKey만 바꾼다.",
+  "size": { "width": 3200, "height": 2400 },
+  "spawn": { "x": 1600, "y": 1200 },
+  "regions": [],
+  "points": [
+    { "id": "forest_dust_01", "x": 1100, "y": 880, "radius": 56 },
+    { "id": "forest_dust_02", "x": 1360, "y": 1120, "radius": 56 },
+    { "id": "forest_dust_03", "x": 1130, "y": 1150, "radius": 56 },
+    { "id": "forest_dust_04", "x": 1760, "y": 760, "radius": 56 },
+    { "id": "forest_dust_05", "x": 1960, "y": 1260, "radius": 56 },
+    { "id": "forest_dust_06", "x": 1300, "y": 1440, "radius": 56 },
+    { "id": "forest_dust_07", "x": 960, "y": 1300, "radius": 56 },
+    { "id": "forest_dust_08", "x": 2010, "y": 800, "radius": 56 },
+    { "id": "forest_dust_09", "x": 790, "y": 1440, "radius": 56 },
+    { "id": "forest_dust_10", "x": 1510, "y": 1700, "radius": 56 },
+    { "id": "forest_cut_thread", "x": 1600, "y": 1000, "radius": 64 },
+    { "id": "forest_bopuli_ambush", "x": 1240, "y": 1000, "radius": 72 },
+    { "id": "forest_bopuli_return", "x": 1240, "y": 1000, "radius": 72 },
+    { "id": "forest_hidden_path", "x": 2240, "y": 1250, "radius": 64 },
+    { "id": "forest_giant_knot", "x": 2620, "y": 1250, "radius": 72 },
+    { "id": "forest_first_knot_awaken", "x": 2620, "y": 1250, "radius": 72 },
+    { "id": "forest_dansuring", "x": 3020, "y": 1250, "radius": 72 }
+  ],
+  "objects": [
+    { "id": "forest_dust_01", "objectiveKey": "forest_glowing_dust", "group": "near_clearing", "assetKey": "placeholder-dust", "label": "실가루(임시)", "prompt": "실가루 줍기" },
+    { "id": "forest_dust_02", "objectiveKey": "forest_glowing_dust", "group": "near_clearing", "assetKey": "placeholder-dust", "label": "실가루(임시)", "prompt": "실가루 줍기" },
+    { "id": "forest_dust_03", "objectiveKey": "forest_glowing_dust", "group": "near_clearing", "assetKey": "placeholder-dust", "label": "실가루(임시)", "prompt": "실가루 줍기" },
+    { "id": "forest_dust_04", "objectiveKey": "forest_glowing_dust", "group": "detour", "assetKey": "placeholder-dust", "label": "실가루(임시)", "prompt": "실가루 줍기" },
+    { "id": "forest_dust_05", "objectiveKey": "forest_glowing_dust", "group": "detour", "assetKey": "placeholder-dust", "label": "실가루(임시)", "prompt": "실가루 줍기" },
+    { "id": "forest_dust_06", "objectiveKey": "forest_glowing_dust", "group": "detour", "assetKey": "placeholder-dust", "label": "실가루(임시)", "prompt": "실가루 줍기" },
+    { "id": "forest_dust_07", "objectiveKey": "forest_glowing_dust", "group": "detour", "assetKey": "placeholder-dust", "label": "실가루(임시)", "prompt": "실가루 줍기" },
+    { "id": "forest_dust_08", "objectiveKey": "forest_glowing_dust", "group": "near_wild", "assetKey": "placeholder-dust", "label": "실가루(임시)", "prompt": "실가루 줍기" },
+    { "id": "forest_dust_09", "objectiveKey": "forest_glowing_dust", "group": "near_wild", "assetKey": "placeholder-dust", "label": "실가루(임시)", "prompt": "실가루 줍기" },
+    { "id": "forest_dust_10", "objectiveKey": "forest_glowing_dust", "group": "near_wild", "assetKey": "placeholder-dust", "label": "실가루(임시)", "prompt": "실가루 줍기" }
+  ],
+  "storyPoints": [
+    { "id": "forest_cut_thread", "kind": "inspect", "assetKey": "placeholder-point", "label": "잘린 실오라기(임시)", "prompt": "잘린 실 살펴보기" },
+    { "id": "forest_bopuli_ambush", "kind": "battle", "assetKey": "placeholder-point", "label": "보풀이 공터(임시)", "prompt": "공터로 들어가기" },
+    { "id": "forest_bopuli_return", "kind": "npc", "assetKey": "placeholder-point", "label": "보풀이(임시)", "prompt": "보풀이에게 말 걸기" },
+    { "id": "forest_hidden_path", "kind": "gate", "assetKey": "placeholder-point", "label": "먼지바람에 가린 길(임시)", "prompt": "나침판 꺼내기" },
+    { "id": "forest_giant_knot", "kind": "battle", "assetKey": "placeholder-point", "label": "거대 실밥 매듭(임시)", "prompt": "다가가기" },
+    { "id": "forest_first_knot_awaken", "kind": "inspect", "assetKey": "placeholder-point", "label": "끊어진 오래된 실(임시)", "prompt": "살펴보기" },
+    { "id": "forest_dansuring", "kind": "discover", "assetKey": "placeholder-point", "label": "실뿌리 문(임시)", "prompt": "살펴보기" }
+  ],
+  "layout": {
+    "zones": [
+      { "id": "zone_entry", "label": "숲 입구", "x": 1440, "y": 1100, "width": 320, "height": 220 },
+      { "id": "zone_first_path", "label": "첫 길", "x": 1520, "y": 900, "width": 160, "height": 200 },
+      { "id": "zone_clearing", "label": "보풀이 공터", "x": 1060, "y": 860, "width": 360, "height": 300 },
+      { "id": "zone_dust_loop", "label": "실가루 순환 길", "x": 760, "y": 700, "width": 1320, "height": 1080 },
+      { "id": "zone_hidden", "label": "숨은 실오라기 길", "x": 2340, "y": 1040, "width": 520, "height": 420, "visibleAfter": "forest_hidden_path_opened" },
+      { "id": "zone_root_gate", "label": "실뿌리 문", "x": 2900, "y": 1040, "width": 240, "height": 420, "visibleAfter": "forest_first_knot_equipped" }
+    ],
+    "paths": [
+      [[1600, 1200], [1600, 1000], [1240, 1000]],
+      [[1240, 1000], [1100, 880], [960, 1300], [790, 1440], [1300, 1440], [1510, 1700], [1960, 1260], [2010, 800], [1760, 760], [1600, 1000]],
+      [[1600, 1200], [2240, 1250], [2620, 1250], [3020, 1250]]
+    ],
+    "blockers": [
+      { "id": "bush_04", "label": "먼지풀", "x": 1680, "y": 810, "width": 200, "height": 44 },
+      { "id": "bush_05", "label": "먼지풀", "x": 1860, "y": 1180, "width": 44, "height": 200 },
+      { "id": "bush_06", "label": "먼지풀", "x": 1200, "y": 1360, "width": 200, "height": 44 },
+      { "id": "bush_07", "label": "먼지풀", "x": 1040, "y": 1180, "width": 44, "height": 200 },
+      { "id": "wall_hidden_top", "label": "", "x": 2300, "y": 1000, "width": 880, "height": 40 },
+      { "id": "wall_hidden_bottom", "label": "", "x": 2300, "y": 1460, "width": 880, "height": 40 },
+      { "id": "wall_hidden_right", "label": "", "x": 3140, "y": 1000, "width": 40, "height": 500 },
+      { "id": "wall_hidden_left_a", "label": "", "x": 2300, "y": 1000, "width": 40, "height": 170 },
+      { "id": "wall_hidden_left_b", "label": "", "x": 2300, "y": 1330, "width": 40, "height": 170 },
+      { "id": "wall_root_a", "label": "", "x": 2860, "y": 1000, "width": 40, "height": 170 },
+      { "id": "wall_root_b", "label": "", "x": 2860, "y": 1330, "width": 40, "height": 170 }
+    ],
+    "gates": [
+      { "id": "gate_hidden_path", "label": "먼지바람", "x": 2300, "y": 1170, "width": 40, "height": 160, "openEvent": "forest_hidden_path_opened" },
+      { "id": "gate_root", "label": "닫힌 실뿌리", "x": 2860, "y": 1170, "width": 40, "height": 160, "openEvent": "forest_first_knot_equipped" }
+    ]
+  }
+}

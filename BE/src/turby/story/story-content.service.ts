@@ -22,10 +22,29 @@ export interface StagePoint {
   radius: number;
 }
 
+export interface StageRect {
+  id: string;
+  label: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+export interface StageZone extends StageRect {
+  visibleAfter?: string; // 이 이벤트가 끝난 뒤에만 지도에 보인다(숨은 길)
+}
+
+// 지역 스토리 데이터(story-data/stages/<stage>.json). 판정 규칙(언제·무엇을)은 story-data.ts, 여기는 위치와 겉모습만 둔다.
+// regions·points: 서버 위치 증거용 좌표. objects·storyPoints: ID별 표시 정보(에셋 키·문구). layout: 회색상자 배치(구역·길·막힌 곳·문)
 export interface StageStoryData {
   stageCode: string;
+  greybox?: boolean;
+  size?: { width: number; height: number };
   regions: StageRegion[];
   points: StagePoint[];
+  objects?: { id: string; objectiveKey: string; group: string; assetKey: string; label: string; prompt: string }[];
+  storyPoints?: { id: string; kind: string; assetKey: string; label: string; prompt: string }[];
+  layout?: { zones: StageZone[]; paths: number[][][]; blockers: StageRect[]; gates: (StageRect & { openEvent: string })[] };
 }
 
 @Injectable()

@@ -40,7 +40,7 @@ export class StoryDialogueScene extends OpeningScene {
     this.state = await this.retrying(() => this.opts.client.fetchState(), '이야기 진행 정보를 불러오지 못했어요.');
 
     if (d.play) {
-      await runDialogue(file, d.play.segmentId, this.ports(), { endAfter: d.play.endAfter, exact: true }); // 서버가 정한 구간 그대로
+      await runDialogue(file, d.play.segmentId, this.ports(), { endAfter: d.play.endAfter, fromEntry: d.play.fromEntry, untilEntry: d.play.untilEntry, exact: true }); // 서버가 정한 범위 그대로
       return;
     }
     const at = battleEntryOf(file, d.resumeBattle!.encounterKey);

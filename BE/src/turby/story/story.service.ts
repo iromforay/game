@@ -4,7 +4,7 @@ import { PrismaService } from '../prisma.service';
 import { RoomsService } from '../rooms/rooms.service';
 import { SettingsService } from '../rooms/settings.service';
 import { gameError } from '../turby-dto';
-import { StoryContentService } from './story-content.service';
+import { StoryContentService, type StageRect, type StageZone } from './story-content.service';
 import { addToPlayerItem, usedBagSlots } from './bag';
 import { StageAccessService } from './stage-access.service';
 import type { StageStatusDto } from './stage-access';
@@ -18,6 +18,8 @@ import {
   SEGMENT_CHAIN_END,
   STAGE_CHAPTER,
   STORY_TRIGGERS,
+  STORY_OBJECTIVES,
+  FIRST_PATH_INTRO,
   TRIGGER_BY_ID,
   STORY_CATEGORIES,
   STORY_NUBI_CHARACTER,
@@ -27,11 +29,13 @@ import {
   type ItemGrant,
   type StoryEncounterDef,
   type StoryEventDef,
+  type StoryPlayRange,
   type StoryTriggerDef,
 } from './story-data';
 import {
   bagRoomFor,
   chapterCodeOf,
+  checkpointIndex,
   checkEvent,
   checkObjective,
   nextCheckpoint,
@@ -76,10 +80,27 @@ export interface StoryStateDto {
   delivery: { triggerId: string; itemCode: string; have: number; need: number } | null;
 }
 
-// 서버가 재생하라고 알려 주는 대화 범위(segmentId부터 endAfter까지 파일 순서대로)
+// 서버가 재생하라고 알려 주는 대화 범위(segmentId부터 endAfter까지 파일 순서대로).
+// fromEntry·untilEntry가 있으면 첫 구간은 그 항목부터, 마지막 구간은 그 항목까지만(숲 안의 지점이 한 구간을 나눠 재생)
 export interface StoryPlayDto {
   segmentId: string;
   endAfter: string;
+  fromEntry?: string;
+  untilEntry?: string;
+}
+
+// 지역 스토리 화면 데이터 — 이 플레이어에게 지금 보이는 것만 담는다(10-02 v3 §3.4·§4)
+export interface StageViewDto {
+  stageCode: string;
+  greybox: boolean; // 임시 회색상자 배치인가(최종 지도 아님)
+  size: { width: number; height: number } | null;
+  // 아직 수집하지 않은 오브젝트만. locked = 아직 모을 수 없음(보풀이 구조 전)
+  objects: { id: string; objectiveKey: string; x: number; y: number; radius: number; assetKey: string; label: string; prompt: string; state: 'locked' | 'available' }[];
+  // 지금 활성화된 이야기 지점만(비활성·완료 지점은 내려 주지 않는다)
+  points: { id: string; kind: string; x: number; y: number; radius: number; assetKey: string; label: string; prompt: string }[];
+  gates: { id: string; label: string; x: number; y: number; width: number; height: number; open: boolean }[];
+  layout: { zones: StageZone[]; paths: number[][][]; blockers: StageRect[] } | null;
+  objectives: { key: string; collected: number; required: number; active: boolean }[];
 }
 
 export interface StoryTriggerResultDto {
@@ -98,7 +119,11 @@ export interface StoryEventResultDto {
   play?: StoryPlayDto | null; // 새로 기록했을 때 이어서 재생할 구간(유물 장착 장면 등)
 }
 
-const playOf = (segmentId: string | null | undefined): StoryPlayDto | null => (segmentId ? { segmentId, endAfter: SEGMENT_CHAIN_END[segmentId] ?? segmentId } : null);
+const playOf = (range: string | StoryPlayRange | null | undefined): StoryPlayDto | null => {
+  if (!range) return null;
+  const r = typeof range === 'string' ? { segmentId: range } : range;
+  return { segmentId: r.segmentId, endAfter: r.endAfter ?? SEGMENT_CHAIN_END[r.segmentId] ?? r.segmentId, ...(r.fromEntry ? { fromEntry: r.fromEntry } : {}), ...(r.untilEntry ? { untilEntry: r.untilEntry } : {}) };
+};
 
 // 스토리 진행·보상·장 개방의 서버 권위 구현(docs/dev/save-a-turby/m0/m0_design.md 3절).
 // 멱등성: (player_id, event_id)·(player_id, objective_key, object_id) unique + 체크포인트 조건부 갱신.
@@ -235,7 +260,7 @@ export class StoryService {
 
   // 지역 진입(map:enter 성공 뒤): 그 지역의 진입 트리거가 있으면 실행. 없으면 null
   async onStageEntered(playerId: bigint, stageCode: string): Promise<StoryTriggerResultDto | null> {
-    const def = STORY_TRIGGERS.find((t) => t.play === 'resume' && t.stageCode === stageCode);
+    const def = STORY_TRIGGERS.find((t) => t.auto && t.stageCode === stageCode);
     return def ? this.trigger(playerId, def.id) : null;
   }
 
@@ -251,36 +276,64 @@ export class StoryService {
   private async runTrigger(playerId: bigint, def: StoryTriggerDef): Promise<StoryTriggerResultDto> {
     const done = (play: StoryPlayDto | null, shortage: StoryTriggerResultDto['shortage'] = null) => this.getState(playerId).then((story) => ({ triggerId: def.id, play, shortage, story }));
     const snap = await this.readSnapshot(playerId);
-    const resume = () => {
-      const seg = resumeOf(snap).segmentId;
-      return seg && STAGE_CHAPTER[def.stageCode] !== undefined && seg.startsWith(`ch0${STAGE_CHAPTER[def.stageCode]}.`) ? playOf(seg) : null;
-    };
+    const rangeOf = (s: StorySnapshot) => (def.play === 'resume' ? this.resumePlay(s, def.stageCode) : playOf(typeof def.play === 'function' ? def.play(s.events) : def.play));
 
-    if (def.event) {
-      const ev = EVENT_BY_ID.get(def.event)!;
-      if (snap.events.has(ev.id)) return done(def.play === 'resume' ? resume() : null); // 이미 기록 — 새로 재생하지 않음(재접속 복귀는 resume만)
-      const failure = checkEvent(ev, snap);
-      if (failure) {
-        if (def.optionalEvent) return done(def.play === 'resume' ? resume() : null);
-        throw this.ruleError(failure, snap);
+    // 지역 진입: 장 시작 이벤트를 기록할 수 있으면 기록하고, 지금 진행의 복귀 범위를 알려 준다
+    if (def.auto) {
+      const ev = def.event ? EVENT_BY_ID.get(def.event)! : null;
+      if (ev && !snap.events.has(ev.id) && !checkEvent(ev, snap)) {
+        const res = await this.runEvent(playerId, ev, null);
+        return { triggerId: def.id, play: rangeOf(await this.readSnapshot(playerId)), shortage: null, story: res.story };
       }
+      return done(rangeOf(snap));
+    }
+
+    const recorded = !!def.event && snap.events.has(def.event);
+    if (!this.pointOpen(def, snap)) {
+      // 완료한 일회성 지점의 재요청: 아무 효과 없이 현재 상태만 돌려준다(다시 재생하지 않음)
+      if (recorded || this.pointClosed(def, snap)) return done(null);
+      // 아직 활성화되지 않은 지점: 거부
+      const failure = def.event ? checkEvent(EVENT_BY_ID.get(def.event)!, snap) : null;
+      throw failure ? this.ruleError(failure, snap) : gameError(409, 'STORY_EVENT_NOT_ALLOWED', '지금은 진행할 수 없는 이야기입니다.');
+    }
+
+    if (def.event && !recorded) {
       if (def.need) {
         const have = await this.itemQuantity(playerId, def.need.itemCode);
         if (have < def.need.quantity) return done(null, { itemCode: def.need.itemCode, have, need: def.need.quantity });
       }
-      const res = await this.runEvent(playerId, ev, null);
-      if (def.play === 'resume') {
-        const after = await this.readSnapshot(playerId);
-        const seg = resumeOf(after).segmentId;
-        return { triggerId: def.id, play: playOf(seg), shortage: null, story: res.story };
-      }
-      return { triggerId: def.id, play: res.alreadyCompleted ? null : playOf(def.play), shortage: null, story: res.story };
+      const res = await this.runEvent(playerId, EVENT_BY_ID.get(def.event)!, null);
+      // 동시에 온 같은 요청은 먼저 기록한 쪽만 장면을 재생한다
+      return { triggerId: def.id, play: res.alreadyCompleted ? null : rangeOf(snap), shortage: null, story: res.story };
     }
+    // 이벤트를 기록하지 않는 지점(전투·이어 보기): 조건만 확인하고 범위를 연다. 진행은 전투 확정·대화 완료 이벤트가 바꾼다
+    return done(rangeOf(snap));
+  }
 
-    // 이벤트 없는 트리거: 허용 체크포인트·미완료 조건만 확인하고 구간을 연다
-    const open = (def.activeAt ?? []).includes(snap.checkpoint) && !(def.unless ?? []).some((e) => snap.events.has(e));
-    if (!open) throw gameError(409, 'STORY_EVENT_NOT_ALLOWED', '지금은 진행할 수 없는 이야기입니다.');
-    return done(def.play === 'resume' ? resume() : playOf(def.play));
+  // 지점이 끝났는가(unless의 이벤트가 모두 완료)
+  private pointClosed(def: StoryTriggerDef, snap: StorySnapshot): boolean {
+    return !!def.unless?.length && def.unless.every((e) => snap.events.has(e));
+  }
+
+  // 지점이 지금 활성화돼 있는가 — 지도 표시와 발동 판정이 같은 함수를 쓴다
+  private pointOpen(def: StoryTriggerDef, snap: StorySnapshot): boolean {
+    if (this.pointClosed(def, snap)) return false;
+    if (def.event) {
+      const ev = EVENT_BY_ID.get(def.event)!;
+      // 완료 기록은 끝났지만 장면을 이어 볼 수 있는 지점(unless가 끝나기 전까지)
+      if (snap.events.has(ev.id)) return def.repeatable && !!def.unless?.length;
+      return checkEvent(ev, snap) === null;
+    }
+    const chapter = STAGE_CHAPTER[def.stageCode] ?? 0;
+    return canProgressChapter(chapter, snap.checkpoint) && (def.activeAt ?? []).includes(snap.checkpoint) && (def.requires ?? []).every((e) => snap.events.has(e));
+  }
+
+  // 지역 진입 때의 복귀 범위(그 지역 장의 구간만). 숲의 첫 길은 걷는 장면만 — 나머지는 숲 안의 지점이 이어 간다
+  private resumePlay(snap: StorySnapshot, stageCode: string): StoryPlayDto | null {
+    const seg = resumeOf(snap).segmentId;
+    if (!seg || STAGE_CHAPTER[stageCode] === undefined || !seg.startsWith(`ch0${STAGE_CHAPTER[stageCode]}.`)) return null;
+    if (seg === FIRST_PATH_INTRO.segmentId) return snap.events.has('forest_cut_thread_inspected') ? null : playOf(FIRST_PATH_INTRO);
+    return playOf(seg);
   }
 
   // ---------- 수집 목표 ----------
@@ -290,6 +343,8 @@ export class StoryService {
     if (!def) throw gameError(404, 'OBJECTIVE_UNKNOWN', '알 수 없는 목표입니다.');
     if (typeof objectIdRaw !== 'string' || !def.objectIds.includes(objectIdRaw)) throw gameError(404, 'OBJECT_UNKNOWN', '알 수 없는 오브젝트입니다.');
     const objectId = objectIdRaw;
+    // 지역 데이터에 놓여 있는(활성화된) 오브젝트만 — 정의에만 있고 지도에 없는 ID는 수집할 수 없다
+    if (!this.content.stage(def.stageCode)?.objects?.some((o) => o.id === objectId && o.objectiveKey === objectiveKey)) throw gameError(404, 'OBJECT_UNKNOWN', '알 수 없는 오브젝트입니다.');
     return this.serialize(playerId, async () => {
       this.checkPositionEvidence(playerId, { kind: 'point', stageCode: def.stageCode, pointId: objectId });
       let already = false;
@@ -309,7 +364,8 @@ export class StoryService {
         else throw err;
       }
       const collected = await this.prisma.player_story_objective_progress.count({ where: { player_id: playerId, objective_key: objectiveKey } });
-      return { objectiveKey, objectId, alreadyCollected: already, collected, required: def.objectIds.length, grants: grant && !already ? [grant] : [] };
+      // stage: 수집 뒤의 지역 화면 상태(남은 오브젝트·목표) — 클라이언트가 한 번의 응답으로 화면을 맞춘다
+      return { objectiveKey, objectId, alreadyCollected: already, collected, required: def.objectIds.length, grants: grant && !already ? [grant] : [], stage: await this.stageView(playerId, def.stageCode) };
     });
   }
 
@@ -348,12 +404,51 @@ export class StoryService {
     return data;
   }
 
-  async stageData(playerId: bigint, stageCode: string) {
-    const state = await this.getState(playerId);
-    const status = state.stages.find((s) => s.stageCode === stageCode);
+  async stageData(playerId: bigint, stageCode: string): Promise<StageViewDto> {
+    const status = (await this.stageAccess.statuses(playerId)).find((s) => s.stageCode === stageCode);
     if (!status) throw gameError(404, 'INVALID_STAGE', '존재하지 않는 지역입니다.');
     if (!status.canEnter) throw gameError(403, 'STAGE_LOCKED', '아직 열리지 않은 지역입니다.');
-    return this.content.stage(stageCode) ?? { stageCode, regions: [], points: [] };
+    return this.stageView(playerId, stageCode);
+  }
+
+  // 이 플레이어에게 지금 보이는 지역 스토리 화면: 남은 오브젝트(잠김·수집 가능), 활성 지점, 문 상태, 목표 진행
+  private async stageView(playerId: bigint, stageCode: string): Promise<StageViewDto> {
+    const data = this.content.stage(stageCode);
+    if (!data) return { stageCode, greybox: false, size: null, objects: [], points: [], gates: [], layout: null, objectives: [] };
+    const snap = await this.readSnapshot(playerId);
+    const at = new Map(data.points.map((p) => [p.id, p]));
+    const defs = STORY_OBJECTIVES.filter((o) => o.stageCode === stageCode);
+    // 목표가 끝난 뒤(마지막 활성 체크포인트를 지남)에는 남은 오브젝트를 보여 주지 않는다
+    const past = (o: (typeof defs)[number]) => checkpointIndex(snap.checkpoint) > Math.max(...o.activeAt.map(checkpointIndex));
+
+    const objects: StageViewDto['objects'] = [];
+    for (const o of data.objects ?? []) {
+      const def = defs.find((d) => d.key === o.objectiveKey);
+      const p = at.get(o.id);
+      if (!def || !p || !def.objectIds.includes(o.id) || snap.objectives.get(def.key)?.has(o.id) || past(def)) continue;
+      objects.push({ id: o.id, objectiveKey: def.key, x: p.x, y: p.y, radius: p.radius, assetKey: o.assetKey, label: o.label, prompt: o.prompt, state: checkObjective(def, snap) ? 'locked' : 'available' });
+    }
+
+    const points: StageViewDto['points'] = [];
+    for (const t of STORY_TRIGGERS) {
+      if (t.stageCode !== stageCode || t.auto || !this.pointOpen(t, snap)) continue;
+      const p = at.get(t.id);
+      const look = data.storyPoints?.find((s) => s.id === t.id);
+      if (!p || !look) continue;
+      points.push({ id: t.id, kind: look.kind, x: p.x, y: p.y, radius: p.radius, assetKey: look.assetKey, label: look.label, prompt: look.prompt });
+    }
+
+    const layout = data.layout;
+    return {
+      stageCode,
+      greybox: data.greybox === true,
+      size: data.size ?? null,
+      objects,
+      points,
+      gates: (layout?.gates ?? []).map((g) => ({ id: g.id, label: g.label, x: g.x, y: g.y, width: g.width, height: g.height, open: snap.events.has(g.openEvent) })),
+      layout: layout ? { zones: layout.zones.filter((z) => !z.visibleAfter || snap.events.has(z.visibleAfter)), paths: layout.paths, blockers: layout.blockers } : null,
+      objectives: defs.map((d) => ({ key: d.key, collected: snap.objectives.get(d.key)?.size ?? 0, required: d.objectIds.length, active: checkObjective(d, snap) === null })),
+    };
   }
 
   // ---------- 내부: 상태 ----------

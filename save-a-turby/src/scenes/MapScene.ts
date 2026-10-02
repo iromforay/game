@@ -261,7 +261,7 @@ export class MapScene extends Phaser.Scene {
   }
 
   // 퀘스트 추적(빛나는 실가루 n/10, 서버 인벤토리 수량). 운영 화면에는 추적 정보만 — 원격 전달 버튼은 좌표·보풀이 NPC 확정 전이라
-  // 개발 미리보기(devFlags.remoteDelivery)에서만 보인다(v3 §4). 서버 npc_bopuli 트리거와 검증은 그대로다.
+  // 개발 미리보기(devFlags.remoteDelivery)에서만 보인다(v3 §4). 서버 forest_bopuli_return 지점과 검증은 그대로다.
   // 목표가 없으면 패널을 남기지 않는다. 긴 목표 문구는 왼쪽 HUD와 미니맵 사이 폭 안에서 줄바꿈한다(자르지 않음)
   private showDelivery(delivery: StoryDelivery | null) {
     this.lastDelivery = delivery;

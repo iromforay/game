@@ -64,10 +64,10 @@ test('이벤트 허용: 시작 상태·선행 이벤트·목표·성장 단계',
   // 나침판 조건은 목표 진행이 아니라 서버 인벤토리 실가루 수량(Codex v2 §2.3) — 규칙은 체크포인트·선행 이벤트만, 수량은 트리거·소비가 확인
   assert.equal(checkEvent(ev('forest_compass_granted'), snap('CH01_BOPUL_RESCUED', ['forest_dansuring_clue_learned'])), null);
   // 목표 조건 규칙 자체는 유지(수집 목표를 조건으로 쓰는 이벤트용)
-  const nine = Array.from({ length: 9 }, (_, i) => `dust_0${i + 1}`);
+  const nine = Array.from({ length: 9 }, (_, i) => `forest_dust_0${i + 1}`);
   const withObjective = { ...ev('forest_compass_granted'), requireObjective: { key: 'forest_glowing_dust', count: 10 } };
   assert.equal(checkEvent(withObjective, snap('CH01_BOPUL_RESCUED', ['forest_dansuring_clue_learned'], { forest_glowing_dust: nine }))?.code, 'STORY_PREREQUISITE_MISSING');
-  assert.equal(checkEvent(withObjective, snap('CH01_BOPUL_RESCUED', ['forest_dansuring_clue_learned'], { forest_glowing_dust: [...nine, 'dust_10'] })), null);
+  assert.equal(checkEvent(withObjective, snap('CH01_BOPUL_RESCUED', ['forest_dansuring_clue_learned'], { forest_glowing_dust: [...nine, 'forest_dust_10'] })), null);
   assert.equal(checkEvent(ev('forest_primordial_knot_seen'), snap('CH01_FIRST_KNOT_EQUIPPED', ['forest_dansuring_found'], {}, 0))?.code, 'STORY_PREREQUISITE_MISSING', '장 완료는 성장 단계 1 확인');
   assert.equal(checkEvent(ev('forest_primordial_knot_seen'), snap('CH01_FIRST_KNOT_EQUIPPED', ['forest_dansuring_found'], {}, 1)), null);
 });
@@ -77,7 +77,7 @@ test('수집 목표 활성 구간: 단서 전·나침판 뒤에는 비활성', (
   assert.equal(checkObjective(dust, snap('CH01_STARTED', ['forest_bopul_rescued'])) !== null, true);
   assert.equal(checkObjective(dust, snap('CH01_BOPUL_RESCUED', ['forest_dansuring_clue_learned'])), null);
   assert.equal(checkObjective(dust, snap('CH01_COMPASS_ACQUIRED', ['forest_dansuring_clue_learned'])) !== null, true);
-  assert.deepEqual(dust.objectIds, ['dust_01', 'dust_02', 'dust_03', 'dust_04', 'dust_05', 'dust_06', 'dust_07', 'dust_08', 'dust_09', 'dust_10']);
+  assert.deepEqual(dust.objectIds, Array.from({ length: 10 }, (_, i) => `forest_dust_${String(i + 1).padStart(2, '0')}`));
 });
 
 test('재접속 위치: 오프닝 구간, 유물 장착 튜토리얼', () => {
