@@ -3,6 +3,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'path';
+import { readFileSync } from 'fs';
 import type { Browser } from 'playwright-core';
 import { Backend, Game, ROOT, freePort, launchBrowser, startVite, withDiagnosis } from './harness';
 import { seedExplorer, seedKnotReady } from './fixtures';
@@ -39,7 +40,17 @@ async function goForest(g: Game) {
   await g.until('숲 맵(또는 맵이 바로 연 대화)', "s.scenes.includes('Map') || s.scenes.includes('StoryDialogue')");
 }
 
-test('1장 E2E ①: 신규 계정 오프닝 → 오프닝 전 이탈 차단 → 이름 → 숲 대화 자동 → 스토리 PartySelect → 새로고침 복원 → 전투 → 대화 복귀', async () => {
+// 숲 안의 지점까지 걸어가 안내 버튼을 한 번 누른다(좌표는 서버 지역 데이터)
+const FOREST = JSON.parse(readFileSync(join(ROOT, 'BE/story-data/save-a-turby/stages/forest.json'), 'utf8')) as { points: { id: string; x: number; y: number }[] };
+async function interactAt(g: Game, id: string, expect: string) {
+  const p = FOREST.points.find((x) => x.id === id)!;
+  await g.walkTo('Map', p, 'keys', `s.map && s.map.story && s.map.story.prompt === '${id}'`);
+  await g.until(`${id} 안내 버튼`, `s.map && s.map.story && s.map.story.prompt === '${id}' && !!s.map.story.promptText`);
+  const at = (await g.state()).map.story.interact as { x: number; y: number };
+  await g.clickAt(at.x, at.y, expect);
+}
+
+test('1장 E2E ①: 신규 계정 오프닝 → 오프닝 전 이탈 차단 → 이름 → 숲 입구 장면 → 잘린 실 지점 → 공터 지점 → 스토리 PartySelect → 새로고침 복원 → 전투 → 대화 복귀', async () => {
   const device = 'e2e-ch01';
   await backend.start();
   const g = await Game.open(browser, `${vite.url}/?device=${device}`, device);
@@ -70,11 +81,18 @@ test('1장 E2E ①: 신규 계정 오프닝 → 오프닝 전 이탈 차단 → 
       const p = backend.playerByDevice(device)!;
       assert.equal(backend.db.rows('turby_instance', { owner_player_id: p.id }).length, 1, '이야기 누비 1마리');
 
-      // 4) 숲 진입 → 1장 대화 자동 실행
+      // 4) 숲 진입 → 첫 길의 걷는 장면(자동) → 숲 안의 지점: 잘린 실오라기 → 보풀이 공터(10-02 v3)
       await goForest(g);
       await g.waitScene('StoryDialogue');
+      await g.advanceDialogue("s.scenes.includes('Map') && !s.scenes.includes('StoryDialogue')");
+      await g.until('지도에 잘린 실 지점', "s.map && s.map.story && s.map.story.points.join() === 'forest_cut_thread'");
+      await interactAt(g, 'forest_cut_thread', "s.scenes.includes('StoryDialogue')");
+      await g.advanceDialogue("s.scenes.includes('Map') && !s.scenes.includes('StoryDialogue')");
+      await g.until('다음 지점은 공터', "s.map && s.map.story && s.map.story.points.join() === 'forest_bopuli_ambush'");
+      assert.equal(checkpointOf(device), 'CH01_STARTED', '지점 진입은 체크포인트를 바꾸지 않는다');
+      await interactAt(g, 'forest_bopuli_ambush', "s.scenes.includes('StoryDialogue')");
 
-      // 5) 대화 → 스토리 PartySelect
+      // 5) 공터 대화 → 스토리 PartySelect
       await g.advanceDialogue("s.scenes.includes('PartySelect')");
       await g.until('스토리 파티 선택', 's.party && s.party.story');
 

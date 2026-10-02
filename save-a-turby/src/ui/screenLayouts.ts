@@ -383,6 +383,7 @@ export interface MapHudLayout {
   inventory: Rect;
   turbys: Rect;
   joystickZone: Rect; // 이 영역에는 누를 수 있는 HUD를 두지 않는다
+  interact: Rect; // 수집·이야기 지점 상호작용 버튼(가까이 갔을 때만 보임) — 목표 패널 바로 아래 가운데(화면 가운데의 캐릭터와 조이스틱 영역을 가리지 않는다)
   toastY: number;
 }
 export function mapHudLayout(scale: number): MapHudLayout {
@@ -404,7 +405,11 @@ export function mapHudLayout(scale: number): MapHudLayout {
   const turbys = { x: W - 16 - btnW, y: inventory.y + btnH + 8, w: btnW, h: btnH };
   const hudBottom = Math.max(room.y + room.h, turbys.y + turbys.h, goal.y + goal.h);
   const zoneY = Math.max(H / 2, hudBottom + 8);
-  return { mode, font, area, captured, home, room, goal, miniMap: mini, inventory, turbys, joystickZone: { x: 0, y: zoneY, w: W, h: H - zoneY }, toastY: H - 60 };
+  // 상호작용 버튼: 왼쪽 HUD 열과 오른쪽 버튼 열 사이, 목표 패널 바로 아래
+  const interactH = Math.max(touchH(scale, compact ? 48 : 44), Math.round(font.button * 1.25 + 20)); // 어느 배율에서도 실제 화면 40px 이상
+  const interactW = compact ? 420 : 280;
+  const interact = { x: Math.round(W / 2 - interactW / 2), y: goal.y + goal.h + 8, w: interactW, h: interactH };
+  return { mode, font, area, captured, home, room, goal, miniMap: mini, inventory, turbys, joystickZone: { x: 0, y: zoneY, w: W, h: H - zoneY }, interact, toastY: H - 60 };
 }
 
 // 가상 키보드 대응(10-01 v2 §5): 입력 줄(위·아래, 화면 px)이 보이는 영역(visualViewport) 아래로 가려지면 위로 올릴 양(px).

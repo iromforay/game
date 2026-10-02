@@ -127,6 +127,15 @@ export function ensureUiPlaceholders(scene: Phaser.Scene) {
     g.lineStyle(4, 0xcccccc, 1).strokeCircle(20, 14, 8);
     g.fillStyle(0x8a8a8a).fillRoundedRect(9, 18, 22, 18, 3);
   });
+  // 10-02 v3: 이야기 지점·실가루 지도 표식(임시 도형 — 최종 에셋 아님)
+  ensureTexture(scene, 'marker-story', 40, 40, (g) => {
+    g.lineStyle(4, 0x9276d2, 1).strokeCircle(20, 20, 15);
+    g.fillStyle(0x9276d2, 1).fillCircle(20, 20, 7);
+  });
+  ensureTexture(scene, 'marker-dust', 40, 40, (g) => {
+    g.fillStyle(0xffd23f, 1).fillPoints([{ x: 20, y: 4 }, { x: 34, y: 20 }, { x: 20, y: 36 }, { x: 6, y: 20 }], true);
+    g.lineStyle(2, 0x695b67, 1).strokePoints([{ x: 20, y: 4 }, { x: 34, y: 20 }, { x: 20, y: 36 }, { x: 6, y: 20 }], true);
+  });
   ensureTexture(scene, 'marker-current', 48, 48, (g) => {
     g.fillStyle(0xffd23f, 0.35);
     star(g, 24, 25, 22, 10);

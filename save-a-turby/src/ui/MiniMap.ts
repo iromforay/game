@@ -123,6 +123,14 @@ export class MiniMap {
     this.syncPlayer();
   }
 
+  // 게임 진행으로 지도에 놓이는 것이 바뀌면(이야기 지점이 열리고 닫힘, 오브젝트 수집) 마커 목록을 바꿔 다시 그린다
+  setMarkers(markers: MapMarker[]) {
+    this.markers = markers;
+    if (!markers.some((m) => m.id === this.selectedId)) this.selectedId = this.destinationId || markers[0]?.id || '';
+    this.hidden.clear();
+    this.relayout();
+  }
+
   private build() {
     this.L = miniMapLayout(displayScaleOf(this.scene.scale.displaySize.width));
     this.buildMini();

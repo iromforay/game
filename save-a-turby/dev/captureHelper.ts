@@ -141,6 +141,13 @@ function state() {
       miniMap: map.miniMap?.debugState ?? null, joystickZone: map.hud.joystickZone,
       buttons: { home: center(map.hud.home), inventory: center(map.hud.inventory), turbys: center(map.hud.turbys) },
       inputPatch: g.registry.get('inputPatch') ?? null,
+      // 10-02 v3: 지역 스토리 화면(서버가 내려 준 것)과 지금 누를 수 있는 대상
+      story: map.stageView ? {
+        greybox: map.stageView.greybox, objects: map.stageView.objects.map((o: Any) => o.id), locked: map.stageView.objects.filter((o: Any) => o.state === 'locked').length,
+        points: map.stageView.points.map((p: Any) => p.id), gates: Object.fromEntries(map.stageView.gates.map((x: Any) => [x.id, x.open])),
+        objective: map.stageView.objectives[0] ?? null,
+        prompt: map.activeTarget?.target.id ?? null, promptText: map.interactLabel?.visible ? map.interactLabel.text : null, busy: map.storyBusy, interact: center(map.hud.interact), interactRect: map.hud.interact,
+      } : null,
     };
   }
   const inv = [...liveInventoryWindows].find((w) => w.isVisible);

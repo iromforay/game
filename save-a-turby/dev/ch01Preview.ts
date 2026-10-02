@@ -20,10 +20,10 @@ const ME = '1';
 const OPENING_DONE = ['opening_fall_completed', 'opening_name_saved', 'story_nubi_granted'];
 const PRESETS: Record<string, { checkpoint: Checkpoint; events: string[] }> = {
   forest: { checkpoint: 'OPENING_COMPLETE', events: OPENING_DONE },
-  clue: { checkpoint: 'CH01_BOPUL_RESCUED', events: [...OPENING_DONE, 'forest_first_path_started', 'forest_stitchling_battle_won', 'forest_bopul_rescued', 'forest_dansuring_clue_learned'] },
-  compass: { checkpoint: 'CH01_COMPASS_ACQUIRED', events: [...OPENING_DONE, 'forest_first_path_started', 'forest_stitchling_battle_won', 'forest_bopul_rescued', 'forest_dansuring_clue_learned', 'forest_compass_granted'] },
+  clue: { checkpoint: 'CH01_BOPUL_RESCUED', events: [...OPENING_DONE, 'forest_first_path_started', 'forest_cut_thread_inspected', 'forest_stitchling_battle_won', 'forest_bopul_rescued', 'forest_dansuring_clue_learned'] },
+  compass: { checkpoint: 'CH01_COMPASS_ACQUIRED', events: [...OPENING_DONE, 'forest_first_path_started', 'forest_cut_thread_inspected', 'forest_stitchling_battle_won', 'forest_bopul_rescued', 'forest_dansuring_clue_learned', 'forest_compass_granted'] },
   // 첫 매듭 각성까지 끝남(장착 전) — 인벤토리·누비 장착 캡처용
-  knot: { checkpoint: 'CH01_COMPASS_ACQUIRED', events: [...OPENING_DONE, 'forest_first_path_started', 'forest_stitchling_battle_won', 'forest_bopul_rescued', 'forest_dansuring_clue_learned', 'forest_compass_granted', 'forest_giant_knot_defeated', 'forest_first_knot_awakened'] },
+  knot: { checkpoint: 'CH01_COMPASS_ACQUIRED', events: [...OPENING_DONE, 'forest_first_path_started', 'forest_cut_thread_inspected', 'forest_stitchling_battle_won', 'forest_bopul_rescued', 'forest_dansuring_clue_learned', 'forest_compass_granted', 'forest_hidden_path_opened', 'forest_giant_knot_defeated', 'forest_first_knot_awakened'] },
 };
 const preset = PRESETS[params.get('start') ?? 'forest'] ?? PRESETS.forest;
 

@@ -28,7 +28,8 @@ export const STORY_SLOT_LABEL = '이야기 슬롯';
 export const STORY_SLOT_LOCK = '해제 불가';
 
 // ----- 지도 범례: 색이 아니라 모양·표식으로 구분한다. 지도에 실제로 있는 종류만 보여 준다 -----
-export type MarkerType = 'home' | 'market' | 'exit' | 'target';
+// story·dust: 탐험 지도의 이야기 지점·수집 오브젝트(임시 도형)
+export type MarkerType = 'home' | 'market' | 'exit' | 'target' | 'story' | 'dust';
 export type LegendKey = 'player' | 'peer' | MarkerType;
 export const LEGEND_LABEL: Record<LegendKey, string> = {
   player: '내 위치 — 화살표(가는 방향)',
@@ -37,9 +38,11 @@ export const LEGEND_LABEL: Record<LegendKey, string> = {
   market: '장터',
   exit: '야생 출구',
   target: '목적지 — 별',
+  story: '이야기 지점 — 겹동그라미',
+  dust: '빛나는 실가루 — 마름모',
 };
 export function legendEntries(markerTypes: MarkerType[], hasPeers: boolean): LegendKey[] {
-  const order: MarkerType[] = ['target', 'home', 'market', 'exit'];
+  const order: MarkerType[] = ['target', 'story', 'dust', 'home', 'market', 'exit'];
   return ['player', ...(hasPeers ? (['peer'] as const) : []), ...order.filter((t) => markerTypes.includes(t))];
 }
 

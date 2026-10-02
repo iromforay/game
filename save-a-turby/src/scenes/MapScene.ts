@@ -24,8 +24,13 @@ import coopSlots from '../data/coop-slots.json';
 import type { Facing, MapPlayer } from '../net/roomClient';
 import charactersData from '../data/characters.json';
 import { AVATAR_IMAGE, CHARACTER_IMAGES, BACKGROUND_TILES } from '../assets/registry';
-import { fetchStory, triggerStory } from '../api/client';
-import { deliveryGoalText, shortageText, type StoryDelivery, type StoryPlay } from '../story/storyFlow';
+import { collectStoryObject, fetchStageView, fetchStory, triggerStory } from '../api/client';
+import { DELIVERY_ITEM_NAME, deliveryGoalText, shortageText, type StoryDelivery, type StoryPlay } from '../story/storyFlow';
+import { collectedText, nearestInteractable, promptText, solidRects, stepWithSolids, type Interactable, type StageRect, type StageView } from '../story/storyStage';
+
+const AVATAR_HALF = 16; // 막힌 곳 판정에 쓰는 아바타 몸 반지름(px)
+const DEPTH_GROUND = -20;
+const DEPTH_STORY = -5; // 이야기 지점·오브젝트 표식(아바타·야생 터비보다 아래)
 
 interface WildMarker {
   spawn: WildSpawn;
@@ -86,6 +91,16 @@ export class MapScene extends Phaser.Scene {
   private selfRing?: Phaser.GameObjects.Ellipse | Phaser.GameObjects.Image;
   private deliveryLayer: Phaser.GameObjects.GameObject[] = [];
   private delivering = false;
+  // 10-02 v3: 지역 스토리 화면(서버가 내려 준 남은 오브젝트·활성 지점·문) — 좌표·문구·에셋 키는 전부 서버 데이터
+  private stageView: StageView | null = null;
+  private storyLayer: Phaser.GameObjects.GameObject[] = [];
+  private solids: StageRect[] = [];
+  private activeTarget: Interactable | null = null;
+  private storyBusy = false;
+  private interactBox?: Phaser.GameObjects.Rectangle;
+  private interactLabel?: Phaser.GameObjects.Text;
+  private baseMarkers: MapMarker[] = [];
+  private keys?: Record<'up' | 'down' | 'left' | 'right' | 'w' | 'a' | 's' | 'd' | 'e' | 'space' | 'enter', Phaser.Input.Keyboard.Key>;
 
   constructor() {
     super('Map');
@@ -109,6 +124,13 @@ export class MapScene extends Phaser.Scene {
     this.leaving = false;
     this.lastDelivery = null;
     this.goalTextOverride = null;
+    this.stageView = null;
+    this.storyLayer = [];
+    this.solids = [];
+    this.activeTarget = null;
+    this.storyBusy = false;
+    this.interactBox = undefined;
+    this.interactLabel = undefined;
     this.generation++;
   }
 
@@ -135,6 +157,12 @@ export class MapScene extends Phaser.Scene {
     const gen = this.generation;
     const current = getCurrentChapter((await loadChapterStatuses()).statuses);
     if (gen !== this.generation || !this.sys.isActive()) return; // 기다리는 사이 화면이 바뀜(마을 복귀 등)
+    // 지역 스토리 화면 데이터(없거나 실패해도 탐험은 된다 — 이야기 지점만 보이지 않는다)
+    const view = await fetchStageView(stage.code).catch((err: unknown) => {
+      console.warn('[story] 지역 이야기 정보를 불러오지 못했습니다:', err);
+      return null;
+    });
+    if (gen !== this.generation || !this.sys.isActive()) return;
     ensureUiPlaceholders(this);
     this.stageWidth = stage.width;
     this.stageHeight = stage.height;
@@ -142,7 +170,9 @@ export class MapScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor('#20301c');
     this.cameras.main.setBounds(0, 0, stage.width, stage.height);
 
-    this.add.tileSprite(0, 0, stage.width, stage.height, `bg-${stage.code}`).setOrigin(0, 0);
+    // 회색상자(임시) 배치가 있으면 반복 배경 대신 배치를 그린다 — 최종 지도가 오면 이 분기만 바꾼다
+    if (view?.greybox && view.layout) this.drawGreybox(view, stage.width, stage.height);
+    else this.add.tileSprite(0, 0, stage.width, stage.height, `bg-${stage.code}`).setOrigin(0, 0);
 
     this.avatar = this.add.image(stage.width / 2, stage.height / 2, 'avatar').setDisplaySize(44, 44);
     this.cameras.main.startFollow(this.avatar, true, 0.1, 0.1);
@@ -152,6 +182,11 @@ export class MapScene extends Phaser.Scene {
     this.markers.forEach((m) => this.applyWildState(m.index, roomClient.wilds.get(m.index) ?? 'free')); // 마지막으로 알려진 서버 상태로 먼저 그린다
 
     this.joystick = new VirtualJoystick(this);
+    const kb = this.input.keyboard;
+    if (kb) {
+      const K = Phaser.Input.Keyboard.KeyCodes;
+      this.keys = { up: kb.addKey(K.UP), down: kb.addKey(K.DOWN), left: kb.addKey(K.LEFT), right: kb.addKey(K.RIGHT), w: kb.addKey(K.W), a: kb.addKey(K.A), s: kb.addKey(K.S), d: kb.addKey(K.D), e: kb.addKey(K.E), space: kb.addKey(K.SPACE), enter: kb.addKey(K.ENTER) };
+    }
 
     // 구 판정(롤백 상태)일 때만: 지금 열린 장이 이 맵이면 대표 터비 스폰 위치를 별로 표시. 신 판정에서는 포획이 장을 열지 않아 표시하지 않는다.
     const targets: MapMarker[] = [];
@@ -161,8 +196,9 @@ export class MapScene extends Phaser.Scene {
         targets.push({ id: `target-${index}`, type: 'target', name: `대표 터비 ${current.clearCharacterName}`, x: spawn.x, y: spawn.y, hint: `${current.chapter.titleKo}: '${current.clearCharacterName}'를 조우해 직접 포획하면 다음 지역이 열려요.` });
       });
     }
-    const view: MapView = { title: stage.name, width: stage.width, height: stage.height, bounds: { x: 0, y: 0, w: stage.width, h: stage.height } };
-    this.miniMap = new MiniMap(this, view, targets, '', (open) => {
+    const mapView: MapView = { title: stage.name, width: stage.width, height: stage.height, bounds: { x: 0, y: 0, w: stage.width, h: stage.height } };
+    this.baseMarkers = targets;
+    this.miniMap = new MiniMap(this, mapView, targets, '', (open) => {
       this.joystick.setEnabled(!open);
     });
 
@@ -171,6 +207,7 @@ export class MapScene extends Phaser.Scene {
     this.inventoryWindow = new InventoryWindow(this, { onClose: () => this.joystick.setEnabled(true), onPlay: (play) => this.launchStory(play) });
     this.areaName = stage.name;
     this.buildHud();
+    this.applyStageView(view);
     // 창 크기가 바뀌면 맵을 다시 시작하지 않고 HUD·미니맵·목표 표시만 새 배율로 다시 그린다(위치·탐험 세션·목표 상태 유지)
     watchLayout(this, () => this.relayoutHud());
     this.ready = true;
@@ -178,6 +215,7 @@ export class MapScene extends Phaser.Scene {
     const onWake = () => {
       this.joystick.setEnabled(true);
       void this.refreshDelivery();
+      void this.refreshStageView(); // 대화·전투로 진행이 바뀌었을 수 있다(지점이 닫히고 다음 지점·문이 열림)
     };
     this.events.on('wake', onWake);
     this.events.once('shutdown', () => this.events.off('wake', onWake));
@@ -227,6 +265,11 @@ export class MapScene extends Phaser.Scene {
       this.inventoryPanel.toggle();
       if (opening) this.joystick.setEnabled(false); // 닫을 때는 InventoryPanel의 onClose 콜백이 다시 켜줌
     });
+    // 수집·이야기 지점 상호작용 버튼: 대상 가까이 있을 때만 보인다(조이스틱 영역 밖)
+    this.interactBox = fix(this.add.rectangle(L.interact.x, L.interact.y, L.interact.w, L.interact.h, 0x241a3d, 0.92).setOrigin(0, 0).setStrokeStyle(3, 0xffd27f, 1).setDepth(2000));
+    this.interactLabel = fix(this.add.text(L.interact.x + L.interact.w / 2, L.interact.y + L.interact.h / 2, '', { fontSize: `${L.font.button}px`, color: '#ffe9a8' }).setOrigin(0.5).setDepth(2001));
+    this.interactBox.setInteractive({ useHandCursor: true }).on('pointerdown', () => void this.interact());
+    this.showInteract();
     // 방·참가자 상태(방에 있을 때만)
     this.roomLabel = undefined;
     if (this.roomJoined) {
@@ -240,6 +283,130 @@ export class MapScene extends Phaser.Scene {
     this.miniMap.relayout();
     this.showDelivery(this.lastDelivery);
     this.inventoryPanel.relayout();
+  }
+
+  // ----- 10-02 v3: 지역 스토리 화면 — 회색상자 배치, 고유 오브젝트 수집, 이야기 지점 -----
+
+  // 회색상자(임시): 구역·길·막힌 곳을 도형으로만 그린다. 좌표는 서버 지역 데이터 — 최종 지도와 에셋이 오면 이 그리기만 바꾼다
+  private drawGreybox(view: StageView, width: number, height: number) {
+    const L = view.layout!;
+    const g = this.add.graphics().setDepth(DEPTH_GROUND);
+    g.fillStyle(0x3b423c, 1).fillRect(0, 0, width, height);
+    g.lineStyle(1, 0x4a524b, 1);
+    for (let x = 0; x <= width; x += 200) g.lineBetween(x, 0, x, height);
+    for (let y = 0; y <= height; y += 200) g.lineBetween(0, y, width, y);
+    for (const z of L.zones) {
+      g.fillStyle(0x566058, 0.55).fillRect(z.x, z.y, z.width, z.height).lineStyle(2, 0x8a968c, 0.9).strokeRect(z.x, z.y, z.width, z.height);
+      this.add.text(z.x + 8, z.y + 6, z.label, { fontSize: '16px', color: '#cfd8d0' }).setDepth(DEPTH_GROUND + 1);
+    }
+    g.lineStyle(10, 0x9aa59c, 0.45);
+    for (const path of L.paths) for (let i = 1; i < path.length; i++) g.lineBetween(path[i - 1][0], path[i - 1][1], path[i][0], path[i][1]);
+    for (const b of L.blockers) {
+      g.fillStyle(0x1f2420, 1).fillRect(b.x, b.y, b.width, b.height).lineStyle(2, 0x0f120f, 1).strokeRect(b.x, b.y, b.width, b.height);
+      if (b.label) this.add.text(b.x + b.width / 2, b.y + b.height / 2, b.label, { fontSize: '13px', color: '#9aa59c' }).setOrigin(0.5).setDepth(DEPTH_GROUND + 1);
+    }
+    this.add.text(width / 2, height / 2 + 70, '회색상자(임시 배치) — 기능·동선 확인용', { fontSize: '15px', color: '#e8c96a', backgroundColor: '#00000066', padding: { x: 8, y: 4 } }).setOrigin(0.5).setDepth(DEPTH_GROUND + 1);
+  }
+
+  // 서버가 내려 준 화면 상태로 맞춘다: 문·오브젝트·지점 표식, 막힌 곳, 지도 마커, 안내 버튼
+  private applyStageView(view: StageView | null) {
+    this.stageView = view;
+    this.solids = solidRects(view);
+    this.storyLayer.forEach((o) => o.destroy());
+    this.storyLayer = [];
+    const keep = <T extends Phaser.GameObjects.GameObject>(o: T) => {
+      this.storyLayer.push(o);
+      return o;
+    };
+    for (const gate of view?.gates ?? []) {
+      if (gate.open) continue;
+      keep(this.add.rectangle(gate.x, gate.y, gate.width, gate.height, 0x6b5a8a, 0.95).setOrigin(0, 0).setStrokeStyle(2, 0xdcd3f4, 1).setDepth(DEPTH_STORY));
+      keep(this.add.text(gate.x + gate.width / 2, gate.y - 6, gate.label, { fontSize: '13px', color: '#dcd3f4' }).setOrigin(0.5, 1).setDepth(DEPTH_STORY));
+    }
+    for (const o of view?.objects ?? []) {
+      const locked = o.state === 'locked';
+      const c = keep(this.add.container(o.x, o.y).setDepth(DEPTH_STORY));
+      // 임시 도형(마름모): 최종 에셋이 오면 o.assetKey로 그림을 바꾼다
+      const shape = this.add.graphics();
+      shape.fillStyle(locked ? 0x8a8a8a : 0xffd23f, 1).fillPoints([{ x: 0, y: -16 }, { x: 14, y: 0 }, { x: 0, y: 16 }, { x: -14, y: 0 }], true);
+      shape.lineStyle(2, 0x2a2a2a, 1).strokePoints([{ x: 0, y: -16 }, { x: 14, y: 0 }, { x: 0, y: 16 }, { x: -14, y: 0 }], true);
+      c.add([this.add.circle(0, 0, o.radius).setStrokeStyle(1, locked ? 0x8a8a8a : 0xffd23f, 0.35), shape, this.add.text(0, 22, locked ? `${o.label} · 잠김` : o.label, { fontSize: '12px', color: locked ? '#b5b5b5' : '#ffe9a8' }).setOrigin(0.5, 0)]);
+    }
+    for (const pt of view?.points ?? []) {
+      const c = keep(this.add.container(pt.x, pt.y).setDepth(DEPTH_STORY));
+      c.add([this.add.circle(0, 0, pt.radius).setStrokeStyle(2, 0xb9a6ee, 0.5), this.add.circle(0, 0, 20).setStrokeStyle(4, 0xb9a6ee, 1), this.add.circle(0, 0, 8, 0xb9a6ee), this.add.text(0, 28, pt.label, { fontSize: '13px', color: '#e6dcff' }).setOrigin(0.5, 0)]);
+    }
+    const storyMarkers: MapMarker[] = [
+      ...(view?.points ?? []).map((pt) => ({ id: pt.id, type: 'story' as const, name: pt.label, x: pt.x, y: pt.y, hint: pt.prompt })),
+      ...(view?.objects ?? []).map((o) => ({ id: o.id, type: 'dust' as const, name: o.label, x: o.x, y: o.y, hint: o.state === 'locked' ? '아직 모을 수 없어요' : o.prompt })),
+    ];
+    this.miniMap?.setMarkers([...this.baseMarkers, ...storyMarkers]);
+    this.setActiveTarget(null);
+  }
+
+  private async refreshStageView() {
+    const gen = this.generation;
+    try {
+      const view = await fetchStageView(this.stageCode);
+      if (gen !== this.generation || !this.sys.isActive()) return;
+      this.applyStageView(view);
+    } catch (err) {
+      console.warn('[story] 지역 이야기 정보를 불러오지 못했습니다:', err);
+    }
+  }
+
+  private setActiveTarget(it: Interactable | null) {
+    if ((it?.target.id ?? null) === (this.activeTarget?.target.id ?? null) && (it?.type ?? null) === (this.activeTarget?.type ?? null)) {
+      this.activeTarget = it; // 같은 대상(상태만 바뀌었을 수 있음)
+      this.showInteract();
+      return;
+    }
+    this.activeTarget = it;
+    this.showInteract();
+  }
+
+  private showInteract() {
+    const it = this.activeTarget;
+    const on = !!it && !this.storyBusy;
+    this.interactBox?.setVisible(on);
+    this.interactLabel?.setVisible(on);
+    if (it) this.interactLabel?.setText(promptText(it));
+    if (this.interactBox?.input) this.interactBox.input.enabled = on;
+  }
+
+  // 수집·지점 발동: 대상 ID만 보낸다. 허용 여부·수량·진행은 서버가 정하고, 거절되면 서버 상태로 다시 맞춘다
+  private async interact() {
+    const it = this.activeTarget;
+    if (!it || this.storyBusy || !this.ready || this.encounterLocked) return;
+    this.storyBusy = true;
+    this.showInteract();
+    const gen = this.generation;
+    const stale = () => gen !== this.generation || !this.sys.isActive();
+    if (this.inRoomMap) roomClient.sendMove(this.avatar.x, this.avatar.y, this.facing); // 서버가 아는 내 위치를 지금 자리로
+    try {
+      if (it.type === 'object') {
+        const res = await collectStoryObject(it.target.objectiveKey, it.target.id);
+        if (stale()) return;
+        this.applyStageView(res.stage);
+        const name = DELIVERY_ITEM_NAME[res.grants[0]?.itemCode ?? ''] ?? '빛나는 실가루';
+        showToast(this, collectedText(name, res.collected, res.required), { y: this.hud.toastY, fixed: true });
+        void this.refreshDelivery();
+      } else {
+        const res = await triggerStory(it.target.id);
+        if (stale()) return;
+        this.showDelivery(res.story.delivery);
+        if (res.shortage) showToast(this, shortageText(res.shortage), { y: this.hud.toastY, fixed: true });
+        if (res.play) this.launchStory(res.play); // 끝나면 wake에서 화면을 다시 맞춘다
+        else await this.refreshStageView();
+      }
+    } catch (err) {
+      if (stale()) return;
+      showToast(this, err instanceof Error && err.message ? err.message : '서버에 연결할 수 없습니다.', { y: this.hud.toastY, error: true, fixed: true });
+      await this.refreshStageView();
+    } finally {
+      this.storyBusy = false;
+      if (!stale()) this.showInteract();
+    }
   }
 
   // ----- M4-C: 1장 이야기 연결(서버가 정한 구간만 재생) -----
@@ -569,17 +736,31 @@ export class MapScene extends Phaser.Scene {
       return;
     }
 
-    const { x, y, magnitude } = this.joystick.getVector();
-    if (magnitude > 0) {
+    if (this.inventoryWindow.isVisible) return;
+    // 이동: 조이스틱 + 키보드(방향키·WASD). 막힌 곳(먼지풀·닫힌 문)은 지나가지 못하고 벽을 따라 미끄러진다
+    const joy = this.joystick.getVector();
+    const k = this.keys;
+    let x = joy.x * joy.magnitude + (k && (k.right.isDown || k.d.isDown) ? 1 : 0) - (k && (k.left.isDown || k.a.isDown) ? 1 : 0);
+    let y = joy.y * joy.magnitude + (k && (k.down.isDown || k.s.isDown) ? 1 : 0) - (k && (k.up.isDown || k.w.isDown) ? 1 : 0);
+    const len = Math.hypot(x, y);
+    if (len > 1) {
+      x /= len;
+      y /= len;
+    }
+    if (len > 0.05) {
       const dt = delta / 1000;
-      const nextX = Phaser.Math.Clamp(this.avatar.x + x * AVATAR_SPEED * magnitude * dt, 0, this.stageWidth);
-      const nextY = Phaser.Math.Clamp(this.avatar.y + y * AVATAR_SPEED * magnitude * dt, 0, this.stageHeight);
-      this.avatar.setPosition(nextX, nextY);
+      const to = { x: Phaser.Math.Clamp(this.avatar.x + x * AVATAR_SPEED * dt, 0, this.stageWidth), y: Phaser.Math.Clamp(this.avatar.y + y * AVATAR_SPEED * dt, 0, this.stageHeight) };
+      const next = stepWithSolids(this.solids, { x: this.avatar.x, y: this.avatar.y }, to, AVATAR_HALF);
+      this.avatar.setPosition(next.x, next.y);
       this.moveAngle = Math.atan2(y, x);
       this.facing = Math.abs(x) > Math.abs(y) ? (x < 0 ? 'left' : 'right') : y < 0 ? 'up' : 'down';
     }
     this.syncRoom(delta);
     this.miniMap.update(this.avatar.x, this.avatar.y, this.moveAngle);
+
+    // 가까이 있는 수집 오브젝트·이야기 지점: 안내 버튼을 보이고, 키(E·스페이스·엔터)로도 누를 수 있다
+    this.setActiveTarget(this.storyBusy ? null : nearestInteractable(this.stageView, this.avatar.x, this.avatar.y));
+    if (this.activeTarget && k && [k.e, k.space, k.enter].some((key) => Phaser.Input.Keyboard.JustDown(key))) void this.interact();
 
     for (const marker of this.markers) {
       if (marker.encountered || marker.state !== 'free' || (marker.retryAt ?? 0) > Date.now()) continue;

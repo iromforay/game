@@ -2,7 +2,7 @@
 import type { FakeDb } from '../helpers/fake-prisma';
 
 // 첫 매듭 각성까지 끝난 계정(테스트 격리 DB에 직접 준비 — 좌표가 필요한 숨은 길·보스전은 플레이로 위조하지 않음)
-const KNOT_READY_EVENTS = ['opening_fall_completed', 'opening_name_saved', 'story_nubi_granted', 'forest_first_path_started', 'forest_stitchling_battle_won', 'forest_bopul_rescued', 'forest_dansuring_clue_learned', 'forest_compass_granted', 'forest_giant_knot_defeated', 'forest_first_knot_awakened'];
+const KNOT_READY_EVENTS = ['opening_fall_completed', 'opening_name_saved', 'story_nubi_granted', 'forest_first_path_started', 'forest_cut_thread_inspected', 'forest_stitchling_battle_won', 'forest_bopul_rescued', 'forest_dansuring_clue_learned', 'forest_compass_granted', 'forest_hidden_path_opened', 'forest_giant_knot_defeated', 'forest_first_knot_awakened'];
 export function seedKnotReady(device: string) {
   return (db: FakeDb) => {
     const player = db.seed('player', { device_uuid: `dev-device-${device}-account`, nickname: '하늘', tare_balance: 100 }) as { id: bigint };
@@ -71,9 +71,33 @@ export function seedDelivery(device: string) {
     const nubiChar = db.rows('turby_character', { code: 'nubi' })[0] as { id: number };
     const nubi = db.seed('turby_instance', { owner_player_id: player.id, character_id: nubiChar.id, acquired_via: 'starter', is_story_companion: true }) as { id: bigint };
     db.seed('player_story_progress', { player_id: player.id, checkpoint: 'CH01_BOPUL_RESCUED', story_nubi_turby_instance_id: nubi.id, origin: 'new' });
-    for (const e of KNOT_READY_EVENTS.slice(0, 7)) db.seed('player_story_event', { player_id: player.id, event_id: e });
+    for (const e of KNOT_READY_EVENTS.slice(0, 8)) db.seed('player_story_event', { player_id: player.id, event_id: e });
     const dust = (db.rows('item_definition', { code: 'glowing_yarn_dust' })[0] as { id: number }).id;
     const now = new Date();
     db.seed('player_item', { player_id: player.id, item_definition_id: dust, quantity: 3, is_new: false, is_locked: true, first_acquired_at: now, last_acquired_at: now });
+  };
+}
+
+// 10-02 v3: 1장 숲의 특정 진행 상태(테스트 격리 DB에 직접). stage = 'started'(숲 진입 직후) | 'cut'(잘린 실 조사 뒤, 구조 전) | 'rescued'(실가루 의뢰 중)
+// collected: 이미 주운 실가루 ID(기록·아이템을 같은 수로 맞춘다)
+const FOREST_STAGE = {
+  started: { checkpoint: 'CH01_STARTED', events: 4 },
+  cut: { checkpoint: 'CH01_STARTED', events: 5 },
+  rescued: { checkpoint: 'CH01_BOPUL_RESCUED', events: 8 },
+} as const;
+export function seedForest(device: string, stage: keyof typeof FOREST_STAGE, collected: string[] = []) {
+  return (db: FakeDb) => {
+    const player = db.seed('player', { device_uuid: `dev-device-${device}-account`, nickname: '하늘', tare_balance: 100 }) as { id: bigint };
+    const nubiChar = db.rows('turby_character', { code: 'nubi' })[0] as { id: number };
+    const nubi = db.seed('turby_instance', { owner_player_id: player.id, character_id: nubiChar.id, acquired_via: 'starter', is_story_companion: true }) as { id: bigint };
+    const s = FOREST_STAGE[stage];
+    db.seed('player_story_progress', { player_id: player.id, checkpoint: s.checkpoint, story_nubi_turby_instance_id: nubi.id, origin: 'new' });
+    for (const e of KNOT_READY_EVENTS.slice(0, s.events)) db.seed('player_story_event', { player_id: player.id, event_id: e });
+    for (const id of collected) db.seed('player_story_objective_progress', { player_id: player.id, objective_key: 'forest_glowing_dust', object_id: id });
+    if (collected.length > 0) {
+      const dust = (db.rows('item_definition', { code: 'glowing_yarn_dust' })[0] as { id: number }).id;
+      const now = new Date();
+      db.seed('player_item', { player_id: player.id, item_definition_id: dust, quantity: collected.length, is_new: false, is_locked: true, first_acquired_at: now, last_acquired_at: now });
+    }
   };
 }

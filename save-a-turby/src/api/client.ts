@@ -1,4 +1,5 @@
 import { ApiError, createHttp } from './http';
+import type { StageView } from '../story/storyStage';
 import type { StoryDelivery, StoryPlay } from '../story/storyFlow';
 import type { InventoryList } from '../inventory/inventoryView';
 import { createMeApi } from './meApi';
@@ -170,6 +171,25 @@ export interface StoryTriggerResult {
 
 export function triggerStory(triggerId: string): Promise<StoryTriggerResult> {
   return me.post(`/story/triggers/${triggerId}`, {});
+}
+
+// 10-02 v3: 지역 스토리 화면(남은 오브젝트·활성 지점·문 상태) — 서버가 이 플레이어에게 지금 보이는 것만 내려 준다
+export function fetchStageView(stageCode: string): Promise<StageView> {
+  return me.get(`/story/stages/${stageCode}`);
+}
+
+// 고유 오브젝트 수집: 오브젝트 ID만 보낸다(수량·진행도는 서버가 정함). 응답의 stage로 화면을 맞춘다
+export interface CollectResult {
+  objectiveKey: string;
+  objectId: string;
+  alreadyCollected: boolean;
+  collected: number;
+  required: number;
+  grants: { itemCode: string; quantity: number }[];
+  stage: StageView;
+}
+export function collectStoryObject(objectiveKey: string, objectId: string): Promise<CollectResult> {
+  return me.post(`/story/objectives/${objectiveKey}/progress`, { objectId });
 }
 
 export function saveProfileName(name: string): Promise<{ eventId: string; alreadyCompleted: boolean; story: StoryStateFull }> {
