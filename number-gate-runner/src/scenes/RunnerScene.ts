@@ -3,7 +3,7 @@ import { applyGate, gateLabel, swarmPenetration } from '../model';
 import type { GateRule } from '../model';
 import type { RunnerResult } from '../game';
 import { RUNNER_STAGES, type RunnerStage } from '../stages';
-import heroCommanderUrl from '../assets/units/hero-commander.png';
+import heroCommanderUrl from '../assets/units/hero-commander-back.png';
 import squadRiflemanUrl from '../assets/units/squad-rifleman-formation.png';
 import numberGateUrl from '../assets/world/number-gate-3d.png';
 import clockworkGruntUrl from '../assets/enemies/clockwork-grunt.png';
@@ -377,8 +377,7 @@ export class RunnerScene extends Phaser.Scene {
     const heroY = 0;
     const shadow = this.add.ellipse(heroX + 2, heroY + 48, 112, 30, 0x0f172a, 0.42);
     const hero = this.add.image(heroX, heroY - 8, 'hero-commander')
-      .setDisplaySize(165, 138)
-      .setAngle(-90)
+      .setDisplaySize(175, 175)
       .setOrigin(0.5, 0.58);
     this.formation.add([shadow, hero]);
   }
