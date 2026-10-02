@@ -519,5 +519,6 @@ model score_record {
 enum score_record_game {
   tower_defense
   offense_tower
+  number_hero_tower
   marbles
 }

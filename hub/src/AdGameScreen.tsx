@@ -1,0 +1,28 @@
+import { NumberHeroTowerGame } from 'number-hero-tower';
+import { NumberGateRunnerScreen } from './NumberGateRunnerScreen';
+import type { AdGameId } from './adGames';
+import { GameResultCard } from './scoreboard/GameResultCard';
+import type { RankingGame } from './scoreboard/scoreboardClient';
+
+interface AdGameScreenProps {
+  gameId: AdGameId;
+  onExit: () => void;
+  onOpenRanking: (game: RankingGame, roundId?: number) => void;
+}
+
+export function AdGameScreen({ gameId, onExit, onOpenRanking }: AdGameScreenProps) {
+  if (gameId === 'number-hero-tower') {
+    return (
+      <div className="ad-game-react-screen">
+        <NumberHeroTowerGame onExit={onExit} />
+        <GameResultCard onOpenRanking={onOpenRanking} />
+      </div>
+    );
+  }
+
+  if (gameId === 'number-gate-runner') {
+    return <NumberGateRunnerScreen onExit={onExit} />;
+  }
+
+  return null;
+}

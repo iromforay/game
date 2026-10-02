@@ -4,7 +4,7 @@ import { PrismaService } from './prisma.service';
 
 // 스코어보드(2026-09-28, 설계 docs/dev/scoreboard.md) — 점수는 서버가 게임 결과 수치로 계산한다(공식을 한 곳에 두고
 // 값 범위를 검사하기 위함). 로그인(허브 계정) 상태면 기록하고 순위를 돌려주며, 게스트는 점수 계산 결과만 받는다.
-export type ScoreGame = 'tower_defense' | 'offense_tower' | 'marbles';
+export type ScoreGame = 'tower_defense' | 'offense_tower' | 'number_hero_tower' | 'marbles';
 export type RankingGame = ScoreGame | 'kirby';
 
 const RANKING_LIMIT = 50;
@@ -99,6 +99,17 @@ export class ScoreboardService {
       const label = result === 'win' ? '단독 1위' : result === 'tie' ? '공동 1위' : '입상 실패';
       return { score: points, roundId: 0, breakdown: [{ label: '대전 결과', value: label, points }], detail: { result } };
     }
+    if (game === 'number_hero_tower') {
+      const stageId = int(stats.stageId, 1, 1000, 'stageId');
+      const currentScore = int(stats.currentScore, 1, 10_000_000, 'currentScore');
+      const floorsCleared = int(stats.floorsCleared, 0, 100, 'floorsCleared');
+      const cleared = stats.cleared === true;
+      const breakdown: BreakdownItem[] = [
+        { label: '현재 합산 숫자', value: currentScore, points: currentScore },
+      ];
+      if (cleared) breakdown.push({ label: '드래곤 격파', value: '완료', points: 0 });
+      return { score: currentScore, roundId: stageId, breakdown, detail: { stageId, currentScore, floorsCleared, cleared } };
+    }
     throw new BadRequestException({ message: '알 수 없는 게임', code: 'INVALID_GAME' });
   }
 
@@ -141,13 +152,13 @@ export class ScoreboardService {
 
   async ranking(token: string | undefined, gameRaw: unknown, roundIdRaw: unknown) {
     const game = gameRaw as RankingGame;
-    if (!['tower_defense', 'offense_tower', 'marbles', 'kirby'].includes(game)) {
+    if (!['tower_defense', 'offense_tower', 'number_hero_tower', 'marbles', 'kirby'].includes(game)) {
       throw new BadRequestException({ message: '알 수 없는 게임', code: 'INVALID_GAME' });
     }
     const accountId = await this.accounts.resolveAccountId(token);
     if (game === 'kirby') return this.kirbyRanking(accountId);
 
-    const roundId = game === 'offense_tower' ? int(roundIdRaw ?? 1, 1, 1000, 'roundId') : 0;
+    const roundId = game === 'offense_tower' || game === 'number_hero_tower' ? int(roundIdRaw ?? 1, 1, 1000, 'roundId') : 0;
     const rows = await this.aggregate(game, roundId);
     const entries = rows.slice(0, RANKING_LIMIT).map((r, i) => ({
       rank: i + 1,

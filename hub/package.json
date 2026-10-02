@@ -15,6 +15,7 @@
     "socket.io-client": "^4.8.1",
     "tower-defense": "*",
     "offense-tower": "*",
+    "number-hero-tower": "*",
     "strategy-marbles": "*",
     "save-a-turby": "*",
     "steal_a_kirby": "*"

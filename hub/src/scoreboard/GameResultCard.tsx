@@ -9,6 +9,7 @@ import './Scoreboard.css';
 const GAME_TITLES: Record<GameResultDetail['game'], string> = {
   tower_defense: '타워 디펜스',
   offense_tower: '오펜스 타워',
+  number_hero_tower: '숫자 용사 탑',
   marbles: '전략 알까기',
 };
 
@@ -25,9 +26,9 @@ export function GameResultCard({ onOpenRanking }: Props) {
   useEffect(() => {
     const onResult = (e: Event) => {
       const d = (e as CustomEvent<GameResultDetail>).detail;
-      // 진행 중 기록(웨이브·돌파마다)은 카드 없이 조용히 갱신만 한다. 게스트는 저장되지 않으니 보내지 않는다.
+      // 진행 중 기록은 카드 없이 조용히 갱신한다. 숫자 용사 탑은 매 보상 합산 직후 반드시 BE에 전송한다.
       if (d.final === false) {
-        if (hasStoredToken()) submitGameResult(d).catch(() => undefined);
+        if (d.game === 'number_hero_tower' || hasStoredToken()) submitGameResult(d).catch(() => undefined);
         return;
       }
       setDetail(d);
@@ -39,9 +40,21 @@ export function GameResultCard({ onOpenRanking }: Props) {
     return () => window.removeEventListener(GAME_RESULT_EVENT, onResult);
   }, []);
 
+  useEffect(() => {
+    if (!detail || detail.game !== 'number_hero_tower' || detail.stats.cleared) return;
+
+    const dismissTimer = window.setTimeout(() => {
+      setDetail(null);
+      setResult(null);
+      setError('');
+    }, 3_000);
+
+    return () => window.clearTimeout(dismissTimer);
+  }, [detail]);
+
   if (!detail) return null;
   const isMarbles = detail.game === 'marbles';
-  const roundId = detail.game === 'offense_tower' ? detail.stats.roundId : undefined;
+  const roundId = detail.game === 'offense_tower' ? detail.stats.roundId : detail.game === 'number_hero_tower' ? detail.stats.stageId : undefined;
 
   return (
     <div className="result-card" role="dialog" aria-label="점수 결과">
