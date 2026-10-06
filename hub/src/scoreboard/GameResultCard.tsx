@@ -10,6 +10,8 @@ const GAME_TITLES: Record<GameResultDetail['game'], string> = {
   tower_defense: '타워 디펜스',
   offense_tower: '오펜스 타워',
   number_hero_tower: '숫자 용사 탑',
+  number_gate_runner: '숫자 게이트 러너',
+  merge_defense: '장난감 머지 방어전',
   marbles: '전략 알까기',
 };
 
@@ -54,12 +56,17 @@ export function GameResultCard({ onOpenRanking }: Props) {
 
   if (!detail) return null;
   const isMarbles = detail.game === 'marbles';
-  const roundId = detail.game === 'offense_tower' ? detail.stats.roundId : detail.game === 'number_hero_tower' ? detail.stats.stageId : undefined;
+  const isStageGame = detail.game === 'number_hero_tower' || detail.game === 'number_gate_runner' || detail.game === 'merge_defense';
+  const roundId = detail.game === 'offense_tower'
+    ? detail.stats.roundId
+    : detail.game === 'number_hero_tower' || detail.game === 'number_gate_runner' || detail.game === 'merge_defense'
+      ? detail.stats.stageId
+      : undefined;
 
   return (
     <div className="result-card" role="dialog" aria-label="점수 결과">
       <div className="result-card-head">
-        <span>{GAME_TITLES[detail.game]}{roundId ? ` · 라운드 ${roundId}` : ''}</span>
+        <span>{GAME_TITLES[detail.game]}{roundId ? ` · ${isStageGame ? '스테이지' : '라운드'} ${formatResultRound(detail.game, roundId)}` : ''}</span>
         <button type="button" className="result-card-close" onClick={() => setDetail(null)} aria-label="닫기">
           ×
         </button>
@@ -97,4 +104,9 @@ export function GameResultCard({ onOpenRanking }: Props) {
       )}
     </div>
   );
+}
+
+function formatResultRound(game: GameResultDetail['game'], roundId: number) {
+  if (game === 'number_gate_runner' || game === 'merge_defense') return `${Math.floor((roundId - 1) / 10) + 1}-${((roundId - 1) % 10) + 1}`;
+  return roundId;
 }

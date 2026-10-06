@@ -21,4 +21,29 @@ export class ScoreboardController {
   ranking(@Headers('authorization') auth: string | undefined, @Query('game') game: unknown, @Query('roundId') roundId: unknown) {
     return this.scoreboard.ranking(bearer(auth), game, roundId);
   }
+
+  @Get('merge-defense/profile')
+  mergeDefenseProfile(@Headers('authorization') auth: string | undefined) {
+    return this.scoreboard.mergeDefenseProfile(bearer(auth));
+  }
+
+  @Post('merge-defense/collect')
+  collectMergeDefenseSilver(@Headers('authorization') auth: string | undefined, @Body() body: Record<string, unknown>) {
+    return this.scoreboard.collectMergeDefenseSilver(bearer(auth), body);
+  }
+
+  @Post('merge-defense/discover')
+  discoverMergeDefenseHero(@Headers('authorization') auth: string | undefined, @Body('heroClass') heroClass: unknown, @Body('grade') grade: unknown) {
+    return this.scoreboard.discoverMergeDefenseHero(bearer(auth), heroClass, grade);
+  }
+
+  @Post('merge-defense/unlock-spellblade')
+  unlockMergeDefenseSpellblade(@Headers('authorization') auth: string | undefined) {
+    return this.scoreboard.unlockMergeDefenseSpellblade(bearer(auth));
+  }
+
+  @Post('merge-defense/purchase')
+  purchaseMergeDefenseUpgrade(@Headers('authorization') auth: string | undefined, @Body('upgrade') upgrade: unknown) {
+    return this.scoreboard.purchaseMergeDefenseUpgrade(bearer(auth), upgrade);
+  }
 }

@@ -1,0 +1,19 @@
+.merge-world-map {
+  padding: 36px 0;
+}
+
+.merge-chapter.locked {
+  cursor: not-allowed;
+  filter: saturate(.35);
+  opacity: .66;
+}
+
+.merge-chapter.future {
+  border-color: #91a0b8;
+  background: linear-gradient(145deg, #343b4de8, #151a29e8);
+}
+
+.merge-chapter.future b {
+  background: #2a3142;
+  color: #aeb8ca;
+}

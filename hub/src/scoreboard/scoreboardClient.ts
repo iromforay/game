@@ -2,7 +2,7 @@ import { ACCOUNT_SERVER_URL, authHeader } from '../account/accountClient';
 import type { GameResultDetail } from 'tower-defense';
 
 // 스코어보드(2026-09-28, docs/dev/scoreboard.md) — 점수 계산은 서버가 한다. 로그인 상태면 기록 + 순위, 게스트면 점수만.
-export type RankingGame = 'tower_defense' | 'offense_tower' | 'number_hero_tower' | 'marbles' | 'kirby';
+export type RankingGame = 'tower_defense' | 'offense_tower' | 'number_hero_tower' | 'number_gate_runner' | 'merge_defense' | 'marbles' | 'kirby';
 
 export interface ScoreBreakdownItem {
   label: string;
@@ -24,6 +24,7 @@ export interface RankingEntry {
   nickname: string;
   score: number;
   games: number | null;
+  highestStage?: number | null;
   isMe: boolean;
 }
 
@@ -31,7 +32,7 @@ export interface RankingResponse {
   game: RankingGame;
   roundId: number;
   entries: RankingEntry[];
-  me: { rank: number; score: number; games: number | null } | null;
+  me: { rank: number; score: number; games: number | null; highestStage?: number | null } | null;
 }
 
 async function parse<T>(res: Response): Promise<T> {

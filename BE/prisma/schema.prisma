@@ -428,5 +428,31 @@ enum score_record_game {
   tower_defense
   offense_tower
   number_hero_tower
+  number_gate_runner
+  merge_defense
   marbles
+}
+
+model merge_defense_profile {
+  account_id        BigInt   @id @db.UnsignedBigInt
+  silver            Int      @default(0) @db.UnsignedInt
+  attack_level      Int      @default(0) @db.UnsignedInt
+  warrior_unlocked    Int    @default(1) @db.UnsignedInt
+  archer_unlocked     Int    @default(1) @db.UnsignedInt
+  spellblade_unlocked Int    @default(0) @db.UnsignedInt
+  spellblade_recipe_unlocked Boolean @default(false)
+  start_coin_level        Int      @default(0) @db.UnsignedInt
+  summon_discount_level   Int      @default(0) @db.UnsignedInt
+  updated_at        DateTime @default(now()) @updatedAt @db.Timestamp(0)
+}
+
+model merge_defense_silver_claim {
+  run_key     String   @id @db.VarChar(64)
+  account_id  BigInt   @db.UnsignedBigInt
+  stage_id    Int      @db.UnsignedInt
+  silver      Int      @db.UnsignedInt
+  kills       Int      @db.UnsignedInt
+  created_at  DateTime @default(now()) @db.Timestamp(0)
+
+  @@index([account_id], map: "idx_merge_silver_account")
 }

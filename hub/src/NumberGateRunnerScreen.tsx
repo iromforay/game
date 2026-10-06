@@ -3,6 +3,7 @@ import type Phaser from 'phaser';
 import { mountGame } from '../../number-gate-runner/src/game';
 import { RUNNER_CHAPTERS, RUNNER_STAGES, type RunnerStage } from '../../number-gate-runner/src/stages';
 import houseMapUrl from '../../number-hero-tower/src/assets/house-chapter-map.jpg';
+import { GAME_RESULT_EVENT, type GameResultDetail } from 'tower-defense';
 import './NumberGateRunnerScreen.css';
 
 type Screen = 'map' | 'stages' | 'game';
@@ -59,6 +60,12 @@ export function NumberGateRunnerScreen({ onExit }: NumberGateRunnerScreenProps) 
         stage={selectedStage}
         onLeave={() => setScreen('stages')}
         onComplete={(won, maxCount) => {
+          const detail: GameResultDetail = {
+            game: 'number_gate_runner',
+            final: true,
+            stats: { stageId: selectedStage.id, finalCount: maxCount, maxCount, cleared: won },
+          };
+          window.dispatchEvent(new CustomEvent<GameResultDetail>(GAME_RESULT_EVENT, { detail }));
           const best = Math.max(bestScores[selectedStage.id] ?? 0, maxCount);
           window.localStorage.setItem(bestKey(selectedStage.id), String(best));
           setBestScores((current) => ({ ...current, [selectedStage.id]: best }));

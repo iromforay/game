@@ -26,7 +26,12 @@ export function AdGameScreen({ gameId, onExit, onOpenRanking }: AdGameScreenProp
   }
 
   if (gameId === 'number-gate-runner') {
-    return <NumberGateRunnerScreen onExit={onExit} />;
+    return (
+      <div className="ad-game-react-screen">
+        <NumberGateRunnerScreen onExit={onExit} />
+        <GameResultCard onOpenRanking={onOpenRanking} />
+      </div>
+    );
   }
 
   return null;

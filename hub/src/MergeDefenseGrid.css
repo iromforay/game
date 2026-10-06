@@ -44,9 +44,14 @@
 .merge-range-legend { display: flex; justify-content: center; gap: 16px; margin: 9px auto 0; font-size: 12px; font-weight: 900; }
 .merge-range-legend .move { color: #8ddcff; }
 .merge-range-legend .attack { color: #ff7774; }
+.merge-silver-drop { position: absolute; z-index: 9; transform: translate(-50%, -50%); display: grid; place-items: center; color: #eef5ff; font-size: 25px; filter: drop-shadow(0 2px 4px #000a); pointer-events: none; animation: mergeSilverRemain 1.2s ease-in-out infinite alternate; }
+.merge-silver-drop.collecting { animation: mergeSilverCollect .9s ease-in forwards; }
+.merge-silver-drop b { padding: 1px 5px; border-radius: 8px; background: #17233ddd; color: #fff; font-size: 10px; }
 @keyframes spawnCellPulse { from { filter: brightness(1); } to { filter: brightness(1.35); } }
 @keyframes enemyHit { 0% { transform: translateX(-7px) scale(1.08); } 45% { transform: translateX(6px) scale(.94); } 100% { transform: translateX(0) scale(1); } }
 @keyframes hitSpark { from { transform: scale(.35) rotate(-25deg); opacity: 1; } to { transform: scale(1.6) rotate(20deg); opacity: 0; } }
+@keyframes mergeSilverCollect { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.4); } 20% { opacity: 1; transform: translate(-50%, -80%) scale(1.18); } 100% { opacity: 0; transform: translate(240px, -520px) scale(.55); } }
+@keyframes mergeSilverRemain { from { transform: translate(-50%, -50%) scale(.92); filter: drop-shadow(0 2px 4px #000a); } to { transform: translate(-50%, -62%) scale(1.08); filter: drop-shadow(0 0 9px #dcecff); } }
 @media (max-width: 700px) {
   .merge-grid-map { width: min(96vw, 560px); border-width: 3px; border-radius: 12px; }
   .grid-hero small { font-size: 7px; }
