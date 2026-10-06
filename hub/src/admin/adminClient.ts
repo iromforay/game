@@ -104,3 +104,38 @@ export const listSpawnSettings = () => request<AdminSpawnSetting[]>('/admin/kirb
 
 export const updateSpawnSettings = (changes: AdminSpawnChange[]) =>
   request<AdminSpawnSetting[]>('/admin/kirby/spawn', { method: 'PUT', body: JSON.stringify({ changes }) });
+
+export interface AdminMergeDefenseProfile {
+  accountId: string;
+  loginId: string;
+  nickname: string;
+  silver: number;
+  warriorUnlocked: number;
+  archerUnlocked: number;
+  spellbladeUnlocked: number;
+  spellbladeRecipeUnlocked: boolean;
+  collectionUnlocked: number;
+  collectionTotal: number;
+  attackLevel: number;
+  startCoinLevel: number;
+  summonDiscountLevel: number;
+  highestClearedStage: number;
+  highestClearedChapter: number;
+  highestClearedChapterStage: number;
+  updatedAt: string | null;
+}
+
+export type AdminMergeDefenseUpdate = Pick<AdminMergeDefenseProfile,
+  'silver' | 'warriorUnlocked' | 'archerUnlocked' | 'spellbladeUnlocked' | 'spellbladeRecipeUnlocked' |
+  'attackLevel' | 'startCoinLevel' | 'summonDiscountLevel' | 'highestClearedStage'>;
+
+export const searchMergeDefenseAccounts = (q: string) =>
+  request<AdminMergeDefenseProfile[]>(`/admin/ad-games/merge-defense/accounts?${new URLSearchParams({ q })}`);
+
+export const getMergeDefenseProfile = (accountId: string) =>
+  request<AdminMergeDefenseProfile>(`/admin/ad-games/merge-defense/accounts/${encodeURIComponent(accountId)}`);
+
+export const updateMergeDefenseProfile = (accountId: string, profile: AdminMergeDefenseUpdate) =>
+  request<AdminMergeDefenseProfile>(`/admin/ad-games/merge-defense/accounts/${encodeURIComponent(accountId)}`, {
+    method: 'PUT', body: JSON.stringify(profile),
+  });

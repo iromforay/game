@@ -4,9 +4,10 @@ import { fetchSession } from '../account/accountClient';
 import { addKirbies, adjustGold, getPlayer, listCharacters, listLogs, removeKirby, searchPlayers } from './adminClient';
 import type { AdminCharacter, AdminLog, AdminPlayerDetail, AdminPlayerRow } from './adminClient';
 import { SpawnTab } from './SpawnTab';
+import { MergeDefenseAdminTab } from './MergeDefenseAdminTab';
 import './Admin.css';
 
-type Tab = 'players' | 'spawn' | 'logs';
+type Tab = 'players' | 'spawn' | 'merge-defense' | 'logs';
 
 const ACTION_LABELS: Record<string, string> = {
   'kirby.instance.add': '커비 추가',
@@ -14,6 +15,7 @@ const ACTION_LABELS: Record<string, string> = {
   'kirby.gold.set': '골드 설정',
   'kirby.gold.add': '골드 가감',
   'kirby.spawn.update': '스폿 설정',
+  'merge_defense.profile.update': '머지 디펜스 프로필 설정',
 };
 
 function errorText(err: unknown) {
@@ -54,12 +56,16 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
             <button type="button" role="tab" aria-selected={tab === 'spawn'} className={tab === 'spawn' ? 'active' : ''} onClick={() => setTab('spawn')}>
               스폿 확률·이벤트
             </button>
+            <button type="button" role="tab" aria-selected={tab === 'merge-defense'} className={tab === 'merge-defense' ? 'active' : ''} onClick={() => setTab('merge-defense')}>
+              광고게임 &gt; 머지 디펜스
+            </button>
             <button type="button" role="tab" aria-selected={tab === 'logs'} className={tab === 'logs' ? 'active' : ''} onClick={() => setTab('logs')}>
               조작 로그
             </button>
           </div>
           {tab === 'players' && <PlayersTab />}
           {tab === 'spawn' && <SpawnTab />}
+          {tab === 'merge-defense' && <MergeDefenseAdminTab />}
           {tab === 'logs' && <LogsTab />}
         </>
       )}
@@ -361,7 +367,7 @@ function LogsTab() {
                   <td>{l.admin}</td>
                   <td>{ACTION_LABELS[l.action] ?? l.action}</td>
                   <td>
-                    {l.targetType === 'kirby_character' ? '캐릭터 ' : '플레이어 '}#{l.targetId}
+                    {l.targetType === 'kirby_character' ? '캐릭터 ' : l.targetType === 'account' ? '계정 ' : '플레이어 '}#{l.targetId}
                   </td>
                   <td className="admin-json">{describe(l.before)}</td>
                   <td className="admin-json">{describe(l.after)}</td>

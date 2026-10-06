@@ -53,6 +53,21 @@ export class AdminController {
     return this.admin.updateSpawnSettings(req.adminAccountId!, changes);
   }
 
+  @Get('ad-games/merge-defense/accounts')
+  searchMergeDefenseAccounts(@Query('q') q: unknown) {
+    return this.admin.searchMergeDefenseAccounts(q);
+  }
+
+  @Get('ad-games/merge-defense/accounts/:accountId')
+  getMergeDefenseProfile(@Param('accountId') accountId: string) {
+    return this.admin.getMergeDefenseProfile(accountId);
+  }
+
+  @Put('ad-games/merge-defense/accounts/:accountId')
+  updateMergeDefenseProfile(@Req() req: AdminRequest, @Param('accountId') accountId: string, @Body() body: unknown) {
+    return this.admin.updateMergeDefenseProfile(req.adminAccountId!, accountId, body);
+  }
+
   // ?limit=50&targetId=
   @Get('logs')
   listLogs(@Query('limit') limit: unknown, @Query('targetId') targetId: unknown) {

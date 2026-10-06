@@ -13,7 +13,12 @@ interface AdGameScreenProps {
 
 export function AdGameScreen({ gameId, onExit, onOpenRanking }: AdGameScreenProps) {
   if (gameId === 'merge-defense') {
-    return <MergeDefenseScreen onExit={onExit} />;
+    return (
+      <div className="ad-game-react-screen">
+        <MergeDefenseScreen onExit={onExit} />
+        <GameResultCard onOpenRanking={onOpenRanking} />
+      </div>
+    );
   }
 
   if (gameId === 'number-hero-tower') {

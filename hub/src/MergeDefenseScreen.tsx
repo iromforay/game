@@ -443,6 +443,7 @@ function MergeBattle({ stage, profile, onLeave, onDiscover, onFinish }: { stage:
   const waveRunningRef = useRef(waveRunning);
   const finishedRef = useRef(finished);
   const finishReportedRef = useRef(false);
+  const lastReportedWaveRef = useRef(0);
   const collectionStartedRef = useRef(false);
   const runIdRef = useRef(newRunId());
   heroesRef.current = heroes;
@@ -532,6 +533,25 @@ function MergeBattle({ stage, profile, onLeave, onDiscover, onFinish }: { stage:
     }, 900);
     return () => window.clearTimeout(timer);
   }, [enemies.length, finished, silverDrops, wave, waveRunning]);
+
+  useEffect(() => {
+    if (wave === 0 || waveRunning || finished || collectingSilver || silverDrops.length > 0 || lastReportedWaveRef.current >= wave) return;
+    lastReportedWaveRef.current = wave;
+    reportGameResult({
+      game: 'merge_defense',
+      runId: runIdRef.current,
+      final: false,
+      stats: {
+        stageId: stage.id,
+        cleared: false,
+        wavesCleared: wave,
+        kills,
+        killPoints,
+        baseHp,
+        elapsedSeconds: Math.floor(elapsed),
+      },
+    });
+  }, [baseHp, collectingSilver, elapsed, finished, killPoints, kills, silverDrops.length, stage.id, wave, waveRunning]);
 
   useEffect(() => {
     if (!finished || collectingSilver || silverDrops.length > 0 || finishReportedRef.current) return;
@@ -657,6 +677,7 @@ function MergeBattle({ stage, profile, onLeave, onDiscover, onFinish }: { stage:
   const restart = () => {
     setCoins(startingCoins); setBaseHp(stage.baseHp); setWave(0); setWaveRunning(false); setHeroes(Array(GRID_SIZE * GRID_SIZE).fill(null)); setEnemies([]);
     finishReportedRef.current = false;
+    lastReportedWaveRef.current = 0;
     collectionStartedRef.current = false;
     runIdRef.current = newRunId();
     setDiscovered({ ...initialDiscovery(), warrior: profile.warriorUnlocked, archer: profile.archerUnlocked, spellblade: profile.spellbladeUnlocked }); setSelectedSlot(null); setFinished(null); setKills(0); setKillPoints(0); setElapsed(0); setStageSilver(0); setSilverDrops([]); setCollectingSilver(false); setMessage(`${startingCoins}코인으로 첫 용사를 스폰하세요!`);

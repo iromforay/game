@@ -222,6 +222,62 @@
   font-weight: 600;
 }
 
+.admin-section-path {
+  margin: 4px 0 12px;
+  color: var(--accent, #aa3bff);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.admin-merge-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.admin-merge-form fieldset {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 10px;
+}
+
+.admin-merge-form legend {
+  padding: 0 6px;
+  font-weight: 700;
+}
+
+.admin-merge-form label {
+  display: grid;
+  gap: 5px;
+  font-size: 13px;
+}
+
+.admin-merge-form input,
+.admin-merge-form select {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-h, #111);
+}
+
+.admin-merge-form label.admin-check {
+  display: flex;
+  align-items: center;
+  align-self: end;
+  grid-template-columns: auto 1fr;
+  min-height: 36px;
+}
+
+.admin-merge-form .admin-check input {
+  width: auto;
+}
+
 /* 스폿 확률·이벤트 탭 */
 .admin-grade-summary {
   display: flex;

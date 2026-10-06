@@ -11,6 +11,7 @@ const ADD_MAX_COUNT = 20;
 const GOLD_MAX = 4_294_967_295; // kirby_player.gold UNSIGNED INT
 const LOG_LIMIT_MAX = 200;
 const WEIGHT_MAX = 1_000_000;
+const UNSIGNED_INT_MAX = 4_294_967_295;
 
 export interface SpawnChange {
   characterId: unknown;
@@ -40,6 +41,17 @@ function parseInt32(raw: unknown, label: string): number {
   const n = typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : raw;
   if (typeof n !== 'number' || !Number.isInteger(n)) throw new BadRequestException({ message: `${label}는 정수여야 합니다`, code: 'INVALID_NUMBER' });
   return n;
+}
+
+function parseRangedInt(raw: unknown, label: string, min: number, max: number): number {
+  const n = parseInt32(raw, label);
+  if (n < min || n > max) throw new BadRequestException({ message: `${label} 범위는 ${min}~${max}입니다`, code: 'INVALID_RANGE' });
+  return n;
+}
+
+function parseBoolean(raw: unknown, label: string): boolean {
+  if (typeof raw !== 'boolean') throw new BadRequestException({ message: `${label} 값이 올바르지 않습니다`, code: 'INVALID_BOOLEAN' });
+  return raw;
 }
 
 @Injectable()
@@ -234,6 +246,90 @@ export class AdminService {
     return this.listSpawnSettings();
   }
 
+  async searchMergeDefenseAccounts(qRaw: unknown) {
+    const q = typeof qRaw === 'string' ? qRaw.trim() : '';
+    const like = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+    const idMatch = /^\d{1,19}$/.test(q) ? BigInt(q) : null;
+    const rows = await this.prisma.$queryRaw<{
+      id: bigint; login_id: string; nickname: string; silver: number | null; warrior_unlocked: number | null;
+      archer_unlocked: number | null; spellblade_unlocked: number | null; spellblade_recipe_unlocked: boolean | null; attack_level: number | null;
+      start_coin_level: number | null; summon_discount_level: number | null; highest_cleared_stage: number | null; updated_at: Date | null;
+    }[]>`
+      SELECT a.id, a.login_id, a.nickname,
+             p.silver, p.warrior_unlocked, p.archer_unlocked, p.spellblade_unlocked, p.spellblade_recipe_unlocked,
+             p.attack_level, p.start_coin_level, p.summon_discount_level,
+             p.highest_cleared_stage, p.updated_at
+      FROM account a
+      LEFT JOIN merge_defense_profile p ON p.account_id = a.id
+      WHERE ${q === ''}
+         OR a.id = ${idMatch ?? -1}
+         OR a.login_id LIKE ${like}
+         OR a.nickname LIKE ${like}
+      ORDER BY COALESCE(p.updated_at, a.updated_at) DESC
+      LIMIT ${SEARCH_LIMIT}`;
+    return rows.map((row) => this.mergeDefenseAdminSummary(row));
+  }
+
+  async getMergeDefenseProfile(accountIdRaw: unknown) {
+    const accountId = parseId(accountIdRaw, '계정 id');
+    const account = await this.prisma.account.findUnique({ where: { id: accountId } });
+    if (!account) throw new NotFoundException({ message: '계정을 찾을 수 없습니다', code: 'ACCOUNT_NOT_FOUND' });
+    const profile = await this.prisma.merge_defense_profile.findUnique({ where: { account_id: accountId } });
+    return this.mergeDefenseAdminSummary({
+      id: account.id, login_id: account.login_id, nickname: account.nickname,
+      silver: profile?.silver ?? null,
+      warrior_unlocked: profile?.warrior_unlocked ?? null,
+      archer_unlocked: profile?.archer_unlocked ?? null,
+      spellblade_unlocked: profile?.spellblade_unlocked ?? null,
+      spellblade_recipe_unlocked: profile?.spellblade_recipe_unlocked ?? null,
+      attack_level: profile?.attack_level ?? null,
+      start_coin_level: profile?.start_coin_level ?? null,
+      summon_discount_level: profile?.summon_discount_level ?? null,
+      highest_cleared_stage: profile?.highest_cleared_stage ?? null,
+      updated_at: profile?.updated_at ?? null,
+    });
+  }
+
+  async updateMergeDefenseProfile(adminId: bigint, accountIdRaw: unknown, bodyRaw: unknown) {
+    const accountId = parseId(accountIdRaw, '계정 id');
+    const body = bodyRaw && typeof bodyRaw === 'object' ? bodyRaw as Record<string, unknown> : {};
+    const data = {
+      silver: parseRangedInt(body.silver, '은화', 0, UNSIGNED_INT_MAX),
+      warrior_unlocked: parseRangedInt(body.warriorUnlocked, '검사 도감', 1, 10),
+      archer_unlocked: parseRangedInt(body.archerUnlocked, '궁수 도감', 1, 10),
+      spellblade_unlocked: parseRangedInt(body.spellbladeUnlocked, '마검사 도감', 0, 10),
+      spellblade_recipe_unlocked: parseBoolean(body.spellbladeRecipeUnlocked, '마검사 합성법'),
+      attack_level: parseRangedInt(body.attackLevel, '전체 공격력 강화', 0, 8),
+      start_coin_level: parseRangedInt(body.startCoinLevel, '시작 코인 강화', 0, 5),
+      summon_discount_level: parseRangedInt(body.summonDiscountLevel, '소환 할인 강화', 0, 5),
+      highest_cleared_stage: parseRangedInt(body.highestClearedStage, '최고 클리어 스테이지', 0, 30),
+    };
+    const account = await this.prisma.account.findUnique({ where: { id: accountId } });
+    if (!account) throw new NotFoundException({ message: '계정을 찾을 수 없습니다', code: 'ACCOUNT_NOT_FOUND' });
+
+    await this.prisma.$transaction(async (tx) => {
+      const before = await tx.merge_defense_profile.findUnique({ where: { account_id: accountId } });
+      const after = await tx.merge_defense_profile.upsert({
+        where: { account_id: accountId },
+        create: { account_id: accountId, ...data },
+        update: data,
+      });
+      const pick = (profile: typeof after | null) => profile ? {
+        silver: profile.silver,
+        warriorUnlocked: profile.warrior_unlocked,
+        archerUnlocked: profile.archer_unlocked,
+        spellbladeUnlocked: profile.spellblade_unlocked,
+        spellbladeRecipeUnlocked: profile.spellblade_recipe_unlocked,
+        attackLevel: profile.attack_level,
+        startCoinLevel: profile.start_coin_level,
+        summonDiscountLevel: profile.summon_discount_level,
+        highestClearedStage: profile.highest_cleared_stage,
+      } : null;
+      await this.log(tx, adminId, 'merge_defense.profile.update', 'account', accountId, pick(before), pick(after));
+    }, TX_OPTIONS);
+    return this.getMergeDefenseProfile(accountId.toString());
+  }
+
   async listLogs(limitRaw: unknown, targetIdRaw: unknown) {
     const limit = Math.min(LOG_LIMIT_MAX, Math.max(1, Number(limitRaw) || 50));
     const targetId = typeof targetIdRaw === 'string' && targetIdRaw.trim() ? targetIdRaw.trim() : undefined;
@@ -261,6 +357,37 @@ export class AdminService {
     const player = await this.prisma.kirby_player.findUnique({ where: { id: playerId } });
     if (!player) throw new NotFoundException({ message: '플레이어를 찾을 수 없습니다', code: 'PLAYER_NOT_FOUND' });
     return player;
+  }
+
+  private mergeDefenseAdminSummary(row: {
+    id: bigint; login_id: string; nickname: string; silver: number | null; warrior_unlocked: number | null;
+    archer_unlocked: number | null; spellblade_unlocked: number | null; spellblade_recipe_unlocked?: boolean | null;
+    attack_level: number | null; start_coin_level: number | null; summon_discount_level: number | null;
+    highest_cleared_stage: number | null; updated_at: Date | null;
+  }) {
+    const warriorUnlocked = Number(row.warrior_unlocked ?? 1);
+    const archerUnlocked = Number(row.archer_unlocked ?? 1);
+    const spellbladeUnlocked = Number(row.spellblade_unlocked ?? 0);
+    const highestClearedStage = Number(row.highest_cleared_stage ?? 0);
+    return {
+      accountId: row.id.toString(),
+      loginId: row.login_id,
+      nickname: row.nickname,
+      silver: Number(row.silver ?? 0),
+      warriorUnlocked,
+      archerUnlocked,
+      spellbladeUnlocked,
+      spellbladeRecipeUnlocked: Boolean(row.spellblade_recipe_unlocked ?? false),
+      collectionUnlocked: warriorUnlocked + archerUnlocked + spellbladeUnlocked,
+      collectionTotal: 30,
+      attackLevel: Number(row.attack_level ?? 0),
+      startCoinLevel: Number(row.start_coin_level ?? 0),
+      summonDiscountLevel: Number(row.summon_discount_level ?? 0),
+      highestClearedStage,
+      highestClearedChapter: highestClearedStage === 0 ? 0 : Math.floor((highestClearedStage - 1) / 10) + 1,
+      highestClearedChapterStage: highestClearedStage === 0 ? 0 : ((highestClearedStage - 1) % 10) + 1,
+      updatedAt: row.updated_at,
+    };
   }
 
   private async log(tx: Tx, adminId: bigint, action: string, targetType: string, targetId: bigint, before: unknown, after: unknown) {
