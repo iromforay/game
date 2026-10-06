@@ -108,7 +108,7 @@ test('위치 ①: 시작 지점 배치 → 좌표를 끼운 입장 요청 무시
     await openFullMap(g);
     m = await mapOf(g);
     assert.deepEqual(m.miniMap.terrain, { zones: 4, paths: 3, blockers: 10, gatesClosed: 1, gatesOpen: 0 });
-    assert.deepEqual(m.miniMap.legend, ['player', 'target', 'story', 'path', 'wall', 'gateClosed']);
+    assert.deepEqual(m.miniMap.legend, ['player', 'story', 'wild', 'path', 'wall', 'gateClosed']);
     await g.capture('07_full_map_greybox_paths_walls_gate');
     await g.capture('08a_full_map_hidden_zone_before');
     await closeFullMap(g);
@@ -173,7 +173,7 @@ test('위치 ①: 시작 지점 배치 → 좌표를 끼운 입장 요청 무시
     await openFullMap(g);
     m = await mapOf(g);
     assert.deepEqual(m.miniMap.terrain, { zones: 5, paths: 4, blockers: 12, gatesClosed: 1, gatesOpen: 1 });
-    assert.deepEqual(m.miniMap.legend, ['player', 'target', 'story', 'path', 'wall', 'gateClosed', 'gateOpen']);
+    assert.deepEqual(m.miniMap.legend, ['player', 'story', 'wild', 'path', 'wall', 'gateClosed', 'gateOpen']);
     await g.capture('08b_full_map_hidden_zone_after');
     await closeFullMap(g);
   }, backend, device);
@@ -217,7 +217,7 @@ test('위치 ③: 640×360 — 전체 지도의 범례를 접었다 펼칠 수 �
     const t = m.miniMap.legendToggle!;
     await g.clickAt(t.x + t.w / 2, t.y + t.h / 2, 's.map.miniMap.legendOpen === true');
     m = await mapOf(g);
-    assert.deepEqual(m.miniMap.legend, ['player', 'target', 'story', 'dust', 'path', 'wall', 'gateClosed']);
+    assert.deepEqual(m.miniMap.legend, ['player', 'story', 'dust', 'wild', 'path', 'wall', 'gateClosed']);
     await g.capture('09_full_map_legend_small');
     await g.clickAt(t.x + t.w / 2, t.y + t.h / 2, 's.map.miniMap.legendOpen === false');
     await closeFullMap(g);

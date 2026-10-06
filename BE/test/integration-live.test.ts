@@ -106,6 +106,14 @@ async function playToEnd(c: Client, start: Snap): Promise<{ snap: Snap; ended: {
 
 const ch01 = JSON.parse(readFileSync(join(__dirname, '../story-data/save-a-turby/dialogue/ch01.json'), 'utf8'));
 const pid = (c: Client) => BigInt(c.playerId);
+// 소켓 방송이 도착할 때까지(조건 폴링 — 고정 지연 아님)
+async function until(cond: () => boolean, ms = 3000) {
+  const end = Date.now() + ms;
+  while (!cond()) {
+    if (Date.now() > end) throw new Error('기다리던 방송이 오지 않음');
+    await new Promise((r) => setTimeout(r, 10));
+  }
+}
 
 test('통합 1: 오프닝 전 직접 요청 차단(방 생성·스토리 전투·1장 시작 이벤트), 오프닝 완료 뒤 이야기 누비 1마리', async () => {
   const c = new Client('dev-test-live-1');
@@ -389,20 +397,35 @@ test('통합 3: 실가루 10개 수집(동시 10건·재접속·다른 지역·�
   c3.close();
 });
 
-test('통합 4(회귀): 일반 야생 전투 — 누비 강제 참가·스토리 표식 없음, 포획 보상 지급 / 일반 장비 슬롯 장착', async () => {
+test('통합 4(회귀): 일반 야생 전투 — 야생 마커는 서버가 위치·상태를 내려 준다(입장·상태 방송·재접속에서 같은 ID), 누비 강제 참가·스토리 표식 없음, 포획 보상 지급, 포획 뒤 재조우 없음 / 일반 장비 슬롯 장착', async () => {
+  type Wild = { index: number; characterCode: string; x: number; y: number; state: string; visible: boolean };
+  const WILD0 = { index: 0, characterCode: 'bopuli', x: 520, y: 500 }; // 서버 DB(stage_wild_spawn)의 값 — 클라이언트 설정에는 좌표가 없다
   const c = new Client('dev-test-live-1');
   await c.identify();
   await c.connect();
   await c.req('room:create', { stageCode: 'forest' });
   await c.req('room:start');
-  const entered = await c.req<{ self: { x: number; y: number } }>('map:enter', { x: 500, y: 500, dir: 'down' });
+  const entered = await c.req<{ self: { x: number; y: number }; wilds: Wild[] }>('map:enter', { x: 500, y: 500, dir: 'down' });
   // 앞 시험의 탐험 세션이 유예 안에 이어진다 → 마지막 승인 위치(거대 매듭 앞). 요청에 넣은 좌표(500,500)는 무시된다
   assert.deepEqual([entered.self.x, entered.self.y], [pointOf('forest_giant_knot').x, pointOf('forest_giant_knot').y]);
+  // 10-02 v6 §1: 입장 응답의 야생 마커 = 서버 마커 ID·종류·서버 좌표·상태·표시 여부. 서버에 없는 마커는 없다
+  assert.deepEqual(entered.wilds, [{ ...WILD0, state: 'free', visible: true }]);
+  assert.equal((await c.req('battle:start', { spawnIndex: 7 })).code, 'INVALID_SPAWN', '서버에 없는 마커 번호로는 조우할 수 없다');
+  const changes: Wild[] = [];
+  c.socket.on('wild:changed', (w: Wild) => changes.push(w));
   assert.equal((await c.req('battle:start', { spawnIndex: 0 })).code, 'TOO_FAR', '야생 터비에게서 멀다');
   assert.equal(await moveTo(c, { x: 500, y: 500 }), true);
-  const start = await c.req<{ snapshot: Snap }>('battle:start', { spawnIndex: 0 });
+  const start = await c.req<{ snapshot: Snap & { spawnIndex: number } }>('battle:start', { spawnIndex: 0 });
   assert.equal(start.ok, true);
   assert.equal(start.snapshot.story, undefined, '일반 전투에는 스토리 표식 없음');
+  assert.equal(start.snapshot.spawnIndex, 0, '전투도 같은 서버 마커 ID');
+  await until(() => changes.length >= 1);
+  assert.deepEqual(changes[0], { ...WILD0, state: 'engaged', visible: true }, '상태 방송도 같은 ID·서버 좌표');
+  // 전투 중 재접속: 접속 인증 응답의 야생 마커가 같은 ID·같은 상태(engaged)이고, 진행 중 전투도 같은 마커를 가리킨다
+  c.close();
+  const hello = await c.connect() as unknown as { inMap: boolean; wilds: Wild[]; battle: { battleId: string; spawnIndex: number } | null };
+  assert.deepEqual([hello.inMap, hello.wilds, hello.battle?.battleId, hello.battle?.spawnIndex], [true, [{ ...WILD0, state: 'engaged', visible: true }], start.snapshot.battleId, 0]);
+  c.socket.on('wild:changed', (w: Wild) => changes.push(w));
   const nubiId = String(db.rows('turby_instance', { owner_player_id: pid(c) })[0].id);
   const party = await c.req<{ snapshot: Snap }>('battle:party', { battleId: start.snapshot.battleId, turbyIds: [] });
   assert.equal(party.ok, false, '일반 전투는 빈 파티 거부(누비 자동 편성 없음)');
@@ -412,6 +435,12 @@ test('통합 4(회귀): 일반 야생 전투 — 누비 강제 참가·스토리
   assert.equal(snap.outcome, 'win');
   const mine = ended!.rewards.find((r) => r.playerId === c.playerId)!;
   assert.deepEqual([mine.rewardStatus, mine.capturedTurby?.characterCode], ['granted', 'bopuli'], '포획 보상 유지');
+  // 포획 뒤: 같은 마커는 보이지 않게 되고(visible=false) 다시 조우할 수 없다. 맵에 다시 들어와도 같다
+  await until(() => changes.some((w) => w.state === 'captured'));
+  assert.deepEqual(changes.at(-1), { ...WILD0, state: 'captured', visible: false });
+  assert.equal((await c.req('battle:start', { spawnIndex: 0 })).code, 'WILD_GONE', '전투 뒤 같은 마커 재조우 방지');
+  const again = await c.req<{ wilds: Wild[] }>('map:enter', { dir: 'down' });
+  assert.deepEqual(again.wilds, [{ ...WILD0, state: 'captured', visible: false }]);
 
   const needle = db.rows('item_definition', { code: 'knit_needle' })[0];
   db.seed('player_item', { player_id: pid(c), item_definition_id: needle.id, quantity: 1 });

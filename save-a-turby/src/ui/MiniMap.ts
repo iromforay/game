@@ -96,7 +96,7 @@ export class MiniMap {
   // 진단용 요약(화면 상태만)
   get debugState() {
     const gb = this.view.greybox;
-    return { terrain: gb ? { zones: gb.zones.length, paths: gb.paths.length, blockers: gb.blockers.length, gatesClosed: gb.gates.filter((x) => !x.open).length, gatesOpen: gb.gates.filter((x) => x.open).length } : null, legend: this.legendKeys(), open: this.open, legendOpen: this.legendOpen, mode: this.L.mode, selected: this.selectedId, diameter: this.L.mini.diameter, close: this.L.full.close, legendToggle: this.L.full.legendToggle, openButton: this.L.mini.open, labelsOnMap: this.L.full.labelsOnMap };
+    return { terrain: gb ? { zones: gb.zones.length, paths: gb.paths.length, blockers: gb.blockers.length, gatesClosed: gb.gates.filter((x) => !x.open).length, gatesOpen: gb.gates.filter((x) => x.open).length } : null, legend: this.legendKeys(), wilds: this.markers.filter((m) => m.type === 'wild').map((m) => ({ id: m.id, x: m.x, y: m.y, mini: { x: this.miniOrigin.x + m.x * this.miniScale, y: this.miniOrigin.y + m.y * this.miniScale }, full: { x: this.fullOrigin.x + m.x * this.fullScale, y: this.fullOrigin.y + m.y * this.fullScale } })), scale: { mini: this.miniScale, full: this.fullScale }, open: this.open, legendOpen: this.legendOpen, mode: this.L.mode, selected: this.selectedId, diameter: this.L.mini.diameter, close: this.L.full.close, legendToggle: this.L.full.legendToggle, openButton: this.L.mini.open, labelsOnMap: this.L.full.labelsOnMap };
   }
 
   toggle() {

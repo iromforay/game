@@ -136,6 +136,11 @@ export function ensureUiPlaceholders(scene: Phaser.Scene) {
     g.fillStyle(0xffd23f, 1).fillPoints([{ x: 20, y: 4 }, { x: 34, y: 20 }, { x: 20, y: 36 }, { x: 6, y: 20 }], true);
     g.lineStyle(2, 0x695b67, 1).strokePoints([{ x: 20, y: 4 }, { x: 34, y: 20 }, { x: 20, y: 36 }, { x: 6, y: 20 }], true);
   });
+  // 10-02 v6: 야생 터비 지도 표식(임시 도형 — 최종 에셋 아님). 세모 — 다른 표식과 모양으로 구분된다
+  ensureTexture(scene, 'marker-wild', 40, 40, (g) => {
+    g.fillStyle(0x7fc8ff, 1).fillPoints([{ x: 20, y: 5 }, { x: 35, y: 33 }, { x: 5, y: 33 }], true);
+    g.lineStyle(2, 0x695b67, 1).strokePoints([{ x: 20, y: 5 }, { x: 35, y: 33 }, { x: 5, y: 33 }], true);
+  });
   ensureTexture(scene, 'marker-current', 48, 48, (g) => {
     g.fillStyle(0xffd23f, 0.35);
     star(g, 24, 25, 22, 10);

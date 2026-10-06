@@ -35,9 +35,15 @@ export interface WildRuntime {
   battleId: string | null; // engaged일 때 이 야생과 싸우는 전투
 }
 
+// 클라이언트에 내려 주는 야생 마커(10-02 v6 §1) — 위치의 유일한 정본은 서버(stage_wild_spawn)다. 클라이언트는 이 좌표로만 마커를 놓는다.
+// index = 서버 야생 마커 ID(지역 안에서 고유, 전투·상태 방송·재접속 뒤에도 같은 값)
 export interface WildDto {
   index: number;
+  characterCode: string; // 표시 키(터비 종류)
+  x: number;
+  y: number;
   state: WildState;
+  visible: boolean; // 지도에 보이는가(free·engaged). captured·removed는 이 탐험 세션에서 다시 나오지 않는다
 }
 
 export interface Room {

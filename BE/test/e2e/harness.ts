@@ -11,6 +11,8 @@ import { FakeDb } from '../helpers/fake-prisma';
 import { seedBase, startTurbyApp } from '../helpers/turby-app';
 
 import { RoomsService } from '../../src/turby/rooms/rooms.service';
+import { RoomError } from '../../src/turby/rooms/types';
+import { StoryContentService, type StageStoryData } from '../../src/turby/story/story-content.service';
 export const ROOT = join(__dirname, '../../..');
 export const ARTIFACTS = process.env.E2E_ARTIFACT_DIR ?? join(__dirname, '.artifacts');
 export const CAPTURE_DIR = process.env.E2E_CAPTURE_DIR ?? null; // 지정하면 캡처(v5 §7)를 여기에 저장
@@ -54,11 +56,64 @@ export class Backend {
   playerByDevice(device: string) {
     return this.db.rows('player', { device_uuid: `dev-device-${device}-account` })[0] as { id: bigint } | undefined;
   }
-  // 그 계정의 탐험 세션(없으면 null): 방 코드와 야생 상태
-  session(device: string): { code: string; wilds: { index: number; state: string }[] } | null {
+  // 그 계정의 탐험 세션(없으면 null): 방 코드와 야생 마커(서버가 가진 위치·종류·상태)
+  session(device: string): { code: string; wilds: { index: number; characterCode: string; x: number; y: number; state: string }[] } | null {
     const p = this.playerByDevice(device);
     const room = p ? this.app?.get(RoomsService).roomOf(p.id.toString()) : undefined;
-    return room ? { code: room.code, wilds: room.wilds.map((w) => ({ index: w.index, state: w.state })) } : null;
+    return room ? { code: room.code, wilds: room.wilds.map((w) => ({ index: w.index, characterCode: w.characterCode, x: w.x, y: w.y, state: w.state })) } : null;
+  }
+  // 서버에 열려 있는 탐험 세션(방) 수 — 재시도가 방을 새로 만들지 않는지 확인하는 데 쓴다
+  roomCount(): number {
+    return ((this.app!.get(RoomsService) as unknown as { rooms: Map<string, unknown> }).rooms).size;
+  }
+  // 시험용 지역 데이터 덧붙이기(이 서버 인스턴스의 메모리에서만 — 파일은 그대로다). 방을 만들기 전에 불러야 한다
+  patchStage(stageCode: string, patch: (data: StageStoryData) => void) {
+    patch(this.app!.get(StoryContentService).stage(stageCode)!);
+  }
+  // 서버의 야생 마커 좌표를 바꾸고 상태 방송을 보낸다(서버 좌표가 바뀌면 화면 마커가 따라오는지 볼 때)
+  moveWild(device: string, index: number, to: { x: number; y: number }) {
+    const p = this.playerByDevice(device)!;
+    const rooms = this.app!.get(RoomsService);
+    const room = rooms.roomOf(p.id.toString())!;
+    const w = room.wilds.find((x) => x.index === index)!;
+    w.x = to.x;
+    w.y = to.y;
+    rooms.events.emit('wild:changed', room, w);
+  }
+  // 서버에 저장된 탐험 위치를 다른 자리로 바꾼다(저장돼 있던 위치가 더는 유효하지 않게 된 상황을 만든다 — 재입장 보정 시험용)
+  displace(device: string, to: { x: number; y: number }) {
+    const p = this.playerByDevice(device)!;
+    const m = this.app!.get(RoomsService).roomOf(p.id.toString())!.members.find((x) => x.playerId === p.id.toString())!;
+    m.x = to.x;
+    m.y = to.y;
+  }
+  // 접속 인증(presence:hello) 응답을 붙잡아 둔다(느린 서버·끊긴 연결 흉내). 호출마다 따로 풀어 준다.
+  //   release(n)      : n번째(1부터) 인증을 정상 처리해 응답한다
+  //   release(n, true): n번째 인증을 실패로 응답한다(늦게 도착한 낡은 응답이 화면을 덮지 않는지 볼 때)
+  //   restore()       : 붙잡기를 끝내고 남은 것을 모두 정상 처리한다
+  holdHello() {
+    const rooms = this.app!.get(RoomsService);
+    const original = rooms.identify.bind(rooms);
+    const gates: { open: (fail: boolean) => void }[] = [];
+    let held = true;
+    rooms.identify = async (...args: Parameters<RoomsService['identify']>) => {
+      if (held) {
+        const fail = await new Promise<boolean>((resolve) => gates.push({ open: resolve }));
+        if (fail) throw new RoomError('TEST_HELD', '시험용 실패 응답');
+      }
+      return original(...args);
+    };
+    return {
+      get calls() {
+        return gates.length;
+      },
+      release: (n: number, fail = false) => gates[n - 1]?.open(fail),
+      restore: () => {
+        held = false;
+        gates.forEach((g) => g.open(false));
+        rooms.identify = original;
+      },
+    };
   }
   // 서버가 마지막으로 승인한 탐험 위치(탐험 세션이 없으면 null) — 화면의 위치와 서버 위치를 비교하는 데 쓴다
   serverPosition(device: string): { x: number; y: number } | null {
@@ -246,7 +301,8 @@ export class Game {
 
   // 전투: 내 차례마다 이동·공격·턴 종료를 실제 클릭 한 번씩으로. 결과창이 뜰 때까지.
   // 누른 뒤에는 서버 응답·재생이 끝나 전투 버전이 바뀌기를 기다린다. 바뀌지 않으면 다시 누르지 않고 입력 누락으로 실패한다
-  async playBattle(deadlineMs = 120_000) {
+  // stop: 이 상태 조건이 참이 되면(내 차례·처리 중이 아닐 때만 본다) 전투를 끝내지 않고 멈춘다 — 전투 도중의 화면을 볼 때
+  async playBattle(deadlineMs = 120_000, stop?: string) {
     const until = Date.now() + deadlineMs;
     const changed = (v: number, timeout: number) =>
       this.page.waitForFunction(
@@ -261,6 +317,7 @@ export class Game {
       const s = await this.state();
       if (s.battle?.resultShown) return s.battle;
       const step = (await this.page.evaluate(() => (window as any).__dev.battleStep())) as { x: number; y: number; kind: string } | null; // eslint-disable-line @typescript-eslint/no-explicit-any
+      if (stop && step && (await this.page.evaluate(`(() => { const s = window.__dev.state(); return !!(${stop}); })()`))) return (await this.state()).battle;
       const before = (await this.page.evaluate(() => (window as any).__game.scene.getScene('Battle').snap?.version ?? -1)) as number; // eslint-disable-line @typescript-eslint/no-explicit-any
       if (!step) {
         // 내 차례가 아니거나 재생 중 — 누르지 않고 차례가 오기를 기다린다

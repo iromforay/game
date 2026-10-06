@@ -7,6 +7,7 @@ import { gameError } from '../turby-dto';
 import { StoryContentService, type StageRect } from './story-content.service';
 import { addToPlayerItem, usedBagSlots } from './bag';
 import { StageAccessService } from './stage-access.service';
+import { gateOpen } from '../shared/stage-geometry';
 import type { StageStatusDto } from './stage-access';
 import {
   DEFAULT_NICKNAME,
@@ -438,7 +439,10 @@ export class StoryService {
   // 이 플레이어에게 지금 보이는 지역 스토리 화면: 남은 오브젝트(잠김·수집 가능), 활성 지점, 문 상태, 목표 진행
   private async stageView(playerId: bigint, stageCode: string): Promise<StageViewDto> {
     const data = this.content.stage(stageCode);
-    if (!data) return { stageCode, greybox: false, size: null, objects: [], points: [], gates: [], layout: null, objectives: [] };
+    // 지도 크기도 서버가 정한다(10-02 v6 §2): 지역 데이터의 size, 없으면 지역 표의 크기 — 방의 geometry(collisionOf)와 같은 기준
+    const chapter = data?.size ? null : await this.prisma.story_chapter.findUnique({ where: { stage_code: stageCode } });
+    const size = data?.size ?? (chapter ? { width: chapter.map_width, height: chapter.map_height } : null);
+    if (!data) return { stageCode, greybox: false, size, objects: [], points: [], gates: [], layout: null, objectives: [] };
     const snap = await this.readSnapshot(playerId);
     const at = new Map(data.points.map((p) => [p.id, p]));
     const defs = STORY_OBJECTIVES.filter((o) => o.stageCode === stageCode);
@@ -467,10 +471,10 @@ export class StoryService {
     return {
       stageCode,
       greybox: data.greybox === true,
-      size: data.size ?? null,
+      size,
       objects,
       points,
-      gates: (layout?.gates ?? []).filter(shown).map((g) => ({ id: g.id, label: g.label, x: g.x, y: g.y, width: g.width, height: g.height, open: snap.events.has(g.openEvent) })),
+      gates: (layout?.gates ?? []).filter(shown).map((g) => ({ id: g.id, label: g.label, x: g.x, y: g.y, width: g.width, height: g.height, open: gateOpen(g, snap.events) })),
       layout: layout
         ? {
             zones: layout.zones.filter(shown).map((z) => ({ id: z.id, label: z.label, x: z.x, y: z.y, width: z.width, height: z.height })),

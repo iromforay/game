@@ -4,12 +4,14 @@ import type { Socket } from 'socket.io-client';
 import { BASE_URL, session } from '../api/client';
 import { getPlayerId } from '../state/player';
 import { helloPayload } from '../state/session';
-import type { BattleInvite, BattleSnapshot, BattleUpdate, WildInfo, WildState } from './battleTypes';
+import type { BattleInvite, BattleSnapshot, BattleUpdate, WildInfo } from './battleTypes';
 
 // 4-A: 방·맵 위치 동기화 클라이언트(docs/save_a_turby_coop_spec.md 5절 계약). 화면과 분리된 연결 계층이라
 // 최종 방 UI가 나와도 이 클래스는 그대로 쓴다. 서버가 device_uuid와 세션 토큰으로 플레이어를 확정하므로 playerId를 보내지 않는다.
 
 export type Facing = 'down' | 'left' | 'right' | 'up';
+
+export const HELLO_TIMEOUT_MS = 5000; // 접속 인증 응답을 기다리는 한도
 
 export interface MemberInfo {
   playerId: string;
@@ -40,15 +42,17 @@ export interface MapPlayer {
 export class RoomApiError extends Error {
   readonly code: string;
   readonly snapshot: BattleSnapshot | null; // STATE_MISMATCH일 때 서버가 함께 내려주는 최신 전투 상태
+  readonly reason: string | null; // 서버가 덧붙인 거부 사유(예: WILD_UNREACHABLE의 blocked·locked_zone) — 좌표 같은 정보는 없다
 
-  constructor(code: string, message: string, snapshot: BattleSnapshot | null = null) {
+  constructor(code: string, message: string, snapshot: BattleSnapshot | null = null, reason: string | null = null) {
     super(message);
     this.code = code;
     this.snapshot = snapshot;
+    this.reason = reason;
   }
 }
 
-type Ack<T> = ({ ok: true } & T) | { ok: false; code: string; message: string; snapshot?: BattleSnapshot };
+type Ack<T> = ({ ok: true } & T) | { ok: false; code: string; message: string; reason?: string; snapshot?: BattleSnapshot };
 
 interface Events {
   state: (room: RoomState | null) => void;
@@ -68,6 +72,8 @@ class RoomClient {
   private socket: Socket | null = null;
   private listeners = new Map<keyof Events, Set<(...args: never[]) => void>>();
   private helloPromise: Promise<void> | null = null;
+  private helloSeq = 0; // 접속 인증 시도 번호 — 새 시도가 시작되면 앞선 시도의 응답은 버린다
+  private abortHello: (() => void) | null = null;
   playerId: string | null = null;
   room: RoomState | null = null;
   resumeInMap = false; // hello 응답: 이어받은 탐험 세션에서 맵 안에 있었는가(새로고침 뒤 Map 복원의 근거 — 서버 응답만 쓴다)
@@ -85,7 +91,8 @@ class RoomClient {
     return Date.now() + this.clockOffset;
   }
 
-  readonly wilds = new Map<number, WildState>(); // 서버가 소유한 야생 터비 상태(마커 공유)
+  // 서버가 소유한 야생 터비 마커(위치·종류·상태). 화면·미니맵·전체 지도는 이 값만 쓴다(클라이언트 설정에 좌표가 없다)
+  readonly wilds = new Map<number, WildInfo>();
 
   // 방 입장 순서 = 참가자 슬롯(색). 방에 없으면 0
   slotOf(playerId: string): number {
@@ -95,7 +102,7 @@ class RoomClient {
 
   private setWilds(list: WildInfo[] | undefined) {
     this.wilds.clear();
-    (list ?? []).forEach((w) => this.wilds.set(w.index, w.state));
+    (list ?? []).forEach((w) => this.wilds.set(w.index, w));
   }
 
   on<K extends keyof Events>(event: K, fn: Events[K]) {
@@ -112,24 +119,33 @@ class RoomClient {
   }
 
   // 연결하고 접속 인증(presence:hello)까지 끝낸다. 끊겼다가 다시 붙으면 자동으로 hello를 다시 보내 방 세션을 이어받는다.
-  async connect(): Promise<void> {
-    if (this.socket?.connected && this.playerId) return;
-    if (this.helloPromise) return this.helloPromise;
+  // fresh: 진행 중인 시도를 버리고 새로 시도한다(복원 화면의 "다시 시도"). 버린 시도의 응답이 늦게 와도 상태를 덮지 않는다.
+  // hello는 방을 만들지 않고 있던 세션을 이어받기만 하므로 여러 번 보내도 방이 늘지 않는다
+  async connect(opts: { fresh?: boolean } = {}): Promise<void> {
+    if (!opts.fresh) {
+      if (this.socket?.connected && this.playerId) return;
+      if (this.helloPromise) return this.helloPromise;
+    }
+    const seq = ++this.helloSeq;
+    this.abortHello?.();
 
-    this.helloPromise = new Promise<void>((resolve, reject) => {
+    const attempt: Promise<void> = new Promise<void>((resolve, reject) => {
       const socket = this.socket ?? io(BASE_URL, { transports: ['websocket'] });
       if (!this.socket) {
         this.socket = socket;
         this.bind(socket);
       }
+      const superseded = () => new RoomApiError('SUPERSEDED', '새로 시도한 접속으로 바뀌었습니다.');
       const hello = async () => {
+        if (seq !== this.helloSeq) return;
         try {
           // HTTP /player/me/* 와 같은 세션 토큰을 보낸다. 토큰이 거부되면 session.run이 재식별을 한 번만 하고 다시 보낸다.
           const res = await session.run(async (token) => {
-            const ack = (await socket.timeout(5000).emitWithAck('presence:hello', helloPayload(getPlayerId(), token))) as Ack<{ playerId: string; room: RoomState | null; players: MapPlayer[]; battle: BattleSnapshot | null; inMap?: boolean; wilds?: WildInfo[]; returnToVillage?: boolean }>;
+            const ack = (await socket.timeout(HELLO_TIMEOUT_MS).emitWithAck('presence:hello', helloPayload(getPlayerId(), token))) as Ack<{ playerId: string; room: RoomState | null; players: MapPlayer[]; battle: BattleSnapshot | null; inMap?: boolean; wilds?: WildInfo[]; returnToVillage?: boolean }>;
             if (!ack.ok) throw new RoomApiError(ack.code, ack.message);
             return ack;
           });
+          if (seq !== this.helloSeq) return reject(superseded()); // 오래된 응답 — 새 시도의 결과를 덮지 않는다
           this.playerId = res.playerId;
           this.room = res.room;
           this.activeBattle = res.battle ?? null;
@@ -145,13 +161,26 @@ class RoomClient {
           reject(err);
         }
       };
+      const onConnect = () => void hello();
+      const onError = (err: Error) => reject(err);
+      this.abortHello = () => {
+        socket.off('connect', onConnect);
+        socket.off('connect_error', onError);
+        reject(superseded());
+      };
       if (socket.connected) void hello();
-      else socket.once('connect', () => void hello());
-      socket.once('connect_error', (err) => reject(err));
+      else {
+        socket.once('connect', onConnect);
+        socket.once('connect_error', onError);
+      }
     }).finally(() => {
-      this.helloPromise = null;
+      if (this.helloPromise === attempt) {
+        this.helloPromise = null;
+        this.abortHello = null;
+      }
     });
-    return this.helloPromise;
+    this.helloPromise = attempt;
+    return attempt;
   }
 
   private bind(socket: Socket) {
@@ -183,7 +212,7 @@ class RoomClient {
       this.emitLocal('battleInvite', i);
     });
     socket.on('wild:changed', (w: WildInfo) => {
-      this.wilds.set(w.index, w.state);
+      this.wilds.set(w.index, w);
       this.emitLocal('wildChanged', w);
     });
     socket.on('map:correct', (pos: { x: number; y: number; reason?: string }) => this.emitLocal('correct', pos));
@@ -202,7 +231,7 @@ class RoomClient {
     const res = (await this.socket!.timeout(5000).emitWithAck(event, body)) as Ack<T>;
     if (!res.ok) {
       this.observeServerTime(res.snapshot?.serverNow);
-      throw new RoomApiError(res.code, res.message, res.snapshot ?? null);
+      throw new RoomApiError(res.code, res.message, res.snapshot ?? null, res.reason ?? null);
     }
     this.observeServerTime((res as { snapshot?: BattleSnapshot }).snapshot?.serverNow);
     return res as unknown as T;
@@ -215,6 +244,7 @@ class RoomClient {
   async createRoom(stageCode: string): Promise<RoomState> {
     this.room = (await this.request<{ room: RoomState }>('room:create', { stageCode })).room;
     this.others.clear();
+    this.wilds.clear(); // 새 탐험 세션 — 야생 마커는 맵 입장 응답으로 다시 받는다
     this.emitLocal('state', this.room);
     return this.room;
   }
@@ -234,6 +264,7 @@ class RoomClient {
     } finally {
       this.room = null;
       this.others.clear();
+      this.wilds.clear();
       this.emitLocal('state', null);
     }
   }

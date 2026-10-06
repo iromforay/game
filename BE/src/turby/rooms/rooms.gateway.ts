@@ -5,7 +5,7 @@ import { RoomsService } from './rooms.service';
 import { BattleService } from '../battle/battle.service';
 import { StoryService } from '../story/story.service';
 import { RoomError } from './types';
-import type { Room } from './types';
+import type { Room, WildRuntime } from './types';
 
 type Ack = { ok: true; [key: string]: unknown } | { ok: false; code: string; message: string };
 
@@ -27,8 +27,8 @@ export class RoomsGateway implements OnGatewayDisconnect, OnModuleInit {
     this.rooms.events.on('room:state', (room: Room) => {
       this.server.to(this.rooms.roomChannel(room.code)).emit('room:state', this.rooms.toState(room));
     });
-    this.rooms.events.on('wild:changed', (room: Room, wild: { index: number; state: string }) => {
-      this.server.to(this.rooms.mapChannel(room)).emit('wild:changed', { index: wild.index, state: wild.state });
+    this.rooms.events.on('wild:changed', (room: Room, wild: WildRuntime) => {
+      this.server.to(this.rooms.mapChannel(room)).emit('wild:changed', this.rooms.toWildDto(wild)); // 상태 갱신도 같은 마커 ID·서버 좌표를 싣는다
     });
     // 이탈(퇴장·재접속 유예 만료)은 같은 맵에 있던 사람들에게 유령이 남지 않도록 알린다
     this.rooms.events.on('member:removed', (room: Room, playerId: string, wasInMap: boolean, reason: string) => {

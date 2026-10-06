@@ -118,9 +118,14 @@ export type ActionBody =
   | { type: 'end' };
 
 export type WildState = 'free' | 'engaged' | 'captured' | 'removed';
+// 서버가 내려 주는 야생 마커(10-02 v6 §1): 위치·종류·상태 모두 서버 값. index = 서버 야생 마커 ID
 export interface WildInfo {
   index: number;
+  characterCode: string;
+  x: number;
+  y: number;
   state: WildState;
+  visible: boolean;
 }
 export interface BattleInvite {
   battleId: string;

@@ -1,7 +1,6 @@
 import Phaser from 'phaser';
 import { AVATAR_SPEED, ENCOUNTER_RADIUS, CANVAS_WIDTH } from '../config/constants';
 import { getStage } from '../config/stages';
-import type { WildSpawn } from '../config/stages';
 import { VirtualJoystick } from '../ui/VirtualJoystick';
 import { InventoryPanel } from '../ui/InventoryPanel';
 import { InventoryWindow } from '../ui/InventoryWindow';
@@ -17,7 +16,7 @@ import { ensureUiPlaceholders } from '../assets/placeholders';
 import { loadChapterStatuses, getCurrentChapter } from '../config/story';
 import { roomClient, RoomApiError } from '../net/roomClient';
 import { battleClient } from '../net/battleClient';
-import type { BattleSnapshot, BattleUpdate, WildState } from '../net/battleTypes';
+import type { BattleSnapshot, BattleUpdate, WildInfo, WildState } from '../net/battleTypes';
 import { showToast, feltPanel, pillButton, PAL, TEXT } from '../ui/kit';
 import coopSlots from '../data/coop-slots.json';
 import type { Facing, MapPlayer } from '../net/roomClient';
@@ -25,16 +24,17 @@ import charactersData from '../data/characters.json';
 import { AVATAR_IMAGE, CHARACTER_IMAGES, BACKGROUND_TILES } from '../assets/registry';
 import { collectStoryObject, fetchStageView, fetchStory, triggerStory } from '../api/client';
 import { DELIVERY_ITEM_NAME, deliveryGoalText, shortageText, type StoryDelivery, type StoryPlay } from '../story/storyFlow';
-import { collectedText, nearestInteractable, promptText, solidRects, stepWithSolids, type Interactable, type StageRect, type StageView } from '../story/storyStage';
+import { CLIENT_BODY_HALF, collectedText, nearestInteractable, promptText, solidRects, stepWithSolids, type Interactable, type StageRect, type StageView } from '../story/storyStage';
+import { NoticeGate, POSITION_CORRECTED_TEXT, WILD_NOTICE_REPEAT_MS, wildNoticeKey, wildUnreachableText } from '../story/mapNotices';
 
 const WILD_RECHECK_MS = 1500; // 서버가 "닿지 않는다"고 한 야생을 다시 물어보기까지의 간격
-const AVATAR_HALF = 16; // 막힌 곳 판정에 쓰는 아바타 몸 반지름(px)
+const AVATAR_HALF = CLIENT_BODY_HALF; // 막힌 곳 판정에 쓰는 아바타 몸 반지름(px) — 서버와 같은 geometry 계약의 값
 const DEPTH_GROUND = -20;
 const DEPTH_STORY = -5; // 이야기 지점·오브젝트 표식(아바타·야생 터비보다 아래)
 
 interface WildMarker {
-  spawn: WildSpawn;
-  index: number;
+  info: WildInfo; // 서버가 내려 준 마커(위치·종류) — 클라이언트 설정에는 야생 좌표가 없다
+  index: number; // 서버 야생 마커 ID
   gfx: Phaser.GameObjects.Container;
   encountered: boolean;
   retryAt?: number; // 조우 시작에 실패한 뒤 다시 시도하기까지의 대기(ms 시각)
@@ -95,6 +95,10 @@ export class MapScene extends Phaser.Scene {
   private corrections = 0; // 서버 보정 횟수(진단용)
   private lastCorrectionReason: string | null = null;
   private unreachableWilds = 0; // 서버가 가로막힘으로 거부한 조우 요청 수(진단용)
+  private notices = new NoticeGate(); // 안내 반복 억제(같은 야생·같은 사유 3초, 위치 보정 안내는 한 번)
+  private noticeLog: string[] = []; // 띄운 안내(진단용)
+  private legacyTarget: { code: string; name: string; title: string } | null = null;
+  private capturedShown = -1;
   private lastViewSyncAt = 0;
   private quietWilds = new Set<number>(); // 배치된 자리 바로 옆의 야생 터비 — 한 번 벗어나기 전에는 조우를 다시 시작하지 않는다
   // 10-02 v3: 지역 스토리 화면(서버가 내려 준 남은 오브젝트·활성 지점·문) — 좌표·문구·에셋 키는 전부 서버 데이터
@@ -105,7 +109,6 @@ export class MapScene extends Phaser.Scene {
   private storyBusy = false;
   private interactBox?: Phaser.GameObjects.Rectangle;
   private interactLabel?: Phaser.GameObjects.Text;
-  private baseMarkers: MapMarker[] = [];
   private mapView!: MapView;
   private keys?: Record<'up' | 'down' | 'left' | 'right' | 'w' | 'a' | 's' | 'd' | 'e' | 'space' | 'enter', Phaser.Input.Keyboard.Key>;
 
@@ -125,6 +128,10 @@ export class MapScene extends Phaser.Scene {
     this.inviteBattleId = null;
     this.deliveryLayer = [];
     this.positioned = false;
+    this.notices = new NoticeGate();
+    this.noticeLog = [];
+    this.legacyTarget = null;
+    this.capturedShown = -1;
     this.quietWilds = new Set();
     this.roomLabel = undefined; // 같은 씬 인스턴스를 다시 쓰므로 이전 화면의 글자 참조를 비운다(파괴된 객체에 setText 방지)
     this.hudObjs = [];
@@ -172,22 +179,19 @@ export class MapScene extends Phaser.Scene {
     });
     if (gen !== this.generation || !this.sys.isActive()) return;
     ensureUiPlaceholders(this);
-    this.stageWidth = stage.width;
-    this.stageHeight = stage.height;
+    // 지도 크기는 서버의 지역 화면 응답이 정한다(서버 충돌 판정과 같은 값). 응답을 받지 못했을 때만 설정의 임시 크기를 쓴다
+    const width = (this.stageWidth = view?.size?.width ?? stage.width);
+    const height = (this.stageHeight = view?.size?.height ?? stage.height);
 
     this.cameras.main.setBackgroundColor('#20301c');
-    this.cameras.main.setBounds(0, 0, stage.width, stage.height);
+    this.cameras.main.setBounds(0, 0, width, height);
 
     // 회색상자(임시) 배치가 있으면 반복 배경 대신 배치를 그린다 — 최종 지도가 오면 이 분기만 바꾼다
-    if (view?.greybox && view.layout) this.drawGreybox(view, stage.width, stage.height);
-    else this.add.tileSprite(0, 0, stage.width, stage.height, `bg-${stage.code}`).setOrigin(0, 0);
+    if (view?.greybox && view.layout) this.drawGreybox(view, width, height);
+    else this.add.tileSprite(0, 0, width, height, `bg-${stage.code}`).setOrigin(0, 0);
 
-    this.avatar = this.add.image(stage.width / 2, stage.height / 2, 'avatar').setDisplaySize(44, 44);
+    this.avatar = this.add.image(width / 2, height / 2, 'avatar').setDisplaySize(44, 44);
     this.cameras.main.startFollow(this.avatar, true, 0.1, 0.1);
-
-    // 3.4/4-C: 포획됨·도망(패배)한 개체는 재등장하지 않는다 — 상태는 서버가 소유하고 같은 방 모두에게 공유된다(roomClient.wilds)
-    stage.wildSpawns.forEach((spawn, index) => this.markers.push(this.createMarker(spawn, index)));
-    this.markers.forEach((m) => this.applyWildState(m.index, roomClient.wilds.get(m.index) ?? 'free')); // 마지막으로 알려진 서버 상태로 먼저 그린다
 
     this.joystick = new VirtualJoystick(this);
     const kb = this.input.keyboard;
@@ -197,16 +201,9 @@ export class MapScene extends Phaser.Scene {
     }
 
     // 구 판정(롤백 상태)일 때만: 지금 열린 장이 이 맵이면 대표 터비 스폰 위치를 별로 표시. 신 판정에서는 포획이 장을 열지 않아 표시하지 않는다.
-    const targets: MapMarker[] = [];
-    if (current && current.legacyTargetCode && current.chapter.stageCode === stage.code) {
-      stage.wildSpawns.forEach((spawn, index) => {
-        if (spawn.characterCode !== current.legacyTargetCode || ['captured', 'removed'].includes(roomClient.wilds.get(index) ?? 'free')) return;
-        targets.push({ id: `target-${index}`, type: 'target', name: `대표 터비 ${current.clearCharacterName}`, x: spawn.x, y: spawn.y, hint: `${current.chapter.titleKo}: '${current.clearCharacterName}'를 조우해 직접 포획하면 다음 지역이 열려요.` });
-      });
-    }
-    const mapView: MapView = (this.mapView = { title: stage.name, width: stage.width, height: stage.height, bounds: { x: 0, y: 0, w: stage.width, h: stage.height } });
-    this.baseMarkers = targets;
-    this.miniMap = new MiniMap(this, mapView, targets, '', (open) => {
+    if (current && current.legacyTargetCode && current.chapter.stageCode === stage.code) this.legacyTarget = { code: current.legacyTargetCode, name: current.clearCharacterName, title: current.chapter.titleKo };
+    const mapView: MapView = (this.mapView = { title: stage.name, width, height, bounds: { x: 0, y: 0, w: width, h: height } });
+    this.miniMap = new MiniMap(this, mapView, [], '', (open) => {
       this.joystick.setEnabled(!open);
     });
 
@@ -216,6 +213,9 @@ export class MapScene extends Phaser.Scene {
     this.areaName = stage.name;
     this.buildHud();
     this.applyStageView(view);
+    // 3.4/4-C·10-02 v6 §1: 야생 마커는 서버가 내려 준 것만 놓는다(위치·종류·상태 모두 서버 값). 이 지역의 탐험 세션이 있을 때만
+    // 마지막으로 받은 값으로 먼저 그리고, 맵 입장 응답이 오면 다시 맞춘다. 서버에 없는 마커는 만들지 않는다
+    if (roomClient.room?.stageCode === stage.code) this.syncWilds();
     // 창 크기가 바뀌면 맵을 다시 시작하지 않고 HUD·미니맵·목표 표시만 새 배율로 다시 그린다(위치·탐험 세션·목표 상태 유지)
     watchLayout(this, () => this.relayoutHud());
     this.ready = true;
@@ -254,7 +254,7 @@ export class MapScene extends Phaser.Scene {
       box.setInteractive({ useHandCursor: true }).on('pointerdown', onClick);
     };
     label(L.area, this.areaName, L.font.area, Math.round(L.font.room));
-    label(L.captured, capturedLabel(this.capturedIndices.length), L.font.label, L.font.label);
+    label(L.captured, capturedLabel(this.capturedCount()), L.font.label, L.font.label);
     // 4.1: 마을(입구) — 야생 맵에서 언제든 안전지대로 복귀 가능
     button(L.home, '마을로', 0x4a7a3a, () => {
       if (this.leaving) return; // 한 번만
@@ -344,14 +344,91 @@ export class MapScene extends Phaser.Scene {
       const c = keep(this.add.container(pt.x, pt.y).setDepth(DEPTH_STORY));
       c.add([this.add.circle(0, 0, pt.radius).setStrokeStyle(2, 0xb9a6ee, 0.5), this.add.circle(0, 0, 20).setStrokeStyle(4, 0xb9a6ee, 1), this.add.circle(0, 0, 8, 0xb9a6ee), this.add.text(0, 28, pt.label, { fontSize: '13px', color: '#e6dcff' }).setOrigin(0.5, 0)]);
     }
+    this.refreshMiniMap();
+    this.setActiveTarget(null);
+  }
+
+  // 미니맵·전체 지도에 놓이는 것을 지금 상태로 다시 그린다: 야생 터비(서버 좌표), 이야기 지점·오브젝트, 회색상자 지형
+  private refreshMiniMap() {
+    const view = this.stageView;
     const storyMarkers: MapMarker[] = [
       ...(view?.points ?? []).map((pt) => ({ id: pt.id, type: 'story' as const, name: pt.label, x: pt.x, y: pt.y, hint: pt.prompt })),
       ...(view?.objects ?? []).map((o) => ({ id: o.id, type: 'dust' as const, name: o.label, x: o.x, y: o.y, hint: o.state === 'locked' ? '아직 모을 수 없어요' : o.prompt })),
     ];
+    // 야생 터비: 지금 보이는 것만(포획·도망은 서버가 visible=false로 내려 준다). 좌표는 화면의 마커와 같은 서버 값
+    const shown = this.markers.filter((m) => m.info.visible);
+    const target = this.legacyTarget; // 구 판정(롤백 상태)일 때만: 지금 열린 장의 대표 터비는 별로 표시
+    const wildMarkers: MapMarker[] = shown.map((m) =>
+      target && m.info.characterCode === target.code
+        ? { id: `target-${m.index}`, type: 'target' as const, name: `대표 터비 ${target.name}`, x: m.info.x, y: m.info.y, hint: `${target.title}: '${target.name}'를 조우해 직접 포획하면 다음 지역이 열려요.` }
+        : { id: `wild-${m.index}`, type: 'wild' as const, name: this.characterName(m.info.characterCode), x: m.info.x, y: m.info.y, hint: m.info.state === 'engaged' ? '교전 중인 야생 터비예요.' : '야생 터비예요. 가까이 다가가면 만나요.' },
+    );
     // 전체 지도·미니맵: 회색상자 모드에서만 길·벽·문·공개된 구역을 임시 도형으로 그린다(최종 지도가 오면 이 임시 배경은 없어진다)
     const terrain = view?.greybox && view.layout ? { zones: view.layout.zones, paths: view.layout.paths, blockers: view.layout.blockers, gates: view.gates } : undefined;
-    this.miniMap?.setScene({ ...this.mapView, greybox: terrain }, [...this.baseMarkers, ...storyMarkers]);
-    this.setActiveTarget(null);
+    this.miniMap?.setScene({ ...this.mapView, greybox: terrain }, [...wildMarkers, ...storyMarkers]);
+  }
+
+  // ----- 10-02 v6 §1: 야생 마커 — 서버가 내려 준 목록(roomClient.wilds)과 화면을 맞춘다 -----
+
+  // 서버에 있는 마커만 남기고(없어진 것은 지운다), 새 마커는 만들고, 좌표·종류가 바뀐 마커는 안전하게 옮기거나 다시 만든다
+  private syncWilds() {
+    const server = roomClient.wilds;
+    for (const m of this.markers.filter((x) => !server.has(x.index) || server.get(x.index)!.characterCode !== x.info.characterCode)) this.dropMarker(m);
+    for (const info of server.values()) {
+      const m = this.markers.find((x) => x.index === info.index) ?? this.addMarker(info);
+      m.info = info;
+      m.gfx.setPosition(info.x, info.y);
+      this.applyWildState(info.index, info.state);
+    }
+    this.refreshMiniMap();
+    this.refreshCaptured();
+  }
+
+  private addMarker(info: WildInfo): WildMarker {
+    const m = this.createMarker(info);
+    this.markers.push(m);
+    return m;
+  }
+
+  private dropMarker(m: WildMarker) {
+    m.pulse?.stop();
+    m.gfx.destroy();
+    this.quietWilds.delete(m.index);
+    this.markers = this.markers.filter((x) => x !== m);
+  }
+
+  // 서버의 야생 상태 방송: 같은 마커 ID의 상태(와 좌표)를 반영한다. 모르는 마커거나 종류가 바뀌었으면 목록 전체를 다시 맞춘다
+  private onWildChanged(info: WildInfo) {
+    const m = this.markers.find((x) => x.index === info.index);
+    if (!m || m.info.characterCode !== info.characterCode) return this.syncWilds();
+    const redraw = m.info.x !== info.x || m.info.y !== info.y || m.info.visible !== info.visible || m.info.state !== info.state;
+    m.info = info;
+    m.gfx.setPosition(info.x, info.y);
+    this.applyWildState(info.index, info.state);
+    if (redraw) this.refreshMiniMap();
+    this.refreshCaptured();
+  }
+
+  private characterName(code: string) {
+    return (charactersData as { code: string; name: string }[]).find((c) => c.code === code)?.name ?? code;
+  }
+
+  // 포획 수: 이 탐험 세션에서 서버가 포획됨으로 표시한 야생 수(새로고침 뒤에도 같다). 탐험 세션이 없으면 화면이 넘겨받은 값
+  private capturedCount() {
+    return this.roomJoined ? this.markers.filter((m) => m.state === 'captured').length : this.capturedIndices.length;
+  }
+
+  private refreshCaptured() {
+    const n = this.capturedCount();
+    if (n === this.capturedShown || !this.hud) return;
+    this.capturedShown = n;
+    this.buildHud();
+  }
+
+  // 짧은 안내(이동을 막지 않는다 — 글자만 잠깐 보인다)
+  private notice(text: string) {
+    this.noticeLog.push(text);
+    showToast(this, text, { y: this.hud.toastY, fixed: true });
   }
 
   private async refreshStageView() {
@@ -479,7 +556,7 @@ export class MapScene extends Phaser.Scene {
       }),
       roomClient.on('left', ({ playerId }) => this.removePeer(playerId)),
       roomClient.on('correct', (pos) => this.applyCorrection(pos)),
-      roomClient.on('wildChanged', (w) => this.applyWildState(w.index, w.state)),
+      roomClient.on('wildChanged', (w) => this.onWildChanged(w)),
       roomClient.on('battleInvite', (i) => this.showInvite(i.snapshot)),
       roomClient.on('battleUpdate', (u) => this.onBattleUpdate(u)),
     );
@@ -496,9 +573,11 @@ export class MapScene extends Phaser.Scene {
     try {
       const players = await roomClient.enterMap(this.facing);
       if (!this.inRoomMap) return; // 입장 응답을 기다리는 사이 씬이 끝남
+      this.syncWilds(); // 서버가 이 입장에 내려 준 야생 마커(위치·종류·상태)로 맞춘다
       this.placeAt(roomClient.selfOnEnter);
+      // 10-02 v6 §4.1: 저장돼 있던 위치를 쓸 수 없어 서버가 시작 지점으로 보정했다 — 한 번만 알린다(작은 이동 보정에는 알리지 않는다)
+      if (roomClient.selfOnEnter?.corrected && this.notices.once('position-corrected')) this.notice(POSITION_CORRECTED_TEXT);
       players.forEach((p) => this.upsertPeer(p));
-      this.markers.forEach((m) => this.applyWildState(m.index, roomClient.wilds.get(m.index) ?? 'free'));
       if (!this.selfRing) this.selfRing = this.makeRing(this.slotColor(roomClient.slotOf(roomClient.playerId ?? ''))).setDepth(5);
       // M4-C: 서버가 이 입장에 붙여 준 이야기(숲 첫 진입 → 첫 길, 새로고침 → 복귀 구간) — 서버가 정한 구간만 재생
       const story = roomClient.storyOnEnter;
@@ -512,7 +591,12 @@ export class MapScene extends Phaser.Scene {
 
   // 진단용 요약(화면 상태만): 서버가 정한 위치에 배치됐는가, 서버 보정 횟수와 마지막 사유
   get debugPosition() {
-    return { positioned: this.positioned, corrections: this.corrections, lastCorrection: this.lastCorrectionReason, unreachableWilds: this.unreachableWilds };
+    return {
+      positioned: this.positioned, corrections: this.corrections, lastCorrection: this.lastCorrectionReason, unreachableWilds: this.unreachableWilds,
+      notices: [...this.noticeLog], size: { width: this.stageWidth, height: this.stageHeight }, captured: this.capturedCount(),
+      // 화면에 놓인 야생 마커(서버 마커 ID·화면 좌표·상태)
+      wilds: this.markers.map((m) => ({ index: m.index, characterCode: m.info.characterCode, x: m.gfx.x, y: m.gfx.y, state: m.state, visible: m.gfx.visible })),
+    };
   }
 
   // 서버가 확정한 위치에 배치한다(첫 입장 = 시작 지점, 재입장 = 마지막 승인 위치). 그 자리 바로 옆의 야생 터비는 한 번 벗어난 뒤에야 다시 조우한다
@@ -521,7 +605,7 @@ export class MapScene extends Phaser.Scene {
       this.avatar.setPosition(self.x, self.y);
       this.lastSent = { x: self.x, y: self.y };
       this.cameras.main.centerOn(self.x, self.y);
-      for (const m of this.markers) if (Phaser.Math.Distance.Between(self.x, self.y, m.spawn.x, m.spawn.y) <= ENCOUNTER_RADIUS * 1.5) this.quietWilds.add(m.index);
+      for (const m of this.markers) if (Phaser.Math.Distance.Between(self.x, self.y, m.info.x, m.info.y) <= ENCOUNTER_RADIUS * 1.5) this.quietWilds.add(m.index);
     }
     this.positioned = true;
   }
@@ -633,19 +717,19 @@ export class MapScene extends Phaser.Scene {
     this.lastSentAt = 0;
   }
 
-  private createMarker(spawn: WildSpawn, index: number): WildMarker {
-    const character = (charactersData as { code: string; name: string }[]).find((c) => c.code === spawn.characterCode);
-    const container = this.add.container(spawn.x, spawn.y);
-    const hasImage = this.textures.exists(`turby-${spawn.characterCode}`);
+  // 이름·그림 같은 표시 정보만 클라이언트 데이터(characters.json)에서 고른다. 위치와 종류는 서버 마커 그대로
+  private createMarker(info: WildInfo): WildMarker {
+    const container = this.add.container(info.x, info.y);
+    const hasImage = this.textures.exists(`turby-${info.characterCode}`);
     const sprite = hasImage
-      ? this.add.image(0, 0, `turby-${spawn.characterCode}`).setDisplaySize(40, 40)
+      ? this.add.image(0, 0, `turby-${info.characterCode}`).setDisplaySize(40, 40)
       : this.add.circle(0, 0, 18, 0x7fc8ff).setStrokeStyle(2, 0x2d6fa3);
-    const label = this.add.text(0, -34, character?.name ?? spawn.characterCode, { fontSize: '13px', color: '#eaf6ff' }).setOrigin(0.5, 1);
+    const label = this.add.text(0, -34, this.characterName(info.characterCode), { fontSize: '13px', color: '#eaf6ff' }).setOrigin(0.5, 1);
     // 교전 중 표시: 라벤더 펄스 링 + 명패(다른 사람이 이미 싸우는 중이라 재조우할 수 없다)
     const ring = (this.textures.exists('engaged-ring') ? this.add.image(0, 0, 'engaged-ring').setDisplaySize(84, 84) : this.add.circle(0, 0, 30).setStrokeStyle(4, 0xb9a6ee, 1)).setVisible(false);
     const badge = this.add.text(0, 30, '교전 중', { fontSize: '12px', color: '#695B67', backgroundColor: '#FFF4DF', padding: { x: 6, y: 2 } }).setOrigin(0.5, 0).setVisible(false);
     container.add([ring, sprite, label, badge]);
-    return { spawn, index, gfx: container, encountered: false, state: 'free', ring, badge };
+    return { info, index: info.index, gfx: container, encountered: false, state: 'free', ring, badge };
   }
 
   // 서버가 알려준 야생 상태를 마커에 반영: 포획·도망은 사라지고, 교전 중은 흐리게 + 링, free는 원래대로(무승부·취소로 되돌아옴)
@@ -664,8 +748,6 @@ export class MapScene extends Phaser.Scene {
     else m.ring.setScale(1);
     m.ring.setAlpha(1);
     if (state === 'engaged') m.pulse = this.tweens.add({ targets: m.ring, scale: m.ring.scale * 1.2, alpha: 0.5, duration: 800, yoyo: true, repeat: -1 });
-    // 스토리 목적지 별: 다른 참가자가 대표 터비를 포획·도망시켰거나(사라짐) 다시 만날 수 있게 되면(free) 즉시 갱신한다
-    this.miniMap?.setMarkerVisible(`target-${index}`, state === 'free' || state === 'engaged');
     if (state === 'free') m.encountered = false;
   }
 
@@ -778,7 +860,7 @@ export class MapScene extends Phaser.Scene {
 
     for (const marker of this.markers) {
       if (marker.encountered || marker.state !== 'free' || (marker.retryAt ?? 0) > Date.now()) continue;
-      const dist = Phaser.Math.Distance.Between(this.avatar.x, this.avatar.y, marker.spawn.x, marker.spawn.y);
+      const dist = Phaser.Math.Distance.Between(this.avatar.x, this.avatar.y, marker.info.x, marker.info.y);
       if (this.quietWilds.has(marker.index)) {
         if (dist > ENCOUNTER_RADIUS * 1.5) this.quietWilds.delete(marker.index);
         continue;
@@ -802,10 +884,12 @@ export class MapScene extends Phaser.Scene {
       marker.encountered = false;
       marker.retryAt = Date.now() + 4000;
       this.encounterLocked = false;
-      // 10-02 v5 §1: 벽·닫힌 문 너머라 서버가 거부한 야생 — 전투도 마커도 그대로 두고, 매 프레임 묻지 않게 1.5초 뒤에 다시 확인한다(안내 없음)
+      // 10-02 v5 §1·v6 §3: 벽·닫힌 문 너머거나 아직 들어갈 수 없는 구역이라 서버가 거부한 야생 — 전투도 마커도 그대로 두고,
+      // 매 프레임 묻지 않게 1.5초 뒤에 다시 확인한다. 고장으로 보이지 않게 사유별 안내를 띄우되 같은 야생·같은 사유는 3초 안에 반복하지 않는다
       if (err instanceof RoomApiError && err.code === 'WILD_UNREACHABLE') {
         marker.retryAt = Date.now() + WILD_RECHECK_MS;
         this.unreachableWilds++;
+        if (this.notices.allow(wildNoticeKey(marker.index, err.reason), Date.now(), WILD_NOTICE_REPEAT_MS)) this.notice(wildUnreachableText(err.reason));
         return;
       }
       const message = err instanceof RoomApiError ? err.message : '서버에 연결할 수 없어 전투를 시작할 수 없습니다.';

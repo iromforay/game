@@ -94,11 +94,13 @@ function state() {
   const g = game();
   const scenes = g.scene.getScenes(true).map((s) => s.scene.key);
   const out: Any = { scenes, displayWidth: Math.round(g.scale.displaySize.width) };
+  const boot = g.scene.getScene('Boot') as unknown as Any;
+  if (scenes.includes('Boot') && boot.debugRestore) out.boot = boot.debugRestore; // 복원 화면: 단계(loading·slow·failed)·시도 횟수·다시 시도 버튼
   const battle = g.scene.getScene('Battle') as unknown as Any;
   if (scenes.includes('Battle') && battle.snap) {
     // 결과창의 누를 수 있는 버튼(돌아가기·다시 확인) 가운데 좌표
     const btn = (battle.resultObjs ?? []).filter((o: Any) => o.type === 'Container' && o.input?.enabled).pop();
-    out.battle = { phase: battle.snap.phase, outcome: battle.snap.outcome, story: !!battle.snap.story, resultShown: battle.resultShown, settled: battle.resultEnded?.settled ?? null, hudMode: battle.hud?.mode, goalOpen: battle.goalOpen, resultButton: btn ? { x: Math.round(btn.x), y: Math.round(btn.y), label: btn.list?.find((c: Any) => typeof c.text === 'string')?.text } : null };
+    out.battle = { battleId: battle.snap.battleId, version: battle.snap.version, round: battle.snap.round, spawnIndex: battle.snap.spawnIndex, units: battle.snap.units.map((u: Any) => ({ id: u.unitId, side: u.side, col: u.col, row: u.row, hp: u.hp, maxHp: u.maxHp, ap: u.ap })), returnTo: battle.initData?.returnTo?.scene ?? null, phase: battle.snap.phase, outcome: battle.snap.outcome, story: !!battle.snap.story, resultShown: battle.resultShown, settled: battle.resultEnded?.settled ?? null, hudMode: battle.hud?.mode, goalOpen: battle.goalOpen, resultButton: btn ? { x: Math.round(btn.x), y: Math.round(btn.y), label: btn.list?.find((c: Any) => typeof c.text === 'string')?.text } : null };
   }
   const party = g.scene.getScene('PartySelect') as unknown as Any;
   if (scenes.includes('PartySelect') && party.layout) out.party = { selected: [...party.selected], page: party.page, pages: party.layout.pages, story: !!party.snap?.story, cardW: party.layout.cards[0]?.w };

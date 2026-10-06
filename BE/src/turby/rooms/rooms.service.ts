@@ -128,7 +128,7 @@ export class RoomsService {
       phase: 'lobby',
       members: [],
       wilds: await this.loadWilds(stage.stage_code),
-      collision: collisionOf(this.content.stage(stage.stage_code), stage.map_width, stage.map_height),
+      collision: collisionOf(this.content.stage(stage.stage_code), stage.map_width, stage.map_height, stage.stage_code),
     };
     room.members.push(this.newMember(playerId, player.nickname));
     this.rooms.set(room.code, room);
@@ -251,8 +251,12 @@ export class RoomsService {
     return rows.map((r) => ({ index: r.spawn_index, characterCode: r.character_code, x: r.x, y: r.y, state: 'free' as WildState, battleId: null }));
   }
 
+  toWildDto(w: WildRuntime): WildDto {
+    return { index: w.index, characterCode: w.characterCode, x: w.x, y: w.y, state: w.state, visible: w.state === 'free' || w.state === 'engaged' };
+  }
+
   wildsOf(room: Room): WildDto[] {
-    return room.wilds.map((w) => ({ index: w.index, state: w.state }));
+    return room.wilds.map((w) => this.toWildDto(w));
   }
 
   // 상태 전이는 서버만 한다. 바뀌면 같은 맵의 모두에게 알린다.
