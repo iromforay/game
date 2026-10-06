@@ -122,7 +122,6 @@ export class RoomsGateway implements OnGatewayDisconnect, OnModuleInit {
       // 위치는 서버가 정한다(요청의 x·y는 읽지 않는다). self = 서버가 확정한 위치, corrected = 저장돼 있던 위치를 시작 지점으로 보정했는가
       const { room, self, corrected, others, wilds, encounterRadiusPx } = await this.rooms.enterMap(playerId, body?.dir);
       await client.join(this.rooms.mapChannel(room));
-      this.battles.acknowledgeResults(playerId); // 10-06 v1 §7: 맵에 돌아왔으니 끝난 전투 결과는 확인한 것으로 본다
       // 전투 후 복귀처럼 이미 맵에 있던 사람의 재입장도 joined로 알린다 — 클라이언트는 playerId 기준으로 갱신(upsert)한다
       client.to(this.rooms.mapChannel(room)).emit('map:joined', { player: self });
       // M4-C: 지역 진입 트리거(숲 첫 진입 → 1장 시작 기록)와 재생할 이야기 구간. 이야기 처리 실패가 맵 입장을 막지는 않는다

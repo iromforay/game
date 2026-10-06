@@ -118,6 +118,10 @@ export class Backend {
       },
     };
   }
+  // 서버 시작 전(시험 데이터를 만드는 중)에 계정 id를 찾는다
+  playerByDeviceIn(db: FakeDb, device: string): bigint {
+    return (db.rows('player', { device_uuid: `dev-device-${device}-account` })[0] as { id: bigint }).id;
+  }
   // 그 계정에 스토리 이벤트를 기록한다(구역 개방 등 — DB 행과 서버 메모리의 판정 상태를 함께 갱신). 실제 진행 경로가 아니라 시험용 상태 만들기
   grantEvent(device: string, eventId: string) {
     const p = this.playerByDevice(device)!;

@@ -31,6 +31,11 @@ export const battleClient = {
     return roomClient.request<BattleResponse>('battle:leave', { battleId });
   },
 
+  // 10-06 v3 §2: 결과 화면을 보여 준 뒤 사용자가 돌아가기를 선택했을 때 보내는 명시적 결과 확인(여러 번 보내도 같은 성공)
+  async ackResult(battleId: string): Promise<void> {
+    await roomClient.request<{ acknowledged: true }>('battle:result:ack', { battleId });
+  },
+
   snapshot(battleId: string): Promise<BattleResponse> {
     return roomClient.request<BattleResponse>('battle:snapshot', { battleId });
   },

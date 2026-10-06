@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { NoticeGate, POSITION_CORRECTED_TEXT, WILD_HINT_ENGAGED, WILD_HINT_NEAR, WILD_NOTICE_REPEAT_MS, WILD_UNREACHABLE_TEXT, wildNoticeKey, wildUnreachableText } from '../src/story/mapNotices.ts';
-import { canLeaveToVillage, canRetry, DeferredRestore, OnceGuard, RESTORE_BATTLE_LABEL, RESTORE_RETRY_LABEL, RESTORE_SLOW_MS, RESTORE_TEXT, RESTORE_VILLAGE_LABEL, RestoreAttempts, shouldPromptBattle } from '../src/state/restoreAttempt.ts';
+import { canLeaveToVillage, canRetry, DeferredRestore, OnceGuard, ackFailureAllowsExit, promptKindOf, RESTORE_PROMPT, RESTORE_TO_VILLAGE_TEXT, RESULT_ACK_RETRY_TEXT, RESTORE_RETRY_LABEL, RESTORE_SLOW_MS, RESTORE_TEXT, RESTORE_VILLAGE_LABEL, RestoreAttempts, shouldPromptBattle } from '../src/state/restoreAttempt.ts';
 import { FALLBACK_ENCOUNTER_RADIUS_PX, resolveEncounterRadius } from '../src/net/encounterRadius.ts';
 import { LEGEND_LABEL, legendEntries } from '../src/ui/screenStates.ts';
 
@@ -156,9 +156,40 @@ test('마을: 서버를 확인하지 못한 채 돌아왔다면 연결 회복 �
   assert.deepEqual([shouldPromptBattle(d.isPending, { battleId: 'b' }), shouldPromptBattle(d.isPending, null)], [true, false]);
   d.clear();
   assert.equal(d.isPending, false);
-  assert.equal(RESTORE_BATTLE_LABEL, '이어서 하기');
+  // 10-06 v3 §1 확정 문구 — 진행 중 전투와 종료 결과는 같은 문구가 아니다
+  assert.deepEqual([RESTORE_PROMPT.active.text, RESTORE_PROMPT.active.button], ['진행 중인 전투가 있어요. 이어서 할까요?', '이어서 하기']);
+  assert.deepEqual([RESTORE_PROMPT.result.text, RESTORE_PROMPT.result.button], ['확인하지 않은 전투 결과가 있어요.', '결과 보기']);
+  assert.equal(RESTORE_TO_VILLAGE_TEXT, '마을로 돌아가는 중…');
+  assert.deepEqual([promptKindOf({ phase: 'player_subturn' }), promptKindOf({ phase: 'party_select' }), promptKindOf({ phase: 'resolved' })], ['active', 'active', 'result']);
   const village = src('scenes/VillageScene.ts');
   assert.match(village, /roomClient\.on\('reconnected', \(\) => this\.checkServerBattle\(\)\)/, '연결이 돌아오면 접속 인증 결과를 다시 확인');
   assert.match(village, /if \(this\.restorePrompt\.length > 0\) return;/, '안내는 한 번만');
+  assert.match(village, /this\.locked = true; \/\/ 안내에 답하기 전에는 새 활동/);
+});
+
+test('결과 확인: 결과 화면의 돌아가기 버튼이 확인 요청을 보내고, 성공(또는 서버에서 사라진 전투)일 때만 나간다. 실패하면 결과 화면을 닫지 않고 다시 시도할 수 있다. 맵 입장은 확인 신호가 아니다', () => {
+  assert.equal(ackFailureAllowsExit('BATTLE_EXPIRED'), true);
+  for (const code of ['RESULT_NOT_SETTLED', 'NOT_PARTICIPANT', 'BATTLE_NOT_ENDED', 'INTERNAL', undefined]) assert.equal(ackFailureAllowsExit(code), false, String(code));
+  assert.match(RESULT_ACK_RETRY_TEXT, /다시 시도/);
+  const battle = src('scenes/BattleScene.ts');
+  const fn = battle.slice(battle.indexOf('private async confirmResultThenExit('), battle.indexOf('private renderResult()'));
+  assert.match(fn, /if \(this\.resultAcking\) return;/, '확인 요청은 한 번에 하나');
+  assert.match(fn, /await battleClient\.ackResult\(this\.snap\.battleId\);/);
+  assert.match(fn, /gen !== this\.generation\) return;[^\n]*\n\s*exit\(\);/, '오래된 응답이 새 화면을 덮지 않는다');
+  const failure = fn.slice(fn.indexOf('catch (err)'), fn.indexOf('this.resultAcking = false;\n    if (!this.scene.isActive()'));
+  assert.doesNotMatch(failure, /exit\(\)/, '실패 경로는 화면을 나가지 않는다');
+  // 결과 화면을 실제로 그리는 버튼에서만 확인 요청을 보낸다(일반 전투만, 스토리 전투는 대화가 복원)
+  assert.match(battle, /if \(story\) return this\.exitTo\(outcome, capturedIndices\);\s*void this\.confirmResultThenExit\(\(\) => this\.exitTo\(outcome, capturedIndices\)\);/);
+  assert.equal([...battle.matchAll(/battleClient\.ackResult\(/g)].length, 1);
+  assert.doesNotMatch(src('scenes/MapScene.ts'), /ackResult|result:ack/, '맵 입장·복귀는 확인 신호가 아니다');
+  assert.match(src('net/battleClient.ts'), /'battle:result:ack'/);
+});
+
+test('복원 안내가 새 활동으로 우회되지 않는다: deferredRestore는 화면이 바뀌어도 유지되고(모듈 상태), 서버가 남은 전투 없음을 확인할 때나 사용자가 안내에 답할 때만 지워진다', () => {
+  const restore = src('state/restoreAttempt.ts');
+  assert.match(restore, /export const deferredRestore = new DeferredRestore\(\);/, '화면(씬)이 아닌 모듈 상태');
+  const village = src('scenes/VillageScene.ts');
+  assert.equal([...village.matchAll(/deferredRestore\.clear\(\)/g)].length, 2, '서버가 전투 없음을 확인할 때와 안내에 답할 때만');
+  assert.match(village, /if \(!battle\) deferredRestore\.clear\(\); \/\/ 서버가 "남은 전투 없음"을 확인했다/);
   assert.match(village, /this\.locked = true; \/\/ 안내에 답하기 전에는 새 활동/);
 });

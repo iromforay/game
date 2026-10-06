@@ -9,7 +9,7 @@ import { getPlayerId } from '../state/player';
 import type { OpeningSceneData } from './OpeningScene';
 import { roomClient } from '../net/roomClient';
 import { restoreRoute } from '../state/restore';
-import { canLeaveToVillage, canRetry, deferredRestore, OnceGuard, RESTORE_RETRY_LABEL, RESTORE_SLOW_MS, RESTORE_TEXT, RESTORE_VILLAGE_LABEL, RestoreAttempts, type RestorePhase } from '../state/restoreAttempt';
+import { canLeaveToVillage, canRetry, deferredRestore, OnceGuard, RESTORE_RETRY_LABEL, RESTORE_SLOW_MS, RESTORE_TEXT, RESTORE_TO_VILLAGE_TEXT, RESTORE_VILLAGE_LABEL, RestoreAttempts, type RestorePhase } from '../state/restoreAttempt';
 import { displayScaleOf, fontPx, MIN_BODY_PX } from '../ui/responsive';
 import { resumeBattle } from './VillageScene';
 
@@ -132,7 +132,7 @@ export class BootScene extends Phaser.Scene {
     this.retryButton = undefined;
     this.villageButton = undefined;
     this.restorePhase = null;
-    this.restoreStatus?.setText('마을로 돌아가는 중…').setColor(TEXT.body);
+    this.restoreStatus?.setText(RESTORE_TO_VILLAGE_TEXT).setColor(TEXT.body);
     const how = await roomClient.leaveRoomIfOnline();
     if (!this.sys.isActive()) return;
     if (how === 'offline' || roomClient.activeBattle) deferredRestore.mark();

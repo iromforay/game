@@ -176,6 +176,7 @@ test('이동 유지: 막힌 야생에 대한 거부 안내(3초 억제)가 떠 �
     await g.walkTo('Map', { x: 2100, y: 990 }, 'keys');
     await g.until('거부 안내', `s.map.unreachableWilds >= 1 && window.__dev.texts().includes(${JSON.stringify(BLOCKED_TEXT)})`);
     const at = await serverCatchesUp(g, device);
+    await g.capture('06a_blocked_wild_notice_before_moving');
     await g.walkTo('Map', { x: at.x - 100, y: at.y + 60 }, 'keys');
     const moved = await serverCatchesUp(g, device);
     assert.ok(moved.x < at.x - 60, `안내 중 계속 이동: ${JSON.stringify(moved)}`);
@@ -272,9 +273,10 @@ test('결과 새로고침 ③④(정산 직후·포획 성공 뒤 Map 복귀 직
     await g.reload();
     await g.until('결과 화면 복원', "s.scenes.includes('Battle') && s.battle && s.battle.resultShown && s.battle.settled === true");
     assert.deepEqual([captures(device), results(device)], [1, 1]);
-    await g.clickResult("s.scenes.includes('Map')");
+    await g.clickResult("s.scenes.includes('Map')"); // 돌아가기 버튼 = 결과 확인 요청 + 이동
     await g.until('Map 복귀', READY);
-    // Map 복귀로 결과를 확인했다 — 새로고침하면 Map(같은 자리)로 복원되고 결과는 다시 나오지 않는다
+    await g.capture('11_after_result_ack_map_wild_removed');
+    // 결과를 확인했다 — 새로고침하면 Map(같은 자리)로 복원되고 결과는 다시 나오지 않는다
     await g.reload();
     await g.until('Map 복원', READY);
     const st = await g.state();
@@ -318,12 +320,113 @@ test('복원 실패 → 마을 → 연결 회복: 두 버튼, 마을 복귀는 �
     await g.until('복원 안내', 's.village && s.village.restorePrompt === true');
     let st = await g.state();
     assert.ok(st.scenes.includes('Village') && !st.scenes.includes('Battle'), '자동으로 전투로 끌고 가지 않는다');
-    assert.ok((await texts(g)).includes('이어서 하기'));
+    assert.ok((await texts(g)).includes('진행 중인 전투가 있어요. 이어서 할까요?') && (await texts(g)).includes('이어서 하기'), '진행 중 전투 문구');
     await g.capture('10_village_restore_prompt_after_connection_back');
     hold.restore();
     await g.clickLabel('이어서 하기', { exact: true, expect: "s.scenes.includes('Battle')" });
     assert.equal((await g.state()).battle.battleId, battleId, '같은 전투로 이어진다');
     assert.equal(backend.roomCount(), rooms);
+  }, backend, device);
+  await g.close();
+});
+
+test('결과 확인 계약: 확인 요청을 여러 번 보내도 같은 성공·보상 1회, 서버가 결과를 내려 준 것만으로는 확인되지 않고(새로고침해도 다시 열림), 확인 뒤에는 다시 열리지 않는다', async () => {
+  const device = 'e2e-result-ack-twice';
+  const WILD = { index: 2, code: 'muldeuli', x: 1760, y: 1330 };
+  await backend.start(withWilds((db) => { seedExplorer(device)(db); sturdy(db); }, [WILD]), { 'battle.resolvedRetentionSeconds': 600 });
+  const g = await Game.open(browser, `${vite.url}/?device=${device}`, device);
+  await withDiagnosis(g, 'result-ack-twice', async () => {
+    await startBattle(g, WILD);
+    await g.playBattle();
+    await g.until('보상 확정', 's.battle.settled === true');
+    const bid = (await g.state()).battle.battleId as string;
+    const ack = () => g.page.evaluate((id) => (window as any).__dev.rawRequest('battle:result:ack', { battleId: id }), bid) as Promise<{ ok?: boolean; acknowledged?: boolean }>; // eslint-disable-line @typescript-eslint/no-explicit-any
+    // 확인 전: 몇 번을 새로고침해도(서버가 결과를 여러 번 내려 줘도) 결과가 다시 열린다
+    for (let i = 0; i < 2; i++) {
+      await g.reload();
+      await g.until('결과 복원', "s.scenes.includes('Battle') && s.battle && s.battle.resultShown && s.battle.settled === true");
+    }
+    assert.deepEqual([(await ack()).acknowledged, (await ack()).acknowledged], [true, true], '확인 두 번 모두 같은 성공');
+    assert.deepEqual([captures(device), results(device)], [1, 1], '확인 요청 2회에도 보상·포획 기록 1회');
+    await g.reload();
+    await g.until('확인한 결과는 다시 열리지 않음', READY);
+    assert.ok(!(await g.state()).scenes.includes('Battle'));
+    // 남의 전투·없는 전투는 확인되지 않는다
+    const bad = (await g.page.evaluate(() => (window as any).__dev.rawRequest('battle:result:ack', { battleId: 'no-such-battle' }))) as { ok: boolean; code: string }; // eslint-disable-line @typescript-eslint/no-explicit-any
+    assert.deepEqual([bad.ok, bad.code], [false, 'BATTLE_EXPIRED']);
+  }, backend, device);
+  await g.close();
+});
+
+test('결과 복원 범위: 보존 기간이 지난 결과는 복원하지 않고(보상은 남음), 진행 중 전투가 있으면 오래된 종료 결과보다 우선한다', async () => {
+  const device = 'e2e-result-retention-priority';
+  const A = { index: 2, code: 'muldeuli', x: 1760, y: 1330 };
+  const B = { index: 9, code: 'muldeuli', x: 1760, y: 1340 };
+  // 보존 기간 2초
+  await backend.start(withWilds((db) => { seedExplorer(device)(db); sturdy(db); }, [A, B]), { 'battle.resolvedRetentionSeconds': 2 });
+  const g = await Game.open(browser, `${vite.url}/?device=${device}`, device);
+  await withDiagnosis(g, 'result-retention-priority', async () => {
+    await startBattle(g, A);
+    await g.playBattle();
+    await g.until('보상 확정', 's.battle.settled === true');
+    await g.page.waitForTimeout(3500); // 보존 기간(2초)이 지난다
+    await g.reload();
+    await g.until('Map 복원', READY);
+    assert.ok(!(await g.state()).scenes.includes('Battle'), '보존 기간이 지난 결과는 복원하지 않는다');
+    assert.equal(captures(device), 1, '보상은 DB에 남아 있다');
+    assert.equal((await mapOf(g)).wilds.find((w) => w.index === A.index)!.visible, false);
+  }, backend, device);
+  await g.close();
+
+  // 우선순위: 종료 결과(확인 전) + 새 진행 중 전투 → 새로고침하면 진행 중 전투
+  const device2 = 'e2e-result-priority';
+  await backend.start(withWilds((db) => { seedExplorer(device2)(db); sturdy(db); }, [A, B]), { 'battle.resolvedRetentionSeconds': 600 });
+  const g2 = await Game.open(browser, `${vite.url}/?device=${device2}`, device2);
+  await withDiagnosis(g2, 'result-priority', async () => {
+    await startBattle(g2, A);
+    await g2.playBattle();
+    await g2.until('보상 확정', 's.battle.settled === true');
+    const doneId = (await g2.state()).battle.battleId as string;
+    const started = (await g2.page.evaluate(() => (window as any).__dev.rawRequest('battle:start', { spawnIndex: 9 }))) as { ok: boolean; snapshot?: { battleId: string } }; // eslint-disable-line @typescript-eslint/no-explicit-any
+    assert.equal(started.ok, true, '결과 확인 전에도 새 조우가 시작된다');
+    const liveId = started.snapshot!.battleId;
+    assert.notEqual(liveId, doneId);
+    await g2.reload();
+    await g2.until('복원 완료', "s.scenes.includes('Battle') || s.scenes.includes('PartySelect')");
+    const hello = (await g2.page.evaluate(() => (window as any).__rooms.activeBattle?.battleId)) as string;
+    assert.equal(hello, liveId, '진행 중 전투가 오래된 종료 결과보다 우선');
+  }, backend, device2);
+  await g2.close();
+});
+
+test('마을 복귀 뒤 미확인 전투 결과: 연결이 돌아오면 "확인하지 않은 전투 결과가 있어요." + 결과 보기 — 진행 중 전투 문구와 다르고, 결과 보기를 누르면 같은 결과 화면(보상 1회)', async () => {
+  const device = 'e2e-restore-result-prompt';
+  const WILD = { index: 2, code: 'muldeuli', x: 1760, y: 1330 };
+  await backend.start(withWilds((db) => { seedExplorer(device)(db); sturdy(db); }, [WILD]), { 'battle.resolvedRetentionSeconds': 600 });
+  const g = await Game.open(browser, `${vite.url}/?device=${device}`, device);
+  await withDiagnosis(g, 'restore-result-prompt', async () => {
+    await startBattle(g, WILD);
+    await g.playBattle();
+    await g.until('보상 확정', 's.battle.settled === true');
+    const doneId = (await g.state()).battle.battleId as string;
+    const hold = backend.holdHello();
+    await g.reload();
+    await g.until('지연 안내', "s.boot && s.boot.phase === 'slow' && s.boot.village === true", 20_000);
+    const btn = (await g.page.evaluate(() => (window as any).__dev.find('마을 화면으로 돌아가기', true))) as { x: number; y: number }; // eslint-disable-line @typescript-eslint/no-explicit-any
+    await g.click(btn.x, btn.y);
+    await g.waitScene('Village');
+    await g.until('마을 준비', 's.village && s.village.ready');
+    hold.release(1);
+    await g.until('복원 안내', 's.village && s.village.restorePrompt === true');
+    const t = await texts(g);
+    assert.ok(t.includes('확인하지 않은 전투 결과가 있어요.') && t.includes('결과 보기'));
+    assert.ok(!t.includes('진행 중인 전투가 있어요. 이어서 할까요?'), '진행 중 전투 문구와 다르다');
+    await g.capture('12_village_unconfirmed_result_prompt');
+    hold.restore();
+    await g.clickLabel('결과 보기', { exact: true, expect: "s.scenes.includes('Battle')" });
+    await g.until('같은 결과 화면', `s.battle.battleId === ${JSON.stringify(doneId)} && s.battle.resultShown && s.battle.settled === true`);
+    assert.deepEqual([captures(device), results(device)], [1, 1]);
+    await g.capture('13_unconfirmed_result_restored_from_village');
   }, backend, device);
   await g.close();
 });

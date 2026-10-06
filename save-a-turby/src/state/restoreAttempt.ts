@@ -68,7 +68,15 @@ export class DeferredRestore {
 }
 export const deferredRestore = new DeferredRestore();
 
-// 마을 화면: 서버에 남은 활성 전투를 알릴 때(안내 문구는 임시 — Codex 확인)
-export const RESTORE_BATTLE_TEXT = '진행 중이던 전투가 남아 있어요. 이어서 할까요?';
-export const RESTORE_BATTLE_LABEL = '이어서 하기';
+// 마을 화면: 서버에 남은 전투를 알릴 때(10-06 v3 §1 확정 문구). 진행 중 전투와 종료된 전투 결과는 같은 문구로 표시하지 않는다
+export const RESTORE_PROMPT = {
+  active: { text: '진행 중인 전투가 있어요. 이어서 할까요?', button: '이어서 하기' },
+  result: { text: '확인하지 않은 전투 결과가 있어요.', button: '결과 보기' },
+} as const;
+export const RESTORE_TO_VILLAGE_TEXT = '마을로 돌아가는 중…';
+export const promptKindOf = (battle: { phase: string }): keyof typeof RESTORE_PROMPT => (battle.phase === 'resolved' ? 'result' : 'active');
 export const shouldPromptBattle = (deferredPending: boolean, activeBattle: unknown): boolean => deferredPending && !!activeBattle;
+
+// 결과 확인 요청의 실패 처리(10-06 v3 §2): 서버에 사라진 전투(보존 기간 지남)는 더 확인할 것이 없어 계속 진행하고, 그 밖의 실패는 결과 화면을 닫지 않고 다시 시도하게 한다
+export const RESULT_ACK_RETRY_TEXT = '결과를 확인하지 못했어요. 다시 시도해 주세요.';
+export const ackFailureAllowsExit = (code: string | undefined): boolean => code === 'BATTLE_EXPIRED';

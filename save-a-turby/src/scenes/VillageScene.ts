@@ -22,7 +22,7 @@ import { MiniMap } from '../ui/MiniMap';
 import type { MapMarker, MapView } from '../ui/MiniMap';
 import { inventory } from '../state/inventory';
 import { roomClient } from '../net/roomClient';
-import { deferredRestore, RESTORE_BATTLE_LABEL, RESTORE_BATTLE_TEXT, shouldPromptBattle } from '../state/restoreAttempt';
+import { deferredRestore, promptKindOf, RESTORE_PROMPT, shouldPromptBattle } from '../state/restoreAttempt';
 import { feltPanel, pillButton, TEXT } from '../ui/kit';
 
 type Facing = 'down' | 'left' | 'right' | 'up';
@@ -306,8 +306,8 @@ ${storyHint}` : it.hint,
     const objs: Phaser.GameObjects.GameObject[] = [
       this.add.rectangle(cx, cy, this.scale.width, CANVAS_HEIGHT, 0x4a3a44, 0.55).setInteractive(),
       feltPanel(this, cx - 300, cy - 130, 600, 260, { radius: 28, strokeW: 6 }),
-      this.add.text(cx, cy - 40, RESTORE_BATTLE_TEXT, { fontSize: '24px', color: TEXT.body, align: 'center', wordWrap: { width: 520 } }).setOrigin(0.5),
-      pillButton(this, cx, cy + 60, 280, 76, RESTORE_BATTLE_LABEL, 'primary', () => {
+      this.add.text(cx, cy - 40, RESTORE_PROMPT[promptKindOf(battle)].text, { fontSize: '24px', color: TEXT.body, align: 'center', wordWrap: { width: 520 } }).setOrigin(0.5),
+      pillButton(this, cx, cy + 60, 280, 76, RESTORE_PROMPT[promptKindOf(battle)].button, 'primary', () => {
         deferredRestore.clear();
         resumeBattle(this, battle);
       }),

@@ -149,6 +149,15 @@ test('야생 ③: 아직 열리지 않은 구역 안의 야생은 화면·미니
     assert.ok(!m.miniMap.wilds.some((w) => w.id === 'wild-4'), '미니맵에도 없다');
     const received = (await g.page.evaluate(() => [...(window as any).__rooms.wilds.keys()])) as number[]; // eslint-disable-line @typescript-eslint/no-explicit-any
     assert.deepEqual(received, [0], '서버가 클라이언트에 내려 준 야생 목록에도 없다(ID·좌표가 오지 않았다)');
+    // 응답 원문·소켓 이벤트 원문: 공개 전 야생(4번, 좌표 1716,1380)의 ID·종류·좌표가 어디에도 없다
+    await g.page.evaluate(() => { const r = (window as any).__rooms; (window as any).__events = []; r.socket.onAny((name: string, ...args: unknown[]) => (window as any).__events.push([name, JSON.stringify(args)])); }); // eslint-disable-line @typescript-eslint/no-explicit-any
+    const enterRaw = JSON.stringify(await g.page.evaluate(() => (window as any).__dev.rawRequest('map:enter', { dir: 'down' }))); // eslint-disable-line @typescript-eslint/no-explicit-any
+    assert.doesNotMatch(enterRaw, /"index":4|1716|1380/, 'map:enter 응답 원문에 숨은 야생이 없다');
+    assert.match(enterRaw, /"encounterRadiusPx":\d+/);
+    backend.moveWild(device, 4, { x: 1716, y: 1380 }); // 서버가 숨은 야생의 상태 방송을 시도해도 이 플레이어에게는 가지 않는다
+    await g.page.waitForTimeout(500);
+    const events = (await g.page.evaluate(() => (window as any).__events)) as [string, string][]; // eslint-disable-line @typescript-eslint/no-explicit-any
+    assert.ok(events.every(([, body]) => !/"index":4|1716,|"y":1380/.test(body)), `소켓 이벤트 원문에 숨은 야생이 없다: ${JSON.stringify(events.map((e) => e[0]))}`);
     await g.capture('01_locked_zone_wild_hidden_screen');
     await g.clickAt(m.miniMap.openButton.x, m.miniMap.openButton.y, 's.map.miniMap.open === true');
     await g.capture('01_locked_zone_wild_hidden_full_map');
@@ -163,6 +172,12 @@ test('야생 ③: 아직 열리지 않은 구역 안의 야생은 화면·미니
     m = await mapOf(g);
     assert.deepEqual(byIndex(m.wilds).map((w) => [w.index, w.x, w.y]), [[0, 520, 500], [4, 1716, 1380]]);
     assert.ok(m.miniMap.wilds.some((w) => w.id === 'wild-4'), '미니맵에도 나타난다');
+    // 상태 방송(wild:changed)이 공개 이벤트와 겹쳐 와도 같은 야생이 중복 생성되지 않는다
+    backend.moveWild(device, 4, { x: 1716, y: 1380 });
+    await g.page.waitForTimeout(500);
+    m = await mapOf(g);
+    assert.equal(m.wilds.filter((w) => w.index === 4).length, 1, '같은 야생을 두 번 만들지 않는다');
+    assert.equal(m.miniMap.wilds.filter((w) => w.id === 'wild-4').length, 1);
     await g.capture('02_zone_opened_wild_appears');
   }, backend, device);
   await g.close();
@@ -319,4 +334,35 @@ test('야생 ⑥: 일반 야생 전투 도중 새로고침 → 같은 전투·�
     await g.capture('09b_map_after_capture_wild_gone');
   }, backend, device);
   await g.close();
+});
+
+test('야생 ⑦: 두 계정(구역을 연 쪽·안 연 쪽)은 같은 서버·같은 지역에서 서로 다른 야생 공개 상태를 본다 — 한쪽의 개방이 다른 쪽에 새어 나가지 않는다', async () => {
+  const a = 'e2e-wild-vis-a';
+  const b = 'e2e-wild-vis-b';
+  await backend.start(
+    withWilds((db) => {
+      seedForest(a, 'rescued')(db);
+      seedForest(b, 'rescued')(db);
+      db.seed('player_story_event', { player_id: backend.playerByDeviceIn(db, b), event_id: 'forest_first_knot_equipped' }); // b만 구역 개방 이벤트가 있다
+    }, [{ index: 4, code: 'bopuli', x: 1716, y: 1380 }]),
+  );
+  backend.patchStage('forest', (d) => d.layout!.zones.push({ id: 'zone_test_locked', label: '잠긴 곳(시험)', x: 1700, y: 1320, width: 140, height: 120, visibleAfter: 'forest_first_knot_equipped' }));
+  const ga = await Game.open(browser, `${vite.url}/?device=${a}`, a);
+  const gb = await Game.open(browser, `${vite.url}/?device=${b}`, b);
+  await withDiagnosis(ga, 'wild-two-players-a', async () => {
+    await withDiagnosis(gb, 'wild-two-players-b', async () => {
+      await enterForest(ga);
+      await enterForest(gb);
+      assert.deepEqual((await mapOf(ga)).wilds.map((w) => w.index), [0], '열지 않은 쪽: 숨은 야생 없음');
+      assert.deepEqual((await mapOf(gb)).wilds.map((w) => w.index), [0, 4], '연 쪽: 보인다');
+      // a가 구역을 열면 a에게만 새로 나타나고, b는 그대로(중복 없음)
+      backend.grantEvent(a, 'forest_first_knot_equipped');
+      await ga.until('a에게 공개', 's.map.wilds.some((w) => w.index === 4 && w.visible)');
+      assert.deepEqual((await mapOf(ga)).wilds.map((w) => w.index), [0, 4]);
+      assert.deepEqual((await mapOf(gb)).wilds.map((w) => w.index), [0, 4]);
+      await ga.capture('02b_two_players_after_a_opened');
+    }, backend, b);
+  }, backend, a);
+  await ga.close();
+  await gb.close();
 });

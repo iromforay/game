@@ -12,6 +12,7 @@ import coopSlots from '../data/coop-slots.json';
 import { actionHint, battleHudLayout, clampLabel, goalSummary, resultLayout, unitLabel, type BattleHudLayout } from '../battle/battleView';
 import { watchLayout } from '../ui/relayout';
 import { displayScaleOf } from '../ui/responsive';
+import { ackFailureAllowsExit, RESULT_ACK_RETRY_TEXT } from '../state/restoreAttempt';
 import { isStoryBattle, labelPlacement, objectiveLines, reachableCells, returnDestination, showsCornerEscape, storyResultText, targetState, STORY_BADGE, STORY_NOTICE, TARGET_HINT, type BattleReturn } from '../battle/battleView';
 
 interface BattleInitData {
@@ -760,6 +761,27 @@ export class BattleScene extends Phaser.Scene {
     this.renderResult();
   }
 
+  private resultAcking = false;
+
+  // 결과 확인 요청을 한 번에 하나만 보내고, 성공(또는 서버에서 이미 사라진 전투)이면 나간다. 그 밖의 실패는 화면을 닫지 않는다
+  private async confirmResultThenExit(exit: () => void) {
+    if (this.resultAcking) return;
+    this.resultAcking = true;
+    const gen = this.generation;
+    try {
+      await battleClient.ackResult(this.snap.battleId);
+    } catch (err) {
+      if (!ackFailureAllowsExit(err instanceof RoomApiError ? err.code : undefined)) {
+        this.resultAcking = false;
+        if (this.scene.isActive() && gen === this.generation) showToast(this, RESULT_ACK_RETRY_TEXT, { y: 660, error: true, fixed: true });
+        return;
+      }
+    }
+    this.resultAcking = false;
+    if (!this.scene.isActive() || gen !== this.generation) return; // 기다리는 사이 화면이 바뀜 — 새 화면을 덮지 않는다
+    exit();
+  }
+
   private renderResult() {
     this.resultObjs.forEach((o) => o.destroy());
     this.resultObjs = [];
@@ -835,7 +857,9 @@ export class BattleScene extends Phaser.Scene {
           // 3.4: 승리=포획(재등장 안 함) / 패배=야생 도주 / 무승부·취소=재도전 가능 — 마커 상태는 서버가 소유하고 방송한다
           const spawnIndex = this.snap.spawnIndex;
           const capturedIndices = won && !story ? [...this.initData.capturedIndices, spawnIndex] : this.initData.capturedIndices;
-          this.exitTo(outcome, capturedIndices);
+          // 10-06 v3 §2: 일반 전투는 결과를 확인했다고 서버에 알린 뒤에만 나간다(실패하면 결과 화면을 그대로 두고 다시 누를 수 있다). 스토리 전투는 대화 흐름이 복원한다
+          if (story) return this.exitTo(outcome, capturedIndices);
+          void this.confirmResultThenExit(() => this.exitTo(outcome, capturedIndices));
         }, undefined, RL.font.button),
       ).setDepth(3002);
     }

@@ -282,30 +282,40 @@ export class BattleService implements OnModuleInit {
 
   // 접속 인증 응답에 실을 진행 중 전투(새로고침·재접속 복구용)
   // 방 이벤트(재접속으로 인한 connected 복구 등)가 대기열에서 먼저 처리된 뒤의 상태를 돌려준다
-  // 10-06 v1 §7: 진행 중인 전투가 없어도, 끝났지만 아직 확인하지 않은 일반 전투 결과가 있으면(보존 기간 안) 그 결과를 내려 준다.
-  // 결과 화면에서 새로고침해도 결과가 사라지지 않고, 정산이 실패했던 전투는 여기서 다시 정산한다(보상은 (전투, 플레이어) 유니크라 한 번만 지급된다)
+  // 10-06 v3 §2: 접속 인증 응답에 실을 전투 1건의 우선순위 — ① 진행 중 전투 ② 정산되지 않은 종료 전투 ③ 정산됐지만 아직 확인하지 않은 최신 종료 전투.
+  // 종료 전투가 미정산이면 먼저 정산을 다시 시도한다(보상은 (전투, 플레이어) 유니크라 한 번만 지급). 결과는 battle.resolvedRetentionSeconds 안에서만 복원된다.
+  // 결과를 내려 줬다는 사실만으로는 확인 처리하지 않는다 — 클라이언트가 결과 화면을 보여 준 뒤 battle:result:ack로 확인한다.
   async activeSnapshotOf(playerId: string): Promise<BattleSnapshotDto | null> {
     const record = this.recordOfPlayer(playerId);
     if (record) {
       await record.queue;
       return toSnapshot(record.state);
     }
-    const pending = this.unconfirmedResultOf(playerId);
-    if (!pending) return null;
-    await this.enqueue(pending, async () => {
-      if (!pending.settled) await this.settle(pending);
+    const pending = this.unconfirmedResults(playerId);
+    const target = pending.find((r) => !r.settled) ?? pending[0];
+    if (!target) return null;
+    await this.enqueue(target, async () => {
+      if (!target.settled) await (target.story ? this.settleStory(target) : this.settle(target));
     });
-    return toSnapshot(pending.state);
+    return toSnapshot(target.state);
   }
 
-  // 그 플레이어가 확인하지 않은 가장 최근의 일반 전투 결과(스토리 전투는 대화 흐름이 복원하므로 제외)
-  private unconfirmedResultOf(playerId: string): BattleRecord | undefined {
-    return [...this.battles.values()].reverse().find((r) => !r.story && r.state.phase === 'resolved' && !r.acknowledged.has(playerId) && r.state.participants.some((p) => p.playerId === playerId && p.partySubmitted));
+  // 그 플레이어가 확인하지 않은 종료 일반 전투(최신순). 스토리 전투는 대화 흐름이 복원하므로 제외
+  private unconfirmedResults(playerId: string): BattleRecord[] {
+    return [...this.battles.values()].reverse().filter((r) => !r.story && r.state.phase === 'resolved' && !r.acknowledged.has(playerId) && r.state.participants.some((p) => p.playerId === playerId && p.partySubmitted));
   }
 
-  // 결과를 확인했다(전투가 끝나고 맵에 다시 들어왔다) — 이후 새로고침에는 결과를 다시 내려 주지 않는다
-  acknowledgeResults(playerId: string) {
-    for (const r of this.battles.values()) if (r.state.phase === 'resolved') r.acknowledged.add(playerId);
+  // 결과 확인(battle:result:ack): 결과 화면을 실제로 보여 준 클라이언트가 사용자의 "계속/돌아가기" 선택 뒤에 보낸다. 여러 번 호출해도 같은 성공.
+  // 존재하지 않는 전투·남의 전투·아직 끝나지 않은 전투·정산 전 전투는 확인 처리하지 않고 거부한다.
+  async acknowledgeResult(playerId: string, battleId: unknown): Promise<{ acknowledged: true }> {
+    const record = this.requireRecord(battleId);
+    return this.enqueue(record, async () => {
+      this.requireParticipant(record, playerId);
+      if (record.state.phase !== 'resolved') throw new BattleError('BATTLE_NOT_ENDED', '아직 끝나지 않은 전투입니다.');
+      if (!record.settled) throw new BattleError('RESULT_NOT_SETTLED', '결과 정산이 끝나지 않았습니다.');
+      record.acknowledged.add(playerId);
+      return { acknowledged: true as const };
+    });
   }
 
   // ---------- 내부 ----------

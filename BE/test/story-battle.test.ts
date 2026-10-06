@@ -295,3 +295,84 @@ test('v4 회귀: 일반 장비 슬롯 장착·해제 정상, 일반 아이템은
   const off = await eq.unequip('1', s.ids.bag1, 'weapon');
   assert.equal(off.equipment.length, 0, '일반 슬롯 해제 가능');
 });
+
+// ---------- 10-06 v3 §2: 일반 전투 결과 복원·명시적 확인(battle:result:ack) ----------
+
+async function normalSetup(wilds: number[] = [0]) {
+  const s = setup({ checkpoint: 'CH01_FIRST_KNOT_EQUIPPED' });
+  const weak = s.db.seed('turby_grade', { id: 2, name: '약함', base_attack: 1, base_defense: 0, base_action_power: 0, base_hp: 1 });
+  s.db.seed('turby_character', { code: 'bopuli', name: '보풀이', grade_id: weak.id, atk_mod: 0, def_mod: 0, ap_mod: 0, hp_mod: 0 });
+  for (const i of wilds) s.db.seed('stage_wild_spawn', { stage_code: 'forest', spawn_index: i, character_code: 'bopuli', x: 1250, y: 1010 + i * 4 });
+  await enterForest(s);
+  return s;
+}
+// 야생 spawn을 만나 한 번에 이긴다(정산 포함). failSettles만큼 정산을 실패시킬 수 있다
+async function winNormal(s: Awaited<ReturnType<typeof normalSetup>>, spawn: number, failSettles = 0) {
+  (s.battles as unknown as { injectedSettleFailures: number }).injectedSettleFailures = failSettles;
+  const snap = await s.battles.start('1', spawn);
+  const res = await s.battles.party('1', snap.battleId, [s.ids.bag1]);
+  const party = res.snapshot.units.filter((u) => u.side === 'party');
+  const rec = (s.battles as unknown as { battles: Map<string, { state: { units: { side: string; col: number; row: number; unitId: string }[] } }> }).battles.get(snap.battleId)!;
+  const wildUnit = rec.state.units.find((u) => u.side === 'wild')!;
+  const me = rec.state.units.find((u) => u.side === 'party')!;
+  wildUnit.col = me.col + 1;
+  wildUnit.row = me.row;
+  await s.battles.action('1', { battleId: snap.battleId, actionId: `w${spawn}`, expectedVersion: res.snapshot.version, type: 'attack', unitId: party[0].unitId, targetUnitId: wildUnit.unitId });
+  return snap.battleId;
+}
+const captures = (s: Awaited<ReturnType<typeof normalSetup>>) => s.db.rows('turby_instance', { owner_player_id: P, acquired_via: 'wild_capture' }).length;
+
+test('결과 확인: 정산된 미확인 결과는 hello가 내려 주고(여러 번 받아도 확인되지 않음), 명시적 확인을 여러 번 해도 같은 성공·보상 1회, 확인 뒤에는 복원되지 않는다', async () => {
+  const s = await normalSetup();
+  const id = await winNormal(s, 0);
+  assert.equal(captures(s), 1);
+  for (let i = 0; i < 3; i++) {
+    const snap = await s.battles.activeSnapshotOf('1');
+    assert.deepEqual([snap?.battleId, snap?.phase], [id, 'resolved'], '내려 줬다는 사실만으로는 확인 처리되지 않는다');
+  }
+  assert.deepEqual(await s.battles.acknowledgeResult('1', id), { acknowledged: true });
+  assert.deepEqual(await s.battles.acknowledgeResult('1', id), { acknowledged: true }, '두 번째도 같은 성공');
+  assert.equal(await s.battles.activeSnapshotOf('1'), null, '확인한 결과는 다시 열리지 않는다');
+  assert.deepEqual([captures(s), s.db.rows('battle_result', { player_id: P }).length], [1, 1], '보상·포획 기록 1회');
+});
+
+test('결과 확인: 존재하지 않는 전투·남의 전투·끝나지 않은 전투·정산 전 전투는 확인 처리하지 않는다. 미정산 종료 전투는 hello가 먼저 재정산한다(정산 성공 전 확인 불가)', async () => {
+  const s = await normalSetup([0, 1]);
+  assert.equal(await code(s.battles.acknowledgeResult('1', 'no-such-battle')), 'BATTLE_EXPIRED');
+  assert.equal(await code(s.battles.acknowledgeResult('1', undefined)), 'BATTLE_NOT_FOUND');
+  // 끝나지 않은 전투
+  const live = await s.battles.start('1', 1);
+  assert.equal(await code(s.battles.acknowledgeResult('1', live.battleId)), 'BATTLE_NOT_ENDED');
+  await s.battles.leave('1', live.battleId); // 정리(취소로 끝남 — 일반 전투 취소는 파티 미제출이라 결과 복원 대상이 아니다)
+  // 남의 전투
+  const s2 = await normalSetup();
+  const id = await winNormal(s2, 0, 2); // 종료 때 정산 1회 실패(+ 이후 재시도 1회 실패)
+  assert.equal(captures(s2), 0, '아직 정산되지 않았다');
+  assert.equal(await code(s2.battles.acknowledgeResult('1', id)), 'RESULT_NOT_SETTLED', '정산 전에는 확인 불가');
+  assert.equal(await code(s2.battles.acknowledgeResult('2', id)), 'NOT_PARTICIPANT', '남의 전투');
+  const first = await s2.battles.activeSnapshotOf('1'); // 재정산 시도(실패 1회 더 남아 있음)
+  assert.deepEqual([first?.battleId, first?.phase], [id, 'resolved']);
+  assert.equal(captures(s2), 0);
+  const second = await s2.battles.activeSnapshotOf('1'); // 이번에는 정산 성공
+  assert.equal(second?.battleId, id);
+  assert.deepEqual([captures(s2), s2.db.rows('battle_result', { player_id: P }).length], [1, 1], '재정산으로 보상 한 번');
+  assert.deepEqual(await s2.battles.acknowledgeResult('1', id), { acknowledged: true });
+});
+
+test('결과 복원 우선순위·보존 기간: 진행 중 전투가 오래된 종료 결과보다 우선하고, 보존 기간이 지난 결과는 복원하지 않는다', async () => {
+  const s = await normalSetup([0, 1]);
+  const done = await winNormal(s, 0);
+  assert.equal((await s.battles.activeSnapshotOf('1'))?.battleId, done, '진행 중 전투가 없으면 종료 결과');
+  const live = await s.battles.start('1', 1);
+  const snap = await s.battles.activeSnapshotOf('1');
+  assert.deepEqual([snap?.battleId, snap?.phase === 'resolved'], [live.battleId, false], '진행 중 전투 우선');
+  await s.battles.leave('1', live.battleId);
+  // 보존 기간(시험에서는 0.05초) 뒤에는 복원하지 않는다
+  NUMBERS['battle.resolvedRetentionSeconds'] = 0.05;
+  const s3 = await normalSetup();
+  await winNormal(s3, 0);
+  NUMBERS['battle.resolvedRetentionSeconds'] = 60;
+  await new Promise((r) => setTimeout(r, 150));
+  assert.equal(await s3.battles.activeSnapshotOf('1'), null, '보존 기간이 지난 결과');
+  assert.equal(captures(s3), 1, '보상 자체는 DB에 남아 있다');
+});

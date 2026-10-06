@@ -102,6 +102,15 @@ export class BattleGateway implements OnModuleInit {
     });
   }
 
+  // 10-06 v3 §2: 종료된 일반 전투 결과의 명시적 확인
+  @SubscribeMessage('battle:result:ack')
+  ackResult(@ConnectedSocket() client: Socket, @MessageBody() body: { battleId?: unknown }) {
+    return this.guard(async () => {
+      const playerId = this.rooms.playerOf(client.id);
+      return { ok: true as const, ...(await this.battles.acknowledgeResult(playerId, body?.battleId)) };
+    });
+  }
+
   private async guard(run: () => Promise<Ack>): Promise<Ack> {
     try {
       return await run();
