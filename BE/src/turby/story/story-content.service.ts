@@ -53,7 +53,7 @@ export interface StageStoryData {
   // visibleAfter: 그 이벤트 전에는 지도·화면에 내려 주지 않는다(숨은 구역의 내부 정보). 통과 불가 판정은 표시 여부와 무관하게 서버가 한다
   layout?: { zones: StageZone[]; paths: StagePath[]; blockers: (StageRect & { visibleAfter?: string })[]; gates: StageGateData[] };
   // 10-06 v2(최종 에셋 연결 계약): 대형 배경과 진행 상태별 오버레이의 런타임 에셋 키. 에셋이 없으면 화면이 회색상자·임시 도형을 그대로 쓴다
-  render?: { background?: { assetKey: string }; overlays?: StageOverlayData[] };
+  render?: { markerMode?: 'fallback' | 'final'; background?: { assetKey: string }; overlays?: StageOverlayData[] };
 }
 
 // 문: 충돌 사각형(x·y·width·height)과 그림(art, 중심 좌표)은 따로다 — 그림이 충돌 영역보다 커도 판정은 사각형으로만 한다.
@@ -63,15 +63,18 @@ export interface StageGateData extends StageRect {
   visibleAfter?: string;
   closedAssetKey?: string | null;
   openAssetKey?: string | null;
-  art?: { x: number; y: number; width: number; height: number };
+  art?: { x: number; y: number; width: number; height: number; pivot?: [number, number] }; // x·y = 피벗이 놓이는 월드 좌표(피벗 생략 시 중심)
 }
 export interface StageOverlayData {
   id: string;
   assetKey: string;
-  x: number; // 중심
+  x: number; // 피벗이 놓이는 월드 좌표(피벗 생략 시 중심)
   y: number;
   width: number;
   height: number;
+  pivot?: [number, number]; // 이미지 안의 기준점(0~1). 예: 하단 중앙 (0.5, 0.9)
+  layer?: 'overlay' | 'story'; // overlay = 바닥(길·그림자), story = 이야기 대상·NPC와 같은 층(기본 overlay)
+  forPoints?: string[]; // 이 그림이 대신 보여 주는 이야기 지점 ID — 최종 표식 모드에서 그 지점의 임시 고리를 없앨 근거
   visibleAfter?: string; // 이 이벤트 뒤에만
   hiddenAfter?: string; // 이 이벤트 뒤에는 사라진다
 }
@@ -83,11 +86,15 @@ export function validateRender(data: StageStoryData, stageCode: string): void {
   const size = (r: Record<string, unknown> | undefined, at: string) => {
     if (!r || !num(r.x) || !num(r.y) || !num(r.width) || !num(r.height) || (r.width as number) <= 0 || (r.height as number) <= 0) bad.push(`${at}: x·y·width·height는 숫자(너비·높이는 0보다 큼)`);
   };
+  const pivot = (v: unknown, at: string) => {
+    if (v !== undefined && !(Array.isArray(v) && v.length === 2 && v.every((n) => num(n) && n >= 0 && n <= 1))) bad.push(`${at}: [0~1, 0~1]`);
+  };
   const key = (v: unknown, at: string, nullable = false) => {
     if (!(typeof v === 'string' && /^[a-z0-9][a-z0-9_-]{0,63}$/.test(v)) && !(nullable && v === null)) bad.push(`${at}: 에셋 키 형식이 아니다`);
   };
   const render = data.render;
   if (render !== undefined) {
+    if (render.markerMode !== undefined && render.markerMode !== 'fallback' && render.markerMode !== 'final') bad.push("render.markerMode: 'fallback' 또는 'final'");
     if (render.background !== undefined) key(render.background.assetKey, 'render.background.assetKey');
     const ids = new Set<string>();
     (render.overlays ?? []).forEach((o, i) => {
@@ -96,6 +103,9 @@ export function validateRender(data: StageStoryData, stageCode: string): void {
       else ids.add(o.id);
       key(o.assetKey, `${at}.assetKey`);
       size(o as unknown as Record<string, unknown>, at);
+      pivot(o.pivot, `${at}.pivot`);
+      if (o.layer !== undefined && o.layer !== 'overlay' && o.layer !== 'story') bad.push(`${at}.layer: overlay 또는 story`);
+      if (o.forPoints !== undefined && !(Array.isArray(o.forPoints) && o.forPoints.every((x) => typeof x === 'string'))) bad.push(`${at}.forPoints: 지점 ID 배열`);
       for (const f of ['visibleAfter', 'hiddenAfter'] as const) if (o[f] !== undefined && typeof o[f] !== 'string') bad.push(`${at}.${f}: 이벤트 이름이 아니다`);
     });
   }
@@ -104,6 +114,7 @@ export function validateRender(data: StageStoryData, stageCode: string): void {
     if (g.closedAssetKey !== undefined) key(g.closedAssetKey, `${at}.closedAssetKey`, true);
     if (g.openAssetKey !== undefined) key(g.openAssetKey, `${at}.openAssetKey`, true);
     if (g.closedAssetKey || g.openAssetKey) size(g.art as unknown as Record<string, unknown> | undefined, `${at}.art`);
+    pivot(g.art?.pivot, `${at}.art.pivot`);
   }
   if (bad.length > 0) throw new Error(`지역 데이터(${stageCode}) render 검증 실패: ${bad.join(' / ')}`);
 }

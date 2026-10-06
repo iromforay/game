@@ -49,10 +49,15 @@
   ],
   "render": {
     "_note": "최종 에셋 연결 계약. assetKey는 save-a-turby/src/assets의 파일명(확장자 제외) 런타임 키다. 해당 이미지가 없으면 화면은 회색상자·임시 도형을 그대로 쓴다. 아래 오버레이의 x·y(중심)·크기는 현재 회색상자 배치에 맞춘 임시 앵커이며 최종 좌표가 아니다(제안: docs/to_codex/2026-10-06/forest_final_coordinate_proposal.md).",
+    "markerMode": "fallback",
     "background": {"assetKey": "forest-base"},
     "overlays": [
       {"id": "overlay_hidden_path_reveal", "assetKey": "hidden-path-reveal", "x": 2600, "y": 1250, "width": 960, "height": 560, "visibleAfter": "forest_hidden_path_opened"},
-      {"id": "overlay_hidden_yarn_path", "assetKey": "hidden-yarn-path", "x": 2580, "y": 1250, "width": 768, "height": 256, "visibleAfter": "forest_hidden_path_opened"}
+      {"id": "overlay_hidden_yarn_path", "assetKey": "hidden-yarn-path", "x": 2580, "y": 1250, "width": 768, "height": 256, "visibleAfter": "forest_hidden_path_opened"},
+      {"id": "prop_giant_knot_map", "assetKey": "giant-thread-knot-map", "x": 2620, "y": 1250, "width": 512, "height": 512, "pivot": [0.5, 0.88], "layer": "story", "forPoints": ["forest_giant_knot"], "visibleAfter": "forest_hidden_path_opened", "hiddenAfter": "forest_giant_knot_defeated"},
+      {"id": "npc_bopuli", "assetKey": "turby-bopuli", "x": 1240, "y": 1000, "width": 160, "height": 160, "pivot": [0.5, 0.9], "layer": "story", "forPoints": ["forest_bopuli_ambush", "forest_bopuli_return"]},
+      {"id": "npc_bopuli_tangled", "assetKey": "bopuli-tangled-overlay", "x": 1240, "y": 1000, "width": 256, "height": 256, "pivot": [0.5, 0.9], "layer": "story", "hiddenAfter": "forest_bopul_rescued"},
+      {"id": "npc_dansuring", "assetKey": "dansuring-world", "x": 3020, "y": 1250, "width": 192, "height": 192, "pivot": [0.5, 0.82], "layer": "story", "forPoints": ["forest_dansuring"], "visibleAfter": "forest_first_knot_equipped"}
     ]
   },
   "layout": {
@@ -86,8 +91,8 @@
       {"id": "wall_root_b", "label": "", "x": 2860, "y": 1330, "width": 40, "height": 170, "visibleAfter": "forest_hidden_path_opened"}
     ],
     "gates": [
-      {"id": "gate_hidden_path", "label": "먼지바람", "x": 2300, "y": 1170, "width": 40, "height": 160, "openEvent": "forest_hidden_path_opened", "closedAssetKey": "dust-wind-closed", "openAssetKey": null, "art": {"x": 2320, "y": 1250, "width": 320, "height": 360}},
-      {"id": "gate_root", "label": "닫힌 실뿌리", "x": 2860, "y": 1170, "width": 40, "height": 160, "openEvent": "forest_first_knot_equipped", "visibleAfter": "forest_hidden_path_opened", "closedAssetKey": "root-gate-closed", "openAssetKey": "root-gate-open", "art": {"x": 2880, "y": 1250, "width": 480, "height": 520}}
+      {"id": "gate_hidden_path", "label": "먼지바람", "x": 2300, "y": 1170, "width": 40, "height": 160, "openEvent": "forest_hidden_path_opened", "closedAssetKey": "dust-wind-closed", "openAssetKey": null, "art": {"x": 2320, "y": 1250, "width": 320, "height": 360, "pivot": [0.5, 0.5]}},
+      {"id": "gate_root", "label": "닫힌 실뿌리", "x": 2860, "y": 1170, "width": 40, "height": 160, "openEvent": "forest_first_knot_equipped", "visibleAfter": "forest_hidden_path_opened", "closedAssetKey": "root-gate-closed", "openAssetKey": "root-gate-open", "art": {"x": 2880, "y": 1468, "width": 480, "height": 520, "pivot": [0.5, 0.92]}}
     ]
   },
   "spawnPoint": {

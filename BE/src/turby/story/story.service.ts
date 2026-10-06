@@ -105,9 +105,9 @@ export interface StageViewDto {
   // 지금 활성화된 이야기 지점만(비활성·완료 지점은 내려 주지 않는다)
   points: { id: string; kind: string; x: number; y: number; radius: number; assetKey: string; label: string; prompt: string }[];
   // 문: open은 서버가 openEvent로 한 번만 정한 값 — 화면의 그림(닫힘/열림 키)과 클라이언트 충돌 예측이 모두 이 값을 쓴다
-  gates: { id: string; label: string; x: number; y: number; width: number; height: number; open: boolean; closedAssetKey: string | null; openAssetKey: string | null; art: { x: number; y: number; width: number; height: number } | null }[];
-  // 최종 에셋 연결: 대형 배경 키와 지금 보이는 오버레이(진행 상태별). 없으면 회색상자·임시 도형 유지
-  render: { background: { assetKey: string } | null; overlays: { id: string; assetKey: string; x: number; y: number; width: number; height: number }[] };
+  gates: { id: string; label: string; x: number; y: number; width: number; height: number; open: boolean; closedAssetKey: string | null; openAssetKey: string | null; art: { x: number; y: number; width: number; height: number; pivot?: [number, number] } | null }[];
+  // 최종 에셋 연결: 대형 배경 키와 지금 보이는 오버레이·월드 오브젝트(진행 상태별). 없으면 회색상자·임시 도형 유지. markerMode final = 에셋이 연결된 대상의 임시 표식(고리·마름모·라벨)을 없앤다
+  render: { markerMode: 'fallback' | 'final'; background: { assetKey: string } | null; overlays: { id: string; assetKey: string; x: number; y: number; width: number; height: number; pivot?: [number, number]; layer: 'overlay' | 'story'; forPoints: string[] }[] };
   layout: { zones: StageRect[]; paths: number[][][]; blockers: StageRect[] } | null;
   objectives: { key: string; collected: number; required: number; active: boolean }[];
 }
@@ -445,7 +445,7 @@ export class StoryService {
     // 지도 크기도 서버가 정한다(10-02 v6 §2): 지역 데이터의 size, 없으면 지역 표의 크기 — 방의 geometry(collisionOf)와 같은 기준
     const chapter = data?.size ? null : await this.prisma.story_chapter.findUnique({ where: { stage_code: stageCode } });
     const size = data?.size ?? (chapter ? { width: chapter.map_width, height: chapter.map_height } : null);
-    if (!data) return { stageCode, greybox: false, size, objects: [], points: [], gates: [], render: { background: null, overlays: [] }, layout: null, objectives: [] };
+    if (!data) return { stageCode, greybox: false, size, objects: [], points: [], gates: [], render: { markerMode: 'fallback', background: null, overlays: [] }, layout: null, objectives: [] };
     const snap = await this.readSnapshot(playerId);
     const at = new Map(data.points.map((p) => [p.id, p]));
     const defs = STORY_OBJECTIVES.filter((o) => o.stageCode === stageCode);
@@ -479,9 +479,10 @@ export class StoryService {
       points,
       gates: (layout?.gates ?? []).filter(shown).map((g) => ({ id: g.id, label: g.label, x: g.x, y: g.y, width: g.width, height: g.height, open: gateOpen(g, snap.events), closedAssetKey: g.closedAssetKey ?? null, openAssetKey: g.openAssetKey ?? null, art: g.art ?? null })),
       render: {
+        markerMode: data.render?.markerMode ?? 'fallback',
         background: data.render?.background ? { assetKey: data.render.background.assetKey } : null,
         // 오버레이도 같은 스냅샷의 이벤트로 판정한다 — 숨은 길의 그림·문·충돌이 한 번에 바뀐다
-        overlays: (data.render?.overlays ?? []).filter((o) => (!o.visibleAfter || snap.events.has(o.visibleAfter)) && !(o.hiddenAfter && snap.events.has(o.hiddenAfter))).map((o) => ({ id: o.id, assetKey: o.assetKey, x: o.x, y: o.y, width: o.width, height: o.height })),
+        overlays: (data.render?.overlays ?? []).filter((o) => (!o.visibleAfter || snap.events.has(o.visibleAfter)) && !(o.hiddenAfter && snap.events.has(o.hiddenAfter))).map((o) => ({ id: o.id, assetKey: o.assetKey, x: o.x, y: o.y, width: o.width, height: o.height, ...(o.pivot ? { pivot: o.pivot } : {}), layer: o.layer ?? 'overlay', forPoints: o.forPoints ?? [] })),
       },
       layout: layout
         ? {

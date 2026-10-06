@@ -337,10 +337,10 @@ export class MapScene extends Phaser.Scene {
     };
     // 같은 서버 화면 데이터(view) 한 번으로 문 그림·오버레이·충돌(this.solids)을 함께 바꾼다 — 숨은 길의 그림과 통과 가능 여부가 어긋나지 않는다
     const plan: StageRenderPlan = planStageRender(view, (key) => this.textures.exists(key), { width: this.stageWidth, height: this.stageHeight });
-    for (const o of plan.overlays) keep(this.add.image(o.x, o.y, o.assetKey).setDisplaySize(o.width, o.height).setDepth(o.depth));
+    for (const o of plan.overlays) keep(this.add.image(o.x, o.y, o.assetKey).setOrigin(o.pivot[0], o.pivot[1]).setDisplaySize(o.width, o.height).setDepth(o.depth));
     for (const g of plan.gates) {
       const gate = view!.gates.find((x) => x.id === g.id)!;
-      if (g.art) keep(this.add.image(g.art.x, g.art.y, g.art.assetKey).setDisplaySize(g.art.width, g.art.height).setDepth(DEPTH_STORY));
+      if (g.art) keep(this.add.image(g.art.x, g.art.y, g.art.assetKey).setOrigin(g.art.pivot[0], g.art.pivot[1]).setDisplaySize(g.art.width, g.art.height).setDepth(DEPTH_STORY));
       if (!g.placeholder) continue; // 그림이 있거나 열린 문 — 임시 사각형은 닫힌 문의 그림이 없을 때만
       keep(this.add.rectangle(gate.x, gate.y, gate.width, gate.height, 0x6b5a8a, 0.95).setOrigin(0, 0).setStrokeStyle(2, 0xdcd3f4, 1).setDepth(DEPTH_STORY));
       keep(this.add.text(gate.x + gate.width / 2, gate.y - 6, gate.label, { fontSize: '13px', color: '#dcd3f4' }).setOrigin(0.5, 1).setDepth(DEPTH_STORY));
@@ -348,7 +348,8 @@ export class MapScene extends Phaser.Scene {
     for (const o of view?.objects ?? []) {
       const locked = o.state === 'locked';
       const c = keep(this.add.container(o.x, o.y).setDepth(DEPTH_STORY));
-      const art = plan.objects.find((x) => x.id === o.id)?.assetKey;
+      const ao = plan.objects.find((x) => x.id === o.id);
+      const art = ao?.assetKey;
       if (art) {
         // 최종 그림이 있으면 그림으로(잠긴 것은 흐리게). 수집 반경 원·글자는 일반 화면에 내지 않는다
         c.add(this.add.image(0, 0, art).setDisplaySize(64, 64).setAlpha(locked ? 0.45 : 1));
@@ -362,11 +363,14 @@ export class MapScene extends Phaser.Scene {
     }
     for (const pt of view?.points ?? []) {
       const c = keep(this.add.container(pt.x, pt.y).setDepth(DEPTH_STORY));
-      const art = plan.points.find((x) => x.id === pt.id)?.assetKey;
-      // 지점은 그림이 있어도 눈에 띄는 고리(상호작용 단서)를 함께 둔다 — 그림이 배경과 섞여 목표를 놓치지 않게. 글자는 임시 도형일 때만
+      const ap = plan.points.find((x) => x.id === pt.id);
+      const art = ap?.assetKey;
       if (art) c.add(this.add.image(0, 0, art).setScale(1).setOrigin(0.5, 0.7));
-      c.add([this.add.circle(0, 0, pt.radius).setStrokeStyle(2, 0xb9a6ee, 0.5), this.add.circle(0, 0, 20).setStrokeStyle(4, 0xb9a6ee, 1), this.add.circle(0, 0, 8, 0xb9a6ee)]);
-      if (!art) c.add(this.add.text(0, 28, pt.label, { fontSize: '13px', color: '#e6dcff' }).setOrigin(0.5, 0));
+      // 임시 표식(고리·글자): 지금(fallback)은 그림이 있어도 눈에 띄는 고리를 함께 둔다 — 목표를 놓치지 않게. 최종 모드(final)에서는 그림이 있는 대상에서 없앤다
+      if (ap?.marker ?? true) {
+        c.add([this.add.circle(0, 0, pt.radius).setStrokeStyle(2, 0xb9a6ee, 0.5), this.add.circle(0, 0, 20).setStrokeStyle(4, 0xb9a6ee, 1), this.add.circle(0, 0, 8, 0xb9a6ee)]);
+        if (!art) c.add(this.add.text(0, 28, pt.label, { fontSize: '13px', color: '#e6dcff' }).setOrigin(0.5, 0));
+      }
     }
     this.refreshMiniMap();
     this.setActiveTarget(null);

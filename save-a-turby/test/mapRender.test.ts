@@ -9,8 +9,8 @@ import { solidRects, type StageView } from '../src/story/storyStage.ts';
 
 const src = (f: string) => readFileSync(fileURLToPath(new URL(`../src/${f}`, import.meta.url)), 'utf8');
 const SIZE = { width: 3200, height: 2400 };
-const WIND = { x: 2320, y: 1250, width: 320, height: 360 };
-const ROOT = { x: 2880, y: 1250, width: 480, height: 520 };
+const WIND = { x: 2320, y: 1250, width: 320, height: 360, pivot: [0.5, 0.5] as [number, number] };
+const ROOT = { x: 2880, y: 1468, width: 480, height: 520, pivot: [0.5, 0.92] as [number, number] };
 
 // 서버가 내려 주는 모양(StageViewDto)의 화면 데이터. 문 open과 오버레이는 서버가 같은 이벤트로 한 번에 정한다
 function view(over: { greybox?: boolean; hiddenOpen?: boolean; rootOpen?: boolean; background?: boolean } = {}): StageView {
@@ -92,13 +92,13 @@ test('숨은 길과 문 상태가 서버 이벤트에 따라 그림·오버레�
 test('실제 에셋이 없어도 상호작용 대상(지점·수집물·닫힌 문)은 임시 도형으로 보이고, 있으면 그림으로 바뀐다. 누락 오버레이는 건너뛴다', () => {
   const v = view({ hiddenOpen: true });
   const bare = planStageRender(v, none, SIZE);
-  assert.deepEqual(bare.objects, [{ id: 'forest_dust_01', assetKey: null }]);
-  assert.deepEqual(bare.points, [{ id: 'forest_cut_thread', assetKey: null }]);
+  assert.deepEqual(bare.objects, [{ id: 'forest_dust_01', assetKey: null, marker: true }]);
+  assert.deepEqual(bare.points, [{ id: 'forest_cut_thread', assetKey: null, marker: true }]);
   assert.deepEqual(bare.gates.map((g) => [g.id, g.open, g.placeholder]), [['gate_hidden_path', true, false], ['gate_root', false, true]], '닫힌 문은 그림이 없으면 임시 사각형');
   assert.deepEqual(bare.overlays, [], '누락된 오버레이는 만들지 않는다(씬 전체가 실패하지 않는다)');
   const only = planStageRender(v, (k) => k === 'hidden-path-reveal' || k === 'glowing-yarn-dust', SIZE);
   assert.deepEqual(only.overlays.map((o) => o.assetKey), ['hidden-path-reveal'], '있는 것만');
-  assert.deepEqual(only.objects, [{ id: 'forest_dust_01', assetKey: 'glowing-yarn-dust' }]);
+  assert.deepEqual(only.objects, [{ id: 'forest_dust_01', assetKey: 'glowing-yarn-dust', marker: true }], 'fallback 모드에서는 그림이 있어도 임시 표식을 유지');
   // 임시 도형을 쓰는 코드가 화면에 남아 있다(최종 에셋 전에 대상이 사라지지 않는다)
   const map = src('scenes/MapScene.ts');
   assert.match(map, /fillPoints\(\[\{ x: 0, y: -16 \}/, '수집물 임시 도형');
@@ -116,4 +116,51 @@ test('카메라 경계는 지도 크기, 깊이 순서는 배경 < 오버레이 
   assert.match(map, /setBounds\(plan\.bounds\.x, plan\.bounds\.y, plan\.bounds\.width, plan\.bounds\.height\)/);
   assert.match(map, /const DEPTH_GROUND = MAP_DEPTH\.greybox;/);
   assert.match(map, /const DEPTH_STORY = MAP_DEPTH\.story;/);
+});
+
+// ----- 10-06 v6: 월드 NPC·보스 표식·피벗·표식 모드 -----
+const PROPS = [
+  { id: 'prop_giant_knot_map', assetKey: 'giant-thread-knot-map', x: 2620, y: 1250, width: 512, height: 512, pivot: [0.5, 0.88] as [number, number], layer: 'story' as const, forPoints: ['forest_giant_knot'] },
+  { id: 'npc_bopuli', assetKey: 'turby-bopuli', x: 1240, y: 1000, width: 160, height: 160, pivot: [0.5, 0.9] as [number, number], layer: 'story' as const, forPoints: ['forest_bopuli_ambush', 'forest_bopuli_return'] },
+  { id: 'npc_bopuli_tangled', assetKey: 'bopuli-tangled-overlay', x: 1240, y: 1000, width: 256, height: 256, pivot: [0.5, 0.9] as [number, number], layer: 'story' as const },
+  { id: 'npc_dansuring', assetKey: 'dansuring-world', x: 3020, y: 1250, width: 192, height: 192, pivot: [0.5, 0.82] as [number, number], layer: 'story' as const, forPoints: ['forest_dansuring'] },
+];
+const withProps = (mode: 'fallback' | 'final'): StageView => {
+  const v = view({ hiddenOpen: true });
+  v.render = { markerMode: mode, background: { assetKey: 'forest-base' }, overlays: [...v.render!.overlays, ...PROPS] };
+  v.points = [
+    { id: 'forest_giant_knot', kind: 'battle', x: 2620, y: 1250, radius: 72, assetKey: 'placeholder-point', label: '거대 실밥 매듭(임시)', prompt: '다가가기' },
+    { id: 'forest_bopuli_ambush', kind: 'battle', x: 1240, y: 1000, radius: 72, assetKey: 'placeholder-point', label: '보풀이 공터(임시)', prompt: '다가가기' },
+    { id: 'forest_dansuring', kind: 'discover', x: 3020, y: 1250, radius: 72, assetKey: 'placeholder-point', label: '실뿌리 문(임시)', prompt: '살펴보기' },
+  ];
+  return v;
+};
+
+test('월드 그림: 피벗·층·순서가 계획에 담기고, 이야기 층 그림은 지점 표식 위·배우 아래에 쌓인다', () => {
+  const plan = planStageRender(withProps('fallback'), all, SIZE);
+  const by = (id: string) => plan.overlays.find((o) => o.id === id)!;
+  assert.deepEqual([by('prop_giant_knot_map').pivot, by('npc_dansuring').pivot, by('npc_bopuli').pivot], [[0.5, 0.88], [0.5, 0.82], [0.5, 0.9]]);
+  assert.equal(by('overlay_hidden_path_reveal').depth, MAP_DEPTH.overlay, '바닥 오버레이');
+  for (const id of ['prop_giant_knot_map', 'npc_bopuli', 'npc_bopuli_tangled', 'npc_dansuring']) assert.ok(by(id).depth > MAP_DEPTH.story && by(id).depth < MAP_DEPTH.actors, `${id}: 이야기 대상 위, 배우 아래`);
+  assert.ok(by('npc_bopuli_tangled').depth > by('npc_bopuli').depth, '먼지실 오버레이는 보풀이 위');
+  assert.deepEqual(plan.gates.map((g) => g.art?.pivot ?? null), [null, [0.5, 0.92]], '실뿌리 문은 닫힘 그림 피벗 (0.5, 0.92)');
+});
+
+test('최종 에셋 미전달 폴백: 보풀이는 캐릭터 이미지+지점 고리, 먼지실 오버레이·거대 매듭·단수링 그림이 없으면 건너뛰고 고리가 유지된다', () => {
+  const v = withProps('fallback');
+  const plan = planStageRender(v, (k) => k === 'turby-bopuli' || k === 'forest-base', SIZE); // 보풀이 캐릭터 이미지만 있다
+  assert.deepEqual(plan.overlays.map((o) => o.id), ['npc_bopuli'], '있는 그림만');
+  assert.ok(plan.points.every((p) => p.marker), 'fallback: 모든 지점 고리 유지');
+  // 미전달 상태에서 final로 바꿔도 그림이 없는 대상의 표식은 남는다(대상이 사라지지 않는다)
+  const final = planStageRender(withProps('final'), (k) => k === 'turby-bopuli', SIZE);
+  const marker = (id: string) => final.points.find((p) => p.id === id)!.marker;
+  assert.deepEqual([marker('forest_giant_knot'), marker('forest_bopuli_ambush'), marker('forest_dansuring')], [true, false, true], '그림이 있는 보풀이만 표식이 사라진다');
+});
+
+test('표식 모드 final: 그림이 모두 연결되면 거대 매듭·보풀이·단수링 고리와 라벨을 없앤다(데이터 한 줄 전환 — 이번에는 fallback 유지)', () => {
+  const plan = planStageRender(withProps('final'), all, SIZE);
+  assert.deepEqual(plan.points.map((p) => [p.id, p.marker]), [['forest_giant_knot', false], ['forest_bopuli_ambush', false], ['forest_dansuring', false]]);
+  assert.equal(plan.markerMode, 'final');
+  const map = src('scenes/MapScene.ts');
+  assert.match(map, /if \(ap\?\.marker \?\? true\) \{/, '표식은 계획이 허용할 때만');
 });

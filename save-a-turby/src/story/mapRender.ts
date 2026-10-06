@@ -22,24 +22,28 @@ export type BackgroundPlan =
 export interface OverlayPlan {
   id: string;
   assetKey: string;
-  x: number;
+  x: number; // 피벗이 놓이는 월드 좌표
   y: number;
   width: number;
   height: number;
+  pivot: [number, number];
   depth: number;
+  forPoints: string[];
 }
 export interface GatePlan {
   id: string;
   open: boolean;
-  art: { assetKey: string; x: number; y: number; width: number; height: number } | null; // 이 상태의 그림(없으면 null)
+  art: { assetKey: string; x: number; y: number; width: number; height: number; pivot: [number, number] } | null; // 이 상태의 그림(없으면 null). 닫힘·열림이 같은 캔버스·피벗이라 전환 때 위치가 튀지 않는다
   placeholder: boolean; // 그림이 없어 임시 도형(닫힌 문 사각형)을 쓴다 — 닫힌 문만. 열린 문은 아무것도 그리지 않는다
 }
 export interface ActorPlan {
   id: string;
   assetKey: string | null; // 이 키의 텍스처가 있으면 그 그림, 없으면 null(임시 도형)
+  marker: boolean; // 임시 표식(고리·동심원·라벨)을 그린다 — 'final' 모드에서 그림(또는 대신하는 월드 그림)이 있으면 false
 }
 
 export interface StageRenderPlan {
+  markerMode: 'fallback' | 'final';
   background: BackgroundPlan;
   overlays: OverlayPlan[];
   gates: GatePlan[];
@@ -60,14 +64,23 @@ export function planStageRender(view: StageView | null, has: HasTexture, fallbac
   else if (view?.layout) background = { mode: 'greybox' };
   else background = { mode: 'tile' };
 
-  const overlays: OverlayPlan[] = (view?.render?.overlays ?? []).filter((o) => has(o.assetKey)).map((o) => ({ ...o, depth: MAP_DEPTH.overlay }));
+  // 월드 그림(길 오버레이·NPC·보스 표식 등): 텍스처가 있는 것만. 층이 story면 이야기 대상 위(고리·마름모 위), 같은 층에서는 데이터 순서대로 위로 쌓인다
+  const overlays: OverlayPlan[] = (view?.render?.overlays ?? [])
+    .filter((o) => has(o.assetKey))
+    .map((o, i) => ({ id: o.id, assetKey: o.assetKey, x: o.x, y: o.y, width: o.width, height: o.height, pivot: o.pivot ?? [0.5, 0.5], depth: (o.layer ?? 'overlay') === 'story' ? MAP_DEPTH.story + 1 + i * 0.01 : MAP_DEPTH.overlay, forPoints: o.forPoints ?? [] }));
 
   const gates: GatePlan[] = (view?.gates ?? []).map((g) => {
     const key = g.open ? g.openAssetKey : g.closedAssetKey;
-    const art = key && g.art && has(key) ? { assetKey: key, ...g.art } : null;
+    const art = key && g.art && has(key) ? { assetKey: key, ...g.art, pivot: g.art.pivot ?? ([0.5, 0.5] as [number, number]) } : null;
     return { id: g.id, open: g.open, art, placeholder: !g.open && !art };
   });
 
-  const actor = (o: StageObject | StagePointView): ActorPlan => ({ id: o.id, assetKey: has(o.assetKey) ? o.assetKey : null });
-  return { background, overlays, gates, objects: (view?.objects ?? []).map(actor), points: (view?.points ?? []).map(actor), bounds };
+  // 임시 표식 모드: fallback(기본) = 항상 유지 / final = 그림이 있는 대상의 임시 표식을 없앤다(Codex가 최종 에셋 연결 완료를 확인한 뒤 데이터에서 바꾼다)
+  const markerMode = view?.render?.markerMode ?? 'fallback';
+  const covered = new Set(overlays.flatMap((o) => o.forPoints));
+  const actor = (o: StageObject | StagePointView): ActorPlan => {
+    const art = has(o.assetKey) ? o.assetKey : null;
+    return { id: o.id, assetKey: art, marker: !(markerMode === 'final' && (art || covered.has(o.id))) };
+  };
+  return { markerMode, background, overlays, gates, objects: (view?.objects ?? []).map(actor), points: (view?.points ?? []).map(actor), bounds };
 }

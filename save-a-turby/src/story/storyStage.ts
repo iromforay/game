@@ -40,8 +40,8 @@ export interface StageView {
   size: { width: number; height: number } | null;
   objects: StageObject[];
   points: StagePointView[];
-  gates: (StageRect & { open: boolean; closedAssetKey?: string | null; openAssetKey?: string | null; art?: { x: number; y: number; width: number; height: number } | null })[];
-  render?: { background: { assetKey: string } | null; overlays: { id: string; assetKey: string; x: number; y: number; width: number; height: number }[] }; // 구버전 서버 응답에는 없다
+  gates: (StageRect & { open: boolean; closedAssetKey?: string | null; openAssetKey?: string | null; art?: { x: number; y: number; width: number; height: number; pivot?: [number, number] } | null })[];
+  render?: { markerMode?: 'fallback' | 'final'; background: { assetKey: string } | null; overlays: { id: string; assetKey: string; x: number; y: number; width: number; height: number; pivot?: [number, number]; layer?: 'overlay' | 'story'; forPoints?: string[] }[] }; // 구버전 서버 응답에는 없다
   layout: { zones: StageRect[]; paths: number[][][]; blockers: StageRect[] } | null;
   objectives: { key: string; collected: number; required: number; active: boolean }[];
 }
