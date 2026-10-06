@@ -51,6 +51,7 @@ interface BattleRecord {
 }
 
 const ACTION_ID_MAX = 64;
+export const UNACKNOWLEDGED_RESULT_MESSAGE = '확인하지 않은 전투 결과가 있어요. 결과를 먼저 확인해 주세요.';
 
 // 4-B: 서버 권위 전투 관리. 엔진(battle-engine)은 순수 규칙만 다루고, 이 서비스가 소유권·파티 검증(DB), 멱등 처리(actionId),
 // 버전 검사, 보상 지급 트랜잭션(중복 방지), 이탈 연동을 맡는다. 전투는 메모리에만 있고 서버가 재시작되면 사라진다(BATTLE_EXPIRED).
@@ -95,6 +96,7 @@ export class BattleService implements OnModuleInit {
     if (!(await this.stageAccess.openingComplete(BigInt(playerId)))) throw new BattleError('OPENING_REQUIRED', OPENING_REQUIRED_HINT);
     const existing = this.recordOfPlayer(playerId);
     if (existing) return toSnapshot(existing.state); // 이미 진행 중인 전투(초대 받은 상태 포함)가 있으면 그대로 이어서(중복 요청 안전)
+    this.assertNoUnconfirmedResult(playerId); // 10-06 v4 §1
 
     const room = this.rooms.roomOf(playerId);
     if (!room) throw new BattleError('NOT_IN_ROOM', '참여 중인 방이 없습니다.');
@@ -158,6 +160,8 @@ export class BattleService implements OnModuleInit {
       if (existing.story?.encounterKey === key) return toSnapshot(existing.state);
       throw new BattleError('ALREADY_IN_BATTLE', '진행 중인 전투가 있습니다.');
     }
+
+    this.assertNoUnconfirmedResult(playerId); // 10-06 v4 §1
 
     // 스토리 판정을 먼저: 이미 이긴 전투는 어디서 요청해도 STORY_ENCOUNTER_DONE(새로고침 복원 뒤 대화가 다음으로 넘어가는 근거)
     const available = await this.story.encounterAvailability(BigInt(playerId), key);
@@ -302,7 +306,15 @@ export class BattleService implements OnModuleInit {
 
   // 그 플레이어가 확인하지 않은 종료 일반 전투(최신순). 스토리 전투는 대화 흐름이 복원하므로 제외
   private unconfirmedResults(playerId: string): BattleRecord[] {
-    return [...this.battles.values()].reverse().filter((r) => !r.story && r.state.phase === 'resolved' && !r.acknowledged.has(playerId) && r.state.participants.some((p) => p.playerId === playerId && p.partySubmitted));
+    return [...this.battles.values()].reverse().filter((r) => !r.story && r.state.phase === 'resolved' && !r.acknowledged.has(playerId) && r.state.participants.some((p) => p.playerId === playerId && p.partySubmitted && p.active));
+  }
+
+  // 10-06 v4 §1: 정산이 끝났지만 아직 확인하지 않은 일반 전투 결과(보존 기간 안)가 있으면 새 활동을 시작할 수 없다.
+  // 새 방 생성·방 시작·맵 입장·일반/스토리 전투 시작이 모두 이 한 곳을 거친다. 결과 조회·확인·접속 인증·방 이탈은 거치지 않는다.
+  // 전투에서 빠진 참가자(active=false)는 결과 화면을 볼 수 없으므로 대상이 아니다. 보존 기간이 지났거나 확인한 결과는 대상이 아니다
+  assertNoUnconfirmedResult(playerId: string) {
+    const blocking = this.unconfirmedResults(playerId).find((r) => r.settled);
+    if (blocking) throw new BattleError('UNACKNOWLEDGED_BATTLE_RESULT', UNACKNOWLEDGED_RESULT_MESSAGE).forBattle(blocking.state.battleId);
   }
 
   // 결과 확인(battle:result:ack): 결과 화면을 실제로 보여 준 클라이언트가 사용자의 "계속/돌아가기" 선택 뒤에 보낸다. 여러 번 호출해도 같은 성공.

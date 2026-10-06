@@ -265,3 +265,46 @@ test('오프닝 전에는 숲 화면 데이터를 내려 주지 않는다', asyn
   assert.equal(await codeOf(s.service.stageData(P1, 'forest')), 'STAGE_LOCKED');
   assert.equal(await codeOf(s.service.stageData(P1, 'nowhere')), 'INVALID_STAGE');
 });
+
+test('최종 에셋 연결 계약(10-06 v2): 배경 키·진행별 오버레이·문 닫힘/열림 키가 같은 서버 스냅샷에서 함께 바뀐다(숨은 길 그림·먼지바람·충돌)', async () => {
+  const base = [...RESCUED, 'forest_compass_granted'];
+  const before = await setup('CH01_COMPASS_ACQUIRED', base).service.stageData(P1, 'forest');
+  const after = await setup('CH01_COMPASS_ACQUIRED', [...base, 'forest_hidden_path_opened']).service.stageData(P1, 'forest');
+  assert.deepEqual(before.render.background, { assetKey: 'forest-base' });
+  // 개방 전: 숨은 길 오버레이 없음, 먼지바람 문은 닫힘(닫힘 텍스처 키 + 충돌), 길 자체가 내려가지 않는다
+  assert.deepEqual(before.render.overlays, []);
+  const windBefore = before.gates.find((g) => g.id === 'gate_hidden_path')!;
+  assert.deepEqual([windBefore.open, windBefore.closedAssetKey, windBefore.openAssetKey], [false, 'dust-wind-closed', null]);
+  // 개방 뒤: 같은 스냅샷에서 오버레이 공개 + 문 열림(열림 텍스처 없음 = 먼지바람이 사라진다) + 실뿌리 문이 닫힘 상태로 나타남
+  assert.deepEqual(after.render.overlays.map((o) => o.assetKey), ['hidden-path-reveal', 'hidden-yarn-path']);
+  const windAfter = after.gates.find((g) => g.id === 'gate_hidden_path')!;
+  assert.deepEqual([windAfter.open, windAfter.openAssetKey], [true, null]);
+  const root = after.gates.find((g) => g.id === 'gate_root')!;
+  assert.deepEqual([root.open, root.closedAssetKey, root.openAssetKey, root.art], [false, 'root-gate-closed', 'root-gate-open', { x: 2880, y: 1250, width: 480, height: 520 }]);
+  // 실뿌리 문: 첫 매듭 장착 뒤에 같은 문이 열림 텍스처로
+  const equipped = await setup('CH01_FIRST_KNOT_EQUIPPED', [...base, 'forest_hidden_path_opened', 'forest_giant_knot_defeated', 'forest_first_knot_awakened', 'forest_first_knot_equipped']).service.stageData(P1, 'forest');
+  const rootOpen = equipped.gates.find((g) => g.id === 'gate_root')!;
+  assert.deepEqual([rootOpen.open, rootOpen.openAssetKey], [true, 'root-gate-open']);
+  // 지점·수집 오브젝트의 에셋 키는 실제 런타임 키다
+  assert.ok((await setup('CH01_BOPUL_RESCUED', RESCUED).service.stageData(P1, 'forest')).objects.every((o) => o.assetKey === 'glowing-yarn-dust'));
+  const cut = await setup('CH01_STARTED', RESCUED.slice(0, 4)).service.stageData(P1, 'forest');
+  assert.equal(cut.points[0].assetKey, 'cut-yarn-strand');
+  // 기존 ID·이벤트 ID는 그대로
+  assert.deepEqual(after.gates.map((g) => g.id), ['gate_hidden_path', 'gate_root']);
+});
+
+test('render 데이터 검증: 잘못된 에셋 키·크기·문 그림은 서버가 거부한다(실제 숲 데이터는 통과)', async () => {
+  const { validateRender } = await import('../src/turby/story/story-content.service');
+  const real = JSON.parse(JSON.stringify(new StoryContentService().stage('forest')));
+  assert.doesNotThrow(() => validateRender(real, 'forest'));
+  const bad = (mutate: (d: any) => void, re: RegExp) => { // eslint-disable-line @typescript-eslint/no-explicit-any
+    const d = JSON.parse(JSON.stringify(real));
+    mutate(d);
+    assert.throws(() => validateRender(d, 'forest'), re);
+  };
+  bad((d) => (d.render.background.assetKey = '../evil.png'), /render\.background\.assetKey/);
+  bad((d) => (d.render.overlays[0].width = 0), /render\.overlays\[0\]/);
+  bad((d) => (d.render.overlays[1].id = d.render.overlays[0].id), /id가 없거나 겹친다/);
+  bad((d) => delete d.layout.gates[1].art, /gate_root\)\.art/);
+  bad((d) => (d.layout.gates[0].closedAssetKey = 'Bad Key'), /closedAssetKey/);
+});

@@ -34,6 +34,7 @@ export const battleClient = {
   // 10-06 v3 §2: 결과 화면을 보여 준 뒤 사용자가 돌아가기를 선택했을 때 보내는 명시적 결과 확인(여러 번 보내도 같은 성공)
   async ackResult(battleId: string): Promise<void> {
     await roomClient.request<{ acknowledged: true }>('battle:result:ack', { battleId });
+    if (roomClient.activeBattle?.battleId === battleId) roomClient.activeBattle = null; // 확인한 결과를 접속 인증 때 받아 둔 값으로 다시 안내하지 않는다
   },
 
   snapshot(battleId: string): Promise<BattleResponse> {

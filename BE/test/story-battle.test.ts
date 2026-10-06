@@ -363,9 +363,12 @@ test('결과 복원 우선순위·보존 기간: 진행 중 전투가 오래된 
   const s = await normalSetup([0, 1]);
   const done = await winNormal(s, 0);
   assert.equal((await s.battles.activeSnapshotOf('1'))?.battleId, done, '진행 중 전투가 없으면 종료 결과');
+  // 결과를 확인하기 전에는 새 전투를 시작할 수 없다(v4 §1) — 확인한 뒤 시작한 전투가 hello에서 진행 중으로 복원된다
+  assert.equal(await code(s.battles.start('1', 1)), 'UNACKNOWLEDGED_BATTLE_RESULT');
+  await s.battles.acknowledgeResult('1', done);
   const live = await s.battles.start('1', 1);
   const snap = await s.battles.activeSnapshotOf('1');
-  assert.deepEqual([snap?.battleId, snap?.phase === 'resolved'], [live.battleId, false], '진행 중 전투 우선');
+  assert.deepEqual([snap?.battleId, snap?.phase === 'resolved'], [live.battleId, false], '진행 중 전투');
   await s.battles.leave('1', live.battleId);
   // 보존 기간(시험에서는 0.05초) 뒤에는 복원하지 않는다
   NUMBERS['battle.resolvedRetentionSeconds'] = 0.05;
@@ -375,4 +378,48 @@ test('결과 복원 우선순위·보존 기간: 진행 중 전투가 오래된 
   await new Promise((r) => setTimeout(r, 150));
   assert.equal(await s3.battles.activeSnapshotOf('1'), null, '보존 기간이 지난 결과');
   assert.equal(captures(s3), 1, '보상 자체는 DB에 남아 있다');
+});
+
+test('미확인 결과 우회 방지(v4 §1): 정산된 미확인 결과가 있으면 새 일반·스토리 전투와 공통 사전 조건이 거부되고, 다른 플레이어는 영향이 없다. 확인 즉시·보존 기간 경과 뒤·중복 확인 뒤에도 허용', async () => {
+  const s = await normalSetup([0, 1]);
+  const id = await winNormal(s, 0);
+  const blocked = async (f: () => unknown) => {
+    try {
+      await f();
+    } catch (e) {
+      return e instanceof BattleError ? [e.code, e.battleId, e.message] : String(e);
+    }
+    return 'allowed';
+  };
+  const expected = ['UNACKNOWLEDGED_BATTLE_RESULT', id, '확인하지 않은 전투 결과가 있어요. 결과를 먼저 확인해 주세요.'];
+  assert.deepEqual(await blocked(() => s.battles.start('1', 1)), expected, '새 일반 야생 전투');
+  assert.deepEqual(await blocked(() => s.battles.startStory('1', 'forest_stitchling_ambush')), expected, '새 스토리 전투');
+  assert.deepEqual(await blocked(() => s.battles.assertNoUnconfirmedResult('1')), expected, '방 생성·방 시작·맵 입장이 거치는 공통 사전 조건');
+  assert.equal(await blocked(() => s.battles.assertNoUnconfirmedResult('2')), 'allowed', '다른 플레이어는 영향 없음');
+  // 허용: 결과 조회·확인·접속 인증용 조회
+  assert.equal((await s.battles.snapshot('1', id)).snapshot.phase, 'resolved');
+  assert.equal((await s.battles.activeSnapshotOf('1'))?.battleId, id);
+  // 확인 즉시 허용(중복 확인 뒤에도 유지)
+  await s.battles.acknowledgeResult('1', id);
+  assert.equal(await blocked(() => s.battles.assertNoUnconfirmedResult('1')), 'allowed');
+  await s.battles.acknowledgeResult('1', id);
+  assert.equal(await blocked(() => s.battles.assertNoUnconfirmedResult('1')), 'allowed');
+  assert.equal((await s.battles.start('1', 1)).phase, 'party_select', '확인 뒤 새 전투 시작');
+  // 보존 기간이 지난 결과는 차단하지 않는다
+  NUMBERS['battle.resolvedRetentionSeconds'] = 0.4;
+  const s2 = await normalSetup();
+  await winNormal(s2, 0);
+  NUMBERS['battle.resolvedRetentionSeconds'] = 60;
+  assert.equal((await blocked(() => s2.battles.assertNoUnconfirmedResult('1')))[0], 'UNACKNOWLEDGED_BATTLE_RESULT', '보존 기간 안에서는 차단');
+  await new Promise((r) => setTimeout(r, 700));
+  assert.equal(await blocked(() => s2.battles.assertNoUnconfirmedResult('1')), 'allowed', '보존 기간이 지난 결과');
+});
+
+test('미확인 결과 우회 방지: 전투에서 빠진 참가자의 결과·정산 전 결과는 차단 대상이 아니다', async () => {
+  const s = await normalSetup([0]);
+  const snap = await s.battles.start('1', 0);
+  await s.battles.party('1', snap.battleId, [s.ids.bag1]);
+  await s.battles.leave('1', snap.battleId); // 혼자 나가면 전투가 취소로 끝나지만, 빠진 참가자는 결과 화면이 없다
+  assert.doesNotThrow(() => s.battles.assertNoUnconfirmedResult('1'));
+  assert.equal(await s.battles.activeSnapshotOf('1'), null);
 });

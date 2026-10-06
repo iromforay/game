@@ -115,7 +115,7 @@ export class BattleGateway implements OnModuleInit {
     try {
       return await run();
     } catch (err) {
-      if (err instanceof BattleError) return { ok: false, code: err.code, message: err.message, ...(err.reason ? { reason: err.reason } : {}), ...(err.snapshot ? { snapshot: err.snapshot } : {}) };
+      if (err instanceof BattleError) return { ok: false, code: err.code, message: err.message, ...(err.reason ? { reason: err.reason } : {}), ...(err.snapshot ? { snapshot: err.snapshot } : {}), ...(err.battleId ? { battleId: err.battleId } : {}) };
       if (err instanceof RoomError) return { ok: false, code: err.code, message: err.message };
       this.log.error(err);
       return { ok: false, code: 'INTERNAL', message: '서버 오류가 발생했습니다.' };

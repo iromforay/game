@@ -144,6 +144,7 @@ function state() {
       miniMap: map.miniMap?.debugState ?? null, joystickZone: map.hud.joystickZone,
       buttons: { home: center(map.hud.home), inventory: center(map.hud.inventory), turbys: center(map.hud.turbys) },
       inputPatch: g.registry.get('inputPatch') ?? null,
+      render: map.debugRender,
       ...map.debugPosition, // 10-02 v4: 서버가 정한 위치에 배치됐는가, 서버 보정 횟수
       // 10-02 v3: 지역 스토리 화면(서버가 내려 준 것)과 지금 누를 수 있는 대상
       story: map.stageView ? {
@@ -207,7 +208,7 @@ function texts(): string[] {
 }
 
 // 변조한 클라이언트 흉내(시험 전용): 게임 화면을 거치지 않고 같은 소켓으로 임의 요청을 보낸다 — 서버가 무시·거절하는지 확인하는 데만 쓴다
-const rawRequest = (event: string, body?: unknown) => roomClient.request<unknown>(event, body).catch((e: { code?: string; message?: string }) => ({ ok: false, code: e.code ?? null, message: e.message ?? String(e) }));
+const rawRequest = (event: string, body?: unknown) => roomClient.request<unknown>(event, body).catch((e: { code?: string; message?: string; battleId?: string | null }) => ({ ok: false, code: e.code ?? null, message: e.message ?? String(e), battleId: e.battleId ?? undefined }));
 
 (window as unknown as { __dev?: unknown }).__dev = { cap, tap, find, state, texts, battleStep, keepAlive, active, rawRequest };
 export {};

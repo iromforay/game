@@ -10,6 +10,11 @@ import { displayScaleOf } from '../ui/responsive';
 import { watchLayout } from '../ui/relayout';
 import { clampPage, pageOf, stageSelectLayout, type StageSelectLayout } from '../ui/screenLayouts';
 import { stageBadgeLabel } from '../ui/screenStates';
+import { battleClient } from '../net/battleClient';
+import { recoverUnackedResult } from '../state/unackedResult';
+import { deferredRestore } from '../state/restoreAttempt';
+import { resumeBattle } from './VillageScene';
+
 
 // stage-card-frame.png(240×480)은 좌우 25px가 투명 — 그대로 카드 폭에 늘리면 보이는 틀이 좁아져 안쪽 내용이 틀 밖으로 넘쳤다(v2 §4 재현).
 // 보이는 틀 = 카드 폭이 되도록 투명 여백만큼 넓혀 그리고, 내용은 안쪽 폭에 맞춘다. 좌표·글자는 stageSelectLayout(표시 배율별).
@@ -217,6 +222,8 @@ export class StageSelectScene extends Phaser.Scene {
       await roomClient.startSolo(stageCode);
     } catch (err) {
       if (gen !== this.generation || !this.sys.isActive()) return;
+      // 10-06 v4 §1: 확인하지 않은 전투 결과가 있으면 새 입장을 더 시도하지 않고 그 결과 화면으로 간다
+      if (await recoverUnackedResult(err, { fetchSnapshot: (id) => battleClient.snapshot(id).then((r) => r.snapshot), showResult: (snap) => resumeBattle(this, snap), fallbackToVillage: () => { deferredRestore.mark(); this.scene.start('Village'); }, isStale: () => gen !== this.generation || !this.sys.isActive() })) return;
       if (err instanceof RoomApiError) {
         wait.forEach((o) => o.destroy());
         this.busy = false;

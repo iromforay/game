@@ -5,6 +5,7 @@ import { RoomsService } from './rooms.service';
 import { BattleService } from '../battle/battle.service';
 import { StoryService } from '../story/story.service';
 import { RoomError } from './types';
+import { BattleError } from '../battle/battle-types';
 import type { Room, WildRuntime } from './types';
 
 type Ack = { ok: true; [key: string]: unknown } | { ok: false; code: string; message: string };
@@ -84,6 +85,7 @@ export class RoomsGateway implements OnGatewayDisconnect, OnModuleInit {
   create(@ConnectedSocket() client: Socket, @MessageBody() body: { stageCode?: unknown }) {
     return this.guard(async () => {
       const playerId = this.rooms.playerOf(client.id);
+      this.battles.assertNoUnconfirmedResult(playerId); // 10-06 v4 §1: 미확인 전투 결과가 있으면 새 방을 만들 수 없다
       const room = await this.rooms.createRoom(playerId, body?.stageCode);
       await client.join(this.rooms.roomChannel(room.code));
       return { ok: true as const, room: this.rooms.toState(room) };
@@ -108,6 +110,7 @@ export class RoomsGateway implements OnGatewayDisconnect, OnModuleInit {
   start(@ConnectedSocket() client: Socket) {
     return this.guard(async () => {
       const playerId = this.rooms.playerOf(client.id);
+      this.battles.assertNoUnconfirmedResult(playerId);
       await this.rooms.requireOpening(playerId);
       const room = this.rooms.startRoom(playerId);
       return { ok: true as const, room: this.rooms.toState(room) };
@@ -118,6 +121,7 @@ export class RoomsGateway implements OnGatewayDisconnect, OnModuleInit {
   enter(@ConnectedSocket() client: Socket, @MessageBody() body: { dir?: unknown }) {
     return this.guard(async () => {
       const playerId = this.rooms.playerOf(client.id);
+      this.battles.assertNoUnconfirmedResult(playerId); // 새 map:enter(전투 후 복귀 포함)는 결과 확인 뒤에만
       await this.rooms.requireOpening(playerId);
       // 위치는 서버가 정한다(요청의 x·y는 읽지 않는다). self = 서버가 확정한 위치, corrected = 저장돼 있던 위치를 시작 지점으로 보정했는가
       const { room, self, corrected, others, wilds, encounterRadiusPx } = await this.rooms.enterMap(playerId, body?.dir);
@@ -152,6 +156,7 @@ export class RoomsGateway implements OnGatewayDisconnect, OnModuleInit {
       return await run();
     } catch (err) {
       if (err instanceof RoomError) return { ok: false, code: err.code, message: err.message };
+      if (err instanceof BattleError) return { ok: false, code: err.code, message: err.message, ...(err.battleId ? { battleId: err.battleId } : {}) };
       this.log.error(err);
       return { ok: false, code: 'INTERNAL', message: '서버 오류가 발생했습니다.' };
     }

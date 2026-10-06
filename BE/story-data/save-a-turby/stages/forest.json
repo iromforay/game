@@ -27,26 +27,34 @@
     {"id": "forest_dansuring", "x": 3020, "y": 1250, "radius": 72}
   ],
   "objects": [
-    {"id": "forest_dust_01", "objectiveKey": "forest_glowing_dust", "group": "near_clearing", "assetKey": "placeholder-dust", "label": "실가루(임시)", "prompt": "빛나는 실가루 줍기"},
-    {"id": "forest_dust_02", "objectiveKey": "forest_glowing_dust", "group": "near_clearing", "assetKey": "placeholder-dust", "label": "실가루(임시)", "prompt": "빛나는 실가루 줍기"},
-    {"id": "forest_dust_03", "objectiveKey": "forest_glowing_dust", "group": "near_clearing", "assetKey": "placeholder-dust", "label": "실가루(임시)", "prompt": "빛나는 실가루 줍기"},
-    {"id": "forest_dust_04", "objectiveKey": "forest_glowing_dust", "group": "detour", "assetKey": "placeholder-dust", "label": "실가루(임시)", "prompt": "빛나는 실가루 줍기"},
-    {"id": "forest_dust_05", "objectiveKey": "forest_glowing_dust", "group": "detour", "assetKey": "placeholder-dust", "label": "실가루(임시)", "prompt": "빛나는 실가루 줍기"},
-    {"id": "forest_dust_06", "objectiveKey": "forest_glowing_dust", "group": "detour", "assetKey": "placeholder-dust", "label": "실가루(임시)", "prompt": "빛나는 실가루 줍기"},
-    {"id": "forest_dust_07", "objectiveKey": "forest_glowing_dust", "group": "detour", "assetKey": "placeholder-dust", "label": "실가루(임시)", "prompt": "빛나는 실가루 줍기"},
-    {"id": "forest_dust_08", "objectiveKey": "forest_glowing_dust", "group": "near_wild", "assetKey": "placeholder-dust", "label": "실가루(임시)", "prompt": "빛나는 실가루 줍기"},
-    {"id": "forest_dust_09", "objectiveKey": "forest_glowing_dust", "group": "near_wild", "assetKey": "placeholder-dust", "label": "실가루(임시)", "prompt": "빛나는 실가루 줍기"},
-    {"id": "forest_dust_10", "objectiveKey": "forest_glowing_dust", "group": "near_wild", "assetKey": "placeholder-dust", "label": "실가루(임시)", "prompt": "빛나는 실가루 줍기"}
+    {"id": "forest_dust_01", "objectiveKey": "forest_glowing_dust", "group": "near_clearing", "assetKey": "glowing-yarn-dust", "label": "실가루(임시)", "prompt": "빛나는 실가루 줍기"},
+    {"id": "forest_dust_02", "objectiveKey": "forest_glowing_dust", "group": "near_clearing", "assetKey": "glowing-yarn-dust", "label": "실가루(임시)", "prompt": "빛나는 실가루 줍기"},
+    {"id": "forest_dust_03", "objectiveKey": "forest_glowing_dust", "group": "near_clearing", "assetKey": "glowing-yarn-dust", "label": "실가루(임시)", "prompt": "빛나는 실가루 줍기"},
+    {"id": "forest_dust_04", "objectiveKey": "forest_glowing_dust", "group": "detour", "assetKey": "glowing-yarn-dust", "label": "실가루(임시)", "prompt": "빛나는 실가루 줍기"},
+    {"id": "forest_dust_05", "objectiveKey": "forest_glowing_dust", "group": "detour", "assetKey": "glowing-yarn-dust", "label": "실가루(임시)", "prompt": "빛나는 실가루 줍기"},
+    {"id": "forest_dust_06", "objectiveKey": "forest_glowing_dust", "group": "detour", "assetKey": "glowing-yarn-dust", "label": "실가루(임시)", "prompt": "빛나는 실가루 줍기"},
+    {"id": "forest_dust_07", "objectiveKey": "forest_glowing_dust", "group": "detour", "assetKey": "glowing-yarn-dust", "label": "실가루(임시)", "prompt": "빛나는 실가루 줍기"},
+    {"id": "forest_dust_08", "objectiveKey": "forest_glowing_dust", "group": "near_wild", "assetKey": "glowing-yarn-dust", "label": "실가루(임시)", "prompt": "빛나는 실가루 줍기"},
+    {"id": "forest_dust_09", "objectiveKey": "forest_glowing_dust", "group": "near_wild", "assetKey": "glowing-yarn-dust", "label": "실가루(임시)", "prompt": "빛나는 실가루 줍기"},
+    {"id": "forest_dust_10", "objectiveKey": "forest_glowing_dust", "group": "near_wild", "assetKey": "glowing-yarn-dust", "label": "실가루(임시)", "prompt": "빛나는 실가루 줍기"}
   ],
   "storyPoints": [
-    {"id": "forest_cut_thread", "kind": "inspect", "assetKey": "placeholder-point", "label": "잘린 실오라기(임시)", "prompt": "잘린 실 살펴보기"},
+    {"id": "forest_cut_thread", "kind": "inspect", "assetKey": "cut-yarn-strand", "label": "잘린 실오라기(임시)", "prompt": "잘린 실 살펴보기"},
     {"id": "forest_bopuli_ambush", "kind": "battle", "assetKey": "placeholder-point", "label": "보풀이 공터(임시)", "prompt": "보풀이에게 다가가기"},
     {"id": "forest_bopuli_return", "kind": "npc", "assetKey": "placeholder-point", "label": "보풀이(임시)", "prompt": "보풀이에게 실가루 건네기"},
     {"id": "forest_hidden_path", "kind": "gate", "assetKey": "placeholder-point", "label": "먼지바람에 가린 길(임시)", "prompt": "나침판 꺼내기"},
     {"id": "forest_giant_knot", "kind": "battle", "assetKey": "placeholder-point", "label": "거대 실밥 매듭(임시)", "prompt": "거대 매듭에 다가가기"},
-    {"id": "forest_first_knot_awaken", "kind": "inspect", "assetKey": "placeholder-point", "label": "끊어진 오래된 실(임시)", "prompt": "첫 매듭 살펴보기"},
+    {"id": "forest_first_knot_awaken", "kind": "inspect", "assetKey": "ancient-yarn-strand", "label": "끊어진 오래된 실(임시)", "prompt": "첫 매듭 살펴보기"},
     {"id": "forest_dansuring", "kind": "discover", "assetKey": "placeholder-point", "label": "실뿌리 문(임시)", "prompt": "단수링 살펴보기"}
   ],
+  "render": {
+    "_note": "최종 에셋 연결 계약. assetKey는 save-a-turby/src/assets의 파일명(확장자 제외) 런타임 키다. 해당 이미지가 없으면 화면은 회색상자·임시 도형을 그대로 쓴다. 아래 오버레이의 x·y(중심)·크기는 현재 회색상자 배치에 맞춘 임시 앵커이며 최종 좌표가 아니다(제안: docs/to_codex/2026-10-06/forest_final_coordinate_proposal.md).",
+    "background": {"assetKey": "forest-base"},
+    "overlays": [
+      {"id": "overlay_hidden_path_reveal", "assetKey": "hidden-path-reveal", "x": 2600, "y": 1250, "width": 960, "height": 560, "visibleAfter": "forest_hidden_path_opened"},
+      {"id": "overlay_hidden_yarn_path", "assetKey": "hidden-yarn-path", "x": 2580, "y": 1250, "width": 768, "height": 256, "visibleAfter": "forest_hidden_path_opened"}
+    ]
+  },
   "layout": {
     "zones": [
       {"id": "zone_entry", "label": "숲 입구", "x": 1440, "y": 1100, "width": 320, "height": 220},
@@ -78,8 +86,8 @@
       {"id": "wall_root_b", "label": "", "x": 2860, "y": 1330, "width": 40, "height": 170, "visibleAfter": "forest_hidden_path_opened"}
     ],
     "gates": [
-      {"id": "gate_hidden_path", "label": "먼지바람", "x": 2300, "y": 1170, "width": 40, "height": 160, "openEvent": "forest_hidden_path_opened"},
-      {"id": "gate_root", "label": "닫힌 실뿌리", "x": 2860, "y": 1170, "width": 40, "height": 160, "openEvent": "forest_first_knot_equipped", "visibleAfter": "forest_hidden_path_opened"}
+      {"id": "gate_hidden_path", "label": "먼지바람", "x": 2300, "y": 1170, "width": 40, "height": 160, "openEvent": "forest_hidden_path_opened", "closedAssetKey": "dust-wind-closed", "openAssetKey": null, "art": {"x": 2320, "y": 1250, "width": 320, "height": 360}},
+      {"id": "gate_root", "label": "닫힌 실뿌리", "x": 2860, "y": 1170, "width": 40, "height": 160, "openEvent": "forest_first_knot_equipped", "visibleAfter": "forest_hidden_path_opened", "closedAssetKey": "root-gate-closed", "openAssetKey": "root-gate-open", "art": {"x": 2880, "y": 1250, "width": 480, "height": 520}}
     ]
   },
   "spawnPoint": {

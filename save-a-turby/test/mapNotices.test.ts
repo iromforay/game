@@ -5,6 +5,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { NoticeGate, POSITION_CORRECTED_TEXT, WILD_HINT_ENGAGED, WILD_HINT_NEAR, WILD_NOTICE_REPEAT_MS, WILD_UNREACHABLE_TEXT, wildNoticeKey, wildUnreachableText } from '../src/story/mapNotices.ts';
 import { canLeaveToVillage, canRetry, DeferredRestore, OnceGuard, ackFailureAllowsExit, promptKindOf, RESTORE_PROMPT, RESTORE_TO_VILLAGE_TEXT, RESULT_ACK_RETRY_TEXT, RESTORE_RETRY_LABEL, RESTORE_SLOW_MS, RESTORE_TEXT, RESTORE_VILLAGE_LABEL, RestoreAttempts, shouldPromptBattle } from '../src/state/restoreAttempt.ts';
+import { isUnackedResultError, recoverUnackedResult, UNACKNOWLEDGED_RESULT_CODE } from '../src/state/unackedResult.ts';
 import { FALLBACK_ENCOUNTER_RADIUS_PX, resolveEncounterRadius } from '../src/net/encounterRadius.ts';
 import { LEGEND_LABEL, legendEntries } from '../src/ui/screenStates.ts';
 
@@ -192,4 +193,26 @@ test('복원 안내가 새 활동으로 우회되지 않는다: deferredRestore�
   assert.equal([...village.matchAll(/deferredRestore\.clear\(\)/g)].length, 2, '서버가 전투 없음을 확인할 때와 안내에 답할 때만');
   assert.match(village, /if \(!battle\) deferredRestore\.clear\(\); \/\/ 서버가 "남은 전투 없음"을 확인했다/);
   assert.match(village, /this\.locked = true; \/\/ 안내에 답하기 전에는 새 활동/);
+});
+
+test('미확인 결과 우회 방지(클라이언트): 새 활동이 거부되면 계속 시도하지 않고 그 결과 화면으로 가며, 조회가 실패하면 마을에서 복원 안내를 유지한다. 오래된 응답은 새 화면을 덮지 않는다', async () => {
+  const err = Object.assign(new Error('확인하지 않은 전투 결과가 있어요. 결과를 먼저 확인해 주세요.'), { code: UNACKNOWLEDGED_RESULT_CODE, battleId: 'b-1' });
+  assert.equal(isUnackedResultError(err), true);
+  assert.equal(isUnackedResultError(new Error('x')), false);
+  const calls: string[] = [];
+  const ports = (over: Partial<Parameters<typeof recoverUnackedResult>[1]> = {}) => ({ fetchSnapshot: async (id: string) => ({ id }), showResult: () => calls.push('result'), fallbackToVillage: () => calls.push('village'), isStale: () => false, ...over });
+  assert.equal(await recoverUnackedResult(new Error('다른 오류'), ports()), false, '다른 오류는 처리하지 않는다');
+  assert.equal(await recoverUnackedResult(err, ports()), true);
+  assert.equal(await recoverUnackedResult(err, ports({ fetchSnapshot: async () => { throw new Error('network'); } })), true);
+  assert.equal(await recoverUnackedResult(Object.assign(new Error('x'), { code: UNACKNOWLEDGED_RESULT_CODE, battleId: null }), ports()), true);
+  assert.equal(await recoverUnackedResult(err, ports({ isStale: () => true })), true);
+  assert.deepEqual(calls, ['result', 'village', 'village'], '결과 화면 / 조회 실패·ID 없음은 마을 / 오래된 응답은 아무것도 하지 않음');
+  // 새 활동 진입 네 곳이 모두 같은 복원 경로를 쓴다
+  for (const f of ['scenes/MapScene.ts', 'scenes/StageSelectScene.ts', 'scenes/StoryDialogueScene.ts']) assert.match(src(f), /recoverUnackedResult\(err,/, f);
+  assert.equal([...src('scenes/MapScene.ts').matchAll(/recoverUnackedResult\(err,/g)].length, 2, '맵 입장·야생 조우');
+});
+
+test('결과 확인에 성공하면 접속 인증 때 받아 둔 활성 전투 값을 비운다(이미 확인한 결과를 마을이 다시 안내하지 않는다)', () => {
+  const c = src('net/battleClient.ts');
+  assert.match(c, /await roomClient\.request<\{ acknowledged: true \}>\('battle:result:ack', \{ battleId \}\);\s*if \(roomClient\.activeBattle\?\.battleId === battleId\) roomClient\.activeBattle = null;/);
 });

@@ -5,6 +5,10 @@ import type { BattleSnapshot } from '../net/battleTypes';
 import { runDialogue, STORY_BATTLE_RETRY_MESSAGE, type DialogueFile, type RunnerPorts, type StoryBattleResult } from '../story/dialogueRunner';
 import { battleEntryOf, battleResultOf, battleStartErrorResult, chapterOfSegment, type StoryPlay } from '../story/storyFlow';
 import { OpeningScene, type OpeningSceneData } from './OpeningScene';
+import { recoverUnackedResult } from '../state/unackedResult';
+import { deferredRestore } from '../state/restoreAttempt';
+import { resumeBattle } from './VillageScene';
+
 
 // M4-C 장 대화 화면 — 오프닝과 같은 대사 표시를 쓰고, 재생 범위는 서버가 정한 구간(play)만, storyBattle은 서버 스토리 전투로 연결한다.
 // 전투 동안 이 화면은 잠들어(sleep) 대화 위치를 그대로 들고 있다가, 전투 결과 화면이 깨우면(wake) 같은 항목에서 이어 간다.
@@ -63,6 +67,7 @@ export class StoryDialogueScene extends OpeningScene {
     try {
       snapshot = await battleClient.startStory(encounterKey);
     } catch (err) {
+      if (await recoverUnackedResult(err, { fetchSnapshot: (id) => battleClient.snapshot(id).then((r) => r.snapshot), showResult: (snap) => resumeBattle(this, snap), fallbackToVillage: () => { deferredRestore.mark(); this.scene.start('Village'); }, isStale: () => !this.sys.isActive() })) throw err;
       const r = battleStartErrorResult(err instanceof RoomApiError ? err.code : undefined);
       if (r) return r;
       throw err; // 통신·상태 오류 → 진행기가 다시 시도 안내

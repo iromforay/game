@@ -387,8 +387,11 @@ test('결과 복원 범위: 보존 기간이 지난 결과는 복원하지 않�
     await g2.playBattle();
     await g2.until('보상 확정', 's.battle.settled === true');
     const doneId = (await g2.state()).battle.battleId as string;
+    const denied = (await g2.page.evaluate(() => (window as any).__dev.rawRequest('battle:start', { spawnIndex: 9 }))) as { ok: boolean; code: string }; // eslint-disable-line @typescript-eslint/no-explicit-any
+    assert.deepEqual([denied.ok, denied.code], [false, 'UNACKNOWLEDGED_BATTLE_RESULT'], '결과 확인 전에는 새 조우가 시작되지 않는다(v4 §1)');
+    await g2.page.evaluate((id) => (window as any).__dev.rawRequest('battle:result:ack', { battleId: id }), doneId); // eslint-disable-line @typescript-eslint/no-explicit-any
     const started = (await g2.page.evaluate(() => (window as any).__dev.rawRequest('battle:start', { spawnIndex: 9 }))) as { ok: boolean; snapshot?: { battleId: string } }; // eslint-disable-line @typescript-eslint/no-explicit-any
-    assert.equal(started.ok, true, '결과 확인 전에도 새 조우가 시작된다');
+    assert.equal(started.ok, true, '확인 뒤에는 새 조우가 시작된다');
     const liveId = started.snapshot!.battleId;
     assert.notEqual(liveId, doneId);
     await g2.reload();
@@ -427,6 +430,54 @@ test('마을 복귀 뒤 미확인 전투 결과: 연결이 돌아오면 "확인�
     await g.until('같은 결과 화면', `s.battle.battleId === ${JSON.stringify(doneId)} && s.battle.resultShown && s.battle.settled === true`);
     assert.deepEqual([captures(device), results(device)], [1, 1]);
     await g.capture('13_unconfirmed_result_restored_from_village');
+  }, backend, device);
+  await g.close();
+});
+
+test('미확인 결과 우회 방지(v4 §2): 확인 전 직접 새 방 생성·야생 전투 시작은 거부(복원할 전투 ID 포함), 마을 UI의 새 활동은 결과 화면으로 복원, 확인 뒤 새 활동 정상 시작', async () => {
+  const device = 'e2e-result-gate';
+  const A = { index: 2, code: 'muldeuli', x: 1760, y: 1330 };
+  const B = { index: 9, code: 'muldeuli', x: 1760, y: 1340 };
+  await backend.start(withWilds((db) => { seedExplorer(device)(db); sturdy(db); }, [A, B]), { 'battle.resolvedRetentionSeconds': 600 });
+  const g = await Game.open(browser, `${vite.url}/?device=${device}`, device);
+  await withDiagnosis(g, 'result-gate', async () => {
+    await startBattle(g, A);
+    await g.playBattle();
+    await g.until('보상 확정', 's.battle.settled === true');
+    const doneId = (await g.state()).battle.battleId as string;
+    const raw = (event: string, body?: unknown) => g.page.evaluate(([e, b]) => (window as any).__dev.rawRequest(e, b), [event, body] as const) as Promise<{ ok?: boolean; code?: string; battleId?: string; message?: string }>; // eslint-disable-line @typescript-eslint/no-explicit-any
+    // 1) 직접 새 방 생성, 2) 직접 야생 전투 시작 — 거부되고 복원할 전투 ID가 있다
+    const room = await raw('room:create', { stageCode: 'forest' });
+    assert.deepEqual([room.ok, room.code, room.battleId, room.message], [false, 'UNACKNOWLEDGED_BATTLE_RESULT', doneId, '확인하지 않은 전투 결과가 있어요. 결과를 먼저 확인해 주세요.']);
+    const start = await raw('battle:start', { spawnIndex: B.index });
+    assert.deepEqual([start.ok, start.code, start.battleId], [false, 'UNACKNOWLEDGED_BATTLE_RESULT', doneId]);
+    assert.equal(backend.session(device)!.wilds.find((w) => w.index === B.index)!.state, 'free', '거부된 조우는 상태를 바꾸지 않았다');
+    // 3) 마을 UI에서 새 활동 진입: 복원 화면에서 마을로 나온 뒤(접속 인증 응답을 일부러 실패시켜 안내 없이 마을에 머문다)
+    const hold = backend.holdHello();
+    await g.reload();
+    await g.until('지연 안내', "s.boot && s.boot.phase === 'slow' && s.boot.village === true", 20_000);
+    const btn = (await g.page.evaluate(() => (window as any).__dev.find('마을 화면으로 돌아가기', true))) as { x: number; y: number }; // eslint-disable-line @typescript-eslint/no-explicit-any
+    await g.click(btn.x, btn.y);
+    await g.waitScene('Village');
+    await g.until('마을 준비', 's.village && s.village.ready');
+    hold.release(1, true);
+    hold.restore();
+    await g.page.waitForTimeout(500);
+    assert.ok(!(await g.state()).village.restorePrompt, '접속 인증이 실패했으므로 마을은 안내 없이 열려 있다');
+    const exit = (await g.page.evaluate(() => (window as any).__game.scene.getScene('Village').layout.interactions.find((i: any) => i.type === 'exit'))) as { zone: { x: number; y: number; w: number; h: number }; prompt: string }; // eslint-disable-line @typescript-eslint/no-explicit-any
+    await g.walkTo('Village', { x: exit.zone.x + exit.zone.w / 2, y: exit.zone.y + exit.zone.h / 2 }, 'keys', "s.village && s.village.prompt === 'exit'");
+    await g.clickLabel(exit.prompt);
+    await g.waitScene('StageSelect');
+    await g.clickLabel('1장 — 숲', { exact: true });
+    await g.until('결과 화면으로 복원', `s.scenes.includes('Battle') && s.battle && s.battle.battleId === ${JSON.stringify(doneId)} && s.battle.resultShown && s.battle.settled === true`);
+    assert.ok(!(await g.state()).scenes.includes('Map'), '새 활동(맵 입장)이 계속 시도되지 않았다');
+    await g.capture('14_new_activity_denied_restored_to_result');
+    assert.deepEqual([captures(device), results(device)], [1, 1]);
+    // 4) 결과 확인 → (탐험 방이 없으므로) 마을 → 새 활동 정상 시작
+    await g.clickResult("s.scenes.includes('Village')");
+    await enterForest(g);
+    assert.ok((await g.state()).scenes.includes('Map'), '확인 뒤 새 탐험이 시작된다');
+    assert.deepEqual([captures(device), results(device)], [1, 1]);
   }, backend, device);
   await g.close();
 });

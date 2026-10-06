@@ -25,14 +25,18 @@ import { AVATAR_IMAGE, CHARACTER_IMAGES, BACKGROUND_TILES } from '../assets/regi
 import { collectStoryObject, fetchStageView, fetchStory, triggerStory } from '../api/client';
 import { DELIVERY_ITEM_NAME, deliveryGoalText, shortageText, type StoryDelivery, type StoryPlay } from '../story/storyFlow';
 import { CLIENT_BODY_HALF, collectedText, nearestInteractable, promptText, solidRects, stepWithSolids, type Interactable, type StageRect, type StageView } from '../story/storyStage';
+import { MAP_DEPTH, planStageRender, type StageRenderPlan } from '../story/mapRender';
+import { recoverUnackedResult } from '../state/unackedResult';
+import { deferredRestore } from '../state/restoreAttempt';
+import { resumeBattle } from './VillageScene';
 import { NoticeGate, POSITION_CORRECTED_TEXT, WILD_HINT_ENGAGED, WILD_HINT_NEAR, WILD_NOTICE_REPEAT_MS, wildNoticeKey, wildUnreachableText } from '../story/mapNotices';
 
 // 배치된 자리 바로 옆(조우 반경 안)의 야생은 반경의 이 배수 밖으로 벗어난 뒤에야 다시 조우한다. 서버 반경이 크게 바뀌어도 같은 비율로 동작한다
 const QUIET_EXIT_FACTOR = 1.1;
 const WILD_RECHECK_MS = 1500; // 서버가 "닿지 않는다"고 한 야생을 다시 물어보기까지의 간격
 const AVATAR_HALF = CLIENT_BODY_HALF; // 막힌 곳 판정에 쓰는 아바타 몸 반지름(px) — 서버와 같은 geometry 계약의 값
-const DEPTH_GROUND = -20;
-const DEPTH_STORY = -5; // 이야기 지점·오브젝트 표식(아바타·야생 터비보다 아래)
+const DEPTH_GROUND = MAP_DEPTH.greybox;
+const DEPTH_STORY = MAP_DEPTH.story; // 이야기 지점·오브젝트 표식·문(아바타·야생 터비보다 아래)
 
 interface WildMarker {
   info: WildInfo; // 서버가 내려 준 마커(위치·종류) — 클라이언트 설정에는 야생 좌표가 없다
@@ -186,10 +190,13 @@ export class MapScene extends Phaser.Scene {
     const height = (this.stageHeight = view?.size?.height ?? stage.height);
 
     this.cameras.main.setBackgroundColor('#20301c');
-    this.cameras.main.setBounds(0, 0, width, height);
-
-    // 회색상자(임시) 배치가 있으면 반복 배경 대신 배치를 그린다 — 최종 지도가 오면 이 분기만 바꾼다
-    if (view?.greybox && view.layout) this.drawGreybox(view, width, height);
+    // 렌더링 계획(10-06 v2): 대형 배경 한 장(최종) / 회색상자(임시) / 반복 타일(지역 배치가 없는 다른 지역)을 서버 화면 데이터와 로드된 텍스처로 정한다.
+    // 최종 배경 텍스처가 없으면(미납품·로드 실패) 임시 회색상자가 그대로 남는다. tileSprite는 최종 숲 분기에서 쓰지 않는다
+    const plan = planStageRender(view, (key) => this.textures.exists(key), { width, height });
+    this.cameras.main.setBounds(plan.bounds.x, plan.bounds.y, plan.bounds.width, plan.bounds.height);
+    this.renderMode = plan.background.mode;
+    if (plan.background.mode === 'final') this.add.image(0, 0, plan.background.assetKey).setOrigin(0, 0).setDisplaySize(plan.background.width, plan.background.height).setDepth(MAP_DEPTH.background);
+    else if (plan.background.mode === 'greybox' && view?.layout) this.drawGreybox(view, width, height);
     else this.add.tileSprite(0, 0, width, height, `bg-${stage.code}`).setOrigin(0, 0);
 
     this.avatar = this.add.image(width / 2, height / 2, 'avatar').setDisplaySize(44, 44);
@@ -328,15 +335,26 @@ export class MapScene extends Phaser.Scene {
       this.storyLayer.push(o);
       return o;
     };
-    for (const gate of view?.gates ?? []) {
-      if (gate.open) continue;
+    // 같은 서버 화면 데이터(view) 한 번으로 문 그림·오버레이·충돌(this.solids)을 함께 바꾼다 — 숨은 길의 그림과 통과 가능 여부가 어긋나지 않는다
+    const plan: StageRenderPlan = planStageRender(view, (key) => this.textures.exists(key), { width: this.stageWidth, height: this.stageHeight });
+    for (const o of plan.overlays) keep(this.add.image(o.x, o.y, o.assetKey).setDisplaySize(o.width, o.height).setDepth(o.depth));
+    for (const g of plan.gates) {
+      const gate = view!.gates.find((x) => x.id === g.id)!;
+      if (g.art) keep(this.add.image(g.art.x, g.art.y, g.art.assetKey).setDisplaySize(g.art.width, g.art.height).setDepth(DEPTH_STORY));
+      if (!g.placeholder) continue; // 그림이 있거나 열린 문 — 임시 사각형은 닫힌 문의 그림이 없을 때만
       keep(this.add.rectangle(gate.x, gate.y, gate.width, gate.height, 0x6b5a8a, 0.95).setOrigin(0, 0).setStrokeStyle(2, 0xdcd3f4, 1).setDepth(DEPTH_STORY));
       keep(this.add.text(gate.x + gate.width / 2, gate.y - 6, gate.label, { fontSize: '13px', color: '#dcd3f4' }).setOrigin(0.5, 1).setDepth(DEPTH_STORY));
     }
     for (const o of view?.objects ?? []) {
       const locked = o.state === 'locked';
       const c = keep(this.add.container(o.x, o.y).setDepth(DEPTH_STORY));
-      // 임시 도형(마름모): 최종 에셋이 오면 o.assetKey로 그림을 바꾼다
+      const art = plan.objects.find((x) => x.id === o.id)?.assetKey;
+      if (art) {
+        // 최종 그림이 있으면 그림으로(잠긴 것은 흐리게). 수집 반경 원·글자는 일반 화면에 내지 않는다
+        c.add(this.add.image(0, 0, art).setDisplaySize(64, 64).setAlpha(locked ? 0.45 : 1));
+        continue;
+      }
+      // 임시 도형(마름모): 최종 에셋이 없을 때만
       const shape = this.add.graphics();
       shape.fillStyle(locked ? 0x8a8a8a : 0xffd23f, 1).fillPoints([{ x: 0, y: -16 }, { x: 14, y: 0 }, { x: 0, y: 16 }, { x: -14, y: 0 }], true);
       shape.lineStyle(2, 0x2a2a2a, 1).strokePoints([{ x: 0, y: -16 }, { x: 14, y: 0 }, { x: 0, y: 16 }, { x: -14, y: 0 }], true);
@@ -344,7 +362,11 @@ export class MapScene extends Phaser.Scene {
     }
     for (const pt of view?.points ?? []) {
       const c = keep(this.add.container(pt.x, pt.y).setDepth(DEPTH_STORY));
-      c.add([this.add.circle(0, 0, pt.radius).setStrokeStyle(2, 0xb9a6ee, 0.5), this.add.circle(0, 0, 20).setStrokeStyle(4, 0xb9a6ee, 1), this.add.circle(0, 0, 8, 0xb9a6ee), this.add.text(0, 28, pt.label, { fontSize: '13px', color: '#e6dcff' }).setOrigin(0.5, 0)]);
+      const art = plan.points.find((x) => x.id === pt.id)?.assetKey;
+      // 지점은 그림이 있어도 눈에 띄는 고리(상호작용 단서)를 함께 둔다 — 그림이 배경과 섞여 목표를 놓치지 않게. 글자는 임시 도형일 때만
+      if (art) c.add(this.add.image(0, 0, art).setScale(1).setOrigin(0.5, 0.7));
+      c.add([this.add.circle(0, 0, pt.radius).setStrokeStyle(2, 0xb9a6ee, 0.5), this.add.circle(0, 0, 20).setStrokeStyle(4, 0xb9a6ee, 1), this.add.circle(0, 0, 8, 0xb9a6ee)]);
+      if (!art) c.add(this.add.text(0, 28, pt.label, { fontSize: '13px', color: '#e6dcff' }).setOrigin(0.5, 0));
     }
     this.refreshMiniMap();
     this.setActiveTarget(null);
@@ -366,7 +388,7 @@ export class MapScene extends Phaser.Scene {
         : { id: `wild-${m.index}`, type: 'wild' as const, name: this.characterName(m.info.characterCode), x: m.info.x, y: m.info.y, hint: m.info.state === 'engaged' ? WILD_HINT_ENGAGED : WILD_HINT_NEAR },
     );
     // 전체 지도·미니맵: 회색상자 모드에서만 길·벽·문·공개된 구역을 임시 도형으로 그린다(최종 지도가 오면 이 임시 배경은 없어진다)
-    const terrain = view?.greybox && view.layout ? { zones: view.layout.zones, paths: view.layout.paths, blockers: view.layout.blockers, gates: view.gates } : undefined;
+    const terrain = view?.layout ? { zones: view.layout.zones, paths: view.layout.paths, blockers: view.layout.blockers, gates: view.gates } : undefined;
     this.miniMap?.setScene({ ...this.mapView, greybox: terrain }, [...wildMarkers, ...storyMarkers]);
   }
 
@@ -588,8 +610,24 @@ export class MapScene extends Phaser.Scene {
       if (story?.play) this.launchStory(story.play);
     } catch (err) {
       this.inRoomMap = false;
+      // 10-06 v4 §1: 확인하지 않은 전투 결과가 있어 서버가 맵 입장을 거부했다 — 그 결과 화면으로 간다(조회가 실패하면 마을에서 복원 안내)
+      if (await recoverUnackedResult(err, { fetchSnapshot: (id) => battleClient.snapshot(id).then((r) => r.snapshot), showResult: (snap) => resumeBattle(this, snap), fallbackToVillage: () => { deferredRestore.mark(); this.scene.start('Village'); }, isStale: () => !this.sys.isActive() })) return;
       console.warn('[room] 맵 입장 실패:', err);
     }
+  }
+
+  private renderMode: StageRenderPlan['background']['mode'] = 'tile';
+
+  // 진단용 요약(렌더링): 배경 방식·오버레이·문 그림·tileSprite 수 — 최종 에셋 연결 전후를 눈으로 보지 않고도 확인한다
+  get debugRender() {
+    const plan = planStageRender(this.stageView, (key) => this.textures.exists(key), { width: this.stageWidth, height: this.stageHeight });
+    return {
+      background: this.renderMode,
+      overlays: plan.overlays.map((o) => o.assetKey),
+      gates: plan.gates.map((g) => ({ id: g.id, open: g.open, art: g.art?.assetKey ?? null, placeholder: g.placeholder })),
+      tileSprites: this.children.list.filter((c) => c.type === 'TileSprite').length,
+      imageObjects: this.storyLayer.filter((o) => o.type === 'Image').length,
+    };
   }
 
   // 진단용 요약(화면 상태만): 서버가 정한 위치에 배치됐는가, 서버 보정 횟수와 마지막 사유
@@ -891,6 +929,7 @@ export class MapScene extends Phaser.Scene {
       this.goPartySelect(snapshot);
     } catch (err) {
       if (stale()) return;
+      if (await recoverUnackedResult(err, { fetchSnapshot: (id) => battleClient.snapshot(id).then((r) => r.snapshot), showResult: (snap) => resumeBattle(this, snap), fallbackToVillage: () => { deferredRestore.mark(); this.scene.start('Village'); }, isStale: stale })) return; // 10-06 v4 §1
       marker.encountered = false;
       marker.retryAt = Date.now() + 4000;
       // 10-02 v5 §1·v6 §3: 벽·닫힌 문 너머라 서버가 거부한 야생 — 전투도 마커도 그대로 두고,

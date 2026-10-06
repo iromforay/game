@@ -369,6 +369,8 @@ export class BattleScene extends Phaser.Scene {
   private exitTo(outcome: BattleEnded['outcome'] | 'cancelled', capturedIndices = this.initData.capturedIndices) {
     const end = this.snap.story ? { encounterKey: this.snap.story.encounterKey, outcome } : null;
     const d = returnDestination(this.initData.returnTo, { scene: 'Map', data: { stageCode: this.initData.stageCode, capturedIndices, removedIndices: this.initData.removedIndices } }, end);
+    // 결과 화면이 탐험 방이 없는 상태(새 활동 거부로 방을 이미 나온 경우)에서 열렸다면 맵이 아니라 마을로 — 맵은 탐험 세션이 있어야 한다
+    if (d.mode !== 'wake' && d.scene === 'Map' && !roomClient.room) return void this.scene.start('Village');
     if (d.mode === 'wake') {
       this.scene.wake(d.scene, d.data); // 대화 화면이 전투 결과를 받아 같은 위치에서 이어 간다
       this.scene.stop();

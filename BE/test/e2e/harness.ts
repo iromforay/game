@@ -216,7 +216,7 @@ export async function launchBrowser(): Promise<Browser> {
         '예) PowerShell: $env:CHROME_PATH="C:/Program Files/Google/Chrome/Application/chrome.exe"; npm run test:e2e  ·  bash: CHROME_PATH=/usr/bin/google-chrome npm run test:e2e (test/e2e/README.md)',
     );
   }
-  return chromium.launch({ executablePath, headless: process.env.E2E_HEADED !== '1' });
+  return chromium.launch({ executablePath, headless: process.env.E2E_HEADED !== '1', args: ['--mute-audio'] });
 }
 
 type Net = { at: number; kind: 'http' | 'socket'; what: string; status?: number; code?: string };

@@ -43,17 +43,19 @@ export interface MapPlayer {
 export class RoomApiError extends Error {
   readonly code: string;
   readonly snapshot: BattleSnapshot | null; // STATE_MISMATCH일 때 서버가 함께 내려주는 최신 전투 상태
+  readonly battleId: string | null; // UNACKNOWLEDGED_BATTLE_RESULT일 때 복원할 전투(그 플레이어 자신의 전투)
   readonly reason: string | null; // 서버가 덧붙인 거부 사유(예: WILD_UNREACHABLE의 blocked·locked_zone) — 좌표 같은 정보는 없다
 
-  constructor(code: string, message: string, snapshot: BattleSnapshot | null = null, reason: string | null = null) {
+  constructor(code: string, message: string, snapshot: BattleSnapshot | null = null, reason: string | null = null, battleId: string | null = null) {
     super(message);
     this.code = code;
     this.snapshot = snapshot;
     this.reason = reason;
+    this.battleId = battleId;
   }
 }
 
-type Ack<T> = ({ ok: true } & T) | { ok: false; code: string; message: string; reason?: string; snapshot?: BattleSnapshot };
+type Ack<T> = ({ ok: true } & T) | { ok: false; code: string; message: string; reason?: string; battleId?: string; snapshot?: BattleSnapshot };
 
 interface Events {
   state: (room: RoomState | null) => void;
@@ -246,7 +248,7 @@ class RoomClient {
     const res = (await this.socket!.timeout(5000).emitWithAck(event, body)) as Ack<T>;
     if (!res.ok) {
       this.observeServerTime(res.snapshot?.serverNow);
-      throw new RoomApiError(res.code, res.message, res.snapshot ?? null, res.reason ?? null);
+      throw new RoomApiError(res.code, res.message, res.snapshot ?? null, res.reason ?? null, res.battleId ?? null);
     }
     this.observeServerTime((res as { snapshot?: BattleSnapshot }).snapshot?.serverNow);
     return res as unknown as T;

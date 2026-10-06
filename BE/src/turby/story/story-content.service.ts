@@ -51,7 +51,61 @@ export interface StageStoryData {
   objects?: { id: string; objectiveKey: string; group: string; assetKey: string; label: string; prompt: string }[];
   storyPoints?: { id: string; kind: string; assetKey: string; label: string; prompt: string }[];
   // visibleAfter: 그 이벤트 전에는 지도·화면에 내려 주지 않는다(숨은 구역의 내부 정보). 통과 불가 판정은 표시 여부와 무관하게 서버가 한다
-  layout?: { zones: StageZone[]; paths: StagePath[]; blockers: (StageRect & { visibleAfter?: string })[]; gates: (StageRect & { openEvent: string; visibleAfter?: string })[] };
+  layout?: { zones: StageZone[]; paths: StagePath[]; blockers: (StageRect & { visibleAfter?: string })[]; gates: StageGateData[] };
+  // 10-06 v2(최종 에셋 연결 계약): 대형 배경과 진행 상태별 오버레이의 런타임 에셋 키. 에셋이 없으면 화면이 회색상자·임시 도형을 그대로 쓴다
+  render?: { background?: { assetKey: string }; overlays?: StageOverlayData[] };
+}
+
+// 문: 충돌 사각형(x·y·width·height)과 그림(art, 중심 좌표)은 따로다 — 그림이 충돌 영역보다 커도 판정은 사각형으로만 한다.
+// closedAssetKey/openAssetKey: 닫힘·열림 텍스처 키(열림 그림이 없으면 null). 열림 여부(open)는 서버가 openEvent로 한 번만 정하고 그림과 충돌이 같은 값을 쓴다
+export interface StageGateData extends StageRect {
+  openEvent: string;
+  visibleAfter?: string;
+  closedAssetKey?: string | null;
+  openAssetKey?: string | null;
+  art?: { x: number; y: number; width: number; height: number };
+}
+export interface StageOverlayData {
+  id: string;
+  assetKey: string;
+  x: number; // 중심
+  y: number;
+  width: number;
+  height: number;
+  visibleAfter?: string; // 이 이벤트 뒤에만
+  hiddenAfter?: string; // 이 이벤트 뒤에는 사라진다
+}
+
+// 지역 데이터의 render·문 그림 블록 검증 — 잘못되면 서버가 뜨지 않는다(geometry 계약과 같은 원칙)
+export function validateRender(data: StageStoryData, stageCode: string): void {
+  const bad: string[] = [];
+  const num = (v: unknown) => typeof v === 'number' && Number.isFinite(v);
+  const size = (r: Record<string, unknown> | undefined, at: string) => {
+    if (!r || !num(r.x) || !num(r.y) || !num(r.width) || !num(r.height) || (r.width as number) <= 0 || (r.height as number) <= 0) bad.push(`${at}: x·y·width·height는 숫자(너비·높이는 0보다 큼)`);
+  };
+  const key = (v: unknown, at: string, nullable = false) => {
+    if (!(typeof v === 'string' && /^[a-z0-9][a-z0-9_-]{0,63}$/.test(v)) && !(nullable && v === null)) bad.push(`${at}: 에셋 키 형식이 아니다`);
+  };
+  const render = data.render;
+  if (render !== undefined) {
+    if (render.background !== undefined) key(render.background.assetKey, 'render.background.assetKey');
+    const ids = new Set<string>();
+    (render.overlays ?? []).forEach((o, i) => {
+      const at = `render.overlays[${i}]`;
+      if (typeof o.id !== 'string' || ids.has(o.id)) bad.push(`${at}: id가 없거나 겹친다`);
+      else ids.add(o.id);
+      key(o.assetKey, `${at}.assetKey`);
+      size(o as unknown as Record<string, unknown>, at);
+      for (const f of ['visibleAfter', 'hiddenAfter'] as const) if (o[f] !== undefined && typeof o[f] !== 'string') bad.push(`${at}.${f}: 이벤트 이름이 아니다`);
+    });
+  }
+  for (const g of data.layout?.gates ?? []) {
+    const at = `layout.gates(${g.id})`;
+    if (g.closedAssetKey !== undefined) key(g.closedAssetKey, `${at}.closedAssetKey`, true);
+    if (g.openAssetKey !== undefined) key(g.openAssetKey, `${at}.openAssetKey`, true);
+    if (g.closedAssetKey || g.openAssetKey) size(g.art as unknown as Record<string, unknown> | undefined, `${at}.art`);
+  }
+  if (bad.length > 0) throw new Error(`지역 데이터(${stageCode}) render 검증 실패: ${bad.join(' / ')}`);
 }
 
 @Injectable()
@@ -87,6 +141,7 @@ export class StoryContentService implements OnModuleInit {
     if (fresh && data) {
       try {
         parseStageGeometry(data, { width: Number.MAX_SAFE_INTEGER, height: Number.MAX_SAFE_INTEGER }, stageCode);
+        validateRender(data, stageCode);
       } catch (err) {
         this.cache.delete(rel); // 다음 호출도 같은 오류를 낸다(잘못된 데이터를 조용히 쓰지 않는다)
         throw err;

@@ -173,11 +173,17 @@ export class BattleError extends Error {
   readonly code: string;
   readonly snapshot: BattleSnapshotDto | null;
   reason: string | null = null; // 내부 사유(가로막힘 등) — 좌표 같은 정보는 담지 않는다
+  battleId: string | null = null; // UNACKNOWLEDGED_BATTLE_RESULT일 때 복원할 전투(결과 화면으로 가는 길) — 그 플레이어 자신의 전투 ID뿐
 
   constructor(code: string, message: string, snapshot: BattleSnapshotDto | null = null) {
     super(message);
     this.code = code;
     this.snapshot = snapshot;
+  }
+
+  forBattle(battleId: string): this {
+    this.battleId = battleId;
+    return this;
   }
 
   because(reason: string): this {

@@ -438,6 +438,21 @@ test('통합 4(회귀): 일반 야생 전투 — 야생 마커는 서버가 위�
   // 포획 뒤: 같은 마커는 보이지 않게 되고(visible=false) 다시 조우할 수 없다. 맵에 다시 들어와도 같다
   await until(() => changes.some((w) => w.state === 'captured'));
   assert.deepEqual(changes.at(-1), { ...WILD0, state: 'captured', visible: false });
+  // 10-06 v4 §1: 결과를 확인하기 전에는 새 활동(맵 입장·전투 시작)이 거부된다 — 응답에 복원할 전투 ID가 있다
+  const blocked = await c.req('battle:start', { spawnIndex: 0 });
+  assert.deepEqual([blocked.code, blocked.battleId], ['UNACKNOWLEDGED_BATTLE_RESULT', snap.battleId]);
+  assert.equal((await c.req('map:enter', { dir: 'down' })).code, 'UNACKNOWLEDGED_BATTLE_RESULT');
+  for (const [event, body] of [['room:create', { stageCode: 'forest' }], ['room:start', undefined], ['battle:story:start', { encounterKey: 'forest_stitchling_ambush' }]] as const) {
+    const r = await c.req(event, body);
+    assert.deepEqual([event, r.ok, r.code, r.battleId, r.message], [event, false, 'UNACKNOWLEDGED_BATTLE_RESULT', snap.battleId, '확인하지 않은 전투 결과가 있어요. 결과를 먼저 확인해 주세요.']);
+  }
+  // 허용: 결과 조회·접속 인증(재접속하면 같은 결과)·방 이탈은 막지 않는다
+  assert.equal((await c.req('battle:snapshot', { battleId: snap.battleId })).ok, true);
+  c.close();
+  const back = (await c.connect()) as unknown as { battle: { battleId: string; phase: string } | null };
+  assert.deepEqual([back.battle?.battleId, back.battle?.phase], [snap.battleId, 'resolved'], '재접속하면 같은 결과 화면으로 복원');
+  assert.equal((await c.req('battle:result:ack', { battleId: snap.battleId })).ok, true);
+  assert.equal((await c.req('battle:result:ack', { battleId: snap.battleId })).ok, true, '확인 중복 호출 뒤에도 허용 상태 유지');
   assert.equal((await c.req('battle:start', { spawnIndex: 0 })).code, 'WILD_GONE', '전투 뒤 같은 마커 재조우 방지');
   const again = await c.req<{ wilds: Wild[] }>('map:enter', { dir: 'down' });
   assert.deepEqual(again.wilds, [{ ...WILD0, state: 'captured', visible: false }]);

@@ -52,6 +52,8 @@ export const WORLD_IMAGES: Record<string, string> = {
   ...buildKeyMap(import.meta.glob('./world/**/*.png', { eager: true, query: '?url', import: 'default' }) as Record<string, string>),
   ...buildKeyMap(import.meta.glob('./sprites/**/*.png', { eager: true, query: '?url', import: 'default' }) as Record<string, string>),
   ...buildKeyMap(import.meta.glob('./ui/**/*.png', { eager: true, query: '?url', import: 'default' }) as Record<string, string>),
+  // 아이템 그림(예: items/story/glowing-yarn-dust.png → glowing-yarn-dust). 지도의 수집 오브젝트가 쓴다
+  ...buildKeyMap(import.meta.glob('./items/**/*.png', { eager: true, query: '?url', import: 'default' }) as Record<string, string>),
 };
 
 // 초상화(docs/asset/integration_contract.md 2절): portraits/{인물}/{표정}.png → portrait-{인물}-{표정}.
