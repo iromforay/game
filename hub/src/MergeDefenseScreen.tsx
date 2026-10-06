@@ -22,7 +22,7 @@ import rangerUrl from './assets/merge-defense/ranger.png';
 import divineArcherUrl from './assets/merge-defense/divine-archer.png';
 import trainingYardUrl from './assets/merge-defense/training-yard-background.png';
 import candyCastleBackgroundUrl from './assets/merge-defense/candy-castle-battlefield.png';
-import { collectSilver, EMPTY_MERGE_PROFILE, fetchMergeProfile, purchaseMergeUpgrade, saveHeroDiscovery, unlockSpellbladeRecipe, upgradeCost, type MergeProfile, type MergeUpgrade } from './mergeDefenseEconomy';
+import { collectSilver, EMPTY_MERGE_PROFILE, fetchMergeProfile, purchaseMergeUpgrade, saveHeroDiscovery, saveMergeStageClear, unlockSpellbladeRecipe, upgradeCost, type MergeProfile, type MergeUpgrade } from './mergeDefenseEconomy';
 import './MergeDefenseScreen.css';
 import './MergeDefenseGrid.css';
 import './MergeDefenseWorldMap.css';
@@ -264,10 +264,32 @@ export function MergeDefenseScreen({ onExit }: { onExit: () => void }) {
   const [shopMessage, setShopMessage] = useState('은화로 모든 전투에 적용되는 영구 강화를 구매하세요.');
   const chapterStages = STAGES.filter((stage) => stage.chapter === selectedChapter);
   const clearedCount = chapterStages.filter((stage) => clearedStages[stage.id]).length;
-  const chapterOneCleared = Boolean(clearedStages[10]);
-  const chapterTwoCleared = Boolean(clearedStages[20]);
+  const chapterOneCleared = profile.highestClearedStage >= 10 || Boolean(clearedStages[10]);
+  const chapterTwoCleared = profile.highestClearedStage >= 20 || Boolean(clearedStages[20]);
 
-  useEffect(() => { fetchMergeProfile().then(setProfile).catch(() => undefined); }, []);
+  useEffect(() => {
+    fetchMergeProfile().then(async (loadedProfile) => {
+      const localClearedIds = STAGES.filter((stage) => window.localStorage.getItem(clearedKey(stage.id)) === 'true').map((stage) => stage.id);
+      const localHighestCleared = Math.max(0, Math.min(STAGES.length, (Number(window.localStorage.getItem(unlockedKey)) || 1) - 1), ...localClearedIds);
+      let nextProfile = loadedProfile;
+      // DB 도입 전 브라우저에만 남아 있던 순차 진행도를 계정에 한 번 승계한다.
+      for (let stageId = loadedProfile.highestClearedStage + 1; stageId <= localHighestCleared; stageId += 1) {
+        nextProfile = await saveMergeStageClear(stageId);
+      }
+      setProfile(nextProfile);
+      const restoredClears = Object.fromEntries(STAGES.map((stage) => [
+        stage.id,
+        stage.id <= nextProfile.highestClearedStage || window.localStorage.getItem(clearedKey(stage.id)) === 'true',
+      ]));
+      setClearedStages(restoredClears);
+      STAGES.forEach((stage) => {
+        if (restoredClears[stage.id]) window.localStorage.setItem(clearedKey(stage.id), 'true');
+      });
+      const nextUnlocked = Math.min(STAGES.length, nextProfile.highestClearedStage + 1);
+      setUnlockedStage(nextUnlocked);
+      window.localStorage.setItem(unlockedKey, String(nextUnlocked));
+    }).catch(() => undefined);
+  }, []);
   useEffect(() => {
     if (!clearedStages[2] || profile.spellbladeRecipeUnlocked) return;
     unlockSpellbladeRecipe().then(setProfile).catch(() => undefined);
@@ -289,8 +311,16 @@ export function MergeDefenseScreen({ onExit }: { onExit: () => void }) {
       }
       collectSilver(runId, selectedStage.id, silver, kills, discovered)
         .catch(() => profile)
+        .then((nextProfile) => won ? saveMergeStageClear(selectedStage.id).catch(() => nextProfile) : nextProfile)
         .then((nextProfile) => won && selectedStage.id === 2 ? unlockSpellbladeRecipe() : nextProfile)
-        .then(setProfile)
+        .then((nextProfile) => {
+          setProfile(nextProfile);
+          if (won) {
+            const nextUnlocked = Math.min(STAGES.length, nextProfile.highestClearedStage + 1);
+            setUnlockedStage((current) => Math.max(current, nextUnlocked));
+            window.localStorage.setItem(unlockedKey, String(nextUnlocked));
+          }
+        })
         .catch(() => undefined);
     }} />;
   }

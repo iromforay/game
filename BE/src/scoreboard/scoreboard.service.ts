@@ -53,7 +53,7 @@ export class ScoreboardService {
     });
   }
 
-  private mergeProfileResponse(profile: { silver: number; attack_level: number; warrior_unlocked: number; archer_unlocked: number; spellblade_unlocked: number; spellblade_recipe_unlocked: boolean; start_coin_level: number; summon_discount_level: number }) {
+  private mergeProfileResponse(profile: { silver: number; attack_level: number; warrior_unlocked: number; archer_unlocked: number; spellblade_unlocked: number; spellblade_recipe_unlocked: boolean; start_coin_level: number; summon_discount_level: number; highest_cleared_stage: number }) {
     return {
       silver: profile.silver,
       attackLevel: profile.attack_level,
@@ -63,6 +63,7 @@ export class ScoreboardService {
       spellbladeRecipeUnlocked: profile.spellblade_recipe_unlocked,
       startCoinLevel: profile.start_coin_level,
       summonDiscountLevel: profile.summon_discount_level,
+      highestClearedStage: profile.highest_cleared_stage,
     };
   }
 
@@ -124,6 +125,21 @@ export class ScoreboardService {
       await this.prisma.$executeRaw`UPDATE merge_defense_profile SET spellblade_unlocked = GREATEST(spellblade_unlocked, ${grade}) WHERE account_id = ${accountId}`;
     }
     return this.mergeProfileResponse(await this.mergeProfile(accountId));
+  }
+
+  async clearMergeDefenseStage(token: string | undefined, stageIdRaw: unknown) {
+    const accountId = await this.accounts.resolveAccountId(token);
+    if (!accountId) throw new UnauthorizedException({ message: '로그인이 필요합니다', code: 'NOT_LOGGED_IN' });
+    const stageId = int(stageIdRaw, 1, 30, 'stageId');
+    const current = await this.mergeProfile(accountId);
+    if (stageId > current.highest_cleared_stage + 1) {
+      throw new BadRequestException({ message: '이전 스테이지를 먼저 클리어해야 합니다', code: 'PREVIOUS_STAGE_REQUIRED' });
+    }
+    const profile = await this.prisma.merge_defense_profile.update({
+      where: { account_id: accountId },
+      data: { highest_cleared_stage: Math.max(current.highest_cleared_stage, stageId) },
+    });
+    return this.mergeProfileResponse(profile);
   }
 
   async unlockMergeDefenseSpellblade(token: string | undefined) {

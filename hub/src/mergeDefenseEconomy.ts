@@ -11,10 +11,11 @@ export interface MergeProfile {
   spellbladeRecipeUnlocked: boolean;
   startCoinLevel: number;
   summonDiscountLevel: number;
+  highestClearedStage: number;
 }
 
 const STORAGE_KEY = 'merge-defense:profile';
-export const EMPTY_MERGE_PROFILE: MergeProfile = { silver: 0, attackLevel: 0, warriorUnlocked: 1, archerUnlocked: 1, spellbladeUnlocked: 0, spellbladeRecipeUnlocked: false, startCoinLevel: 0, summonDiscountLevel: 0 };
+export const EMPTY_MERGE_PROFILE: MergeProfile = { silver: 0, attackLevel: 0, warriorUnlocked: 1, archerUnlocked: 1, spellbladeUnlocked: 0, spellbladeRecipeUnlocked: false, startCoinLevel: 0, summonDiscountLevel: 0, highestClearedStage: 0 };
 
 function readLocal(): MergeProfile {
   try { return { ...EMPTY_MERGE_PROFILE, ...JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') }; } catch { return EMPTY_MERGE_PROFILE; }
@@ -51,6 +52,12 @@ export async function saveHeroDiscovery(heroClass: 'warrior' | 'archer' | 'spell
   else if (heroClass === 'archer') next.archerUnlocked = Math.max(next.archerUnlocked, grade);
   else next.spellbladeUnlocked = Math.max(next.spellbladeUnlocked, grade);
   return saveLocal(next);
+}
+
+export async function saveMergeStageClear(stageId: number) {
+  if (hasStoredToken()) return normalizeProfile(await request<MergeProfile>('/scoreboard/merge-defense/clear-stage', { method: 'POST', body: JSON.stringify({ stageId }) }));
+  const profile = readLocal();
+  return saveLocal({ ...profile, highestClearedStage: Math.max(profile.highestClearedStage, stageId) });
 }
 
 export async function unlockSpellbladeRecipe() {

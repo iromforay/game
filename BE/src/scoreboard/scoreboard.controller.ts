@@ -37,6 +37,11 @@ export class ScoreboardController {
     return this.scoreboard.discoverMergeDefenseHero(bearer(auth), heroClass, grade);
   }
 
+  @Post('merge-defense/clear-stage')
+  clearMergeDefenseStage(@Headers('authorization') auth: string | undefined, @Body('stageId') stageId: unknown) {
+    return this.scoreboard.clearMergeDefenseStage(bearer(auth), stageId);
+  }
+
   @Post('merge-defense/unlock-spellblade')
   unlockMergeDefenseSpellblade(@Headers('authorization') auth: string | undefined) {
     return this.scoreboard.unlockMergeDefenseSpellblade(bearer(auth));

@@ -443,6 +443,7 @@ model merge_defense_profile {
   spellblade_recipe_unlocked Boolean @default(false)
   start_coin_level        Int      @default(0) @db.UnsignedInt
   summon_discount_level   Int      @default(0) @db.UnsignedInt
+  highest_cleared_stage   Int      @default(0) @db.UnsignedInt
   updated_at        DateTime @default(now()) @updatedAt @db.Timestamp(0)
 }
 
