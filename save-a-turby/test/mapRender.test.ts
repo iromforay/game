@@ -123,7 +123,7 @@ const PROPS = [
   { id: 'prop_giant_knot_map', assetKey: 'giant-thread-knot-map', x: 2620, y: 1250, width: 512, height: 512, pivot: [0.5, 0.88] as [number, number], layer: 'story' as const, forPoints: ['forest_giant_knot'] },
   { id: 'npc_bopuli', assetKey: 'turby-bopuli', x: 1240, y: 1000, width: 160, height: 160, pivot: [0.5, 0.9] as [number, number], layer: 'story' as const, forPoints: ['forest_bopuli_ambush', 'forest_bopuli_return'] },
   { id: 'npc_bopuli_tangled', assetKey: 'bopuli-tangled-overlay', x: 1240, y: 1000, width: 256, height: 256, pivot: [0.5, 0.9] as [number, number], layer: 'story' as const },
-  { id: 'npc_dansuring', assetKey: 'dansuring-world', x: 3020, y: 1250, width: 192, height: 192, pivot: [0.5, 0.82] as [number, number], layer: 'story' as const, forPoints: ['forest_dansuring'] },
+  { id: 'npc_dansuring', assetKey: 'dansuring', x: 3020, y: 1250, width: 192, height: 192, pivot: [0.5, 0.82] as [number, number], layer: 'story' as const, forPoints: ['forest_dansuring'] },
 ];
 const withProps = (mode: 'fallback' | 'final'): StageView => {
   const v = view({ hiddenOpen: true });

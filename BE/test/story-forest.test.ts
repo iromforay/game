@@ -329,7 +329,7 @@ test('월드 표시 상태 조건(10-06 v6): 거대 매듭은 숨은 길 개방 
   // 규격: 피벗·크기·표시층, 그림이 대신하는 지점
   const view = await setup('CH01_FIRST_KNOT_EQUIPPED', EQUIPPED).service.stageData(P1, 'forest');
   const by = (id: string) => view.render.overlays.find((o) => o.id === id)!;
-  assert.deepEqual([by('npc_dansuring').assetKey, by('npc_dansuring').width, by('npc_dansuring').height, by('npc_dansuring').pivot, by('npc_dansuring').layer], ['dansuring-world', 192, 192, [0.5, 0.82], 'story']);
+  assert.deepEqual([by('npc_dansuring').assetKey, by('npc_dansuring').width, by('npc_dansuring').height, by('npc_dansuring').pivot, by('npc_dansuring').layer], ['dansuring', 192, 192, [0.5, 0.82], 'story']);
   const knot = (await setup('CH01_COMPASS_ACQUIRED', OPEN).service.stageData(P1, 'forest')).render.overlays.find((o) => o.id === 'prop_giant_knot_map')!;
   assert.deepEqual([knot.assetKey, knot.width, knot.height, knot.pivot, knot.forPoints], ['giant-thread-knot-map', 512, 512, [0.5, 0.88], ['forest_giant_knot']]);
   assert.equal(view.render.markerMode, 'fallback', '에셋 미전달 단계에서는 임시 표식을 유지한다');

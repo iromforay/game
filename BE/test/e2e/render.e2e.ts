@@ -78,7 +78,7 @@ test('렌더링 ②: 같은 키의 텍스처가 있으면 대형 배경 한 장(
     await g.waitScene('Village');
     await g.until('마을 준비', 's.village && s.village.ready');
     // 시험 페이지에만 임시 텍스처 주입(미술 아님)
-    await inject(g, [['forest-base', 3200, 2400, '#5a7f4a'], ['dust-wind-closed', 320, 360, '#c9b6e8'], ['hidden-path-reveal', 960, 560, '#f3e6b0'], ['hidden-yarn-path', 768, 256, '#ffd6e0'], ['giant-thread-knot-map', 512, 512, '#e0a070'], ['dansuring-world', 192, 192, '#a0d0e0'], ['bopuli-tangled-overlay', 256, 256, '#202020'], ['root-gate-closed', 480, 520, '#7a5a3a'], ['root-gate-open', 480, 520, '#bfa26a']]);
+    await inject(g, [['forest-base', 3200, 2400, '#5a7f4a'], ['dust-wind-closed', 320, 360, '#c9b6e8'], ['hidden-path-reveal', 960, 560, '#f3e6b0'], ['hidden-yarn-path', 768, 256, '#ffd6e0'], ['giant-thread-knot-map', 512, 512, '#e0a070'], ['dansuring', 192, 192, '#a0d0e0'], ['bopuli-tangled-overlay', 256, 256, '#202020'], ['root-gate-closed', 480, 520, '#7a5a3a'], ['root-gate-open', 480, 520, '#bfa26a']]);
     await enterForest(g);
     let r = await renderOf(g);
     assert.equal(r.background, 'final');
@@ -109,7 +109,7 @@ test('렌더링 ③: 보풀이는 구조 전 먼지실 오버레이, 구조 뒤 
   await withDiagnosis(g, 'render-npcs', async () => {
     await g.waitScene('Village');
     await g.until('마을 준비', 's.village && s.village.ready');
-    await inject(g, [['forest-base', 3200, 2400, '#5a7f4a'], ['giant-thread-knot-map', 512, 512, '#e0a070'], ['dansuring-world', 192, 192, '#a0d0e0'], ['bopuli-tangled-overlay', 256, 256, '#202020'], ['hidden-path-reveal', 960, 560, '#f3e6b0'], ['hidden-yarn-path', 768, 256, '#ffd6e0']]);
+    await inject(g, [['forest-base', 3200, 2400, '#5a7f4a'], ['giant-thread-knot-map', 512, 512, '#e0a070'], ['dansuring', 192, 192, '#a0d0e0'], ['bopuli-tangled-overlay', 256, 256, '#202020'], ['hidden-path-reveal', 960, 560, '#f3e6b0'], ['hidden-yarn-path', 768, 256, '#ffd6e0']]);
     await enterForest(g);
     const refresh = () => g.page.evaluate(() => (window as any).__game.scene.getScene('Map').refreshStageView()); // eslint-disable-line @typescript-eslint/no-explicit-any
     assert.deepEqual((await renderOf(g)).overlays, ['turby-bopuli', 'bopuli-tangled-overlay'], '구조 전: 먼지실에 붙잡힌 보풀이');
@@ -121,7 +121,7 @@ test('렌더링 ③: 보풀이는 구조 전 먼지실 오버레이, 구조 뒤 
     for (const e of ['forest_compass_granted', 'forest_hidden_path_opened']) backend.grantEvent(device, e);
     await refresh();
     await g.until('거대 매듭 표시', "s.map.render.overlays.includes('giant-thread-knot-map')");
-    assert.ok(!(await renderOf(g)).overlays.includes('dansuring-world'));
+    assert.ok(!(await renderOf(g)).overlays.includes('dansuring'));
     await g.capture('19_giant_knot_map_visible');
     backend.grantEvent(device, 'forest_giant_knot_defeated');
     await refresh();
@@ -129,7 +129,7 @@ test('렌더링 ③: 보풀이는 구조 전 먼지실 오버레이, 구조 뒤 
     assert.ok((await renderOf(g)).overlays.includes('turby-bopuli'), '보풀이는 남는다');
     for (const e of ['forest_first_knot_awakened', 'forest_first_knot_equipped']) backend.grantEvent(device, e);
     await refresh();
-    await g.until('단수링 표시', "s.map.render.overlays.includes('dansuring-world')");
+    await g.until('단수링 표시', "s.map.render.overlays.includes('dansuring')");
     await g.capture('20_dansuring_after_first_knot_equipped');
   }, backend, device);
   await g.close();
