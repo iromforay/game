@@ -7,6 +7,7 @@ import { randomUUID } from 'crypto';
 import { EventEmitter } from 'events';
 import { PrismaService } from '../prisma.service';
 import { RoomsService } from '../rooms/rooms.service';
+import { encounterRadiusPx } from '../rooms/encounter-radius';
 import { SettingsService } from '../rooms/settings.service';
 import { INSTANCE_INCLUDE, baseStatsOf, toTurbyDto } from '../turby-dto';
 import type { Room } from '../rooms/types';
@@ -46,6 +47,7 @@ interface BattleRecord {
   timerKey: string | null;
   // M4-B 스토리 전투: 포획·야생 보상 없음, 승리 시 onWinEvents를 서버 경로로 기록, 이야기 누비 필수 편성
   story: { encounterKey: string; onWinEvents: string[]; storyNubiId: string } | null;
+  acknowledged: Set<string>; // 10-06 v1 §7: 이 결과를 확인한(맵에 돌아온) 플레이어 — 확인 전의 새로고침·재접속에는 결과를 다시 내려 준다
 }
 
 const ACTION_ID_MAX = 64;
@@ -101,10 +103,11 @@ export class BattleService implements OnModuleInit {
     if (!pos?.inMap) throw new BattleError('NOT_IN_MAP', '맵에 입장하지 않았습니다.');
     if (!Number.isInteger(spawnIndexRaw)) throw new BattleError('INVALID_PAYLOAD', '조우 대상이 올바르지 않습니다.');
     const wildRow = room.wilds.find((w) => w.index === spawnIndexRaw);
-    if (!wildRow) throw new BattleError('INVALID_SPAWN', '이 지역에 없는 야생 터비입니다.');
+    // 10-06 v1 §2: 아직 열리지 않은 구역 안의 야생은 이 플레이어에게 없는 것과 같다(존재 여부·사유를 드러내지 않는다)
+    if (!wildRow || !this.rooms.wildVisibleTo(room, playerId, wildRow)) throw new BattleError('INVALID_SPAWN', '이 지역에 없는 야생 터비입니다.');
     if (wildRow.state === 'engaged') throw new BattleError('WILD_ENGAGED', '다른 사람이 이미 교전 중인 야생 터비입니다.');
     if (wildRow.state !== 'free') throw new BattleError('WILD_GONE', '이미 사라진 야생 터비입니다.');
-    if (Math.hypot(pos.x - wildRow.x, pos.y - wildRow.y) > this.settings.number('battle.encounterRadiusPx')) throw new BattleError('TOO_FAR', '야생 터비와 너무 멀리 떨어져 있습니다.');
+    if (Math.hypot(pos.x - wildRow.x, pos.y - wildRow.y) > encounterRadiusPx(this.settings)) throw new BattleError('TOO_FAR', '야생 터비와 너무 멀리 떨어져 있습니다.');
     // 10-02 v5 §1: 거리만 가깝고 벽·닫힌 문 너머거나, 아직 열리지 않은 구역 안의 야생과는 조우하지 않는다(마지막 승인 위치 기준, 수집·지점과 같은 판정 함수)
     const reach = this.rooms.reachOf(room, playerId, { x: wildRow.x, y: wildRow.y });
     if (reach !== 'ok') throw new BattleError('WILD_UNREACHABLE', '막혀 있어 야생 터비에게 닿지 않습니다.').because(reach);
@@ -132,7 +135,7 @@ export class BattleService implements OnModuleInit {
       rules: this.rules(),
       participants,
     });
-    const record: BattleRecord = { state, responses: new Map(), ended: null, settled: false, queue: Promise.resolve(), cleanup: null, timer: null, timerKey: null, story: null };
+    const record: BattleRecord = { state, responses: new Map(), ended: null, settled: false, queue: Promise.resolve(), cleanup: null, timer: null, timerKey: null, story: null, acknowledged: new Set() };
     this.battles.set(state.battleId, record);
     for (const p of participants) this.battleOfPlayer.set(p.playerId, state.battleId);
     this.rooms.setWildState(room, wildRow.index, 'engaged', state.battleId);
@@ -187,7 +190,7 @@ export class BattleService implements OnModuleInit {
       definition,
       story: { encounterKey: key },
     });
-    const record: BattleRecord = { state, responses: new Map(), ended: null, settled: false, queue: Promise.resolve(), cleanup: null, timer: null, timerKey: null, story: { encounterKey: key, onWinEvents: available.def.onWinEvents, storyNubiId: available.storyNubiId.toString() } };
+    const record: BattleRecord = { state, responses: new Map(), ended: null, settled: false, queue: Promise.resolve(), cleanup: null, timer: null, timerKey: null, story: { encounterKey: key, onWinEvents: available.def.onWinEvents, storyNubiId: available.storyNubiId.toString() }, acknowledged: new Set() };
     this.battles.set(state.battleId, record);
     this.battleOfPlayer.set(playerId, state.battleId);
     this.armTimer(record);
@@ -279,11 +282,30 @@ export class BattleService implements OnModuleInit {
 
   // 접속 인증 응답에 실을 진행 중 전투(새로고침·재접속 복구용)
   // 방 이벤트(재접속으로 인한 connected 복구 등)가 대기열에서 먼저 처리된 뒤의 상태를 돌려준다
+  // 10-06 v1 §7: 진행 중인 전투가 없어도, 끝났지만 아직 확인하지 않은 일반 전투 결과가 있으면(보존 기간 안) 그 결과를 내려 준다.
+  // 결과 화면에서 새로고침해도 결과가 사라지지 않고, 정산이 실패했던 전투는 여기서 다시 정산한다(보상은 (전투, 플레이어) 유니크라 한 번만 지급된다)
   async activeSnapshotOf(playerId: string): Promise<BattleSnapshotDto | null> {
     const record = this.recordOfPlayer(playerId);
-    if (!record) return null;
-    await record.queue;
-    return toSnapshot(record.state);
+    if (record) {
+      await record.queue;
+      return toSnapshot(record.state);
+    }
+    const pending = this.unconfirmedResultOf(playerId);
+    if (!pending) return null;
+    await this.enqueue(pending, async () => {
+      if (!pending.settled) await this.settle(pending);
+    });
+    return toSnapshot(pending.state);
+  }
+
+  // 그 플레이어가 확인하지 않은 가장 최근의 일반 전투 결과(스토리 전투는 대화 흐름이 복원하므로 제외)
+  private unconfirmedResultOf(playerId: string): BattleRecord | undefined {
+    return [...this.battles.values()].reverse().find((r) => !r.story && r.state.phase === 'resolved' && !r.acknowledged.has(playerId) && r.state.participants.some((p) => p.playerId === playerId && p.partySubmitted));
+  }
+
+  // 결과를 확인했다(전투가 끝나고 맵에 다시 들어왔다) — 이후 새로고침에는 결과를 다시 내려 주지 않는다
+  acknowledgeResults(playerId: string) {
+    for (const r of this.battles.values()) if (r.state.phase === 'resolved') r.acknowledged.add(playerId);
   }
 
   // ---------- 내부 ----------

@@ -9,6 +9,5 @@ export const BATTLE_GRID_ROWS = 8;
 
 // 3.5.1 맵(탐험) 자유이동 프로토타입(7-5) — 수치는 임시, 실측/밸런싱 전
 export const AVATAR_SPEED = 260; // px/sec, 가상 조이스틱 최대 기울임 기준
-export const ENCOUNTER_RADIUS = 40; // 아바타-야생 터비 조우 판정 거리(px)
 export const JOYSTICK_BASE_RADIUS = 55;
 export const JOYSTICK_THUMB_RADIUS = 26;

@@ -19,7 +19,7 @@ const OTHER = 2n;
 const NUMBERS: Record<string, number> = {
   'battle.gridCols': 12, 'battle.gridRows': 8, 'battle.maxAlliedUnits': 3, 'battle.partyStartCol': 1, 'battle.wildStartCol': 10, 'battle.wildStartRow': 4,
   'battle.minDamage': 1, 'battle.defenseDivisor': 2, 'battle.wildHpMult.1': 1, 'battle.wildHpMult.2': 1.5, 'battle.wildHpMult.3': 2, 'battle.wildHpMult.4': 2.5, 'battle.wildHpMult.5': 3,
-  'battle.inviteSeconds': 30, 'battle.partySelectSeconds': 30, 'battle.subturnSeconds': 30, 'battle.resolvedRetentionSeconds': 60, 'room.reconnectGraceMs': 45000,
+  'battle.inviteSeconds': 30, 'battle.partySelectSeconds': 30, 'battle.subturnSeconds': 30, 'battle.resolvedRetentionSeconds': 60, 'room.reconnectGraceMs': 45000, 'battle.encounterRadiusPx': 200,
 };
 const EASY: BattleDefinition = { key: 'forest_stitchling_ambush', cornerEscape: false, units: [{ unitId: 'weak', side: 'wild', characterCode: 'stitchling', name: '실밥이', col: 2, row: 4, attack: 1, defense: 0, actionPower: 0, maxHp: 1, canAct: false }] };
 
@@ -254,7 +254,6 @@ test('9. 스냅샷에 스토리 전투 표식(포획·야생 보상 없음)과 �
 
 test('v4 회귀: 일반 야생 전투 — 누비 강제 참가 없음·스토리 표식 없음·승리 시 포획 보상 지급, 스토리 이벤트는 그대로', async () => {
   const s = setup({ checkpoint: 'CH01_FIRST_KNOT_EQUIPPED' });
-  NUMBERS['battle.encounterRadiusPx'] = 200;
   const weak = s.db.seed('turby_grade', { id: 2, name: '약함', base_attack: 1, base_defense: 0, base_action_power: 0, base_hp: 1 });
   s.db.seed('turby_character', { code: 'bopuli', name: '보풀이', grade_id: weak.id, atk_mod: 0, def_mod: 0, ap_mod: 0, hp_mod: 0 });
   s.db.seed('stage_wild_spawn', { stage_code: 'forest', spawn_index: 0, character_code: 'bopuli', x: 1250, y: 1010 }); // 시험이 서 있는 자리(공터 지점) 바로 옆

@@ -27,7 +27,6 @@ const SMALL = { width: 640, height: 360 };
 const SPAWN = { x: 1600, y: 1200 };
 const READY = 's.map && s.map.ready && s.map.inRoom && s.map.positioned && s.map.story && s.map.story.greybox === true';
 const BLOCKED_TEXT = '길이 막혀 있어요. 돌아서 가까이 가 보세요.';
-const LOCKED_TEXT = '아직 들어갈 수 없는 곳이에요.';
 const CORRECTED_TEXT = '안전한 위치에서 다시 시작했어요.';
 type Wild = { index: number; characterCode: string; x: number; y: number; state: string; visible: boolean };
 type MiniWild = { id: string; x: number; y: number; mini: { x: number; y: number }; full: { x: number; y: number } };
@@ -84,7 +83,7 @@ test('야생 ①: 야생 마커는 서버가 내려 준 것만, 서버 좌표 �
     assert.ok(m.miniMap.legend.includes('wild'), '범례에 야생 터비(모양으로 구분)');
     await g.capture('01a_server_wilds_on_screen_and_minimap');
     await g.clickAt(m.miniMap.openButton.x, m.miniMap.openButton.y, 's.map.miniMap.open === true');
-    assert.ok((await texts(g)).some((t) => t.includes('야생 터비 — 세모')), '전체 지도 범례');
+    assert.ok((await texts(g)).some((t) => t.includes('야생 터비 ▲')), '전체 지도 범례');
     await g.capture('01b_server_wilds_on_full_map');
     await g.page.keyboard.press('Escape');
     await g.until('지도 닫힘', 's.map.miniMap.open === false');
@@ -137,23 +136,34 @@ test('야생 ②: 울타리 너머의 야생 — 서버 거부를 "길이 막혀
   await g.close();
 });
 
-test('야생 ③: 아직 들어갈 수 없는 구역 안의 야생 — "아직 들어갈 수 없는 곳이에요" 안내, 전투는 시작되지 않는다', async () => {
-  const device = 'e2e-wild-locked';
+test('야생 ③: 아직 열리지 않은 구역 안의 야생은 화면·미니맵·전체 지도·서버 응답 어디에도 없고, 구역이 열리면(재접속 없이) 나타난다', async () => {
+  const device = 'e2e-wild-hidden-zone';
   await backend.start(withWilds(seedForest(device, 'rescued'), [{ index: 4, code: 'bopuli', x: 1716, y: 1380 }]));
-  // 시험용 잠긴 구역을 이 서버 인스턴스의 지역 데이터에 덧붙인다(실제 회색상자의 잠긴 구역은 두꺼운 벽에 둘러싸여 조우 거리 안으로 다가갈 수 없다).
-  // 화면에는 내려가지 않는 구역이다(공개 조건 전) — 판정은 서버가 한다
+  // 시험용 잠긴 구역을 이 서버 인스턴스의 지역 데이터에 덧붙인다(공개 조건: 첫 매듭 장착 이벤트)
   backend.patchStage('forest', (d) => d.layout!.zones.push({ id: 'zone_test_locked', label: '잠긴 곳(시험)', x: 1700, y: 1320, width: 140, height: 120, visibleAfter: 'forest_first_knot_equipped' }));
   const g = await Game.open(browser, `${vite.url}/?device=${device}`, device);
-  await withDiagnosis(g, 'wild-locked-zone-notice', async () => {
+  await withDiagnosis(g, 'wild-hidden-zone', async () => {
     await enterForest(g);
-    await g.walkTo('Map', { x: 1680, y: 1380 }, 'keys', 's.map.unreachableWilds >= 1', 6);
-    await g.until('서버가 조우를 거부', 's.map.unreachableWilds >= 1');
-    await g.until('안내 표시', `s.map.notices.length === 1 && window.__dev.texts().includes(${JSON.stringify(LOCKED_TEXT)})`);
-    await g.capture('03_wild_in_locked_zone_notice');
-    assert.deepEqual((await mapOf(g)).notices, [LOCKED_TEXT]);
-    const st = await g.state();
-    assert.ok(st.scenes.includes('Map') && !st.scenes.includes('PartySelect') && !st.scenes.includes('Battle'), '전투가 시작되지 않음');
-    assert.equal(backend.session(device)!.wilds.find((w) => w.index === 4)!.state, 'free');
+    let m = await mapOf(g);
+    assert.deepEqual(m.wilds.map((w) => w.index), [0], '숨은 야생(4번)은 화면 마커에 없다');
+    assert.ok(!m.miniMap.wilds.some((w) => w.id === 'wild-4'), '미니맵에도 없다');
+    const received = (await g.page.evaluate(() => [...(window as any).__rooms.wilds.keys()])) as number[]; // eslint-disable-line @typescript-eslint/no-explicit-any
+    assert.deepEqual(received, [0], '서버가 클라이언트에 내려 준 야생 목록에도 없다(ID·좌표가 오지 않았다)');
+    await g.capture('01_locked_zone_wild_hidden_screen');
+    await g.clickAt(m.miniMap.openButton.x, m.miniMap.openButton.y, 's.map.miniMap.open === true');
+    await g.capture('01_locked_zone_wild_hidden_full_map');
+    await g.page.keyboard.press('Escape');
+    await g.until('지도 닫힘', 's.map.miniMap.open === false');
+    // 그 구역 가까이 가도 조우 요청이 가지 않는다(서버에도 없는 것과 같다)
+    const res = (await g.page.evaluate(() => (window as any).__dev.rawRequest('battle:start', { spawnIndex: 4 }))) as { ok: boolean; code: string }; // eslint-disable-line @typescript-eslint/no-explicit-any
+    assert.deepEqual([res.ok, res.code], [false, 'INVALID_SPAWN']);
+    // 구역 개방 이벤트 → 같은 연결에서 마커가 나타난다
+    backend.grantEvent(device, 'forest_first_knot_equipped');
+    await g.until('야생 공개', 's.map.wilds.some((w) => w.index === 4 && w.visible)');
+    m = await mapOf(g);
+    assert.deepEqual(byIndex(m.wilds).map((w) => [w.index, w.x, w.y]), [[0, 520, 500], [4, 1716, 1380]]);
+    assert.ok(m.miniMap.wilds.some((w) => w.id === 'wild-4'), '미니맵에도 나타난다');
+    await g.capture('02_zone_opened_wild_appears');
   }, backend, device);
   await g.close();
 });

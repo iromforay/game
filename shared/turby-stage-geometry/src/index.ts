@@ -1,4 +1,4 @@
-// 지역 geometry 계약 — 서버와 클라이언트가 이 파일 하나를 같이 쓴다(10-02 v6 §2).
+// 지역 geometry 계약 — 서버와 클라이언트가 이 패키지(shared/turby-stage-geometry) 하나를 같이 쓴다(10-02 v6 §2, 10-06 v1 §5).
 //   서버: 권위 판정(이동 승인·위치 증거·재입장 보정). rooms/stage-collision.ts가 이 파일을 다시 내보낸다.
 //   클라이언트: 예측 충돌(막힌 곳에서 멈춤·미끄러짐)과 표시만. save-a-turby/src/story/storyStage.ts가 이 파일을 가져다 쓴다.
 // 그래서 타입·검증 규칙·경계 포함 여부·문 개방과 구역 잠금의 해석·몸 반지름이 한 곳에서만 정해진다.
@@ -173,6 +173,11 @@ export function inBounds(g: { width: number; height: number }, p: Point): boolea
 // 점이 사각형을 pad만큼 부풀린 영역의 안쪽에 있는가(경계선 위는 바깥)
 export function insideRect(r: Rect, p: Point, pad: number): boolean {
   return p.x > r.x - pad && p.x < r.x + r.width + pad && p.y > r.y - pad && p.y < r.y + r.height + pad;
+}
+
+// 점이 아직 열리지 않은 구역 안에 있는가 — 그 안의 야생·지점을 이 플레이어에게 보일지의 근거(경계선 위는 바깥)
+export function inLockedZone(locked: Rect[], p: Point): boolean {
+  return locked.some((z) => insideRect(z, p, 0));
 }
 
 // 몸(반지름 half)이 통과 불가 사각형에 겹치는가

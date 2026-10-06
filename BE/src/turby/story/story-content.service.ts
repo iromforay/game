@@ -2,7 +2,7 @@ import { Injectable, OnModuleInit } from '@nestjs/common';
 import { existsSync, readdirSync, readFileSync } from 'fs';
 import { join, resolve } from 'path';
 import type { BattleDefinition } from '../battle/battle-types';
-import { parseStageGeometry } from '../shared/stage-geometry';
+import { parseStageGeometry } from 'turby-stage-geometry';
 
 // 스토리 런타임 데이터(대화 JSON, 지역 트리거 좌표, 이름 금칙어)는 프런트 번들에 넣지 않고 BE에만 둔다(개발 계획 3.4).
 // ts-node(src/turby/story)와 빌드(dist/turby/story) 모두 BE/story-data/save-a-turby를 가리킨다.
@@ -77,7 +77,7 @@ export class StoryContentService implements OnModuleInit {
     return codes;
   }
 
-  // 처음 읽을 때 geometry 계약(shared/stage-geometry.ts)으로 검증한다 — 맞지 않으면 StageGeometryError(그 지역은 쓰이지 않는다).
+  // 처음 읽을 때 geometry 계약(shared/turby-stage-geometry 패키지)으로 검증한다 — 맞지 않으면 StageGeometryError(그 지역은 쓰이지 않는다).
   // 지도 크기가 JSON에 없는 지역의 경계 검사는 방을 만들 때(collisionOf, 지역 표의 크기) 한다
   stage(stageCode: string): StageStoryData | null {
     if (!/^[a-z_]{1,30}$/.test(stageCode)) return null;

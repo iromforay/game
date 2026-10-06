@@ -7,7 +7,7 @@ import { gameError } from '../turby-dto';
 import { StoryContentService, type StageRect } from './story-content.service';
 import { addToPlayerItem, usedBagSlots } from './bag';
 import { StageAccessService } from './stage-access.service';
-import { gateOpen } from '../shared/stage-geometry';
+import { gateOpen } from 'turby-stage-geometry';
 import type { StageStatusDto } from './stage-access';
 import {
   DEFAULT_NICKNAME,

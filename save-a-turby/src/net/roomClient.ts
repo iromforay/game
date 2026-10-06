@@ -4,6 +4,7 @@ import type { Socket } from 'socket.io-client';
 import { BASE_URL, session } from '../api/client';
 import { getPlayerId } from '../state/player';
 import { helloPayload } from '../state/session';
+import { resolveEncounterRadius, FALLBACK_ENCOUNTER_RADIUS_PX } from './encounterRadius';
 import type { BattleInvite, BattleSnapshot, BattleUpdate, WildInfo } from './battleTypes';
 
 // 4-A: 방·맵 위치 동기화 클라이언트(docs/save_a_turby_coop_spec.md 5절 계약). 화면과 분리된 연결 계층이라
@@ -94,6 +95,19 @@ class RoomClient {
   // 서버가 소유한 야생 터비 마커(위치·종류·상태). 화면·미니맵·전체 지도는 이 값만 쓴다(클라이언트 설정에 좌표가 없다)
   readonly wilds = new Map<number, WildInfo>();
 
+  // 서버가 내려 준 조우 반경(px) — 자동 조우 요청·가까움 판정이 쓴다. 새 Map 상태(hello·map:enter)를 받을 때마다 갱신한다(재접속 없이 반영)
+  encounterRadius = FALLBACK_ENCOUNTER_RADIUS_PX;
+  private setEncounterRadius(raw: unknown) {
+    const r = resolveEncounterRadius(raw);
+    if (!r.fromServer) console.warn('[room] 서버 응답에 조우 반경이 없거나 올바르지 않아 기본값을 씁니다(서버가 구버전일 수 있습니다).');
+    this.encounterRadius = r.radius;
+  }
+
+  // 서버에 연결되어 있고 접속 인증이 끝났는가(마을 복귀 같은 "지금 서버를 부를 수 있는가"의 판단)
+  get online() {
+    return !!this.socket?.connected && this.playerId !== null;
+  }
+
   // 방 입장 순서 = 참가자 슬롯(색). 방에 없으면 0
   slotOf(playerId: string): number {
     const i = this.room?.members.findIndex((m) => m.playerId === playerId) ?? -1;
@@ -141,7 +155,7 @@ class RoomClient {
         try {
           // HTTP /player/me/* 와 같은 세션 토큰을 보낸다. 토큰이 거부되면 session.run이 재식별을 한 번만 하고 다시 보낸다.
           const res = await session.run(async (token) => {
-            const ack = (await socket.timeout(HELLO_TIMEOUT_MS).emitWithAck('presence:hello', helloPayload(getPlayerId(), token))) as Ack<{ playerId: string; room: RoomState | null; players: MapPlayer[]; battle: BattleSnapshot | null; inMap?: boolean; wilds?: WildInfo[]; returnToVillage?: boolean }>;
+            const ack = (await socket.timeout(HELLO_TIMEOUT_MS).emitWithAck('presence:hello', helloPayload(getPlayerId(), token))) as Ack<{ playerId: string; room: RoomState | null; players: MapPlayer[]; battle: BattleSnapshot | null; inMap?: boolean; wilds?: WildInfo[]; encounterRadiusPx?: number; returnToVillage?: boolean }>;
             if (!ack.ok) throw new RoomApiError(ack.code, ack.message);
             return ack;
           });
@@ -152,6 +166,7 @@ class RoomClient {
           this.resumeInMap = res.inMap === true;
           this.observeServerTime(res.battle?.serverNow);
           this.setWilds(res.wilds);
+          this.setEncounterRadius(res.encounterRadiusPx);
           this.others.clear();
           res.players.forEach((p) => this.others.set(p.playerId, p));
           this.emitLocal('state', this.room);
@@ -269,6 +284,18 @@ class RoomClient {
     }
   }
 
+  // 마을로 돌아갈 때의 탐험 세션 이탈: 서버에 닿으면 기존 이탈 계약(room:leave)을 쓰고, 닿지 않으면 요청하지 않는다(로컬 화면만 바뀐다)
+  async leaveRoomIfOnline(): Promise<'left' | 'no-room' | 'offline'> {
+    if (!this.online) return 'offline';
+    if (!this.room) return 'no-room';
+    try {
+      await this.leaveRoom();
+      return 'left';
+    } catch {
+      return 'offline';
+    }
+  }
+
   // 1인 방 자동 생성+시작 — 이미 방에 있으면 먼저 나간다
   async startSolo(stageCode: string): Promise<RoomState> {
     await this.connect();
@@ -284,10 +311,11 @@ class RoomClient {
   selfOnEnter: { x: number; y: number; corrected: boolean } | null = null;
 
   async enterMap(dir: Facing): Promise<MapPlayer[]> {
-    const res = await this.request<{ self: { x: number; y: number }; corrected?: boolean; players: MapPlayer[]; wilds: WildInfo[]; story?: { play: StoryPlay | null; delivery: StoryDelivery | null } | null }>('map:enter', { dir });
+    const res = await this.request<{ self: { x: number; y: number }; corrected?: boolean; players: MapPlayer[]; wilds: WildInfo[]; encounterRadiusPx?: number; story?: { play: StoryPlay | null; delivery: StoryDelivery | null } | null }>('map:enter', { dir });
     this.selfOnEnter = res.self ? { x: res.self.x, y: res.self.y, corrected: res.corrected === true } : null;
     this.storyOnEnter = res.story ?? null;
     this.setWilds(res.wilds);
+    this.setEncounterRadius(res.encounterRadiusPx);
     this.others.clear();
     res.players.forEach((p) => this.others.set(p.playerId, p));
     return res.players;

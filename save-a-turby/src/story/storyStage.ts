@@ -1,9 +1,9 @@
 // 지역 스토리 화면(10-02 v3) — 서버가 내려 준 "지금 이 플레이어에게 보이는 것"을 화면 판정으로 옮기는 순수 함수(test/storyStage.test.ts).
 // 좌표·문구·에셋 키는 전부 서버의 지역 데이터에서 온다(회색상자 좌표를 최종 지도로 바꿔도 이 파일은 그대로다).
 // 수집·지점 발동의 허용 여부는 서버가 판정한다. 여기서는 "무엇을 누를 수 있게 보여 줄지"만 정한다.
-import { bodyBlocked, CLIENT_BODY_HALF, solidsOfView } from '../../../BE/src/turby/shared/stage-geometry.ts';
+import { bodyBlocked, CLIENT_BODY_HALF, solidsOfView } from 'turby-stage-geometry';
 
-export { CLIENT_BODY_HALF, SERVER_BODY_HALF, stepWithSolids } from '../../../BE/src/turby/shared/stage-geometry.ts';
+export { CLIENT_BODY_HALF, SERVER_BODY_HALF, stepWithSolids } from 'turby-stage-geometry';
 
 export interface StageRect {
   id: string;
@@ -67,7 +67,7 @@ export function promptText(it: Interactable): string {
   return it.type === 'object' && it.target.state === 'locked' ? LOCKED_OBJECT_PROMPT : it.target.prompt;
 }
 
-// ----- 막힌 곳(예측 충돌) — 규칙은 서버와 같은 파일(BE/src/turby/shared/stage-geometry.ts)에서 온다 -----
+// ----- 막힌 곳(예측 충돌) — 규칙은 서버와 같은 공용 패키지(shared/turby-stage-geometry)에서 온다 -----
 // 경계 포함 여부, 몸 반지름, 문 개방 해석이 서버와 한 정의를 쓴다. 여기서는 화면 데이터에 맞춰 부르기만 한다.
 
 // 지나갈 수 없는 사각형: 막힌 곳 + 닫힌 문(문의 open은 서버가 정해 내려 준 값)

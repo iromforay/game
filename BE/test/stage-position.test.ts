@@ -91,7 +91,7 @@ test('저장된 위치의 안전 보정: 지도 밖·벽 안·닫힌 문 너머�
 
 // ---------- 서비스: 입장·이동·증거 ----------
 
-const NUMBERS: Record<string, number> = { 'room.reconnectGraceMs': 1000, 'move.maxSpeedPxPerSec': 400, 'move.minIntervalMs': 50, 'move.slackPx': 64 };
+const NUMBERS: Record<string, number> = { 'room.reconnectGraceMs': 1000, 'move.maxSpeedPxPerSec': 400, 'move.minIntervalMs': 50, 'move.slackPx': 64, 'battle.encounterRadiusPx': 120 };
 
 function setup(events: string[] = BASE, checkpoint = 'CH01_BOPUL_RESCUED') {
   const db = new FakeDb();

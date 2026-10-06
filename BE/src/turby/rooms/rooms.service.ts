@@ -2,13 +2,14 @@ import { Injectable } from '@nestjs/common';
 import { EventEmitter } from 'events';
 import { PrismaService } from '../prisma.service';
 import { SettingsService } from './settings.service';
+import { encounterRadiusPx } from './encounter-radius';
 import { SessionService } from '../session.service';
 import { StageAccessService } from '../story/stage-access.service';
 import { OPENING_REQUIRED_HINT } from '../story/stage-access';
 import { FACINGS, MAX_PLAYERS, ROOM_CODE_LENGTH, RoomError } from './types';
 import type { Facing, MapPlayerDto, Room, RoomMember, RoomStateDto, WildDto, WildRuntime, WildState } from './types';
 import { StoryContentService } from '../story/story-content.service';
-import { checkMove, collisionOf, lockedZonesFor, reachVerdict, safePosition, solidsFor, type MoveVerdict, type Point, type ReachVerdict } from './stage-collision';
+import { checkMove, collisionOf, inLockedZone, lockedZonesFor, reachVerdict, safePosition, solidsFor, type MoveVerdict, type Point, type ReachVerdict } from './stage-collision';
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 헷갈리는 0/O/1/I 제외
 
@@ -185,7 +186,7 @@ export class RoomsService {
     member.dir = FACINGS.includes(dirRaw as Facing) ? (dirRaw as Facing) : member.dir;
     member.lastMoveAt = Date.now();
     this.events.emit('room:state', room);
-    return { room, self: this.toMapPlayer(member), corrected, others: this.snapshotOf(room, playerId), wilds: this.wildsOf(room) };
+    return { room, self: this.toMapPlayer(member), corrected, others: this.snapshotOf(room, playerId), wilds: this.wildsFor(room, playerId), encounterRadiusPx: this.encounterRadiusPx() };
   }
 
   private async loadStoryEvents(playerId: string): Promise<Set<string>> {
@@ -194,10 +195,14 @@ export class RoomsService {
   }
 
   // 스토리 이벤트가 기록되면(문 개방 등) 그 플레이어의 통과 판정에 바로 반영한다
+  // 구역이 열려 새로 보이게 된 야생은 'wild:revealed'로 알린다(재접속 없이 최신 상태가 된다 — 10-06 v1 §2)
   noteStoryEvents(playerId: string, eventIds: string[]) {
     const room = this.roomOf(playerId);
     const member = room?.members.find((m) => m.playerId === playerId);
-    if (member) for (const id of eventIds) member.storyEvents.add(id);
+    if (!room || !member) return;
+    const before = new Set(room.wilds.filter((w) => this.wildVisibleTo(room, playerId, w)).map((w) => w.index));
+    for (const id of eventIds) member.storyEvents.add(id);
+    for (const w of room.wilds) if (!before.has(w.index) && this.wildVisibleTo(room, playerId, w)) this.events.emit('wild:revealed', room, playerId, w);
   }
 
   // 위치 증거(수집·이야기 지점·야생 조우·스토리 전투 시작 공용): 마지막으로 승인한 위치에서 대상에 닿을 수 있는가.
@@ -255,8 +260,20 @@ export class RoomsService {
     return { index: w.index, characterCode: w.characterCode, x: w.x, y: w.y, state: w.state, visible: w.state === 'free' || w.state === 'engaged' };
   }
 
-  wildsOf(room: Room): WildDto[] {
-    return room.wilds.map((w) => this.toWildDto(w));
+  // 10-06 v1 §2: 이 플레이어에게 야생을 보여도 되는가 — 아직 열리지 않은 구역 안의 야생은 숨긴다(스토리 이벤트 기준, 플레이어마다 다르다)
+  wildVisibleTo(room: Room, playerId: string, wild: { x: number; y: number }): boolean {
+    const m = room.members.find((x) => x.playerId === playerId);
+    return !!m && !inLockedZone(lockedZonesFor(room.collision, m.storyEvents), wild);
+  }
+
+  // 클라이언트에 내려 주는 야생 목록: 숨겨진 야생은 아예 싣지 않는다(visible:false로 ID·종류·좌표를 같이 보내지 않는다).
+  // 포획·제거된 야생은 목록에 남는다(visible:false — 같은 탐험 세션에서 다시 나오지 않는다는 사실을 클라이언트가 안다)
+  wildsFor(room: Room, playerId: string): WildDto[] {
+    return room.wilds.filter((w) => this.wildVisibleTo(room, playerId, w)).map((w) => this.toWildDto(w));
+  }
+
+  encounterRadiusPx(): number {
+    return encounterRadiusPx(this.settings);
   }
 
   // 상태 전이는 서버만 한다. 바뀌면 같은 맵의 모두에게 알린다.

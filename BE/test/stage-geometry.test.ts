@@ -1,12 +1,12 @@
-// 10-02 v6 §2: 지역 geometry 계약 — 서버와 클라이언트가 같은 파일(src/turby/shared/stage-geometry.ts)의 타입·검증·판정을 쓴다.
+// 10-02 v6 §2 · 10-06 v1 §5: 지역 geometry 계약 — 서버와 클라이언트가 같은 공용 패키지(shared/turby-stage-geometry)의 타입·검증·판정을 쓴다.
 // 경계점·모서리·문 개방·구역 잠금의 결과가 양쪽에서 같고, 몸 반지름 차이는 의도한 범위 안이며, 잘못된 지역 JSON은 로드 단계에서 거부된다.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { join, sep } from 'path';
 import { pathToFileURL } from 'url';
-import * as shared from '../src/turby/shared/stage-geometry';
+import * as shared from 'turby-stage-geometry';
 import { collisionOf, pointBlocked, reachable, SERVER_BODY_HALF } from '../src/turby/rooms/stage-collision';
 import { STORY_DATA_DIR, StoryContentService } from '../src/turby/story/story-content.service';
 
@@ -34,12 +34,13 @@ test('계약: 실제 숲 데이터가 계약을 통과하고, 서버 입구(stag
 
 test('계약: 클라이언트(save-a-turby)가 쓰는 판정은 서버와 같은 모듈이다 — 경계점·모서리·문 개방에서 결과가 같다', async () => {
   const client = await nativeImport(pathToFileURL(join(__dirname, '../../save-a-turby/src/story/storyStage.ts')).href);
-  const viaClient = await nativeImport(pathToFileURL(join(__dirname, '../src/turby/shared/stage-geometry.ts')).href);
+  const viaClient = await nativeImport(pathToFileURL(join(__dirname, '../../shared/turby-stage-geometry/dist/esm/index.js')).href); // 프런트(ESM)가 불러오는 산출물
   assert.equal(client.stepWithSolids, viaClient.stepWithSolids, '클라이언트의 한 걸음 판정 = 공용 모듈의 함수');
   assert.deepEqual([client.CLIENT_BODY_HALF, client.SERVER_BODY_HALF], [CLIENT_BODY_HALF, SERVER_BODY_HALF], '몸 반지름 상수도 한 정의');
   // 클라이언트 소스에 충돌 규칙의 복사본이 남아 있지 않다(부등호·반지름 숫자를 직접 쓰지 않는다)
   const src = readFileSync(join(__dirname, '../../save-a-turby/src/story/storyStage.ts'), 'utf8');
-  assert.match(src, /from '\.\.\/\.\.\/\.\.\/BE\/src\/turby\/shared\/stage-geometry\.ts'/);
+  assert.match(src, /from 'turby-stage-geometry'/);
+  assert.doesNotMatch(src, /BE\/src/, '프런트는 BE 소스를 참조하지 않는다');
   assert.doesNotMatch(src, /[<>]=? r\.x|r\.width \+|x \+ half|x - half/, '사각형 비교식을 따로 두지 않는다');
   const map = readFileSync(join(__dirname, '../../save-a-turby/src/scenes/MapScene.ts'), 'utf8');
   assert.match(map, /const AVATAR_HALF = CLIENT_BODY_HALF;/, '아바타 몸 반지름은 계약의 값');
@@ -186,4 +187,45 @@ test('검증: 서버는 시작 단계(모듈 초기화)와 지역 로드에서 �
   assert.throws(() => content.stage('forest'), StageGeometryError, '다시 불러도 조용히 쓰이지 않는다');
   // 방을 만들 때도 같은 파서가 지도 크기(지역 표)까지 넣어 다시 본다: 지도 밖 사각형
   assert.throws(() => collisionOf({ layout: { blockers: [{ id: 'far', label: '', x: 3000, y: 100, width: 400, height: 40 }] } }, 3200, 2400, 'forest'), /지도 밖/);
+});
+
+// ---------- 10-06 v1 §5: 공용 패키지 구조 ----------
+const REPO = join(__dirname, '..', '..');
+const walk = (dir: string, out: string[] = []): string[] => {
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    if (['node_modules', 'dist', '.git', 'docs', 'build'].includes(e.name)) continue;
+    const full = join(dir, e.name);
+    if (e.isDirectory()) walk(full, out);
+    else if (/\.(ts|tsx|js|mjs|cjs)$/.test(e.name)) out.push(full);
+  }
+  return out;
+};
+
+test('구조: geometry 구현은 공용 패키지 한 곳에만 있고, BE는 프런트 소스를·프런트는 BE 소스를 참조하지 않는다', () => {
+  const files = walk(REPO).filter((f) => f !== __filename); // 이 시험 파일은 검색 문자열을 담고 있다
+  const defines = files.filter((f) => /export function parseStageGeometry\b|export function stepWithSolids\b|export function segmentCrosses\b/.test(readFileSync(f, 'utf8')));
+  assert.deepEqual(defines.map((f) => f.slice(REPO.length + 1).split(sep).join('/')), ['shared/turby-stage-geometry/src/index.ts'], '구현 파일은 한 벌');
+  // 코드의 import·require 경로만 본다(주석의 언급은 제외)
+  const importsOf = (f: string) => [...readFileSync(f, 'utf8').matchAll(/(?:from|import|require\()\s*['"]([^'"]+)['"]/g)].map((m) => m[1]);
+  const crossBe = files.filter((f) => f.startsWith(join(REPO, 'BE', 'src')) && importsOf(f).some((p) => /save-a-turby/.test(p)));
+  const crossFe = files.filter((f) => f.startsWith(join(REPO, 'save-a-turby', 'src')) && importsOf(f).some((p) => /BE\/|\/BE\b/.test(p)));
+  assert.deepEqual([crossBe, crossFe], [[], []]);
+  // 기존 경로 호환용 복사본·재노출 파일이 없다
+  assert.equal(existsSync(join(REPO, 'BE', 'src', 'turby', 'shared')), false);
+});
+
+test('구조: 공용 패키지는 자체 package.json·exports·타입 선언을 가지고 의존성이 없으며, 양쪽 소비자가 의존성으로 선언한다', () => {
+  const pkg = JSON.parse(readFileSync(join(REPO, 'shared', 'turby-stage-geometry', 'package.json'), 'utf8'));
+  assert.equal(pkg.name, 'turby-stage-geometry');
+  assert.equal(pkg.dependencies, undefined, '런타임 의존성 없음(브라우저·Node 공용)');
+  assert.deepEqual(Object.keys(pkg.exports['.']).sort(), ['default', 'import', 'require', 'types']);
+  for (const rel of [pkg.exports['.'].import, pkg.exports['.'].require, pkg.exports['.'].types]) assert.ok(existsSync(join(REPO, 'shared', 'turby-stage-geometry', rel)), `산출물 ${rel}`);
+  const root = JSON.parse(readFileSync(join(REPO, 'package.json'), 'utf8'));
+  assert.ok(root.workspaces.includes('shared/turby-stage-geometry'), '루트 workspace');
+  for (const consumer of ['BE', 'save-a-turby']) assert.equal(JSON.parse(readFileSync(join(REPO, consumer, 'package.json'), 'utf8')).dependencies['turby-stage-geometry'], '*', consumer);
+  const lock = JSON.parse(readFileSync(join(REPO, 'package-lock.json'), 'utf8'));
+  assert.equal(lock.packages['node_modules/turby-stage-geometry']?.resolved, 'shared/turby-stage-geometry', 'lockfile 동기화');
+  // 소스 한 벌에서 CJS(서버)와 ESM(프런트)이 같은 계약을 낸다
+  const esm = nativeImport(pathToFileURL(join(REPO, 'shared', 'turby-stage-geometry', pkg.exports['.'].import)).href);
+  return esm.then((m: Record<string, unknown>) => assert.deepEqual(Object.keys(m).sort(), Object.keys(shared).sort()));
 });

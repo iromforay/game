@@ -22,6 +22,8 @@ import { MiniMap } from '../ui/MiniMap';
 import type { MapMarker, MapView } from '../ui/MiniMap';
 import { inventory } from '../state/inventory';
 import { roomClient } from '../net/roomClient';
+import { deferredRestore, RESTORE_BATTLE_LABEL, RESTORE_BATTLE_TEXT, shouldPromptBattle } from '../state/restoreAttempt';
+import { feltPanel, pillButton, TEXT } from '../ui/kit';
 
 type Facing = 'down' | 'left' | 'right' | 'up';
 const FACING_ROW: Record<Facing, number> = { down: 0, left: 1, right: 2, up: 3 };
@@ -269,15 +271,55 @@ ${storyHint}` : it.hint,
   }
 
   // 4-B: 새로고침·재접속으로 돌아왔을 때 서버에 진행 중인 전투가 있으면 그 전투로 이어서 들어간다(서버에 닿지 않으면 조용히 무시)
+  // 10-06 v1 §6: 복원 화면에서 서버를 확인하지 못한 채 마을로 나온 경우(deferredRestore)에는 연결이 돌아왔을 때 접속 인증 결과를 다시 확인하고,
+  // 활성 전투가 남아 있으면 자동으로 끌고 가지 않고 새 활동을 시작하기 전에 복원 안내를 보인다
   private resumeBattleIfAny() {
     void roomClient
       .connect()
-      .then(() => {
-        const battle = roomClient.activeBattle;
-        if (!battle || !this.scene.isActive()) return;
-        resumeBattle(this, battle);
-      })
+      .then(() => this.checkServerBattle())
       .catch(() => undefined);
+    if (deferredRestore.isPending) {
+      const off = roomClient.on('reconnected', () => this.checkServerBattle());
+      this.events.once('shutdown', off);
+    }
+  }
+
+  private checkServerBattle() {
+    if (!this.scene.isActive()) return;
+    const battle = roomClient.activeBattle;
+    if (!shouldPromptBattle(deferredRestore.isPending, battle)) {
+      if (!battle) deferredRestore.clear(); // 서버가 "남은 전투 없음"을 확인했다
+      else resumeBattle(this, battle);
+      return;
+    }
+    this.showRestorePrompt(battle!);
+  }
+
+  private restorePrompt: Phaser.GameObjects.GameObject[] = [];
+
+  private showRestorePrompt(battle: BattleSnapshot) {
+    if (this.restorePrompt.length > 0) return; // 접속 인증 결과가 여러 번 와도 한 번만
+    this.locked = true; // 안내에 답하기 전에는 새 활동(집·시장·모험)을 시작하지 않는다
+    this.joystick.setEnabled(false);
+    const cx = this.scale.width / 2;
+    const cy = CANVAS_HEIGHT / 2;
+    const objs: Phaser.GameObjects.GameObject[] = [
+      this.add.rectangle(cx, cy, this.scale.width, CANVAS_HEIGHT, 0x4a3a44, 0.55).setInteractive(),
+      feltPanel(this, cx - 300, cy - 130, 600, 260, { radius: 28, strokeW: 6 }),
+      this.add.text(cx, cy - 40, RESTORE_BATTLE_TEXT, { fontSize: '24px', color: TEXT.body, align: 'center', wordWrap: { width: 520 } }).setOrigin(0.5),
+      pillButton(this, cx, cy + 60, 280, 76, RESTORE_BATTLE_LABEL, 'primary', () => {
+        deferredRestore.clear();
+        resumeBattle(this, battle);
+      }),
+    ];
+    for (const o of objs) (o as Phaser.GameObjects.Text).setScrollFactor?.(0).setDepth?.(5000);
+    this.restorePrompt = objs;
+    this.events.once('shutdown', () => (this.restorePrompt = []));
+  }
+
+  // 진단용 요약(화면 상태만)
+  get debugRestorePrompt() {
+    return { shown: this.restorePrompt.length > 0, deferred: deferredRestore.isPending };
   }
 
   update(_time: number, delta: number) {

@@ -6,6 +6,9 @@ export const WILD_UNREACHABLE_TEXT: Record<string, string> = {
   blocked: '길이 막혀 있어요. 돌아서 가까이 가 보세요.',
   locked_zone: '아직 들어갈 수 없는 곳이에요.',
 };
+// 지도에서 야생 터비를 골랐을 때의 안내(10-06 v1 §1 확정 문구)
+export const WILD_HINT_NEAR = '가까이 가면 만날 수 있어요.';
+export const WILD_HINT_ENGAGED = '다른 전투가 진행 중이에요.';
 export const WILD_NOTICE_REPEAT_MS = 3000; // 같은 야생·같은 사유의 안내는 이 시간 안에 다시 띄우지 않는다
 
 // 재입장 위치가 유효하지 않아 서버가 시작 지점으로 보정했을 때(한 번만)

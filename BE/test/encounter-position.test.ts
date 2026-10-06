@@ -120,7 +120,9 @@ test('야생 조우: 닫힌 문 너머·잠긴 구역 안의 야생은 조우할
   await closed.enter();
   assert.equal(closed.walk({ x: 1900, y: 1120 }, { x: 2284, y: 1250 }), 'ok', '닫힌 숨은 길 문 바로 앞');
   assert.ok(Math.hypot(2284 - inside.x, 0) <= 120, '조우 거리 안');
-  assert.deepEqual(await failure(closed.battles.start(P, 9)), ['WILD_UNREACHABLE', 'locked_zone'], '플레이어는 구역 밖, 야생은 잠긴 구역 안');
+  // 10-06 v1 §2: 잠긴 구역 안의 야생은 이 플레이어에게 없는 것과 같다 — 목록에도 없고 조우 요청도 존재하지 않는 마커와 같은 응답이다
+  assert.deepEqual(closed.rooms.wildsFor(closed.rooms.roomOf(P)!, P), []);
+  assert.deepEqual(await failure(closed.battles.start(P, 9)), ['INVALID_SPAWN', null], '플레이어는 구역 밖, 야생은 잠긴 구역 안 — 사유(locked_zone)도 드러내지 않는다');
   assert.equal(closed.rooms.roomOf(P)!.wilds[0].state, 'free');
 
   const open = setup({ events: OPENED, checkpoint: 'CH01_COMPASS_ACQUIRED', wilds: [inside] });

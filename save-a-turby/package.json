@@ -5,8 +5,11 @@
   "type": "module",
   "main": "./src/game.ts",
   "scripts": {
+    "predev": "npm run build -w turby-stage-geometry --prefix ..",
     "dev": "vite",
+    "prebuild": "npm run build -w turby-stage-geometry --prefix ..",
     "build": "tsc && vite build",
+    "pretest": "npm run build -w turby-stage-geometry --prefix ..",
     "preview": "vite preview",
     "test": "node --experimental-strip-types --no-warnings --test test/*.test.ts"
   },
@@ -16,6 +19,7 @@
   },
   "dependencies": {
     "phaser": "3.90.0",
-    "socket.io-client": "^4.8.1"
+    "socket.io-client": "^4.8.1",
+    "turby-stage-geometry": "*"
   }
 }

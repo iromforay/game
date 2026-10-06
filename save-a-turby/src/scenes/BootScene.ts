@@ -9,7 +9,7 @@ import { getPlayerId } from '../state/player';
 import type { OpeningSceneData } from './OpeningScene';
 import { roomClient } from '../net/roomClient';
 import { restoreRoute } from '../state/restore';
-import { canRetry, RESTORE_RETRY_LABEL, RESTORE_SLOW_MS, RESTORE_TEXT, RestoreAttempts, type RestorePhase } from '../state/restoreAttempt';
+import { canLeaveToVillage, canRetry, deferredRestore, OnceGuard, RESTORE_RETRY_LABEL, RESTORE_SLOW_MS, RESTORE_TEXT, RESTORE_VILLAGE_LABEL, RestoreAttempts, type RestorePhase } from '../state/restoreAttempt';
 import { displayScaleOf, fontPx, MIN_BODY_PX } from '../ui/responsive';
 import { resumeBattle } from './VillageScene';
 
@@ -34,6 +34,9 @@ export class BootScene extends Phaser.Scene {
   private restorePhase: RestorePhase | null = null; // 복원 화면의 지금 상태(복원 단계가 아니면 null)
   private restoreStatus?: Phaser.GameObjects.Text;
   private retryButton?: Phaser.GameObjects.Container;
+  private villageButton?: Phaser.GameObjects.Container;
+  private slowTimer?: Phaser.Time.TimerEvent;
+  private escape = new OnceGuard(); // 마을 복귀는 버튼을 여러 번 눌러도 한 번만
 
   constructor() {
     super('Boot');
@@ -44,11 +47,14 @@ export class BootScene extends Phaser.Scene {
     this.restorePhase = null;
     this.restoreStatus = undefined;
     this.retryButton = undefined;
+    this.villageButton = undefined;
+    this.slowTimer = undefined;
+    this.escape = new OnceGuard();
   }
 
   // 진단용 요약(화면 상태만)
   get debugRestore() {
-    return { phase: this.restorePhase, attempts: this.attempts.count, retry: !!this.retryButton };
+    return { phase: this.restorePhase, attempts: this.attempts.count, retry: !!this.retryButton, village: !!this.villageButton, leaving: this.escape.used };
   }
 
   preload() {
@@ -83,9 +89,10 @@ export class BootScene extends Phaser.Scene {
   private restore() {
     const id = this.attempts.begin();
     this.showRestore('loading');
-    const slow = this.time.delayedCall(RESTORE_SLOW_MS, () => {
+    this.slowTimer?.remove(false);
+    const slow = (this.slowTimer = this.time.delayedCall(RESTORE_SLOW_MS, () => {
       if (this.attempts.isCurrent(id) && this.restorePhase === 'loading') this.showRestore('slow');
-    });
+    }));
     void roomClient
       .connect({ fresh: id > 1 })
       .then(() => true, () => false)
@@ -105,7 +112,30 @@ export class BootScene extends Phaser.Scene {
     this.restorePhase = phase;
     this.restoreStatus?.setText(RESTORE_TEXT[phase]).setColor(phase === 'failed' ? TEXT.error : TEXT.body);
     this.retryButton?.destroy();
+    this.villageButton?.destroy();
     this.retryButton = undefined;
-    if (canRetry(phase)) this.retryButton = pillButton(this, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 110, 260, 88, RESTORE_RETRY_LABEL, 'primary', () => this.restore());
+    this.villageButton = undefined;
+    // 10-06 v1 §6: 지연·실패 화면의 탈출 경로 두 가지 — 다시 시도 / 마을 화면으로 돌아가기
+    if (canRetry(phase)) this.retryButton = pillButton(this, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 100, 300, 80, RESTORE_RETRY_LABEL, 'primary', () => this.restore());
+    if (canLeaveToVillage(phase)) this.villageButton = pillButton(this, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 196, 420, 80, RESTORE_VILLAGE_LABEL, 'secondary', () => void this.leaveToVillage());
+  }
+
+  // 10-06 v1 §6: 마을로 돌아간다. 한 번만 실행하고, 진행 중이던 복원 시도의 응답은 낡은 것으로 만들어 선택한 마을 화면을 덮지 못하게 한다.
+  // 서버가 연결돼 있으면 기존 탐험 세션 이탈 계약(room:leave)을 먼저 쓰고, 닿지 않으면 요청 없이 로컬 화면만 전환한다 — 새 탐험 방은 만들지 않는다.
+  // 서버를 확인하지 못했거나 활성 전투가 남아 있으면 마을이 서버 연결 회복 뒤에 다시 확인해 복원 안내를 낸다(deferredRestore)
+  private async leaveToVillage() {
+    if (!this.escape.take()) return;
+    this.attempts.begin();
+    this.slowTimer?.remove(false);
+    this.retryButton?.destroy();
+    this.villageButton?.destroy();
+    this.retryButton = undefined;
+    this.villageButton = undefined;
+    this.restorePhase = null;
+    this.restoreStatus?.setText('마을로 돌아가는 중…').setColor(TEXT.body);
+    const how = await roomClient.leaveRoomIfOnline();
+    if (!this.sys.isActive()) return;
+    if (how === 'offline' || roomClient.activeBattle) deferredRestore.mark();
+    this.scene.start('Village');
   }
 }

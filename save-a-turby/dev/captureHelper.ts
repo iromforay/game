@@ -133,7 +133,7 @@ function state() {
     out.home = { pages: [...home.pages], busy: home.busy, mode: home.L.mode, equip: home.equipPanel?.debugState ?? null, bag: count('가방 ('), shelf: count('선반 (') };
   }
   const village = g.scene.getScene('Village') as unknown as Any;
-  if (scenes.includes('Village') && village.hud) out.village = { ready: village.ready, hudMode: village.hud.mode, prompt: village.activeInteraction?.type ?? null, locked: village.locked, paused: village.paused, miniMap: village.miniMap?.debugState ?? null };
+  if (scenes.includes('Village') && village.hud) out.village = { ready: village.ready, hudMode: village.hud.mode, prompt: village.activeInteraction?.type ?? null, locked: village.locked, restorePrompt: (village.restorePrompt?.length ?? 0) > 0, paused: village.paused, miniMap: village.miniMap?.debugState ?? null };
   const map = g.scene.getScene('Map') as unknown as Any;
   if (scenes.includes('Map') && map.hud) {
     const center = (r: Any) => ({ x: Math.round(r.x + r.w / 2), y: Math.round(r.y + r.h / 2) });

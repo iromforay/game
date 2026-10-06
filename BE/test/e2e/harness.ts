@@ -13,6 +13,8 @@ import { seedBase, startTurbyApp } from '../helpers/turby-app';
 import { RoomsService } from '../../src/turby/rooms/rooms.service';
 import { RoomError } from '../../src/turby/rooms/types';
 import { StoryContentService, type StageStoryData } from '../../src/turby/story/story-content.service';
+import { SettingsService } from '../../src/turby/rooms/settings.service';
+import { BattleService } from '../../src/turby/battle/battle.service';
 export const ROOT = join(__dirname, '../../..');
 export const ARTIFACTS = process.env.E2E_ARTIFACT_DIR ?? join(__dirname, '.artifacts');
 export const CAPTURE_DIR = process.env.E2E_CAPTURE_DIR ?? null; // 지정하면 캡처(v5 §7)를 여기에 저장
@@ -45,7 +47,8 @@ export class Backend {
   async start(seed?: (db: FakeDb) => void, settings: Record<string, unknown> = {}) {
     await this.stop();
     this.db = new FakeDb();
-    seedBase(this.db, { 'room.reconnectGraceMs': 30_000, ...settings });
+    // 조우 반경은 서버 설정이 유일한 정본(10-06 v1 §3) — E2E 기본은 실제 걸음으로 닿을 만한 60px. 반경을 보는 시험은 settings로 덮어쓴다
+    seedBase(this.db, { 'room.reconnectGraceMs': 30_000, 'battle.encounterRadiusPx': 60, ...settings });
     seed?.(this.db);
     ({ app: this.app } = await startTurbyApp(this.db, this.port));
   }
@@ -112,6 +115,58 @@ export class Backend {
         held = false;
         gates.forEach((g) => g.open(false));
         rooms.identify = original;
+      },
+    };
+  }
+  // 그 계정에 스토리 이벤트를 기록한다(구역 개방 등 — DB 행과 서버 메모리의 판정 상태를 함께 갱신). 실제 진행 경로가 아니라 시험용 상태 만들기
+  grantEvent(device: string, eventId: string) {
+    const p = this.playerByDevice(device)!;
+    this.db.seed('player_story_event', { player_id: p.id, event_id: eventId });
+    this.app!.get(RoomsService).noteStoryEvents(p.id.toString(), [eventId]);
+  }
+  // game_setting 값을 바꾼다(이 서버 인스턴스의 메모리에서만). 클라이언트는 다음 Map 상태(map:enter·hello)에서 새 값을 받는다
+  setSetting(key: string, value: unknown) {
+    ((this.app!.get(SettingsService) as unknown as { values: Map<string, unknown> }).values).set(key, value);
+  }
+  // 탐험 세션 이탈(room:leave) 요청 횟수를 센다 — 마을 복귀 버튼이 서버 요청을 한 번만 보내는지 볼 때
+  countLeaves() {
+    const rooms = this.app!.get(RoomsService);
+    const original = rooms.leaveRoom.bind(rooms);
+    const counter = { calls: 0 };
+    rooms.leaveRoom = (...args: Parameters<RoomsService['leaveRoom']>) => {
+      counter.calls++;
+      return original(...args);
+    };
+    return counter;
+  }
+  // 앞으로 n번의 전투 결과 정산을 일부러 실패시킨다(정산 직전의 새로고침 시험). 운영 코드의 시험용 주입 경로를 그대로 쓴다
+  failNextSettles(n: number) {
+    (this.app!.get(BattleService) as unknown as { injectedSettleFailures: number }).injectedSettleFailures = n;
+  }
+  // 특정 야생(spawnIndex)에 대한 조우 요청(battle:start)의 처리를 붙잡아 둔다(느린 서버 흉내). release()로 풀면 원래 처리가 이어진다
+  holdBattleStart(spawnIndex: number) {
+    const battles = this.app!.get(BattleService);
+    const original = battles.start.bind(battles);
+    let open: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => (open = resolve));
+    const state = { calls: 0 };
+    battles.start = async (playerId: string, idx: unknown) => {
+      if (idx === spawnIndex) {
+        state.calls++;
+        await gate;
+      }
+      return original(playerId, idx);
+    };
+    return {
+      get calls() {
+        return state.calls;
+      },
+      release: () => {
+        open();
+      },
+      restore: () => {
+        open();
+        battles.start = original;
       },
     };
   }

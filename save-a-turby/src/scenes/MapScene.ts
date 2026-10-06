@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { AVATAR_SPEED, ENCOUNTER_RADIUS, CANVAS_WIDTH } from '../config/constants';
+import { AVATAR_SPEED, CANVAS_WIDTH } from '../config/constants';
 import { getStage } from '../config/stages';
 import { VirtualJoystick } from '../ui/VirtualJoystick';
 import { InventoryPanel } from '../ui/InventoryPanel';
@@ -25,8 +25,10 @@ import { AVATAR_IMAGE, CHARACTER_IMAGES, BACKGROUND_TILES } from '../assets/regi
 import { collectStoryObject, fetchStageView, fetchStory, triggerStory } from '../api/client';
 import { DELIVERY_ITEM_NAME, deliveryGoalText, shortageText, type StoryDelivery, type StoryPlay } from '../story/storyFlow';
 import { CLIENT_BODY_HALF, collectedText, nearestInteractable, promptText, solidRects, stepWithSolids, type Interactable, type StageRect, type StageView } from '../story/storyStage';
-import { NoticeGate, POSITION_CORRECTED_TEXT, WILD_NOTICE_REPEAT_MS, wildNoticeKey, wildUnreachableText } from '../story/mapNotices';
+import { NoticeGate, POSITION_CORRECTED_TEXT, WILD_HINT_ENGAGED, WILD_HINT_NEAR, WILD_NOTICE_REPEAT_MS, wildNoticeKey, wildUnreachableText } from '../story/mapNotices';
 
+// 배치된 자리 바로 옆(조우 반경 안)의 야생은 반경의 이 배수 밖으로 벗어난 뒤에야 다시 조우한다. 서버 반경이 크게 바뀌어도 같은 비율로 동작한다
+const QUIET_EXIT_FACTOR = 1.1;
 const WILD_RECHECK_MS = 1500; // 서버가 "닿지 않는다"고 한 야생을 다시 물어보기까지의 간격
 const AVATAR_HALF = CLIENT_BODY_HALF; // 막힌 곳 판정에 쓰는 아바타 몸 반지름(px) — 서버와 같은 geometry 계약의 값
 const DEPTH_GROUND = -20;
@@ -361,7 +363,7 @@ export class MapScene extends Phaser.Scene {
     const wildMarkers: MapMarker[] = shown.map((m) =>
       target && m.info.characterCode === target.code
         ? { id: `target-${m.index}`, type: 'target' as const, name: `대표 터비 ${target.name}`, x: m.info.x, y: m.info.y, hint: `${target.title}: '${target.name}'를 조우해 직접 포획하면 다음 지역이 열려요.` }
-        : { id: `wild-${m.index}`, type: 'wild' as const, name: this.characterName(m.info.characterCode), x: m.info.x, y: m.info.y, hint: m.info.state === 'engaged' ? '교전 중인 야생 터비예요.' : '야생 터비예요. 가까이 다가가면 만나요.' },
+        : { id: `wild-${m.index}`, type: 'wild' as const, name: this.characterName(m.info.characterCode), x: m.info.x, y: m.info.y, hint: m.info.state === 'engaged' ? WILD_HINT_ENGAGED : WILD_HINT_NEAR },
     );
     // 전체 지도·미니맵: 회색상자 모드에서만 길·벽·문·공개된 구역을 임시 도형으로 그린다(최종 지도가 오면 이 임시 배경은 없어진다)
     const terrain = view?.greybox && view.layout ? { zones: view.layout.zones, paths: view.layout.paths, blockers: view.layout.blockers, gates: view.gates } : undefined;
@@ -557,6 +559,7 @@ export class MapScene extends Phaser.Scene {
       roomClient.on('left', ({ playerId }) => this.removePeer(playerId)),
       roomClient.on('correct', (pos) => this.applyCorrection(pos)),
       roomClient.on('wildChanged', (w) => this.onWildChanged(w)),
+      roomClient.on('reconnected', () => this.syncWilds()), // 재접속 인증이 새로 내려 준 야생 목록(공개·비공개 변화 포함)으로 다시 맞춘다
       roomClient.on('battleInvite', (i) => this.showInvite(i.snapshot)),
       roomClient.on('battleUpdate', (u) => this.onBattleUpdate(u)),
     );
@@ -605,7 +608,7 @@ export class MapScene extends Phaser.Scene {
       this.avatar.setPosition(self.x, self.y);
       this.lastSent = { x: self.x, y: self.y };
       this.cameras.main.centerOn(self.x, self.y);
-      for (const m of this.markers) if (Phaser.Math.Distance.Between(self.x, self.y, m.info.x, m.info.y) <= ENCOUNTER_RADIUS * 1.5) this.quietWilds.add(m.index);
+      for (const m of this.markers) if (Phaser.Math.Distance.Between(self.x, self.y, m.info.x, m.info.y) <= roomClient.encounterRadius) this.quietWilds.add(m.index);
     }
     this.positioned = true;
   }
@@ -862,10 +865,10 @@ export class MapScene extends Phaser.Scene {
       if (marker.encountered || marker.state !== 'free' || (marker.retryAt ?? 0) > Date.now()) continue;
       const dist = Phaser.Math.Distance.Between(this.avatar.x, this.avatar.y, marker.info.x, marker.info.y);
       if (this.quietWilds.has(marker.index)) {
-        if (dist > ENCOUNTER_RADIUS * 1.5) this.quietWilds.delete(marker.index);
+        if (dist > roomClient.encounterRadius * QUIET_EXIT_FACTOR) this.quietWilds.delete(marker.index);
         continue;
       }
-      if (dist <= ENCOUNTER_RADIUS) {
+      if (dist <= roomClient.encounterRadius) {
         this.triggerEncounter(marker);
         break;
       }
@@ -873,18 +876,24 @@ export class MapScene extends Phaser.Scene {
   }
 
   // 3.2/3.3/4-B: 조우는 서버가 확인한다 — 서버가 (지역, 마커 번호)의 야생 종류를 정하고 전투를 만든 뒤에야 파티 선택으로 넘어간다.
+  // 10-06 v1 §4: 요청하는 동안에도 이동 입력을 잠그지 않는다. 같은 야생으로의 중복 요청만 막고(marker.encountered),
+  // 실제 조우가 승인돼 전투 전환이 시작될 때만 잠근다(encounterLocked). 늦게 도착한 응답은 이미 시작된 전환이나 다시 맞춘 마커를 덮지 않는다.
   // 서버에 닿지 않으면 전투를 시작하지 않고 잠시 뒤 다시 시도할 수 있다(전투는 서버에서만 진행됨).
   private async triggerEncounter(marker: WildMarker) {
     marker.encountered = true;
-    this.encounterLocked = true;
+    const gen = this.generation;
+    // 이 응답이 아직 유효한가: 화면이 그대로이고, 다른 조우가 이미 승인돼 전환 중이 아니며, 이 마커가 아직 화면에 있다
+    const stale = () => gen !== this.generation || !this.sys.isActive() || this.encounterLocked || !this.markers.includes(marker);
     try {
       const snapshot = await battleClient.start(marker.index);
+      if (stale()) return;
+      this.encounterLocked = true; // 승인됨 — 이제부터 이동 입력을 잠그고 전투 화면으로 넘어간다
       this.goPartySelect(snapshot);
     } catch (err) {
+      if (stale()) return;
       marker.encountered = false;
       marker.retryAt = Date.now() + 4000;
-      this.encounterLocked = false;
-      // 10-02 v5 §1·v6 §3: 벽·닫힌 문 너머거나 아직 들어갈 수 없는 구역이라 서버가 거부한 야생 — 전투도 마커도 그대로 두고,
+      // 10-02 v5 §1·v6 §3: 벽·닫힌 문 너머라 서버가 거부한 야생 — 전투도 마커도 그대로 두고,
       // 매 프레임 묻지 않게 1.5초 뒤에 다시 확인한다. 고장으로 보이지 않게 사유별 안내를 띄우되 같은 야생·같은 사유는 3초 안에 반복하지 않는다
       if (err instanceof RoomApiError && err.code === 'WILD_UNREACHABLE') {
         marker.retryAt = Date.now() + WILD_RECHECK_MS;

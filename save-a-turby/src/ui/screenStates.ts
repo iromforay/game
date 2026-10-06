@@ -43,7 +43,7 @@ export const LEGEND_LABEL: Record<LegendKey, string> = {
   target: '목적지 — 별',
   story: '이야기 지점 — 겹동그라미',
   dust: '빛나는 실가루 — 마름모',
-  wild: '야생 터비 — 세모',
+  wild: '야생 터비 ▲',
   path: '길 — 굵은 선(임시)',
   wall: '막힌 곳 — 어두운 사각형',
   gateClosed: '닫힌 문 — 채운 사각형',
