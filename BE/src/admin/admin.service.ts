@@ -302,7 +302,7 @@ export class AdminService {
       attack_level: parseRangedInt(body.attackLevel, '전체 공격력 강화', 0, 8),
       start_coin_level: parseRangedInt(body.startCoinLevel, '시작 코인 강화', 0, 5),
       summon_discount_level: parseRangedInt(body.summonDiscountLevel, '소환 할인 강화', 0, 5),
-      highest_cleared_stage: parseRangedInt(body.highestClearedStage, '최고 클리어 스테이지', 0, 30),
+      highest_cleared_stage: parseRangedInt(body.highestClearedStage, '최고 클리어 스테이지', 0, 50),
     };
     const account = await this.prisma.account.findUnique({ where: { id: accountId } });
     if (!account) throw new NotFoundException({ message: '계정을 찾을 수 없습니다', code: 'ACCOUNT_NOT_FOUND' });

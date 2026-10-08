@@ -116,9 +116,9 @@ function MergeDefenseProfileEditor({ accountId, onBack }: { accountId: string; o
             <fieldset><legend>스테이지 진행</legend>
               <label>최고 클리어 스테이지<select value={draft.highestClearedStage} onChange={(e) => setNumber('highestClearedStage', e.target.value)}>
                 <option value={0}>진행 없음 · 1-1 도전 가능</option>
-                {Array.from({ length: 30 }, (_, index) => index + 1).map((stage) => <option key={stage} value={stage}>{progressLabel(stage)} 클리어</option>)}
+                {Array.from({ length: 50 }, (_, index) => index + 1).map((stage) => <option key={stage} value={stage}>{progressLabel(stage)} 클리어</option>)}
               </select></label>
-              <p className="admin-muted">1-10을 선택하면 챕터 2, 2-10을 선택하면 챕터 3이 해금됩니다.</p>
+              <p className="admin-muted">각 챕터의 10번째 스테이지를 클리어하면 다음 챕터가 해금됩니다. 5-10은 종장 완료입니다.</p>
             </fieldset>
             <div className="admin-savebar"><button type="submit" className="primary" disabled={busy}>{busy ? '저장 중…' : '전체 변경 저장'}</button></div>
           </form>

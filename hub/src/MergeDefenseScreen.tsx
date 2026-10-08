@@ -11,6 +11,12 @@ import cookieKingUrl from '../../number-hero-tower/src/assets/boss-03-cookie-kin
 import candyHydraUrl from '../../number-hero-tower/src/assets/boss-04-candy-hydra.png';
 import jellyKrakenUrl from '../../number-hero-tower/src/assets/boss-07-jelly-kraken.png';
 import emperorDragonUrl from '../../number-hero-tower/src/assets/boss-10-emperor-dragon.png';
+import blockDragonUrl from '../../number-hero-tower/src/assets/boss-01-block-dragon.png';
+import clockworkTyrantUrl from '../../number-hero-tower/src/assets/boss-02-clockwork-tyrant.png';
+import mechaTiranoUrl from '../../number-hero-tower/src/assets/boss-05-mecha-tirano.png';
+import pirateKingUrl from '../../number-hero-tower/src/assets/boss-06-block-pirate-king.png';
+import runawayCarouselUrl from '../../number-hero-tower/src/assets/boss-08-runaway-carousel.png';
+import goldenGolemUrl from '../../number-hero-tower/src/assets/boss-09-golden-golem.png';
 import swordsmanUrl from './assets/merge-defense/apprentice-swordsman.png';
 import archerUrl from './assets/merge-defense/apprentice-archer.png';
 import spellbladeUrl from './assets/merge-defense/novice-spellblade.png';
@@ -22,12 +28,14 @@ import rangerUrl from './assets/merge-defense/ranger.png';
 import divineArcherUrl from './assets/merge-defense/divine-archer.png';
 import trainingYardUrl from './assets/merge-defense/training-yard-background.png';
 import candyCastleBackgroundUrl from './assets/merge-defense/candy-castle-battlefield.png';
+import dragonNestBackgroundUrl from './assets/merge-defense/dragon-nest-battlefield.jpg';
+import starFortressBackgroundUrl from './assets/merge-defense/star-fortress-battlefield.jpg';
 import { collectSilver, EMPTY_MERGE_PROFILE, fetchMergeProfile, purchaseMergeUpgrade, saveHeroDiscovery, saveMergeStageClear, unlockSpellbladeRecipe, upgradeCost, type MergeProfile, type MergeUpgrade } from './mergeDefenseEconomy';
 import './MergeDefenseScreen.css';
 import './MergeDefenseGrid.css';
 import './MergeDefenseWorldMap.css';
 
-type Screen = 'map' | 'stages' | 'shop' | 'game';
+type Screen = 'map' | 'stages' | 'shop' | 'game' | 'ending';
 type HeroClass = 'warrior' | 'archer' | 'spellblade';
 type EnemyKind = 'swarm' | 'runner' | 'normal' | 'shield' | 'elite' | 'boss';
 
@@ -69,42 +77,52 @@ interface MergeStage {
   bossImage: string;
 }
 
-const HEROES: Record<HeroClass, Array<{ name: string; attack: number; speed: number; cost: number; icon: string; image: string }>> = {
+interface HeroData {
+  name: string;
+  attack: number;
+  speed: number;
+  cost: number;
+  targets: number;
+  icon: string;
+  image: string;
+}
+
+const HEROES: Record<HeroClass, HeroData[]> = {
   warrior: [
-    { name: '수습 검사', attack: 5, speed: 0.8, cost: 5, icon: '🗡️', image: swordsmanUrl },
-    { name: '방패 전사', attack: 12, speed: 0.8, cost: 10, icon: '🛡️', image: shieldWarriorUrl },
-    { name: '기사', attack: 27, speed: 0.8, cost: 20, icon: '⚔️', image: knightHeroUrl },
-    { name: '성기사', attack: 60, speed: 0.8, cost: 40, icon: '🌟', image: holyKnightUrl },
-    { name: '왕실 검사', attack: 96, speed: 0.82, cost: 80, icon: '👑', image: knightHeroUrl },
-    { name: '황금 기사', attack: 150, speed: 0.84, cost: 160, icon: '🟡', image: holyKnightUrl },
-    { name: '룬 기사', attack: 235, speed: 0.86, cost: 320, icon: '💎', image: knightHeroUrl },
-    { name: '천공 검사', attack: 365, speed: 0.88, cost: 640, icon: '☁️', image: holyKnightUrl },
-    { name: '신화 기사', attack: 565, speed: 0.9, cost: 1280, icon: '🔥', image: knightHeroUrl },
-    { name: '창세검신', attack: 880, speed: 0.92, cost: 2560, icon: '⚔️', image: holyKnightUrl },
+    { name: '수습 검사', attack: 5, speed: 0.8, cost: 5, targets: 1, icon: '🗡️', image: swordsmanUrl },
+    { name: '방패 전사', attack: 12, speed: 0.8, cost: 10, targets: 1, icon: '🛡️', image: shieldWarriorUrl },
+    { name: '기사', attack: 27, speed: 0.8, cost: 20, targets: 1, icon: '⚔️', image: knightHeroUrl },
+    { name: '성기사', attack: 60, speed: 0.8, cost: 40, targets: 1, icon: '🌟', image: holyKnightUrl },
+    { name: '왕실 검사', attack: 96, speed: 0.82, cost: 60, targets: 1, icon: '👑', image: knightHeroUrl },
+    { name: '황금 기사', attack: 150, speed: 0.84, cost: 90, targets: 1, icon: '🟡', image: holyKnightUrl },
+    { name: '룬 기사', attack: 235, speed: 0.86, cost: 135, targets: 1, icon: '💎', image: knightHeroUrl },
+    { name: '천공 검사', attack: 365, speed: 0.88, cost: 200, targets: 1, icon: '☁️', image: holyKnightUrl },
+    { name: '신화 기사', attack: 565, speed: 0.9, cost: 300, targets: 1, icon: '🔥', image: knightHeroUrl },
+    { name: '창세검신', attack: 880, speed: 0.92, cost: 450, targets: 1, icon: '⚔️', image: holyKnightUrl },
   ],
   archer: [
-    { name: '견습 궁수', attack: 4, speed: 1.25, cost: 5, icon: '🏹', image: archerUrl },
-    { name: '명사수', attack: 9, speed: 1.25, cost: 10, icon: '🎯', image: marksmanUrl },
-    { name: '레인저', attack: 20, speed: 1.25, cost: 20, icon: '🪶', image: rangerUrl },
-    { name: '신궁', attack: 44, speed: 1.25, cost: 40, icon: '✨', image: divineArcherUrl },
-    { name: '왕실 궁수', attack: 72, speed: 1.3, cost: 80, icon: '👑', image: rangerUrl },
-    { name: '황금 저격수', attack: 112, speed: 1.35, cost: 160, icon: '🎯', image: divineArcherUrl },
-    { name: '룬 사수', attack: 175, speed: 1.4, cost: 320, icon: '💎', image: rangerUrl },
-    { name: '천공 사수', attack: 270, speed: 1.45, cost: 640, icon: '☁️', image: divineArcherUrl },
-    { name: '신화 궁수', attack: 420, speed: 1.5, cost: 1280, icon: '🌠', image: rangerUrl },
-    { name: '창세궁신', attack: 650, speed: 1.55, cost: 2560, icon: '🏹', image: divineArcherUrl },
+    { name: '견습 궁수', attack: 4, speed: 1.25, cost: 5, targets: 1, icon: '🏹', image: archerUrl },
+    { name: '명사수', attack: 9, speed: 1.25, cost: 10, targets: 1, icon: '🎯', image: marksmanUrl },
+    { name: '레인저', attack: 20, speed: 1.25, cost: 20, targets: 1, icon: '🪶', image: rangerUrl },
+    { name: '신궁', attack: 44, speed: 1.25, cost: 40, targets: 1, icon: '✨', image: divineArcherUrl },
+    { name: '왕실 궁수', attack: 72, speed: 1.3, cost: 60, targets: 1, icon: '👑', image: rangerUrl },
+    { name: '황금 저격수', attack: 112, speed: 1.35, cost: 90, targets: 1, icon: '🎯', image: divineArcherUrl },
+    { name: '룬 사수', attack: 175, speed: 1.4, cost: 135, targets: 1, icon: '💎', image: rangerUrl },
+    { name: '천공 사수', attack: 270, speed: 1.45, cost: 200, targets: 1, icon: '☁️', image: divineArcherUrl },
+    { name: '신화 궁수', attack: 420, speed: 1.5, cost: 300, targets: 1, icon: '🌠', image: rangerUrl },
+    { name: '창세궁신', attack: 650, speed: 1.55, cost: 450, targets: 1, icon: '🏹', image: divineArcherUrl },
   ],
   spellblade: [
-    { name: '마검사', attack: 6, speed: 1, cost: 7, icon: '🔮', image: spellbladeUrl },
-    { name: '룬 검사', attack: 13, speed: 1, cost: 14, icon: '💠', image: spellbladeUrl },
-    { name: '마도 기사', attack: 29, speed: 1, cost: 28, icon: '🌀', image: spellbladeUrl },
-    { name: '아케인 블레이더', attack: 64, speed: 1, cost: 56, icon: '🌌', image: spellbladeUrl },
-    { name: '스펠 블레이더', attack: 102, speed: 1.03, cost: 112, icon: '🔯', image: spellbladeUrl },
-    { name: '비전 마검사', attack: 160, speed: 1.06, cost: 224, icon: '📜', image: spellbladeUrl },
-    { name: '성좌 기사', attack: 250, speed: 1.09, cost: 448, icon: '🌠', image: spellbladeUrl },
-    { name: '천공 마검사', attack: 390, speed: 1.12, cost: 896, icon: '☄️', image: spellbladeUrl },
-    { name: '신화 마검사', attack: 605, speed: 1.15, cost: 1792, icon: '🔥', image: spellbladeUrl },
-    { name: '창세마검신', attack: 940, speed: 1.18, cost: 3584, icon: '🌌', image: spellbladeUrl },
+    { name: '마검사', attack: 1820, speed: 1, cost: 512, targets: 3, icon: '🔮', image: spellbladeUrl },
+    { name: '룬 검사', attack: 4000, speed: 1.02, cost: 1024, targets: 3, icon: '💠', image: spellbladeUrl },
+    { name: '마도 기사', attack: 8800, speed: 1.04, cost: 2048, targets: 3, icon: '🌀', image: spellbladeUrl },
+    { name: '아케인 블레이더', attack: 19400, speed: 1.06, cost: 4096, targets: 3, icon: '🌌', image: spellbladeUrl },
+    { name: '스펠 블레이더', attack: 42700, speed: 1.08, cost: 8192, targets: 4, icon: '🔯', image: spellbladeUrl },
+    { name: '비전 마검사', attack: 93900, speed: 1.1, cost: 16384, targets: 4, icon: '📜', image: spellbladeUrl },
+    { name: '성좌 기사', attack: 206600, speed: 1.12, cost: 32768, targets: 4, icon: '🌠', image: spellbladeUrl },
+    { name: '천공 마검사', attack: 454500, speed: 1.14, cost: 65536, targets: 5, icon: '☄️', image: spellbladeUrl },
+    { name: '신화 마검사', attack: 999900, speed: 1.16, cost: 131072, targets: 5, icon: '🔥', image: spellbladeUrl },
+    { name: '창세마검신', attack: 2199800, speed: 1.18, cost: 262144, targets: 5, icon: '🌌', image: spellbladeUrl },
   ],
 };
 
@@ -112,6 +130,9 @@ const CLASS_LABEL: Record<HeroClass, string> = { warrior: '검사', archer: '궁
 const STANDARD_MAX_GRADE = 10;
 const CLASS_ORDER: HeroClass[] = ['warrior', 'archer', 'spellblade'];
 const HERO_RANGE: Record<HeroClass, number> = { warrior: 1.5, archer: 3.25, spellblade: 2.25 };
+const SPELLBLADE_MOMENTUM_START = 33;
+const SPELLBLADE_MOMENTUM_END = 35;
+const SPELLBLADE_MOMENTUM_COST = 384;
 const ENEMY_DATA: Record<EnemyKind, { name: string; hp: number; speed: number; reward: number; points: number; image: string }> = {
   swarm: { name: '태엽 꼬마', hp: 24, speed: 4.6, reward: 1, points: 5, image: gruntUrl },
   runner: { name: '질주 태엽병', hp: 34, speed: 6.4, reward: 2, points: 20, image: gruntUrl },
@@ -165,6 +186,26 @@ const STAGES: MergeStage[] = [
   { id: 28, chapter: 3, stageNumber: 8, title: '설탕 결정궁', route: '결정 갑옷 왕실 수비대', icon: '💎', bossName: '캔디 히드라', startCharacters: ['수습 검사', '견습 궁수'], startCoins: 90, baseHp: 14, hpScale: 10.3, speedScale: 1.22, preset: 'armor', background: candyCastleBackgroundUrl, bossImage: candyHydraUrl },
   { id: 29, chapter: 3, stageNumber: 9, title: '왕실 제과실', route: '디저트 최정예 근위선', icon: '👑', bossName: '쿠키 왕', startCharacters: ['수습 검사', '견습 궁수'], startCoins: 93, baseHp: 13, hpScale: 11, speedScale: 1.25, preset: 'elite', background: candyCastleBackgroundUrl, bossImage: cookieKingUrl },
   { id: 30, chapter: 3, stageNumber: 10, title: '과자 왕좌', route: '달콤한 왕국 최종 결전', icon: '🏰', bossName: '디저트 황제 드래곤', startCharacters: ['수습 검사', '견습 궁수'], startCoins: 96, baseHp: 13, hpScale: 12, speedScale: 1.28, preset: 'elite', background: candyCastleBackgroundUrl, bossImage: emperorDragonUrl },
+  { id: 31, chapter: 4, stageNumber: 1, title: '잿불 협곡', route: '화염 도마뱀 진입로', icon: '🔥', bossName: '잿불 비룡', startCharacters: ['수습 검사', '견습 궁수'], startCoins: 100, baseHp: 15, hpScale: 12.8, speedScale: 1.2, preset: 'swarm', background: dragonNestBackgroundUrl, bossImage: blockDragonUrl },
+  { id: 32, chapter: 4, stageNumber: 2, title: '비늘 바위길', route: '용린 중갑 방어선', icon: '🐲', bossName: '비늘 골렘', startCharacters: ['수습 검사', '견습 궁수'], startCoins: 103, baseHp: 15, hpScale: 13.5, speedScale: 1.22, preset: 'armor', background: dragonNestBackgroundUrl, bossImage: goldenGolemUrl },
+  { id: 33, chapter: 4, stageNumber: 3, title: '불꽃 날갯길', route: '고속 비룡 급강하 구역', icon: '🪽', bossName: '홍염 와이번', startCharacters: ['수습 검사', '견습 궁수'], startCoins: 106, baseHp: 14, hpScale: 14.2, speedScale: 1.32, preset: 'runner', background: dragonNestBackgroundUrl, bossImage: candyHydraUrl },
+  { id: 34, chapter: 4, stageNumber: 4, title: '용암 갑문', route: '흑요석 수문 방어선', icon: '🌋', bossName: '용암 성문지기', startCharacters: ['수습 검사', '견습 궁수'], startCoins: 109, baseHp: 14, hpScale: 15, speedScale: 1.24, preset: 'armor', background: dragonNestBackgroundUrl, bossImage: clockworkTyrantUrl },
+  { id: 35, chapter: 4, stageNumber: 5, title: '알 부화장', route: '새끼 용 대규모 집결지', icon: '🥚', bossName: '부화장 수호룡', startCharacters: ['수습 검사', '견습 궁수'], startCoins: 112, baseHp: 13, hpScale: 15.9, speedScale: 1.28, preset: 'swarm', background: dragonNestBackgroundUrl, bossImage: blockDragonUrl },
+  { id: 36, chapter: 4, stageNumber: 6, title: '폭군의 사냥터', route: '고대 포식자 주둔지', icon: '🦖', bossName: '기계 폭군 티라노', startCharacters: ['수습 검사', '견습 궁수'], startCoins: 116, baseHp: 13, hpScale: 16.8, speedScale: 1.3, preset: 'elite', background: dragonNestBackgroundUrl, bossImage: mechaTiranoUrl },
+  { id: 37, chapter: 4, stageNumber: 7, title: '화염 숨결 회랑', route: '불꽃과 돌진의 교차로', icon: '☄️', bossName: '쌍두 화염룡', startCharacters: ['수습 검사', '견습 궁수'], startCoins: 120, baseHp: 12, hpScale: 17.7, speedScale: 1.36, preset: 'runner', background: dragonNestBackgroundUrl, bossImage: candyHydraUrl },
+  { id: 38, chapter: 4, stageNumber: 8, title: '고룡의 보물고', route: '황금 비늘 근위선', icon: '💰', bossName: '황금 고룡 골렘', startCharacters: ['수습 검사', '견습 궁수'], startCoins: 124, baseHp: 12, hpScale: 18.7, speedScale: 1.3, preset: 'armor', background: dragonNestBackgroundUrl, bossImage: goldenGolemUrl },
+  { id: 39, chapter: 4, stageNumber: 9, title: '용왕의 심장부', route: '최정예 용기사 방어선', icon: '❤️‍🔥', bossName: '용기사 폭군', startCharacters: ['수습 검사', '견습 궁수'], startCoins: 128, baseHp: 11, hpScale: 19.8, speedScale: 1.34, preset: 'elite', background: dragonNestBackgroundUrl, bossImage: clockworkTyrantUrl },
+  { id: 40, chapter: 4, stageNumber: 10, title: '용의 왕좌', route: '화산 심장 최종 결전', icon: '🐉', bossName: '심연의 용제', startCharacters: ['수습 검사', '견습 궁수'], startCoins: 132, baseHp: 11, hpScale: 21, speedScale: 1.38, preset: 'elite', background: dragonNestBackgroundUrl, bossImage: emperorDragonUrl },
+  { id: 41, chapter: 5, stageNumber: 1, title: '별빛 관문', route: '천공 요새 진입로', icon: '✨', bossName: '성광 문지기', startCharacters: ['수습 검사', '견습 궁수'], startCoins: 137, baseHp: 14, hpScale: 22.2, speedScale: 1.28, preset: 'balanced', background: starFortressBackgroundUrl, bossImage: goldenGolemUrl },
+  { id: 42, chapter: 5, stageNumber: 2, title: '유성 회랑', route: '혜성 돌격대 가속 구역', icon: '🌠', bossName: '혜성 기사', startCharacters: ['수습 검사', '견습 궁수'], startCoins: 141, baseHp: 14, hpScale: 23.5, speedScale: 1.4, preset: 'runner', background: starFortressBackgroundUrl, bossImage: mechaTiranoUrl },
+  { id: 43, chapter: 5, stageNumber: 3, title: '월광 방벽', route: '달빛 결정 중갑선', icon: '🌙', bossName: '월광 골렘', startCharacters: ['수습 검사', '견습 궁수'], startCoins: 145, baseHp: 13, hpScale: 24.8, speedScale: 1.32, preset: 'armor', background: starFortressBackgroundUrl, bossImage: blockDragonUrl },
+  { id: 44, chapter: 5, stageNumber: 4, title: '성운 정원', route: '별가루 군단 증식지', icon: '🌌', bossName: '성운 히드라', startCharacters: ['수습 검사', '견습 궁수'], startCoins: 149, baseHp: 13, hpScale: 26.2, speedScale: 1.35, preset: 'swarm', background: starFortressBackgroundUrl, bossImage: candyHydraUrl },
+  { id: 45, chapter: 5, stageNumber: 5, title: '천체 관측소', route: '별자리 혼합 군단 집결지', icon: '🔭', bossName: '궤도 감시자', startCharacters: ['수습 검사', '견습 궁수'], startCoins: 153, baseHp: 12, hpScale: 27.7, speedScale: 1.36, preset: 'balanced', background: starFortressBackgroundUrl, bossImage: runawayCarouselUrl },
+  { id: 46, chapter: 5, stageNumber: 6, title: '무중력 선착장', route: '공중 해적 함대 주둔지', icon: '🚀', bossName: '성간 해적왕', startCharacters: ['수습 검사', '견습 궁수'], startCoins: 157, baseHp: 12, hpScale: 29.2, speedScale: 1.42, preset: 'runner', background: starFortressBackgroundUrl, bossImage: pirateKingUrl },
+  { id: 47, chapter: 5, stageNumber: 7, title: '황금 성좌', route: '신성 중갑 근위선', icon: '♌', bossName: '황금 성좌 거인', startCharacters: ['수습 검사', '견습 궁수'], startCoins: 162, baseHp: 11, hpScale: 30.8, speedScale: 1.38, preset: 'armor', background: starFortressBackgroundUrl, bossImage: goldenGolemUrl },
+  { id: 48, chapter: 5, stageNumber: 8, title: '시간의 회랑', route: '왜곡된 태엽 정예 구역', icon: '⏳', bossName: '시간 폭군', startCharacters: ['수습 검사', '견습 궁수'], startCoins: 167, baseHp: 11, hpScale: 32.5, speedScale: 1.44, preset: 'elite', background: starFortressBackgroundUrl, bossImage: clockworkTyrantUrl },
+  { id: 49, chapter: 5, stageNumber: 9, title: '창세의 문', route: '최종 수호군 방어선', icon: '🌟', bossName: '창세 성문룡', startCharacters: ['수습 검사', '견습 궁수'], startCoins: 172, baseHp: 10, hpScale: 34.3, speedScale: 1.42, preset: 'elite', background: starFortressBackgroundUrl, bossImage: blockDragonUrl },
+  { id: 50, chapter: 5, stageNumber: 10, title: '별빛 왕좌', route: '다섯 세계 종장 결전', icon: '👑', bossName: '별을 삼킨 종언룡', startCharacters: ['수습 검사', '견습 궁수'], startCoins: 178, baseHp: 10, hpScale: 36.5, speedScale: 1.46, preset: 'elite', background: starFortressBackgroundUrl, bossImage: emperorDragonUrl },
 ];
 
 function wavesFor(stage: MergeStage): EnemyKind[][] {
@@ -175,6 +216,8 @@ function wavesFor(stage: MergeStage): EnemyKind[][] {
   if (stage.preset === 'elite') waves = WAVES.map((wave, index) => index >= 4 && index < 9 ? [...wave, index >= 7 ? 'elite' : 'shield'] : [...wave]);
   if (stage.chapter === 2) waves = waves.map((wave, index) => [...wave, index < 5 ? 'normal' : 'shield', ...(index >= 6 && index < 9 ? ['elite' as EnemyKind] : [])]);
   if (stage.chapter === 3) waves = waves.map((wave, index) => [...wave, index < 4 ? 'swarm' : 'shield', ...(index >= 4 && index < 9 ? ['elite' as EnemyKind] : []), ...(index >= 7 && index < 9 ? ['runner' as EnemyKind] : [])]);
+  if (stage.chapter === 4) waves = waves.map((wave, index) => [...wave, index < 3 ? 'runner' : 'shield', ...(index >= 3 && index < 9 ? ['elite' as EnemyKind] : []), ...(index >= 6 && index < 9 ? ['runner' as EnemyKind] : [])]);
+  if (stage.chapter === 5) waves = waves.map((wave, index) => [...wave, 'shield', ...(index < 5 ? ['runner' as EnemyKind] : ['elite' as EnemyKind]), ...(index >= 5 && index < 9 ? ['elite' as EnemyKind, 'runner' as EnemyKind] : [])]);
   return waves;
 }
 
@@ -192,8 +235,21 @@ function stageStartCoins(stage: MergeStage, profile: MergeProfile) {
   return stage.startCoins + (profile.startCoinLevel ?? 0) * 5;
 }
 
-function waveClearReward(stage: MergeStage) {
-  return 2 + (stage.chapter - 1) * 2 + Math.floor((stage.stageNumber - 1) / 3);
+function stageThreatMultiplier(stage: MergeStage) {
+  return stage.hpScale * stage.speedScale;
+}
+
+function enemyCoinReward(stage: MergeStage, kind: EnemyKind) {
+  if (kind === 'boss') return 0;
+  return Math.ceil(ENEMY_DATA[kind].reward * stageThreatMultiplier(stage));
+}
+
+function waveClearReward(earnedCoins: number) {
+  return Math.ceil(earnedCoins * 0.15);
+}
+
+function bossArrivalReward(stage: MergeStage) {
+  return Math.ceil(150 * stageThreatMultiplier(stage));
 }
 
 function stageLabel(stage: MergeStage) {
@@ -202,6 +258,19 @@ function stageLabel(stage: MergeStage) {
 
 function summonCost(baseCost: number, profile: MergeProfile) {
   return Math.max(1, Math.ceil(baseCost * (1 - (profile.summonDiscountLevel ?? 0) * 0.03)));
+}
+
+function battleSummonCost(stage: MergeStage, heroClass: HeroClass, grade: number, profile: MergeProfile) {
+  const hero = HEROES[heroClass][grade - 1];
+  const hasFusionMomentum = heroClass === 'spellblade'
+    && grade === 1
+    && stage.id >= SPELLBLADE_MOMENTUM_START
+    && stage.id <= SPELLBLADE_MOMENTUM_END;
+  return summonCost(hasFusionMomentum ? SPELLBLADE_MOMENTUM_COST : hero.cost, profile);
+}
+
+function heroCombatDetail(hero: HeroData) {
+  return hero.targets > 1 ? `공격 ${hero.attack.toLocaleString()} · ${hero.targets}연쇄` : `공격 ${hero.attack.toLocaleString()}`;
 }
 
 function silverDrop(kind: EnemyKind) {
@@ -248,6 +317,15 @@ const bestKey = (stageId: number) => `merge-defense:stage-${stageId}:best`;
 const clearedKey = (stageId: number) => `merge-defense:stage-${stageId}:cleared`;
 const unlockedKey = 'merge-defense:unlocked-stage';
 const introKey = 'merge-defense:intro-seen';
+const endingKey = 'merge-defense:ending-seen';
+
+const CHAPTER_COPY: Record<number, { title: string; description: string }> = {
+  1: { title: '태엽 장난감 침공', description: '용사를 합쳐 장난감 군단을 막으세요.' },
+  2: { title: '주방 대소동', description: '정리된 놀이방을 뒤로하고 주방의 음식 군단을 막으세요.' },
+  3: { title: '과자 성 공방전', description: '과자 성으로 밀려드는 군단을 막고 디저트 황제와 결전을 치르세요.' },
+  4: { title: '용의 둥지', description: '불꽃과 비늘을 뚫고 심연의 용제가 기다리는 왕좌로 진격하세요.' },
+  5: { title: '별빛 요새 · 종장', description: '다섯 세계의 운명을 건 마지막 방어전을 시작하세요.' },
+};
 
 export function MergeDefenseScreen({ onExit }: { onExit: () => void }) {
   const [screen, setScreen] = useState<Screen>('map');
@@ -266,6 +344,11 @@ export function MergeDefenseScreen({ onExit }: { onExit: () => void }) {
   const clearedCount = chapterStages.filter((stage) => clearedStages[stage.id]).length;
   const chapterOneCleared = profile.highestClearedStage >= 10 || Boolean(clearedStages[10]);
   const chapterTwoCleared = profile.highestClearedStage >= 20 || Boolean(clearedStages[20]);
+  const chapterThreeCleared = profile.highestClearedStage >= 30 || Boolean(clearedStages[30]);
+  const chapterFourCleared = profile.highestClearedStage >= 40 || Boolean(clearedStages[40]);
+  const campaignCleared = profile.highestClearedStage >= 50 || Boolean(clearedStages[50]);
+  const chapterClearCount = (chapter: number) => STAGES.filter((stage) => stage.chapter === chapter && clearedStages[stage.id]).length;
+  const chapterEntry = (chapter: number) => Math.min(10, Math.max(1, unlockedStage - (chapter - 1) * 10));
 
   useEffect(() => {
     fetchMergeProfile().then(async (loadedProfile) => {
@@ -296,7 +379,10 @@ export function MergeDefenseScreen({ onExit }: { onExit: () => void }) {
   }, [clearedStages, profile.spellbladeRecipeUnlocked]);
 
   if (screen === 'game') {
-    return <MergeBattle stage={selectedStage} profile={profile} onLeave={() => setScreen('stages')} onDiscover={(heroClass, grade) => {
+    return <MergeBattle stage={selectedStage} profile={profile} onLeave={() => setScreen('stages')} onEnding={() => {
+      window.localStorage.setItem(endingKey, 'true');
+      setScreen('ending');
+    }} onDiscover={(heroClass, grade) => {
       return saveHeroDiscovery(heroClass, grade).then((nextProfile) => { setProfile(nextProfile); });
     }} onFinish={(score, won, silver, kills, runId, discovered) => {
       const next = Math.max(bestScores[selectedStage.id] ?? 0, score);
@@ -325,6 +411,29 @@ export function MergeDefenseScreen({ onExit }: { onExit: () => void }) {
     }} />;
   }
 
+  if (screen === 'ending') {
+    return (
+      <main className="merge-ending-screen" style={{ '--ending-bg': `url(${starFortressBackgroundUrl})` } as CSSProperties}>
+        <div className="merge-ending-stars" aria-hidden="true" />
+        <section className="merge-ending-card">
+          <small>FINAL CHAPTER CLEAR</small>
+          <h1>별빛 요새 해방</h1>
+          <div className="merge-ending-seal">✦</div>
+          <p>별을 삼킨 종언룡이 쓰러지고, 멈춰 있던 별빛이 다시 다섯 전장을 비춥니다.</p>
+          <div className="merge-ending-realms" aria-label="해방된 다섯 전장">
+            <span>⚙️ 태엽 훈련장</span><span>🍳 주방</span><span>🍬 과자 성</span><span>🐉 용의 둥지</span><span>✨ 별빛 요새</span>
+          </div>
+          <h2>용사들의 방어전은 승리로 끝났습니다.</h2>
+          <strong>THE END</strong>
+          <div className="merge-ending-actions">
+            <button type="button" onClick={() => setScreen('map')}>전장 지도로</button>
+            <button type="button" className="secondary" onClick={onExit}>광고게임으로</button>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
   if (screen === 'shop') {
     const unlockedGradeFor = (heroClass: HeroClass) => heroClass === 'warrior' ? profile.warriorUnlocked : heroClass === 'archer' ? profile.archerUnlocked : profile.spellbladeUnlocked;
     const upgrades: Array<{ id: MergeUpgrade; title: string; detail: string; level: number }> = [
@@ -342,7 +451,7 @@ export function MergeDefenseScreen({ onExit }: { onExit: () => void }) {
               const unlockedGrade = unlockedGradeFor(heroClass);
               return <article key={heroClass} className={`merge-stack ${heroClass}`}><h3>{CLASS_LABEL[heroClass]} 도감 · 발견 {unlockedGrade}/10</h3><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: 8 }}>{HEROES[heroClass].map((hero, index) => {
                 const found = index < unlockedGrade;
-                return <div key={hero.name} aria-label={found ? `${hero.name} 발견` : `${index + 1}단계 미발견`} style={{ textAlign: 'center', padding: 8, borderRadius: 12, background: '#ffffff0a', outline: '1px solid #ffffff12', opacity: found ? 1 : .42 }}><small>★{index + 1}{found ? ' · 발견' : ' · 미발견'}</small><img src={hero.image} alt="" style={{ display: 'block', width: '100%', height: 110, objectFit: 'contain', margin: '5px auto', filter: found ? 'none' : 'grayscale(1) brightness(.45)' }} /><strong>{found ? hero.name : '미발견 용사'}</strong><p>{found ? `공격 ${hero.attack + profile.attackLevel} · 호출 ${summonCost(hero.cost, profile)}` : '합성하여 해금'}</p></div>;
+                return <div key={hero.name} aria-label={found ? `${hero.name} 발견` : `${index + 1}단계 미발견`} style={{ textAlign: 'center', padding: 8, borderRadius: 12, background: '#ffffff0a', outline: '1px solid #ffffff12', opacity: found ? 1 : .42 }}><small>★{index + 1}{found ? ' · 발견' : ' · 미발견'}</small><img src={hero.image} alt="" style={{ display: 'block', width: '100%', height: 110, objectFit: 'contain', margin: '5px auto', filter: found ? 'none' : 'grayscale(1) brightness(.45)' }} /><strong>{found ? hero.name : '미발견 용사'}</strong><p>{found ? `${heroCombatDetail({ ...hero, attack: hero.attack + profile.attackLevel })} · 호출 ${summonCost(hero.cost, profile)}` : '합성하여 해금'}</p></div>;
               })}</div></article>;
             })}
           </div>
@@ -361,12 +470,12 @@ export function MergeDefenseScreen({ onExit }: { onExit: () => void }) {
   }
 
   if (screen === 'stages') {
-    const chapterTitle = selectedChapter === 1 ? '태엽 장난감 침공' : selectedChapter === 2 ? '주방 대소동' : '과자 성 공방전';
+    const chapterCopy = CHAPTER_COPY[selectedChapter];
     return (
       <main className="merge-stage-screen">
         <header className="merge-select-header">
           <button type="button" onClick={() => setScreen('map')}>← 전장 지도</button>
-          <div><small>CHAPTER {selectedChapter}</small><h1>{chapterTitle}</h1><p>{selectedChapter === 1 ? '용사를 합쳐 장난감 군단을 막으세요.' : selectedChapter === 2 ? '정리된 놀이방을 뒤로하고 주방의 음식 군단을 막으세요.' : '과자 성으로 밀려드는 군단을 막고 디저트 황제와 결전을 치르세요.'}</p></div>
+          <div><small>{selectedChapter === 5 ? 'FINAL CHAPTER' : `CHAPTER ${selectedChapter}`}</small><h1>{chapterCopy.title}</h1><p>{chapterCopy.description}</p></div>
           <b>🥈 {profile.silver.toLocaleString()} · {clearedCount} / 10</b>
         </header>
         <section className="merge-stage-grid">
@@ -389,6 +498,7 @@ export function MergeDefenseScreen({ onExit }: { onExit: () => void }) {
                   <span style={{ display: 'block', paddingLeft: 18 }}>
                     {stageDeckSummary(profile)}
                   </span>
+                  {stage.id >= SPELLBLADE_MOMENTUM_START && stage.id <= SPELLBLADE_MOMENTUM_END && <span style={{ display: 'block', marginTop: 8, color: '#efd2ff' }}>✦ 마검사 해금 시 융합 여세 구간</span>}
                 </small>
                 <em>보스 · {stage.bossName}</em>
                 <b>{locked ? '이전 스테이지 클리어 필요' : clearedStages[stage.id] ? `클리어 · 최고 ${best.toLocaleString()}점` : best ? `최고 ${best.toLocaleString()}점 · 재도전` : '도전 가능'}</b>
@@ -406,20 +516,22 @@ export function MergeDefenseScreen({ onExit }: { onExit: () => void }) {
       <section className="merge-world-map" style={{ backgroundImage: `linear-gradient(180deg, rgba(12,22,48,.15), rgba(12,22,48,.75)), url(${mapUrl})` }}>
         <div style={{ display: 'grid', gap: 16, width: 'min(430px,85vw)' }}>
           <button type="button" className="merge-chapter" style={{ width: '100%', background: 'linear-gradient(145deg,#355a72e8,#4f315fe8)' }} onClick={() => setScreen('shop')}><small>MY ROOM · 🥈 {profile.silver.toLocaleString()}</small><strong>나만의 침대</strong><span>용사를 영구 강화하는 전투 외 상점</span><b>상점 들어가기</b></button>
-          <button type="button" className="merge-chapter" style={{ width: '100%' }} onClick={() => { setSelectedChapter(1); setScreen('stages'); }}><small>CHAPTER 1</small><strong>태엽 훈련장</strong><span>세 직군으로 10개 장난감 방어선을 돌파하세요</span><b>{STAGES.filter((stage) => stage.chapter === 1 && clearedStages[stage.id]).length === 10 ? '1장 방어 완료 · 다시 도전' : `${STAGES.filter((stage) => stage.chapter === 1 && clearedStages[stage.id]).length} / 10 방어`}</b></button>
-          <button type="button" disabled={!chapterOneCleared} className={`merge-chapter ${chapterOneCleared ? '' : 'locked'}`} style={{ width: '100%', background: chapterOneCleared ? 'linear-gradient(145deg,#7c4d25e8,#763d25e8)' : undefined }} onClick={() => { setSelectedChapter(2); setScreen('stages'); }}><small>CHAPTER 2</small><strong>{chapterOneCleared ? '주방 대소동' : '🔒 주방'}</strong><span>쿠키·젤리·향신료 군단의 조리대를 방어하세요</span><b>{chapterOneCleared ? `${STAGES.filter((stage) => stage.chapter === 2 && clearedStages[stage.id]).length} / 10 방어 · 2-${Math.max(1, unlockedStage - 10)} 진입` : '1-10 클리어 시 해금'}</b></button>
-          <button type="button" disabled={!chapterTwoCleared} className={`merge-chapter ${chapterTwoCleared ? '' : 'locked future'}`} style={{ width: '100%', background: chapterTwoCleared ? 'linear-gradient(145deg,#9a4d5ce8,#6c3b20e8)' : undefined }} onClick={() => { setSelectedChapter(3); setScreen('stages'); }}><small>CHAPTER 3</small><strong>{chapterTwoCleared ? '과자 성' : '🔒 과자 성'}</strong><span>쿠키 성벽 너머 달콤한 군단을 방어하세요</span><b>{chapterTwoCleared ? `${STAGES.filter((stage) => stage.chapter === 3 && clearedStages[stage.id]).length} / 10 방어 · 3-${Math.max(1, unlockedStage - 20)} 진입` : '2-10 클리어 시 해금'}</b></button>
-          <button type="button" disabled className="merge-chapter locked future" style={{ width: '100%' }}><small>CHAPTER 4</small><strong>🔒 용의 둥지</strong><span>불꽃과 비늘로 뒤덮인 최상위 전장입니다</span><b>잠김 · 개발 예정</b></button>
-          <button type="button" disabled className="merge-chapter locked future" style={{ width: '100%' }}><small>CHAPTER 5</small><strong>🔒 별빛 요새</strong><span>집 밖의 세계로 이어지는 마지막 관문입니다</span><b>잠김 · 개발 예정</b></button>
+          <button type="button" className="merge-chapter" style={{ width: '100%' }} onClick={() => { setSelectedChapter(1); setScreen('stages'); }}><small>CHAPTER 1</small><strong>태엽 훈련장</strong><span>세 직군으로 10개 장난감 방어선을 돌파하세요</span><b>{chapterClearCount(1) === 10 ? '1장 방어 완료 · 다시 도전' : `${chapterClearCount(1)} / 10 방어`}</b></button>
+          <button type="button" disabled={!chapterOneCleared} className={`merge-chapter ${chapterOneCleared ? '' : 'locked'}`} style={{ width: '100%', background: chapterOneCleared ? 'linear-gradient(145deg,#7c4d25e8,#763d25e8)' : undefined }} onClick={() => { setSelectedChapter(2); setScreen('stages'); }}><small>CHAPTER 2</small><strong>{chapterOneCleared ? '주방 대소동' : '🔒 주방'}</strong><span>쿠키·젤리·향신료 군단의 조리대를 방어하세요</span><b>{!chapterOneCleared ? '1-10 클리어 시 해금' : chapterClearCount(2) === 10 ? '2장 방어 완료 · 다시 도전' : `${chapterClearCount(2)} / 10 방어 · 2-${chapterEntry(2)} 진입`}</b></button>
+          <button type="button" disabled={!chapterTwoCleared} className={`merge-chapter ${chapterTwoCleared ? '' : 'locked future'}`} style={{ width: '100%', background: chapterTwoCleared ? 'linear-gradient(145deg,#9a4d5ce8,#6c3b20e8)' : undefined }} onClick={() => { setSelectedChapter(3); setScreen('stages'); }}><small>CHAPTER 3</small><strong>{chapterTwoCleared ? '과자 성' : '🔒 과자 성'}</strong><span>쿠키 성벽 너머 달콤한 군단을 방어하세요</span><b>{!chapterTwoCleared ? '2-10 클리어 시 해금' : chapterClearCount(3) === 10 ? '3장 방어 완료 · 다시 도전' : `${chapterClearCount(3)} / 10 방어 · 3-${chapterEntry(3)} 진입`}</b></button>
+          <button type="button" disabled={!chapterThreeCleared} className={`merge-chapter ${chapterThreeCleared ? '' : 'locked future'}`} style={{ width: '100%', background: chapterThreeCleared ? 'linear-gradient(145deg,#8b321fe8,#3b1b36e8)' : undefined }} onClick={() => { setSelectedChapter(4); setScreen('stages'); }}><small>CHAPTER 4</small><strong>{chapterThreeCleared ? '용의 둥지' : '🔒 용의 둥지'}</strong><span>불꽃과 비늘로 뒤덮인 고룡의 영역을 방어하세요</span><b>{!chapterThreeCleared ? '3-10 클리어 시 해금' : chapterClearCount(4) === 10 ? '4장 방어 완료 · 다시 도전' : `${chapterClearCount(4)} / 10 방어 · 4-${chapterEntry(4)} 진입`}</b></button>
+          <button type="button" disabled={!chapterFourCleared} className={`merge-chapter final ${chapterFourCleared ? '' : 'locked future'}`} style={{ width: '100%', background: chapterFourCleared ? 'linear-gradient(145deg,#284c83ed,#542f79ed)' : undefined }} onClick={() => { setSelectedChapter(5); setScreen('stages'); }}><small>FINAL CHAPTER</small><strong>{chapterFourCleared ? '별빛 요새 · 종장' : '🔒 별빛 요새 · 종장'}</strong><span>다섯 세계의 운명을 건 마지막 방어전입니다</span><b>{!chapterFourCleared ? '4-10 클리어 시 해금' : campaignCleared ? '종장 완료 · 다시 도전' : `${chapterClearCount(5)} / 10 방어 · 5-${chapterEntry(5)} 진입`}</b></button>
+          {campaignCleared && <button type="button" className="merge-ending-replay" onClick={() => setScreen('ending')}>✦ 종장 엔딩 다시 보기</button>}
         </div>
       </section>
     </main>
   );
 }
 
-function MergeBattle({ stage, profile, onLeave, onDiscover, onFinish }: { stage: MergeStage; profile: MergeProfile; onLeave: () => void; onDiscover: (heroClass: HeroClass, grade: number) => Promise<void>; onFinish: (score: number, won: boolean, silver: number, kills: number, runId: string, discovered: Record<HeroClass, number>) => void }) {
+function MergeBattle({ stage, profile, onLeave, onEnding, onDiscover, onFinish }: { stage: MergeStage; profile: MergeProfile; onLeave: () => void; onEnding: () => void; onDiscover: (heroClass: HeroClass, grade: number) => Promise<void>; onFinish: (score: number, won: boolean, silver: number, kills: number, runId: string, discovered: Record<HeroClass, number>) => void }) {
   const stageWaves = useMemo(() => wavesFor(stage), [stage]);
   const startingCoins = stageStartCoins(stage, profile);
+  const fusionMomentum = profile.spellbladeUnlocked > 0 && stage.id >= SPELLBLADE_MOMENTUM_START && stage.id <= SPELLBLADE_MOMENTUM_END;
   const [coins, setCoins] = useState(startingCoins);
   const [baseHp, setBaseHp] = useState(stage.baseHp);
   const [wave, setWave] = useState(0);
@@ -428,7 +540,7 @@ function MergeBattle({ stage, profile, onLeave, onDiscover, onFinish }: { stage:
   const [enemies, setEnemies] = useState<Enemy[]>([]);
   const [discovered, setDiscovered] = useState<Record<HeroClass, number>>(() => ({ ...initialDiscovery(), warrior: profile.warriorUnlocked, archer: profile.archerUnlocked, spellblade: profile.spellbladeUnlocked }));
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
-  const [message, setMessage] = useState(`${startingCoins}코인으로 첫 용사를 스폰하세요!`);
+  const [message, setMessage] = useState(fusionMomentum ? `융합 여세 발동! 마검사를 ${battleSummonCost(stage, 'spellblade', 1, profile)}코인에 호출할 수 있습니다.` : `${startingCoins}코인으로 첫 용사를 스폰하세요!`);
   const [newHero, setNewHero] = useState<{ heroClass: HeroClass; grade: number } | null>(null);
   const [finished, setFinished] = useState<'win' | 'lose' | null>(null);
   const [kills, setKills] = useState(0);
@@ -437,6 +549,7 @@ function MergeBattle({ stage, profile, onLeave, onDiscover, onFinish }: { stage:
   const [stageSilver, setStageSilver] = useState(0);
   const [silverDrops, setSilverDrops] = useState<SilverDrop[]>([]);
   const [collectingSilver, setCollectingSilver] = useState(false);
+  const [bossArrival, setBossArrival] = useState<number | null>(null);
   const [showIntro, setShowIntro] = useState(() => window.localStorage.getItem(introKey) !== 'true');
   const nextId = useRef(1);
   const heroesRef = useRef(heroes);
@@ -445,6 +558,7 @@ function MergeBattle({ stage, profile, onLeave, onDiscover, onFinish }: { stage:
   const finishReportedRef = useRef(false);
   const lastReportedWaveRef = useRef(0);
   const collectionStartedRef = useRef(false);
+  const waveEarnedCoinsRef = useRef(0);
   const runIdRef = useRef(newRunId());
   heroesRef.current = heroes;
   waveRunningRef.current = waveRunning;
@@ -469,10 +583,14 @@ function MergeBattle({ stage, profile, onLeave, onDiscover, onFinish }: { stage:
             return Math.hypot(heroRow - position.row, heroCol - position.col) <= HERO_RANGE[hero.heroClass];
           });
           if (targetsInRange.length === 0) return;
-          const target = targetsInRange.reduce((bestEnemy, enemy) => enemy.progress > bestEnemy.progress ? enemy : bestEnemy);
           const data = HEROES[hero.heroClass][hero.grade - 1];
-          target.hp -= data.attack + profile.attackLevel;
-          target.hitFlash = 0.2;
+          targetsInRange
+            .sort((left, right) => right.progress - left.progress)
+            .slice(0, data.targets)
+            .forEach((target) => {
+              target.hp -= data.attack + profile.attackLevel;
+              target.hitFlash = 0.2;
+            });
           hero.cooldown = 1 / data.speed;
         });
         heroesRef.current = board;
@@ -480,7 +598,9 @@ function MergeBattle({ stage, profile, onLeave, onDiscover, onFinish }: { stage:
 
         const dead = next.filter((enemy) => enemy.hp <= 0);
         if (dead.length) {
-          setCoins((value) => value + dead.reduce((sum, enemy) => sum + ENEMY_DATA[enemy.kind].reward, 0));
+          const earnedCoins = dead.reduce((sum, enemy) => sum + enemyCoinReward(stage, enemy.kind), 0);
+          waveEarnedCoinsRef.current += earnedCoins;
+          setCoins((value) => value + earnedCoins);
           setKills((value) => value + dead.length);
           setKillPoints((value) => value + dead.reduce((sum, enemy) => sum + ENEMY_DATA[enemy.kind].points, 0));
           const drops = dead.flatMap((enemy) => {
@@ -493,9 +613,10 @@ function MergeBattle({ stage, profile, onLeave, onDiscover, onFinish }: { stage:
         const escaped = next.filter((enemy) => enemy.progress >= 100 && enemy.hp > 0);
         if (escaped.length) {
           const damage = escaped.reduce((sum, enemy) => sum + (enemy.kind === 'boss' ? 10 : enemy.kind === 'elite' ? 2 : 1), 0);
+          const bossEscaped = escaped.some((enemy) => enemy.kind === 'boss');
           setBaseHp((value) => {
             const remaining = Math.max(0, value - damage);
-            if (remaining === 0) setFinished('lose');
+            if (remaining === 0 || bossEscaped) setFinished('lose');
             return remaining;
           });
         }
@@ -503,19 +624,26 @@ function MergeBattle({ stage, profile, onLeave, onDiscover, onFinish }: { stage:
       });
     }, 100);
     return () => window.clearInterval(timer);
-  }, [profile.attackLevel]);
+  }, [profile.attackLevel, stage]);
 
   useEffect(() => {
     if (!waveRunning || enemies.length > 0 || silverDrops.length > 0 || collectingSilver || finished) return;
     collectionStartedRef.current = false;
     setWaveRunning(false);
-    const reward = waveClearReward(stage);
-    setCoins((value) => value + reward);
     if (wave >= stageWaves.length) {
       setFinished('win');
       setMessage(`${stage.bossName}을(를) 물리쳤습니다!`);
     } else {
-      setMessage(`${wave}웨이브 완료! +${reward}코인`);
+      const reward = waveClearReward(waveEarnedCoinsRef.current);
+      setCoins((value) => value + reward);
+      if (wave === stageWaves.length - 1) {
+        const arrivalReward = bossArrivalReward(stage);
+        setCoins((value) => value + arrivalReward);
+        setBossArrival(arrivalReward);
+        setMessage(`${wave}웨이브 완료! 보스 출현 준비금 +${arrivalReward}코인`);
+      } else {
+        setMessage(`${wave}웨이브 완료! 처치 보너스 +${reward}코인`);
+      }
     }
   }, [collectingSilver, enemies.length, finished, silverDrops.length, stage, stageWaves.length, wave, waveRunning]);
 
@@ -587,6 +715,7 @@ function MergeBattle({ stage, profile, onLeave, onDiscover, onFinish }: { stage:
 
   const startWave = () => {
     if (waveRunning || finished || wave >= stageWaves.length) return;
+    waveEarnedCoinsRef.current = 0;
     const kinds = stageWaves[wave];
     setEnemies(kinds.map((kind, index) => {
       const data = ENEMY_DATA[kind];
@@ -600,7 +729,7 @@ function MergeBattle({ stage, profile, onLeave, onDiscover, onFinish }: { stage:
 
   const spawn = (heroClass: HeroClass, grade: number) => {
     const data = HEROES[heroClass][grade - 1];
-    const cost = summonCost(data.cost, profile);
+    const cost = battleSummonCost(stage, heroClass, grade, profile);
     const freeSlots = heroes.reduce<number[]>((slots, hero, index) => {
       if (hero === null && !PATH_SET.has(index)) slots.push(index);
       return slots;
@@ -613,7 +742,7 @@ function MergeBattle({ stage, profile, onLeave, onDiscover, onFinish }: { stage:
     setHeroes(next);
     setCoins((value) => value - cost);
     setSelectedSlot(null);
-    setMessage(`${data.name}가 ${Math.floor(slot / GRID_SIZE) + 1}행 ${slot % GRID_SIZE + 1}열에 소환됐습니다. 용사를 선택한 뒤 빈 칸을 누르면 이동합니다.`);
+    setMessage(`${data.name}가 ${Math.floor(slot / GRID_SIZE) + 1}행 ${slot % GRID_SIZE + 1}열에 소환됐습니다.${data.targets > 1 ? ` 한 번에 ${data.targets}명을 연쇄 공격합니다.` : ' 용사를 선택한 뒤 빈 칸을 누르면 이동합니다.'}`);
   };
 
   const clickSlot = (index: number) => {
@@ -653,7 +782,7 @@ function MergeBattle({ stage, profile, onLeave, onDiscover, onFinish }: { stage:
         setNewHero({ heroClass: 'spellblade', grade: 1 });
       }
       void onDiscover('spellblade', 1).catch(() => setMessage('마검사는 탄생했지만 DB 저장에 실패했습니다. BE 연결을 확인하세요.'));
-      setMessage('창세검신과 창세궁신이 융합해 마검사가 탄생했습니다!');
+      setMessage('창세검신과 창세궁신이 융합해 마검사가 탄생했습니다! 검사와 궁수의 화력을 이어받아 3명을 연쇄 공격합니다.');
     } else if (first.heroClass === hero.heroClass && first.grade === hero.grade) {
       if (hero.grade >= HEROES[hero.heroClass].length) { setMessage('현재 계열의 최고 등급입니다.'); setSelectedSlot(null); return; }
       const grade = hero.grade + 1;
@@ -679,8 +808,9 @@ function MergeBattle({ stage, profile, onLeave, onDiscover, onFinish }: { stage:
     finishReportedRef.current = false;
     lastReportedWaveRef.current = 0;
     collectionStartedRef.current = false;
+    waveEarnedCoinsRef.current = 0;
     runIdRef.current = newRunId();
-    setDiscovered({ ...initialDiscovery(), warrior: profile.warriorUnlocked, archer: profile.archerUnlocked, spellblade: profile.spellbladeUnlocked }); setSelectedSlot(null); setFinished(null); setKills(0); setKillPoints(0); setElapsed(0); setStageSilver(0); setSilverDrops([]); setCollectingSilver(false); setMessage(`${startingCoins}코인으로 첫 용사를 스폰하세요!`);
+    setDiscovered({ ...initialDiscovery(), warrior: profile.warriorUnlocked, archer: profile.archerUnlocked, spellblade: profile.spellbladeUnlocked }); setSelectedSlot(null); setFinished(null); setKills(0); setKillPoints(0); setElapsed(0); setStageSilver(0); setSilverDrops([]); setCollectingSilver(false); setBossArrival(null); setMessage(fusionMomentum ? `융합 여세 발동! 마검사를 ${battleSummonCost(stage, 'spellblade', 1, profile)}코인에 호출할 수 있습니다.` : `${startingCoins}코인으로 첫 용사를 스폰하세요!`);
   };
 
   const startTutorial = () => {
@@ -700,7 +830,7 @@ function MergeBattle({ stage, profile, onLeave, onDiscover, onFinish }: { stage:
 
   return (
     <main className="merge-battle-screen">
-      <header className="merge-battle-header"><button type="button" onClick={onLeave}>← 스테이지 선택</button><div><small>STAGE {stageLabel(stage)}</small><strong>{stage.title}</strong></div><div className="merge-stats"><span>❤️ {baseHp}</span><span>🪙 {coins}</span><span>🥈 {stageSilver > 0 ? `+${stageSilver}` : `전장 ${silverDrops.reduce((sum, drop) => sum + drop.amount, 0)}`}</span><span>⚔️ {wave}/{stageWaves.length}</span><span>🏆 {score.toLocaleString()}</span></div></header>
+      <header className="merge-battle-header"><button type="button" onClick={onLeave}>← 스테이지 선택</button><div><small>STAGE {stageLabel(stage)}</small><strong>{stage.title}</strong>{fusionMomentum && <em className="fusion-momentum-badge">융합 여세 · 마검사 호출 할인</em>}</div><div className="merge-stats"><span>❤️ {baseHp}</span><span>🪙 {coins}</span><span>🥈 {stageSilver > 0 ? `+${stageSilver}` : `전장 ${silverDrops.reduce((sum, drop) => sum + drop.amount, 0)}`}</span><span>⚔️ {wave}/{stageWaves.length}</span><span>🏆 {score.toLocaleString()}</span></div></header>
       <section className="merge-arena">
         <div className="merge-grid-map" style={{ '--battle-bg': `url(${stage.background})` } as CSSProperties} aria-label="6행 6열 전투 격자">
           {heroes.map((hero, index) => {
@@ -711,7 +841,7 @@ function MergeBattle({ stage, profile, onLeave, onDiscover, onFinish }: { stage:
               <button type="button" key={index} disabled={path} onClick={() => clickSlot(index)} className={`merge-grid-cell ${path ? 'path' : 'build'} ${hero ? hero.heroClass : ''} ${attackRange ? 'attack-range' : ''} ${selectedSlot === index ? 'selected' : ''} ${selectedSlot !== null && !hero && !path ? 'move-target' : ''}`}>
                 {path && index === PATH_CELLS[0] && <span className="path-label">입구</span>}
                 {path && index === PATH_CELLS[PATH_CELLS.length - 1] && <span className="grid-gate">🏰<small>기지</small></span>}
-                {hero && data && <span className="grid-hero"><img src={data.image} alt={data.name} /><b>★{hero.grade}{hero.trial ? ' 체험' : ''}</b><small>{data.name}<br />공격 {data.attack + profile.attackLevel}</small></span>}
+                {hero && data && <span className="grid-hero"><img src={data.image} alt={data.name} /><b>★{hero.grade}{hero.trial ? ' 체험' : ''}</b><small>{data.name}<br />{heroCombatDetail({ ...data, attack: data.attack + profile.attackLevel })}</small></span>}
               </button>
             );
           })}
@@ -729,13 +859,14 @@ function MergeBattle({ stage, profile, onLeave, onDiscover, onFinish }: { stage:
       <section className="merge-spawn-stacks">{CLASS_ORDER.filter((heroClass) => discovered[heroClass] > 0).map((heroClass) => {
         return <div key={heroClass} className={`merge-stack ${heroClass}`}><h3>{CLASS_LABEL[heroClass]} 덱 · {discovered[heroClass]}/10 발견</h3><div>{HEROES[heroClass].slice(0, discovered[heroClass]).map((hero, index) => {
           const grade = index + 1;
-          const cost = summonCost(hero.cost, profile);
-          return <button type="button" key={hero.name} disabled={coins < cost || !heroes.some((unit, slot) => unit === null && !PATH_SET.has(slot))} onClick={() => spawn(heroClass, grade)}><img src={hero.image} alt="" /><span><strong>{hero.name}</strong><small>★{grade} · 공격 {hero.attack + profile.attackLevel}</small></span><b>{cost}🪙</b></button>;
+          const cost = battleSummonCost(stage, heroClass, grade, profile);
+          return <button type="button" key={hero.name} disabled={coins < cost || !heroes.some((unit, slot) => unit === null && !PATH_SET.has(slot))} onClick={() => spawn(heroClass, grade)}><img src={hero.image} alt="" /><span><strong>{hero.name}</strong><small>★{grade} · {heroCombatDetail({ ...hero, attack: hero.attack + profile.attackLevel })}</small></span><b>{cost}🪙</b></button>;
         })}</div></div>;
       })}</section>
       {showIntro && <div className="merge-modal intro"><div><small>튜토리얼 체험 용사</small><h2>창세검신 + 창세궁신</h2><div className="merge-fusion"><span>⚔️<b>창세검신</b></span><i>＋</i><span>🏹<b>창세궁신</b></span><i>→</i><span className="ultimate">🔮<b>마검사</b></span></div><p>이번 튜토리얼에서만 마검사 1명을 미리 체험합니다. 정식 등록은 1-2 클리어 후 검사 10단계와 궁수 10단계를 합성해야 합니다.</p><button type="button" onClick={startTutorial}>마검사 체험하기</button></div></div>}
-      {newHero && <div className="merge-modal"><div><small>새로운 직업 등장!</small><div className="new-hero-icon"><img src={HEROES[newHero.heroClass][newHero.grade - 1].image} alt={HEROES[newHero.heroClass][newHero.grade - 1].name} /></div><h2>{HEROES[newHero.heroClass][newHero.grade - 1].name}</h2><p>공격력 {HEROES[newHero.heroClass][newHero.grade - 1].attack} · 이제 {CLASS_LABEL[newHero.heroClass]} 스택에서 직접 스폰할 수 있습니다.</p><button type="button" onClick={() => setNewHero(null)}>대기열에 추가</button></div></div>}
-      {finished && !collectingSilver && silverDrops.length === 0 && <div className="merge-modal"><div><small>{finished === 'win' ? 'STAGE CLEAR' : 'DEFENSE FAILED'}</small><h2>{finished === 'win' ? `${stage.bossName} 격파!` : '기지가 무너졌습니다'}</h2><p>{stageLabel(stage)} · 처치 {kills} · 도달 웨이브 {wave} · 최종 점수 {score.toLocaleString()} · 획득 은화 {stageSilver}</p><button type="button" onClick={restart}>다시 도전</button><button type="button" className="secondary" onClick={onLeave}>스테이지 선택</button></div></div>}
+      {newHero && <div className="merge-modal"><div><small>새로운 직업 등장!</small><div className="new-hero-icon"><img src={HEROES[newHero.heroClass][newHero.grade - 1].image} alt={HEROES[newHero.heroClass][newHero.grade - 1].name} /></div><h2>{HEROES[newHero.heroClass][newHero.grade - 1].name}</h2><p>{heroCombatDetail(HEROES[newHero.heroClass][newHero.grade - 1])} · 이제 {CLASS_LABEL[newHero.heroClass]} 덱에서 직접 호출할 수 있습니다.</p>{newHero.heroClass === 'spellblade' && <p className="fusion-reward-copy">4-3~4-5에서는 융합 여세로 마검사 1단계 호출 비용이 384코인으로 감소합니다.</p>}<button type="button" onClick={() => setNewHero(null)}>대기열에 추가</button></div></div>}
+      {bossArrival !== null && <div className="merge-modal boss-arrival"><div><small>BOSS APPROACHING</small><h2>{stage.bossName} 출현</h2><div className="boss-arrival-reward">🪙 +{bossArrival.toLocaleString()}</div><p>보스 위협도에 비례한 최종 합성 준비금이 지급됐습니다. 용사를 합성하고 배치를 정비한 뒤 마지막 웨이브를 시작하세요.</p><button type="button" onClick={() => setBossArrival(null)}>최종 합성 준비</button></div></div>}
+      {finished && !collectingSilver && silverDrops.length === 0 && <div className="merge-modal"><div><small>{finished === 'win' && stage.id === 50 ? 'FINAL CHAPTER CLEAR' : finished === 'win' ? 'STAGE CLEAR' : 'DEFENSE FAILED'}</small><h2>{finished === 'win' ? `${stage.bossName} 격파!` : '기지가 무너졌습니다'}</h2><p>{stageLabel(stage)} · 처치 {kills} · 도달 웨이브 {wave} · 최종 점수 {score.toLocaleString()} · 획득 은화 {stageSilver}</p>{finished === 'win' && stage.id === 50 && <button type="button" className="final-action" onClick={onEnding}>종장 엔딩 보기</button>}<button type="button" onClick={restart}>다시 도전</button><button type="button" className="secondary" onClick={onLeave}>스테이지 선택</button></div></div>}
     </main>
   );
 }

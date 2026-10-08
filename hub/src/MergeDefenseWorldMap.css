@@ -17,3 +17,18 @@
   background: #2a3142;
   color: #aeb8ca;
 }
+
+.merge-chapter.final:not(.locked) {
+  border-color: #d9c7ff;
+  box-shadow: 0 0 0 1px #8fcfff55, 0 22px 70px #121945cc;
+}
+
+.merge-ending-replay {
+  border: 1px solid #d9c7ff;
+  border-radius: 16px;
+  padding: 13px 18px;
+  background: linear-gradient(135deg, #324c87, #68438a);
+  color: white;
+  font-weight: 900;
+  cursor: pointer;
+}

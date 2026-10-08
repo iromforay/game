@@ -9,5 +9,5 @@ ALTER TABLE merge_defense_profile
   MODIFY COLUMN spellblade_recipe_unlocked TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1-2 클리어 마검사 융합식 해금 여부',
   MODIFY COLUMN start_coin_level INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '전 스테이지 시작 코인 강화 레벨(레벨당 +5)',
   MODIFY COLUMN summon_discount_level INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '용사 직접 호출 비용 할인 레벨(레벨당 -3%)',
-  MODIFY COLUMN highest_cleared_stage INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '순차 진행 기준 최고 클리어 전역 스테이지 ID(1-1=1, 2-1=11, 3-1=21)',
+  MODIFY COLUMN highest_cleared_stage INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '순차 진행 기준 최고 클리어 전역 스테이지 ID(1-1=1, 2-1=11, 3-1=21, 4-1=31, 5-1=41)',
   MODIFY COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '프로필 최종 변경 시각';

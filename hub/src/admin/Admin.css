@@ -262,8 +262,23 @@
   padding: 8px 10px;
   border: 1px solid var(--border, #ddd);
   border-radius: 8px;
-  background: transparent;
+  background: var(--bg, #fff);
   color: var(--text-h, #111);
+}
+
+.admin-merge-form select {
+  color-scheme: light;
+}
+
+.admin-merge-form select option {
+  background-color: var(--bg, #fff);
+  color: var(--text-h, #111);
+}
+
+@media (prefers-color-scheme: dark) {
+  .admin-merge-form select {
+    color-scheme: dark;
+  }
 }
 
 .admin-merge-form label.admin-check {

@@ -130,7 +130,7 @@ export class ScoreboardService {
   async clearMergeDefenseStage(token: string | undefined, stageIdRaw: unknown) {
     const accountId = await this.accounts.resolveAccountId(token);
     if (!accountId) throw new UnauthorizedException({ message: '로그인이 필요합니다', code: 'NOT_LOGGED_IN' });
-    const stageId = int(stageIdRaw, 1, 30, 'stageId');
+    const stageId = int(stageIdRaw, 1, 50, 'stageId');
     const current = await this.mergeProfile(accountId);
     if (stageId > current.highest_cleared_stage + 1) {
       throw new BadRequestException({ message: '이전 스테이지를 먼저 클리어해야 합니다', code: 'PREVIOUS_STAGE_REQUIRED' });
