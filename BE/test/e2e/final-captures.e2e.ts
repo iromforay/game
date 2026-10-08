@@ -8,6 +8,8 @@ import type { Browser } from 'playwright-core';
 import { Backend, Game, ROOT, freePort, launchBrowser, startVite } from './harness';
 import { seedForest } from './fixtures';
 
+import { writeFileSync, mkdirSync } from 'fs';
+const HUD_LOG: unknown[] = [];
 let backend: Backend;
 let vite: { url: string; close: () => Promise<void> };
 let browser: Browser;
@@ -17,6 +19,7 @@ before(async () => {
   browser = await launchBrowser();
 });
 after(async () => {
+  if (process.env.E2E_CAPTURE_DIR && HUD_LOG.length) { mkdirSync(process.env.E2E_CAPTURE_DIR, { recursive: true }); writeFileSync(join(process.env.E2E_CAPTURE_DIR, 'hud_safe_area.json'), JSON.stringify(HUD_LOG, null, 1)); }
   await browser?.close();
   await vite?.close();
   await backend?.stop();
@@ -90,34 +93,36 @@ async function shootOnce(shot: Shot, size: { width: number; height: number }) {
       await g.page.waitForTimeout(600);
     }
     await g.capture(shot.name);
+    // 목표의 화면 좌표(논리 1280×720)와 HUD 안전영역 판정을 기록한다
+    const info = (await g.page.evaluate(() => {
+      const m = (window as any).__game.scene.getScene('Map'); // eslint-disable-line @typescript-eslint/no-explicit-any
+      const cam = m.cameras.main;
+      const v = m.stageView;
+      const to = (x: number, y: number) => ({ x: Math.round((x - cam.worldView.x) * cam.zoom), y: Math.round((y - cam.worldView.y) * cam.zoom) });
+      return [...v.points.map((p: any) => ({ id: p.id, ...to(p.x, p.y) })), ...v.render.overlays.filter((o: any) => o.assetKey !== 'fog-veil').map((o: any) => ({ id: o.id, ...to(o.x, o.y) })), ...v.gates.filter((g: any) => g.art).map((g: any) => ({ id: g.id, ...to(g.art.x, g.art.y) }))];
+    })) as { id: string; x: number; y: number }[];
+    const hudRight = size.width === 640 ? 1280 - 250 : 1280 - 170;
+    HUD_LOG.push({ shot: shot.name, size: `${size.width}x${size.height}`, targets: info.filter((t) => t.x >= -200 && t.x <= 1500).map((t) => ({ ...t, inHud: t.x > hudRight && t.y < 260 })) });
   } finally {
     await g.close();
   }
 }
 
 const SHOTS_1280: Shot[] = [
-  { name: 'v5_01_forest_entry', seed: 'started' },
-  { name: 'v5_02_cut_thread', seed: 'started', at: { x: 1488, y: 1880 } },
-  { name: 'v5_03a_bopuli_before_rescue', seed: 'cut', at: { x: 1490, y: 1570 } },
-  { name: 'v5_03b_bopuli_after_rescue', seed: 'rescued', at: { x: 1490, y: 1570 } },
-  { name: 'v5_04_dust_loop', seed: 'rescued', at: { x: 864, y: 1362 } },
-  { name: 'v5_05_dust_wind_closed', seed: 'compass', at: { x: 1820, y: 1002 } },
-  { name: 'v5_06_hidden_path_open', seed: 'compass', events: OPENED, at: { x: 1870, y: 1004 } },
-  { name: 'v5_07_giant_knot_clearing', seed: 'compass', events: OPENED, at: { x: 2150, y: 1000 } },
-  { name: 'v5_08_ancient_strand_after_defeat', seed: 'compass', events: OPENED, lateEvents: ['forest_giant_knot_defeated'], at: { x: 2250, y: 1000 } },
-  { name: 'v5_09a_root_gate_closed', seed: 'compass', events: OPENED, lateEvents: ['forest_giant_knot_defeated', 'forest_first_knot_awakened'], at: { x: 2760, y: 990 } },
-  { name: 'v5_09b_root_gate_open', seed: 'equipped', at: { x: 2760, y: 990 } },
-  { name: 'v5_10a_dansuring', seed: 'equipped', at: { x: 2880, y: 1018 } },
-  { name: 'v5_10b_chapter_complete_stage_select', seed: 'equipped', complete: true },
+  { name: 'v1_01_cut_thread', seed: 'started', at: { x: 1488, y: 1850 } },
+  { name: 'v1_02a_bopuli_before', seed: 'cut', at: { x: 1490, y: 1570 } },
+  { name: 'v1_02b_bopuli_after', seed: 'rescued', at: { x: 1490, y: 1570 } },
+  { name: 'v1_03_dust_wind', seed: 'compass', at: { x: 1820, y: 1002 } },
+  { name: 'v1_04_hidden_path', seed: 'compass', events: OPENED, at: { x: 1960, y: 985 } },
+  { name: 'v1_05_giant_knot', seed: 'compass', events: OPENED, at: { x: 2250, y: 1000 } },
+  { name: 'v1_06a_root_gate_closed', seed: 'compass', events: OPENED, lateEvents: ['forest_giant_knot_defeated', 'forest_first_knot_awakened'], at: { x: 2740, y: 985 } },
+  { name: 'v1_06b_root_gate_open', seed: 'equipped', at: { x: 2740, y: 985 } },
+  { name: 'v1_07_open_gate_dansuring', seed: 'equipped', at: { x: 2790, y: 1015 } },
 ];
 const SHOTS_640: Shot[] = [
-  { name: 'v5_s01_path_readability', seed: 'rescued', at: { x: 1488, y: 1720 } },
-  { name: 'v5_s02_dust_visible', seed: 'rescued', at: { x: 1480, y: 1340 } },
-  { name: 'v5_s03a_bopuli_before', seed: 'cut', at: { x: 1490, y: 1570 } },
-  { name: 'v5_s03b_bopuli_after', seed: 'rescued', at: { x: 1490, y: 1570 } },
-  { name: 'v5_s04_giant_knot_visible', seed: 'compass', events: OPENED, at: { x: 2100, y: 985 } },
-  { name: 'v5_s05_open_gate_dansuring', seed: 'equipped', at: { x: 2840, y: 1015 } },
-  { name: 'v5_s06_chapter_complete_chapter2_open', seed: 'equipped', complete: true },
+  { name: 'v1_s08_bopuli', seed: 'cut', at: { x: 1490, y: 1570 } },
+  { name: 'v1_s09_hidden_path', seed: 'compass', events: OPENED, at: { x: 1960, y: 985 } },
+  { name: 'v1_s10_open_gate_dansuring', seed: 'equipped', at: { x: 2790, y: 1015 } },
 ];
 
 test('최종 캡처 1280×720', async () => {

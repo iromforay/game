@@ -281,7 +281,7 @@ test('최종 에셋 연결 계약(10-06 v2): 배경 키·진행별 오버레이�
   const windAfter = after.gates.find((g) => g.id === 'gate_hidden_path')!;
   assert.deepEqual([windAfter.open, windAfter.openAssetKey], [true, null]);
   const root = after.gates.find((g) => g.id === 'gate_root')!;
-  assert.deepEqual([root.open, root.closedAssetKey, root.openAssetKey, root.art], [false, 'root-gate-closed', 'root-gate-open', { x: 2960, y: 1050, width: 480, height: 520, pivot: [0.5, 0.92] }]);
+  assert.deepEqual([root.open, root.closedAssetKey, root.openAssetKey, root.art], [false, 'root-gate-closed', 'root-gate-open', { x: 2850, y: 1050, width: 300, height: 325, pivot: [0.5, 0.92] }]);
   // 실뿌리 문: 첫 매듭 장착 뒤에 같은 문이 열림 텍스처로
   const equipped = await setup('CH01_FIRST_KNOT_EQUIPPED', [...base, 'forest_hidden_path_opened', 'forest_giant_knot_defeated', 'forest_first_knot_awakened', 'forest_first_knot_equipped']).service.stageData(P1, 'forest');
   const rootOpen = equipped.gates.find((g) => g.id === 'gate_root')!;
@@ -289,7 +289,9 @@ test('최종 에셋 연결 계약(10-06 v2): 배경 키·진행별 오버레이�
   // 지점·수집 오브젝트의 에셋 키는 실제 런타임 키다
   assert.ok((await setup('CH01_BOPUL_RESCUED', RESCUED).service.stageData(P1, 'forest')).objects.every((o) => o.assetKey === 'glowing-yarn-dust'));
   const cut = await setup('CH01_STARTED', RESCUED.slice(0, 4)).service.stageData(P1, 'forest');
-  assert.equal(cut.points[0].assetKey, 'cut-yarn-strand');
+  const cutArt = cut.render.overlays.find((o) => o.id === 'prop_cut_thread')!;
+  assert.deepEqual([cutArt.assetKey, cutArt.width, cutArt.height, cutArt.forPoints], ['cut-yarn-strand', 360, 150, ['forest_cut_thread']], '잘린 실은 월드 그림 360×150');
+  assert.equal(cutArt.y, cut.points[0].y - 85, '조사 지점 위 85px — 플레이어와 겹치지 않는다');
   // 기존 ID·이벤트 ID는 그대로
   assert.deepEqual(after.gates.map((g) => g.id), ['gate_hidden_path', 'gate_root']);
 });
@@ -330,9 +332,46 @@ test('월드 표시 상태 조건(10-06 v6): 거대 매듭은 숨은 길 개방 
   // 규격: 피벗·크기·표시층, 그림이 대신하는 지점
   const view = await setup('CH01_FIRST_KNOT_EQUIPPED', EQUIPPED).service.stageData(P1, 'forest');
   const by = (id: string) => view.render.overlays.find((o) => o.id === id)!;
-  assert.deepEqual([by('npc_dansuring').assetKey, by('npc_dansuring').width, by('npc_dansuring').height, by('npc_dansuring').pivot, by('npc_dansuring').layer], ['dansuring', 192, 192, [0.5, 0.82], 'story']);
+  assert.deepEqual([by('npc_dansuring').assetKey, by('npc_dansuring').width, by('npc_dansuring').height, by('npc_dansuring').pivot, by('npc_dansuring').layer], ['dansuring', 96, 96, [0.5, 0.82], 'story']);
   const knot = (await setup('CH01_COMPASS_ACQUIRED', OPEN).service.stageData(P1, 'forest')).render.overlays.find((o) => o.id === 'prop_giant_knot_map')!;
-  assert.deepEqual([knot.assetKey, knot.width, knot.height, knot.pivot, knot.forPoints], ['giant-thread-knot-map', 512, 512, [0.5, 0.88], ['forest_giant_knot']]);
+  assert.deepEqual([knot.assetKey, knot.width, knot.height, knot.pivot, knot.forPoints], ['giant-thread-knot-map', 320, 320, [0.5, 0.5], ['forest_giant_knot']]);
   assert.equal(view.render.markerMode, 'final', '최종 에셋이 모두 연결돼 임시 표식은 그림이 있는 대상에서 없어진다');
   assert.deepEqual(view.gates.find((g) => g.id === 'gate_root')!.art!.pivot, [0.5, 0.92], '실뿌리 문 피벗(하단 중앙 0.92) — 닫힘·열림 같은 캔버스·피벗');
+});
+
+// 10-08 v1 §1·§2: 월드 그림 표시 크기·피벗·위치 계약과 HUD 안전영역
+test('표시 크기·피벗 계약(10-08 v1): 보풀이 128/먼지실 176 같은 바닥 접점, 먼지바람 240×270, 숨은 길 ≤480×280·실 높이 80~110, 매듭 320 중심=지점, 문 300×325 닫힘·열림 같은 위치, 단수링 96', async () => {
+  const OPEN = [...RESCUED, 'forest_compass_granted', 'forest_hidden_path_opened'];
+  const view = await setup('CH01_FIRST_KNOT_EQUIPPED', [...OPEN, 'forest_giant_knot_defeated', 'forest_first_knot_awakened', 'forest_first_knot_equipped']).service.stageData(P1, 'forest');
+  const by = (id: string) => view.render.overlays.find((o) => o.id === id)!;
+  const tangled = (await setup('CH01_STARTED', RESCUED.slice(0, 5)).service.stageData(P1, 'forest')).render.overlays.find((o) => o.id === 'npc_bopuli_tangled')!;
+  const bop = by('npc_bopuli');
+  assert.deepEqual([bop.width, bop.height, tangled.width, tangled.height], [128, 128, 176, 176]);
+  assert.deepEqual([tangled.x, tangled.y, tangled.pivot], [bop.x, bop.y, bop.pivot], '두 그림의 바닥 접점(피벗과 위치)이 같다 — 오버레이가 사라져도 보풀이는 그대로');
+  const reveal = by('overlay_hidden_path_reveal');
+  const yarn = by('overlay_hidden_yarn_path');
+  assert.ok(reveal.width <= 480 && reveal.height <= 280, '숨은 길 그림 480×280 이하');
+  assert.ok(yarn.height >= 80 && yarn.height <= 110, '숨은 길 실 높이 80~110');
+  const knot = by('prop_giant_knot_map');
+  void knot;
+  const wind = (await setup('CH01_COMPASS_ACQUIRED', [...RESCUED, 'forest_compass_granted']).service.stageData(P1, 'forest')).gates.find((g) => g.id === 'gate_hidden_path')!;
+  assert.deepEqual([wind.art!.width, wind.art!.height], [240, 270]);
+  assert.ok(wind.art!.x - wind.art!.width / 2 >= wind.x + wind.width - 70 && wind.art!.x - wind.x - wind.width >= 40, '먼지바람은 닫힌 문 충돌선보다 40px 이상 뒤');
+  const root = view.gates.find((g) => g.id === 'gate_root')!;
+  assert.deepEqual([root.art!.width, root.art!.height, root.art!.pivot], [300, 325, [0.5, 0.92]]);
+  const closedView = (await setup('CH01_COMPASS_ACQUIRED', OPEN).service.stageData(P1, 'forest')).gates.find((g) => g.id === 'gate_root')!;
+  assert.deepEqual(closedView.art, root.art, '닫힘·열림 상태가 같은 art(위치·크기·피벗) — 전환 때 위치가 튀지 않는다');
+  const knotPoint = view.points.length >= 0 ? FOREST.points.find((p) => p.id === 'forest_giant_knot')! : null;
+  const knotView = (await setup('CH01_COMPASS_ACQUIRED', OPEN).service.stageData(P1, 'forest')).render.overlays.find((o) => o.id === 'prop_giant_knot_map')!;
+  assert.deepEqual([knotView.x, knotView.y, knotView.pivot], [knotPoint!.x, knotPoint!.y, [0.5, 0.5]], '매듭 그림 중심 = 전투 시작 지점');
+});
+
+test('HUD 안전영역(10-08 v1 §2): 목표 중심은 지도 오른쪽 끝에서 카메라가 멈춰도 오른쪽 HUD(데스크톱 170px·640×360은 논리 250px) 안에 들지 않고, 단수링은 문 안쪽에 있다', () => {
+  // 카메라 최대 이동: 가로 3200−1280 = 1920 → 목표의 화면 x = x − 1920. 안전: ≤ 1280 − 250(640×360의 125px는 논리 좌표 250px)
+  const limit = 3200 - 1280 + (1280 - 250);
+  const targets = [...FOREST.points.map((p) => [p.id, p.x] as [string, number]), ...FOREST.render!.overlays!.map((o) => [o.id, o.x] as [string, number])];
+  for (const [id, x] of targets) assert.ok(x <= limit, `${id} x=${x} > ${limit}`);
+  const door = FOREST.layout!.gates.find((g) => g.id === 'gate_root')!;
+  const dansuring = FOREST.points.find((p) => p.id === 'forest_dansuring')!;
+  assert.ok(Math.abs(dansuring.x - door.art!.x) <= 120, '단수링은 열린 문 중앙 근처(좌우 120px 이내)');
 });

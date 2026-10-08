@@ -57,7 +57,7 @@ test('보풀이 월드 표시 ①: 구조 뒤 정상 보풀이를 공터에 160�
     await enterForest(g);
     await standNearBopuli(g, device);
     const b = await bopuliImage(g);
-    assert.deepEqual(b && [b.w, b.h, b.x, b.y, b.originY, b.src], [160, 160, BOPULI.x, BOPULI.y, 0.9, [512, 512]], '160×160 표시, 원본 512×512');
+    assert.deepEqual(b && [b.w, b.h, b.x, b.y, b.originY, b.src], [128, 128, BOPULI.x, BOPULI.y, 0.9, [512, 512]], '128×128 표시, 원본 512×512');
     await g.capture('01_bopuli_normal_1280x720');
   }, backend, device);
   await g.close();
@@ -79,7 +79,7 @@ test('보풀이 월드 표시 ②: 구조 전, 먼지실 오버레이(최종 에
       const img = m.children.list.find((c: any) => c.type === 'Image' && c.texture.key === 'bopuli-tangled-overlay'); // eslint-disable-line @typescript-eslint/no-explicit-any
       return { w: Math.round(img.displayWidth), h: Math.round(img.displayHeight), x: img.x, y: img.y, originY: img.originY };
     })) as { w: number; h: number; x: number; y: number; originY: number };
-    assert.deepEqual([o.w, o.h, o.x, o.y, o.originY], [256, 256, BOPULI.x, BOPULI.y, 0.9]);
+    assert.deepEqual([o.w, o.h, o.x, o.y, o.originY], [176, 176, BOPULI.x, BOPULI.y, 0.9]);
     await g.capture('02_bopuli_with_tangled_overlay_1280x720');
   }, backend, device);
   await g.close();
@@ -92,7 +92,7 @@ test('보풀이 월드 표시 ③: 640×360에서 정상 보풀이', async () =>
   await withDiagnosis(g, 'bopuli-normal-640', async () => {
     await enterForest(g);
     await standNearBopuli(g, device);
-    assert.equal((await bopuliImage(g))?.w, 160);
+    assert.equal((await bopuliImage(g))?.w, 128);
     await g.capture('03_bopuli_normal_640x360');
   }, backend, device);
   await g.close();

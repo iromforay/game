@@ -375,7 +375,7 @@ test('결과 복원 범위: 보존 기간이 지난 결과는 복원하지 않�
     await g.until('Map 복원', READY);
     assert.ok(!(await g.state()).scenes.includes('Battle'), '보존 기간이 지난 결과는 복원하지 않는다');
     assert.equal(captures(device), 1, '보상은 DB에 남아 있다');
-    assert.equal((await mapOf(g)).wilds.find((w) => w.index === A.index)!.visible, false);
+    assert.ok((await mapOf(g)).wilds.some((w) => [A.index, B.index].includes(w.index) && w.visible === false), '잡은 야생(A 또는 B)은 다시 보이지 않는다');
   }, backend, device);
   await g.close();
 
@@ -388,10 +388,11 @@ test('결과 복원 범위: 보존 기간이 지난 결과는 복원하지 않�
     await g2.playBattle();
     await g2.until('보상 확정', 's.battle.settled === true');
     const doneId = (await g2.state()).battle.battleId as string;
-    const denied = (await g2.page.evaluate(() => (window as any).__dev.rawRequest('battle:start', { spawnIndex: 9 }))) as { ok: boolean; code: string }; // eslint-disable-line @typescript-eslint/no-explicit-any
+    const other = [A, B].find((w) => backend.session(device2)!.wilds.find((x) => x.index === w.index)!.state === 'free')!.index; // 먼저 조우한 쪽은 클라이언트가 고른다 — 아직 free인 쪽으로 요청
+    const denied = (await g2.page.evaluate((i) => (window as any).__dev.rawRequest('battle:start', { spawnIndex: i }), other)) as { ok: boolean; code: string }; // eslint-disable-line @typescript-eslint/no-explicit-any
     assert.deepEqual([denied.ok, denied.code], [false, 'UNACKNOWLEDGED_BATTLE_RESULT'], '결과 확인 전에는 새 조우가 시작되지 않는다(v4 §1)');
     await g2.page.evaluate((id) => (window as any).__dev.rawRequest('battle:result:ack', { battleId: id }), doneId); // eslint-disable-line @typescript-eslint/no-explicit-any
-    const started = (await g2.page.evaluate(() => (window as any).__dev.rawRequest('battle:start', { spawnIndex: 9 }))) as { ok: boolean; snapshot?: { battleId: string } }; // eslint-disable-line @typescript-eslint/no-explicit-any
+    const started = (await g2.page.evaluate((i) => (window as any).__dev.rawRequest('battle:start', { spawnIndex: i }), other)) as { ok: boolean; snapshot?: { battleId: string } }; // eslint-disable-line @typescript-eslint/no-explicit-any
     assert.equal(started.ok, true, '확인 뒤에는 새 조우가 시작된다');
     const liveId = started.snapshot!.battleId;
     assert.notEqual(liveId, doneId);
@@ -450,9 +451,10 @@ test('미확인 결과 우회 방지(v4 §2): 확인 전 직접 새 방 생성·
     // 1) 직접 새 방 생성, 2) 직접 야생 전투 시작 — 거부되고 복원할 전투 ID가 있다
     const room = await raw('room:create', { stageCode: 'forest' });
     assert.deepEqual([room.ok, room.code, room.battleId, room.message], [false, 'UNACKNOWLEDGED_BATTLE_RESULT', doneId, '확인하지 않은 전투 결과가 있어요. 결과를 먼저 확인해 주세요.']);
-    const start = await raw('battle:start', { spawnIndex: B.index });
+    const other = [A, B].find((w) => backend.session(device)!.wilds.find((x) => x.index === w.index)!.state === 'free')!;
+    const start = await raw('battle:start', { spawnIndex: other.index });
     assert.deepEqual([start.ok, start.code, start.battleId], [false, 'UNACKNOWLEDGED_BATTLE_RESULT', doneId]);
-    assert.equal(backend.session(device)!.wilds.find((w) => w.index === B.index)!.state, 'free', '거부된 조우는 상태를 바꾸지 않았다');
+    assert.equal(backend.session(device)!.wilds.find((w) => w.index === other.index)!.state, 'free', '거부된 조우는 상태를 바꾸지 않았다');
     // 3) 마을 UI에서 새 활동 진입: 복원 화면에서 마을로 나온 뒤(접속 인증 응답을 일부러 실패시켜 안내 없이 마을에 머문다)
     const hold = backend.holdHello();
     await g.reload();

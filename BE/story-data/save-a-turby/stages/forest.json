@@ -24,7 +24,7 @@
     {"id": "forest_hidden_path", "x": 1805, "y": 1002, "radius": 64},
     {"id": "forest_giant_knot", "x": 2400, "y": 1040, "radius": 72},
     {"id": "forest_first_knot_awaken", "x": 2400, "y": 1040, "radius": 72},
-    {"id": "forest_dansuring", "x": 2960, "y": 1010, "radius": 72}
+    {"id": "forest_dansuring", "x": 2870, "y": 1010, "radius": 72}
   ],
   "objects": [
     {"id": "forest_dust_01", "objectiveKey": "forest_glowing_dust", "group": "near_clearing", "assetKey": "glowing-yarn-dust", "label": "실가루(임시)", "prompt": "빛나는 실가루 줍기"},
@@ -39,7 +39,7 @@
     {"id": "forest_dust_10", "objectiveKey": "forest_glowing_dust", "group": "near_wild", "assetKey": "glowing-yarn-dust", "label": "실가루(임시)", "prompt": "빛나는 실가루 줍기"}
   ],
   "storyPoints": [
-    {"id": "forest_cut_thread", "kind": "inspect", "assetKey": "cut-yarn-strand", "label": "잘린 실오라기(임시)", "prompt": "잘린 실 살펴보기"},
+    {"id": "forest_cut_thread", "kind": "inspect", "assetKey": "placeholder-point", "label": "잘린 실오라기(임시)", "prompt": "잘린 실 살펴보기"},
     {"id": "forest_bopuli_ambush", "kind": "battle", "assetKey": "placeholder-point", "label": "보풀이 공터(임시)", "prompt": "보풀이에게 다가가기"},
     {"id": "forest_bopuli_return", "kind": "npc", "assetKey": "placeholder-point", "label": "보풀이(임시)", "prompt": "보풀이에게 실가루 건네기"},
     {"id": "forest_hidden_path", "kind": "gate", "assetKey": "placeholder-point", "label": "먼지바람에 가린 길(임시)", "prompt": "나침판 꺼내기"},
@@ -53,12 +53,13 @@
     "background": {"assetKey": "forest-base"},
     "overlays": [
       {"id": "fog_hidden_path", "assetKey": "fog-veil", "x": 2550, "y": 930, "width": 1300, "height": 780, "pivot": [0.5, 0.5], "layer": "overlay", "forPoints": ["forest_hidden_path"], "hiddenAfter": "forest_hidden_path_opened"},
-      {"id": "overlay_hidden_path_reveal", "assetKey": "hidden-path-reveal", "x": 2140, "y": 985, "width": 960, "height": 560, "visibleAfter": "forest_hidden_path_opened"},
-      {"id": "overlay_hidden_yarn_path", "assetKey": "hidden-yarn-path", "x": 2080, "y": 990, "width": 768, "height": 256, "visibleAfter": "forest_hidden_path_opened"},
-      {"id": "prop_giant_knot_map", "assetKey": "giant-thread-knot-map", "x": 2400, "y": 1040, "width": 512, "height": 512, "pivot": [0.5, 0.88], "layer": "story", "forPoints": ["forest_giant_knot"], "visibleAfter": "forest_hidden_path_opened", "hiddenAfter": "forest_giant_knot_defeated"},
-      {"id": "npc_bopuli", "assetKey": "turby-bopuli", "x": 1490, "y": 1447, "width": 160, "height": 160, "pivot": [0.5, 0.9], "layer": "story", "forPoints": ["forest_bopuli_ambush", "forest_bopuli_return"]},
-      {"id": "npc_bopuli_tangled", "assetKey": "bopuli-tangled-overlay", "x": 1490, "y": 1447, "width": 256, "height": 256, "pivot": [0.5, 0.9], "layer": "story", "hiddenAfter": "forest_bopul_rescued"},
-      {"id": "npc_dansuring", "assetKey": "dansuring", "x": 2960, "y": 1010, "width": 192, "height": 192, "pivot": [0.5, 0.82], "layer": "story", "forPoints": ["forest_dansuring"], "visibleAfter": "forest_first_knot_equipped"}
+      {"id": "prop_cut_thread", "assetKey": "cut-yarn-strand", "x": 1488, "y": 1715, "width": 360, "height": 150, "pivot": [0.5, 0.5], "layer": "story", "forPoints": ["forest_cut_thread"], "hiddenAfter": "forest_cut_thread_inspected"},
+      {"id": "overlay_hidden_path_reveal", "assetKey": "hidden-path-reveal", "x": 2230, "y": 956, "width": 360, "height": 210, "visibleAfter": "forest_hidden_path_opened"},
+      {"id": "overlay_hidden_yarn_path", "assetKey": "hidden-yarn-path", "x": 2010, "y": 980, "width": 288, "height": 96, "visibleAfter": "forest_hidden_path_opened"},
+      {"id": "prop_giant_knot_map", "assetKey": "giant-thread-knot-map", "x": 2400, "y": 1040, "width": 320, "height": 320, "pivot": [0.5, 0.5], "layer": "story", "forPoints": ["forest_giant_knot"], "visibleAfter": "forest_hidden_path_opened", "hiddenAfter": "forest_giant_knot_defeated"},
+      {"id": "npc_bopuli", "assetKey": "turby-bopuli", "x": 1490, "y": 1447, "width": 128, "height": 128, "pivot": [0.5, 0.9], "layer": "story", "forPoints": ["forest_bopuli_ambush", "forest_bopuli_return"]},
+      {"id": "npc_bopuli_tangled", "assetKey": "bopuli-tangled-overlay", "x": 1490, "y": 1447, "width": 176, "height": 176, "pivot": [0.5, 0.9], "layer": "story", "hiddenAfter": "forest_bopul_rescued"},
+      {"id": "npc_dansuring", "assetKey": "dansuring", "x": 2870, "y": 1010, "width": 96, "height": 96, "pivot": [0.5, 0.82], "layer": "story", "forPoints": ["forest_dansuring"], "visibleAfter": "forest_first_knot_equipped"}
     ]
   },
   "layout": {
@@ -68,14 +69,14 @@
       {"id": "zone_clearing", "label": "보풀이 공터", "x": 1330, "y": 1290, "width": 340, "height": 310},
       {"id": "zone_dust_loop", "label": "실가루 순환 길", "x": 160, "y": 300, "width": 1300, "height": 1320},
       {"id": "zone_hidden", "label": "숨은 실오라기 길", "x": 1930, "y": 540, "width": 990, "height": 780, "visibleAfter": "forest_hidden_path_opened"},
-      {"id": "zone_root_gate", "label": "실뿌리 문", "x": 2920, "y": 760, "width": 280, "height": 500, "visibleAfter": "forest_first_knot_equipped"}
+      {"id": "zone_root_gate", "label": "실뿌리 문", "x": 2850, "y": 760, "width": 350, "height": 500, "visibleAfter": "forest_first_knot_equipped"}
     ],
     "paths": [
       {"points": [[1440, 2040], [1488, 1986], [1488, 1800], [1506, 1776], [1488, 1452], [1518, 1416], [1518, 1326], [1488, 1296], [1482, 1212], [1404, 1104], [1404, 1026], [1460, 945]]},
       {"points": [[1468, 1672], [1170, 1578], [1018, 1431], [864, 1362], [732, 1350], [493, 1403], [432, 1398], [324, 1314], [312, 1268], [252, 1206], [270, 1134], [354, 1008], [334, 806], [384, 696], [390, 612], [540, 528], [714, 534], [846, 468], [960, 486], [1032, 528], [1212, 714], [1368, 774], [1434, 846], [1460, 945]]},
       {"points": [[1460, 945], [1536, 930], [1805, 1002]], "visibleAfter": "forest_compass_granted"},
       {"points": [[1805, 1002], [2381, 940]], "visibleAfter": "forest_hidden_path_opened"},
-      {"points": [[2381, 940], [2454, 960], [2784, 966], [2960, 1011]], "visibleAfter": "forest_first_knot_equipped"}
+      {"points": [[2381, 940], [2454, 960], [2784, 966], [2870, 1010]], "visibleAfter": "forest_first_knot_equipped"}
     ],
     "blockers": [
       {"id": "bush_04", "label": "먼지풀", "x": 1700, "y": 820, "width": 200, "height": 40},
@@ -88,8 +89,8 @@
       {"id": "wall_hidden_right", "label": "", "x": 3150, "y": 560, "width": 40, "height": 780},
       {"id": "wall_hidden_left_a", "label": "", "x": 1890, "y": 780, "width": 40, "height": 100},
       {"id": "wall_hidden_left_b", "label": "", "x": 1890, "y": 1120, "width": 40, "height": 110},
-      {"id": "wall_root_a", "label": "", "x": 2880, "y": 800, "width": 40, "height": 90, "visibleAfter": "forest_hidden_path_opened"},
-      {"id": "wall_root_b", "label": "", "x": 2880, "y": 1115, "width": 40, "height": 90, "visibleAfter": "forest_hidden_path_opened"},
+      {"id": "wall_root_a", "label": "", "x": 2810, "y": 800, "width": 40, "height": 90, "visibleAfter": "forest_hidden_path_opened"},
+      {"id": "wall_root_b", "label": "", "x": 2810, "y": 1115, "width": 40, "height": 90, "visibleAfter": "forest_hidden_path_opened"},
       {"id": "edge_001", "label": "", "x": 784, "y": 128, "width": 160, "height": 64},
       {"id": "edge_002", "label": "", "x": 752, "y": 144, "width": 32, "height": 80},
       {"id": "edge_003", "label": "", "x": 944, "y": 144, "width": 32, "height": 64},
@@ -527,8 +528,8 @@
       {"id": "edge_435", "label": "", "x": 1456, "y": 2384, "width": 32, "height": 16}
     ],
     "gates": [
-      {"id": "gate_hidden_path", "label": "먼지바람", "x": 1890, "y": 880, "width": 40, "height": 240, "openEvent": "forest_hidden_path_opened", "closedAssetKey": "dust-wind-closed", "openAssetKey": null, "art": {"x": 1910, "y": 1004, "width": 320, "height": 360, "pivot": [0.5, 0.5]}},
-      {"id": "gate_root", "label": "닫힌 실뿌리", "x": 2880, "y": 890, "width": 40, "height": 225, "openEvent": "forest_first_knot_equipped", "visibleAfter": "forest_hidden_path_opened", "closedAssetKey": "root-gate-closed", "openAssetKey": "root-gate-open", "art": {"x": 2960, "y": 1050, "width": 480, "height": 520, "pivot": [0.5, 0.92]}}
+      {"id": "gate_hidden_path", "label": "먼지바람", "x": 1890, "y": 880, "width": 40, "height": 240, "openEvent": "forest_hidden_path_opened", "closedAssetKey": "dust-wind-closed", "openAssetKey": null, "art": {"x": 1990, "y": 1004, "width": 240, "height": 270, "pivot": [0.5, 0.5]}},
+      {"id": "gate_root", "label": "닫힌 실뿌리", "x": 2810, "y": 890, "width": 40, "height": 225, "openEvent": "forest_first_knot_equipped", "visibleAfter": "forest_hidden_path_opened", "closedAssetKey": "root-gate-closed", "openAssetKey": "root-gate-open", "art": {"x": 2850, "y": 1050, "width": 300, "height": 325, "pivot": [0.5, 0.92]}}
     ]
   },
   "spawnPoint": {
