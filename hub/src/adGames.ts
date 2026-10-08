@@ -1,4 +1,9 @@
-export type AdGameId = 'number-gate-runner' | 'number-hero-tower' | 'merge-defense';
+export type AdGameId =
+  | 'number-gate-runner'
+  | 'number-hero-tower'
+  | 'merge-defense'
+  | 'sweet-shop'
+  | 'my-room-dungeon';
 
 export interface AdGameMeta {
   id: AdGameId;
@@ -29,5 +34,19 @@ export const AD_GAMES: AdGameMeta[] = [
     title: '머지 디펜스',
     description: '검사·궁사·마검사를 스폰하고 합쳐 태엽 군단을 막으세요.',
     status: 'available',
+  },
+  {
+    id: 'sweet-shop',
+    number: 4,
+    title: '달콤상점',
+    description: '디저트를 만들어 가격을 정하고 다른 플레이어와 사고파는 온라인 카페를 운영하세요.',
+    status: 'planning',
+  },
+  {
+    id: 'my-room-dungeon',
+    number: 5,
+    title: '내 방이 던전',
+    description: '방 안의 사물을 분해해 자원을 모으고 무기와 채집 로봇을 성장시키세요.',
+    status: 'planning',
   },
 ];
