@@ -26,6 +26,7 @@ import { collectStoryObject, fetchStageView, fetchStory, triggerStory } from '..
 import { DELIVERY_ITEM_NAME, deliveryGoalText, shortageText, type StoryDelivery, type StoryPlay } from '../story/storyFlow';
 import { CLIENT_BODY_HALF, collectedText, nearestInteractable, promptText, solidRects, stepWithSolids, type Interactable, type StageRect, type StageView } from '../story/storyStage';
 import { MAP_DEPTH, planStageRender, type StageRenderPlan } from '../story/mapRender';
+import { ensureFogTexture, FOG_KEY } from '../story/fogTexture';
 import { recoverUnackedResult } from '../state/unackedResult';
 import { deferredRestore } from '../state/restoreAttempt';
 import { resumeBattle } from './VillageScene';
@@ -336,7 +337,9 @@ export class MapScene extends Phaser.Scene {
       return o;
     };
     // 같은 서버 화면 데이터(view) 한 번으로 문 그림·오버레이·충돌(this.solids)을 함께 바꾼다 — 숨은 길의 그림과 통과 가능 여부가 어긋나지 않는다
+    ensureFogTexture(this.textures); // 가려진 구역의 안개(서버가 이벤트 전까지만 내려 준다) — 실행 중에 만드는 막이라 에셋이 아니다
     const plan: StageRenderPlan = planStageRender(view, (key) => this.textures.exists(key), { width: this.stageWidth, height: this.stageHeight });
+    this.lastPlan = plan;
     for (const o of plan.overlays) keep(this.add.image(o.x, o.y, o.assetKey).setOrigin(o.pivot[0], o.pivot[1]).setDisplaySize(o.width, o.height).setDepth(o.depth));
     for (const g of plan.gates) {
       const gate = view!.gates.find((x) => x.id === g.id)!;
@@ -352,7 +355,7 @@ export class MapScene extends Phaser.Scene {
       const art = ao?.assetKey;
       if (art) {
         // 최종 그림이 있으면 그림으로(잠긴 것은 흐리게). 수집 반경 원·글자는 일반 화면에 내지 않는다
-        c.add(this.add.image(0, 0, art).setDisplaySize(64, 64).setAlpha(locked ? 0.45 : 1));
+        c.add(this.add.image(0, 0, art).setDisplaySize(96, 96).setAlpha(locked ? 0.45 : 1)); // 규격 96×96 그대로
         continue;
       }
       // 임시 도형(마름모): 최종 에셋이 없을 때만
@@ -392,8 +395,11 @@ export class MapScene extends Phaser.Scene {
         : { id: `wild-${m.index}`, type: 'wild' as const, name: this.characterName(m.info.characterCode), x: m.info.x, y: m.info.y, hint: m.info.state === 'engaged' ? WILD_HINT_ENGAGED : WILD_HINT_NEAR },
     );
     // 전체 지도·미니맵: 회색상자 모드에서만 길·벽·문·공개된 구역을 임시 도형으로 그린다(최종 지도가 오면 이 임시 배경은 없어진다)
-    const terrain = view?.layout ? { zones: view.layout.zones, paths: view.layout.paths, blockers: view.layout.blockers, gates: view.gates } : undefined;
-    this.miniMap?.setScene({ ...this.mapView, greybox: terrain }, [...wildMarkers, ...storyMarkers]);
+    // 최종 배경이면 배경 그림을 축소해 지도로 쓰고(가려진 구역은 안개 그대로), 임시 도형은 그리지 않는다
+    const plan = this.lastPlan;
+    const art = plan?.background.mode === 'final' ? { assetKey: plan.background.assetKey, fog: plan.overlays.filter((o) => o.assetKey === FOG_KEY).map((o) => ({ x: o.x - o.width * o.pivot[0], y: o.y - o.height * o.pivot[1], width: o.width, height: o.height })) } : undefined;
+    const terrain = !art && view?.layout ? { zones: view.layout.zones, paths: view.layout.paths, blockers: view.layout.blockers, gates: view.gates } : undefined;
+    this.miniMap?.setScene({ ...this.mapView, greybox: terrain, art }, [...wildMarkers, ...storyMarkers]);
   }
 
   // ----- 10-02 v6 §1: 야생 마커 — 서버가 내려 준 목록(roomClient.wilds)과 화면을 맞춘다 -----
@@ -621,6 +627,7 @@ export class MapScene extends Phaser.Scene {
   }
 
   private renderMode: StageRenderPlan['background']['mode'] = 'tile';
+  private lastPlan: StageRenderPlan | null = null;
 
   // 진단용 요약(렌더링): 배경 방식·오버레이·문 그림·tileSprite 수 — 최종 에셋 연결 전후를 눈으로 보지 않고도 확인한다
   get debugRender() {

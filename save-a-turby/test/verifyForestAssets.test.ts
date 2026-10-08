@@ -128,7 +128,7 @@ test('투명 PNG: 알파 채널이 없거나 모서리가 불투명하면 실패
   });
   const f = lines(r);
   assert.ok(f.some((x) => x.startsWith('world/forest/hidden-path-reveal.png|알파 채널|있음|없음')));
-  assert.ok(f.some((x) => x.startsWith('world/forest/root-gate-closed.png|네 모서리 투명|네 모서리 모두 알파 0|(0,519)α=255')));
+  assert.ok(f.some((x) => x.startsWith('world/forest/root-gate-closed.png|네 모서리 투명|네 모서리 알파 8 이하(육안으로 투명)|(0,519)α=255')));
   assert.ok(!f.some((x) => x.startsWith('world/forest/root-gate-open.png')), '팔레트 tRNS는 알파로 인정');
   assert.equal(decodePng(png(4, 4, { mode: 'palette', fill: [0, 0, 0, 0] })).hasAlpha, true);
   assert.equal(decodePng(png(4, 4, { mode: 'rgb' })).hasAlpha, false);
@@ -136,11 +136,12 @@ test('투명 PNG: 알파 채널이 없거나 모서리가 불투명하면 실패
 
 test('forest-base: 가장자리·주요 이동 영역의 완전 투명 픽셀과 반투명을 잡아낸다', () => {
   const dir = workspace();
-  // 가장자리(오른쪽 위 모서리) + 숲 입구 구역 한가운데(1600,1200)에 구멍, 그리고 이동 영역 밖에는 반투명 한 점
-  const r = fail(dir, { 'world/forest/forest-base.png': png(3200, 2400, { edits: [[3199, 0, [0, 0, 0, 0]], [1600, 1200, [0, 0, 0, 0]], [100, 100, [90, 140, 80, 128]]] }) });
+  // 가장자리(오른쪽 위 모서리) + 시작 지점(길 위)에 구멍, 그리고 이동 영역 밖에는 반투명 한 점
+  const spawn = JSON.parse(readFileSync(DEFAULT_FOREST_JSON, 'utf8')).spawnPoint as { x: number; y: number };
+  const r = fail(dir, { 'world/forest/forest-base.png': png(3200, 2400, { edits: [[3199, 0, [0, 0, 0, 0]], [spawn.x, spawn.y, [0, 0, 0, 0]], [20, 20, [90, 140, 80, 128]]] }) });
   const f = lines(r);
   assert.ok(f.some((x) => x.startsWith('world/forest/forest-base.png|가장자리 완전 투명 픽셀 없음|0개|1개, 처음 (3199,0)')), f.join('\n'));
-  assert.ok(f.some((x) => x.startsWith('world/forest/forest-base.png|주요 이동 영역 완전 투명 픽셀 없음|0개|') && x.includes('(1600,1200)')));
+  assert.ok(f.some((x) => x.startsWith('world/forest/forest-base.png|주요 이동 영역 완전 투명 픽셀 없음|0개|') && x.includes(`(${spawn.x},${spawn.y})`)));
   assert.ok(f.some((x) => x.startsWith('world/forest/forest-base.png|전체 불투명|알파 255만|') && x.includes('3개 반투명·투명')));
   // 알파 채널이 없는 RGB 배경은 불투명으로 통과
   const ok = verifyForestAssets({ assetsDir: dir, spec: (FOREST_ASSETS as Spec[]).filter((s) => s.path === 'world/forest/forest-base.png') });
@@ -163,7 +164,7 @@ test('파일명으로 계산되는 assetKey가 forest.json과 일치해야 한�
   build(dir);
   const forest = JSON.parse(readFileSync(DEFAULT_FOREST_JSON, 'utf8'));
   // forest.json이 다른 키를 가리킨다
-  forest.render.overlays[0].assetKey = 'hidden-path-revealed';
+  forest.render.overlays.find((o: { assetKey: string }) => o.assetKey === 'hidden-path-reveal').assetKey = 'hidden-path-revealed';
   forest.storyPoints[0].assetKey = 'placeholder-point'; // 임시 키는 검수 대상이 아니다
   const wrong = join(workspace(), 'forest.json');
   writeFileSync(wrong, JSON.stringify(forest));
@@ -195,6 +196,10 @@ test('npm 명령 verify:forest-assets가 등록돼 있고, 제품 에셋 폴더�
   assert.equal(pkg.scripts['verify:forest-assets'], 'node scripts/verify-forest-assets.mjs');
   const assets = fileURLToPath(new URL('../src/assets', import.meta.url));
   const names = readdirSync(assets, { recursive: true }).map(String);
-  for (const s of FOREST_ASSETS as Spec[]) assert.ok(!names.includes(s.path.split('/').join('\\')) && !names.includes(s.path), `${s.path}이(가) 제품 폴더에 없다`);
+  // 최종 에셋이 들어온 뒤에는 숲 폴더에 검수 목록의 파일만 있어야 한다(시험 fixture·중간 파일 -v1/-v2가 섞이지 않는다)
+  const norm = (n: string) => n.replace(/\\/g, '/');
+  const known = new Set((FOREST_ASSETS as Spec[]).map((x) => x.path));
+  const strays = names.map(norm).filter((n) => n.startsWith('world/forest/') && /\.[a-z0-9]+$/i.test(n) && !known.has(n));
+  assert.deepEqual(strays, [], '숲 폴더에 검수 목록 밖의 파일이 있다');
   void cpSync;
 });

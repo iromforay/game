@@ -9,6 +9,7 @@ import { pathToFileURL } from 'url';
 import * as shared from 'turby-stage-geometry';
 import { collisionOf, pointBlocked, reachable, SERVER_BODY_HALF } from '../src/turby/rooms/stage-collision';
 import { STORY_DATA_DIR, StoryContentService } from '../src/turby/story/story-content.service';
+import { HIDDEN_INSIDE, SPAWN, WIND_FRONT, WIND_GATE } from './helpers/forest-geo';
 
 const { BODY_HALF_TOLERANCE, bodyBlocked, checkMove, CLIENT_BODY_HALF, gateOpen, insideRect, lockedZonesFor, parseStageGeometry, reachVerdict, safePosition, segmentCrosses, solidsFor, solidsOfView, StageGeometryError, stepWithSolids, zoneLocked } = shared;
 const FOREST_RAW = JSON.parse(readFileSync(join(STORY_DATA_DIR, 'stages', 'forest.json'), 'utf8')) as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -18,16 +19,21 @@ const nativeImport = new Function('p', 'return import(p)') as (p: string) => Pro
 
 test('계약: 실제 숲 데이터가 계약을 통과하고, 서버 입구(stage-collision)와 공용 모듈이 같은 함수·같은 결과를 쓴다', () => {
   const g = parseStageGeometry(FOREST_RAW, SIZE, 'forest');
-  assert.deepEqual([g.width, g.height, g.spawn], [3200, 2400, { x: 1600, y: 1200 }]);
+  assert.deepEqual([g.width, g.height, g.spawn], [3200, 2400, SPAWN]);
   assert.equal(g.blockers.length, FOREST_RAW.layout.blockers.length);
   assert.deepEqual(g.gates.map((x) => [x.id, x.openEvent]), [['gate_hidden_path', 'forest_hidden_path_opened'], ['gate_root', 'forest_first_knot_equipped']]);
   assert.deepEqual(g.zones.map((z) => [z.id, z.accessAfter]), [['zone_hidden', 'forest_hidden_path_opened'], ['zone_root_gate', 'forest_first_knot_equipped']], '접근 조건이 있는 구역만 잠금 구역');
   assert.deepEqual(collisionOf(FOREST_RAW, 1, 1, 'forest'), g, '서버의 방 geometry는 같은 파서의 결과');
   // 서버 입구가 다시 내보내는 것은 공용 모듈의 그 함수다(복사본이 아니다)
   assert.equal(SERVER_BODY_HALF, shared.SERVER_BODY_HALF);
-  const p = { x: 1700, y: 800 };
+  const bush = g.blockers.find((b) => b.id === 'bush_04')!; // 먼지풀 — 길 밖
+  const p = { x: bush.x + bush.width / 2, y: bush.y + bush.height / 2 };
+  assert.equal(pointBlocked(g.blockers, p), true);
   assert.equal(pointBlocked(g.blockers, p), bodyBlocked(g.blockers, p, shared.SERVER_BODY_HALF));
-  assert.equal(reachable(g.blockers, { x: 2100, y: 936 }, { x: 2100, y: 900 }), reachVerdict(g.blockers, [], { x: 2100, y: 936 }, { x: 2100, y: 900 }) === 'ok');
+  const above = { x: p.x, y: bush.y - 40 };
+  const below = { x: p.x, y: bush.y + bush.height + 40 };
+  assert.equal(reachable(g.blockers, above, below), reachVerdict(g.blockers, [], above, below) === 'ok');
+  assert.equal(reachable(g.blockers, above, below), false, '먼지풀 위아래는 닿지 않는다');
   // 지역 데이터가 없는 지역: 지도 한가운데에서 시작, 막힌 곳 없음
   assert.deepEqual(collisionOf(null, 2000, 1000), { width: 2000, height: 1000, spawn: { x: 1000, y: 500 }, blockers: [], gates: [], zones: [] });
 });
@@ -98,11 +104,11 @@ test('계약: 문 개방과 구역 잠금은 이벤트 하나로 정해지고, �
   assert.deepEqual(ids(view(none)), ids(solidsFor(g, none)));
   assert.deepEqual(ids(view(opened)), ids(solidsFor(g, opened)));
   // 문 앞에서: 닫혀 있으면 문 너머 지점에 닿지 않고(잠긴 구역), 열리면 닿는다
-  const front = { x: 2270, y: 1250 };
-  const inside = { x: 2400, y: 1250 };
+  const front = WIND_FRONT;
+  const inside = HIDDEN_INSIDE;
   assert.equal(reachVerdict(solidsFor(g, none), lockedZonesFor(g, none), front, inside), 'locked_zone');
   assert.equal(reachVerdict(solidsFor(g, opened), lockedZonesFor(g, opened), front, inside), 'ok');
-  assert.equal(checkMove(g, solidsFor(g, none), lockedZonesFor(g, none), front, { x: 2320, y: 1250 }), 'blocked');
+  assert.equal(checkMove(g, solidsFor(g, none), lockedZonesFor(g, none), front, { x: WIND_GATE.x + 10, y: front.y }), 'blocked');
   assert.equal(safePosition(g, solidsFor(g, none), lockedZonesFor(g, none), inside).corrected, true, '닫힌 문 너머에 저장된 위치는 시작 지점으로');
   assert.deepEqual(safePosition(g, solidsFor(g, opened), lockedZonesFor(g, opened), inside), { ...inside, corrected: false });
 });
@@ -113,7 +119,7 @@ test('계약: 몸 반지름 — 서버(8)는 클라이언트(16)보다 작다. �
   const g = parseStageGeometry(FOREST_RAW, SIZE, 'forest');
   const solids = solidsFor(g, none);
   let band = 0;
-  for (const r of solids) {
+  for (const r of [...g.gates, ...g.blockers.slice(0, 10)]) { // 이름 붙은 벽·문만(바깥 둘레 사각형은 수백 개라 반복 비용이 크다)
     for (let x = r.x - 40; x <= r.x + r.width + 40; x += 3) {
       for (let y = r.y - 40; y <= r.y + r.height + 40; y += 3) {
         const p = { x, y };
@@ -130,15 +136,16 @@ test('계약: 몸 반지름 — 서버(8)는 클라이언트(16)보다 작다. �
     }
   }
   assert.ok(band > 0, '허용 차이 띠가 실제로 있다');
-  // 클라이언트의 한 걸음(벽을 따라 미끄러짐)의 결과는 서버가 승인한다: 먼지풀 bush_04(1680~1880, 810~854) 아래에서 위로 민다
-  let at = { x: 1700, y: 900 };
-  for (let i = 0; i < 40; i++) {
+  // 클라이언트의 한 걸음(벽을 따라 미끄러짐)의 결과는 서버가 승인한다: 길 한가운데에서 위쪽 벽을 향해 비스듬히 민다
+  let at = { x: WIND_FRONT.x - 120, y: WIND_FRONT.y };
+  for (let i = 0; i < 60; i++) {
     const next = stepWithSolids(solids, at, { x: at.x + 2, y: at.y - 6 });
     assert.equal(checkMove(g, solids, lockedZonesFor(g, none), at, next), 'ok');
     at = next;
   }
-  assert.equal(at.y, 870, '클라이언트는 벽에서 16px 떨어진 곳에서 멈춘다(854 + 16)');
-  assert.ok(at.x > 1700, '벽을 따라 미끄러진다');
+  assert.equal(bodyBlocked(solids, at, CLIENT_BODY_HALF), false, '벽 안으로 들어가지 않는다');
+  assert.ok(at.y < WIND_FRONT.y - 20 && at.x > WIND_FRONT.x - 120, '위로 올라가다 벽에 막히고 옆으로 미끄러진다');
+  assert.ok(Math.abs(at.y - WIND_FRONT.y) < 150, '길 밖으로 나가지 않는다');
 });
 
 test('검증: 잘못된 지역 JSON은 계약 오류로 거부한다(모양·숫자·id·경계·문 이벤트·시작 지점)', () => {

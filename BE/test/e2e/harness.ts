@@ -13,6 +13,7 @@ import { seedBase, startTurbyApp } from '../helpers/turby-app';
 import { RoomsService } from '../../src/turby/rooms/rooms.service';
 import { RoomError } from '../../src/turby/rooms/types';
 import { StoryContentService, type StageStoryData } from '../../src/turby/story/story-content.service';
+import { walkRoute } from '../helpers/forest-geo';
 import { SettingsService } from '../../src/turby/rooms/settings.service';
 import { BattleService } from '../../src/turby/battle/battle.service';
 export const ROOT = join(__dirname, '../../..');
@@ -393,7 +394,21 @@ export class Game {
 
   // 아바타를 목표 지점까지 실제 입력으로 걷게 한다. 마을은 방향키, 탐험 맵은 가상 조이스틱(마우스 누른 채 끌기).
   // stop 조건(예: 장면 전환)이 먼저 참이 되면 멈춘다. 막히면 옆으로 비켜 간다.
+  // 탐험 맵(Map)은 길이 굽어 있어 직선으로 갈 수 없다 — 길 중심선(layout.paths)을 따라 가까운 경유지를 차례로 걷고, 마지막에 목표로 간다.
   async walkTo(sceneKey: string, target: { x: number; y: number }, how: 'keys' | 'joystick', stop = 'false', near = 24) {
+    if (sceneKey !== 'Map') return this.walkDirect(sceneKey, target, how, stop, near);
+    const at = (await this.page.evaluate(() => { const a = (window as any).__game.scene.getScene('Map')?.avatar; return a ? { x: a.x, y: a.y } : null; })) as { x: number; y: number } | null; // eslint-disable-line @typescript-eslint/no-explicit-any
+    if (!at) return;
+    const stopped = () => this.page.evaluate(`(() => { const s = window.__dev.state(); return !!(${stop}); })()`) as Promise<boolean>;
+    const legs = walkRoute(at, target);
+    for (let i = 0; i < legs.length; i++) {
+      if (await stopped()) return;
+      const last = i === legs.length - 1;
+      await this.walkDirect(sceneKey, legs[i], how, stop, last ? near : 28);
+    }
+  }
+
+  async walkDirect(sceneKey: string, target: { x: number; y: number }, how: 'keys' | 'joystick', stop = 'false', near = 24) {
     const pos = () => this.page.evaluate((k) => { const a = (window as any).__game.scene.getScene(k)?.avatar; return a ? { x: a.x, y: a.y } : null; }, sceneKey); // eslint-disable-line @typescript-eslint/no-explicit-any
     const stopped = () => this.page.evaluate(`(() => { const s = window.__dev.state(); return !!(${stop}); })()`) as Promise<boolean>;
     const anchor = { x: 640, y: 560 };

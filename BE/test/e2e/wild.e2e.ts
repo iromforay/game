@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { join } from 'path';
 import type { Browser } from 'playwright-core';
 import type { FakeDb } from '../helpers/fake-prisma';
+import { E2E, SPAWN as GEO_SPAWN, HIDDEN_INSIDE, WIND_GATE, ROOT_GATE, WIND_FRONT, ROOT_FRONT, KNOT } from '../helpers/forest-geo';
 import { Backend, Game, ROOT, freePort, launchBrowser, startVite, withDiagnosis } from './harness';
 import { seedExplorer, seedForest } from './fixtures';
 
@@ -24,8 +25,8 @@ after(async () => {
 });
 
 const SMALL = { width: 640, height: 360 };
-const SPAWN = { x: 1600, y: 1200 };
-const READY = 's.map && s.map.ready && s.map.inRoom && s.map.positioned && s.map.story && s.map.story.greybox === true';
+const SPAWN = GEO_SPAWN;
+const READY = 's.map && s.map.ready && s.map.inRoom && s.map.positioned && s.map.story && s.map.story.greybox === false';
 const BLOCKED_TEXT = '길이 막혀 있어요. 돌아서 가까이 가 보세요.';
 const CORRECTED_TEXT = '안전한 위치에서 다시 시작했어요.';
 type Wild = { index: number; characterCode: string; x: number; y: number; state: string; visible: boolean };
@@ -63,7 +64,7 @@ const withWilds = (seed: (db: FakeDb) => void, wilds: { index: number; code: str
 test('야생 ①: 야생 마커는 서버가 내려 준 것만, 서버 좌표 그대로 화면·미니맵·전체 지도에 놓인다. 서버 좌표가 바뀌면 마커가 따라 옮겨진다', async () => {
   const device = 'e2e-wild-authority';
   // 예전 클라이언트 설정(2번 1600,300 · 6번 2500,1600)과 일부러 다른 좌표 — 화면이 서버 값을 쓰는지 드러난다
-  await backend.start(withWilds(seedForest(device, 'rescued'), [{ index: 2, code: 'bopuli', x: 1790, y: 1090 }, { index: 6, code: 'bopuli', x: 1450, y: 1040 }]));
+  await backend.start(withWilds(seedForest(device, 'rescued'), [{ index: 2, code: 'bopuli', x: 1480, y: 1700 }, { index: 6, code: 'bopuli', x: 1404, y: 1100 }]));
   const g = await Game.open(browser, `${vite.url}/?device=${device}`, device);
   await withDiagnosis(g, 'wild-authority', async () => {
     await enterForest(g);
@@ -93,10 +94,10 @@ test('야생 ①: 야생 마커는 서버가 내려 준 것만, 서버 좌표 �
     assert.deepEqual([res.ok, res.code], [false, 'INVALID_SPAWN']);
 
     // 서버 좌표가 바뀌면 같은 마커 ID가 새 좌표로 옮겨진다(화면·미니맵 모두)
-    backend.moveWild(device, 6, { x: 1400, y: 1120 });
-    await g.until('마커 이동', 's.map.wilds.find((w) => w.index === 6).x === 1400 && s.map.miniMap.wilds.find((w) => w.id === "wild-6").y === 1120');
+    backend.moveWild(device, 6, { x: 1482, y: 1212 });
+    await g.until('마커 이동', 's.map.wilds.find((w) => w.index === 6).x === 1482 && s.map.miniMap.wilds.find((w) => w.id === "wild-6").y === 1212');
     m = await mapOf(g);
-    assert.deepEqual(byIndex(m.wilds).map((w) => [w.index, w.x, w.y]), [[0, 520, 500], [2, 1790, 1090], [6, 1400, 1120]]);
+    assert.deepEqual(byIndex(m.wilds).map((w) => [w.index, w.x, w.y]), [[0, 1650, 2080], [2, 1480, 1700], [6, 1482, 1212]]);
     assert.equal(m.wilds.length, 3, '마커가 늘거나 겹치지 않는다');
   }, backend, device);
   await g.close();
@@ -104,12 +105,11 @@ test('야생 ①: 야생 마커는 서버가 내려 준 것만, 서버 좌표 �
 
 test('야생 ②: 울타리 너머의 야생 — 서버 거부를 "길이 막혀 있어요" 안내로 알리고, 재확인(1.5초)마다 반복하지 않으며(3초 억제), 안내 중에도 걸을 수 있다', async () => {
   const device = 'e2e-wild-notice';
-  await backend.start(withWilds(seedForest(device, 'rescued'), [{ index: 3, code: 'bopuli', x: 2100, y: 900 }]));
+  await backend.start(withWilds(seedForest(device, 'rescued'), [{ index: 3, code: 'bopuli', x: E2E.fenceWild.x, y: E2E.fenceWild.y }]));
+  backend.patchStage('forest', (d) => d.layout!.blockers.push(E2E.fence)); // 시험이 덧붙인 울타리(시작 지점 바로 위, 야생은 그 너머)
   const g = await Game.open(browser, `${vite.url}/?device=${device}`, device);
   await withDiagnosis(g, 'wild-blocked-notice', async () => {
     await enterForest(g);
-    await g.walkTo('Map', { x: 1900, y: 1110 }, 'keys');
-    await g.walkTo('Map', { x: 2100, y: 990 }, 'keys');
     await g.page.keyboard.down('ArrowUp');
     try {
       await g.until('서버가 조우를 거부', 's.map.unreachableWilds >= 1');
@@ -138,9 +138,9 @@ test('야생 ②: 울타리 너머의 야생 — 서버 거부를 "길이 막혀
 
 test('야생 ③: 아직 열리지 않은 구역 안의 야생은 화면·미니맵·전체 지도·서버 응답 어디에도 없고, 구역이 열리면(재접속 없이) 나타난다', async () => {
   const device = 'e2e-wild-hidden-zone';
-  await backend.start(withWilds(seedForest(device, 'rescued'), [{ index: 4, code: 'bopuli', x: 1716, y: 1380 }]));
+  await backend.start(withWilds(seedForest(device, 'rescued'), [{ index: 4, code: 'bopuli', x: 1627, y: 1391 }]));
   // 시험용 잠긴 구역을 이 서버 인스턴스의 지역 데이터에 덧붙인다(공개 조건: 첫 매듭 장착 이벤트)
-  backend.patchStage('forest', (d) => d.layout!.zones.push({ id: 'zone_test_locked', label: '잠긴 곳(시험)', x: 1700, y: 1320, width: 140, height: 120, visibleAfter: 'forest_first_knot_equipped' }));
+  backend.patchStage('forest', (d) => d.layout!.zones.push({ id: 'zone_test_locked', label: '잠긴 곳(시험)', x: 1590, y: 1330, width: 120, height: 120, visibleAfter: 'forest_first_knot_equipped' }));
   const g = await Game.open(browser, `${vite.url}/?device=${device}`, device);
   await withDiagnosis(g, 'wild-hidden-zone', async () => {
     await enterForest(g);
@@ -149,15 +149,15 @@ test('야생 ③: 아직 열리지 않은 구역 안의 야생은 화면·미니
     assert.ok(!m.miniMap.wilds.some((w) => w.id === 'wild-4'), '미니맵에도 없다');
     const received = (await g.page.evaluate(() => [...(window as any).__rooms.wilds.keys()])) as number[]; // eslint-disable-line @typescript-eslint/no-explicit-any
     assert.deepEqual(received, [0], '서버가 클라이언트에 내려 준 야생 목록에도 없다(ID·좌표가 오지 않았다)');
-    // 응답 원문·소켓 이벤트 원문: 공개 전 야생(4번, 좌표 1716,1380)의 ID·종류·좌표가 어디에도 없다
+    // 응답 원문·소켓 이벤트 원문: 공개 전 야생(4번, 좌표 1627,1391)의 ID·종류·좌표가 어디에도 없다
     await g.page.evaluate(() => { const r = (window as any).__rooms; (window as any).__events = []; r.socket.onAny((name: string, ...args: unknown[]) => (window as any).__events.push([name, JSON.stringify(args)])); }); // eslint-disable-line @typescript-eslint/no-explicit-any
     const enterRaw = JSON.stringify(await g.page.evaluate(() => (window as any).__dev.rawRequest('map:enter', { dir: 'down' }))); // eslint-disable-line @typescript-eslint/no-explicit-any
-    assert.doesNotMatch(enterRaw, /"index":4|1716|1380/, 'map:enter 응답 원문에 숨은 야생이 없다');
+    assert.doesNotMatch(enterRaw, /"index":4|1627|1391/, 'map:enter 응답 원문에 숨은 야생이 없다');
     assert.match(enterRaw, /"encounterRadiusPx":\d+/);
-    backend.moveWild(device, 4, { x: 1716, y: 1380 }); // 서버가 숨은 야생의 상태 방송을 시도해도 이 플레이어에게는 가지 않는다
+    backend.moveWild(device, 4, { x: 1627, y: 1391 }); // 서버가 숨은 야생의 상태 방송을 시도해도 이 플레이어에게는 가지 않는다
     await g.page.waitForTimeout(500);
     const events = (await g.page.evaluate(() => (window as any).__events)) as [string, string][]; // eslint-disable-line @typescript-eslint/no-explicit-any
-    assert.ok(events.every(([, body]) => !/"index":4|1716,|"y":1380/.test(body)), `소켓 이벤트 원문에 숨은 야생이 없다: ${JSON.stringify(events.map((e) => e[0]))}`);
+    assert.ok(events.every(([, body]) => !/"index":4|1627,|"y":1391/.test(body)), `소켓 이벤트 원문에 숨은 야생이 없다: ${JSON.stringify(events.map((e) => e[0]))}`);
     await g.capture('01_locked_zone_wild_hidden_screen');
     await g.clickAt(m.miniMap.openButton.x, m.miniMap.openButton.y, 's.map.miniMap.open === true');
     await g.capture('01_locked_zone_wild_hidden_full_map');
@@ -170,10 +170,10 @@ test('야생 ③: 아직 열리지 않은 구역 안의 야생은 화면·미니
     backend.grantEvent(device, 'forest_first_knot_equipped');
     await g.until('야생 공개', 's.map.wilds.some((w) => w.index === 4 && w.visible)');
     m = await mapOf(g);
-    assert.deepEqual(byIndex(m.wilds).map((w) => [w.index, w.x, w.y]), [[0, 520, 500], [4, 1716, 1380]]);
+    assert.deepEqual(byIndex(m.wilds).map((w) => [w.index, w.x, w.y]), [[0, 1650, 2080], [4, 1627, 1391]]);
     assert.ok(m.miniMap.wilds.some((w) => w.id === 'wild-4'), '미니맵에도 나타난다');
     // 상태 방송(wild:changed)이 공개 이벤트와 겹쳐 와도 같은 야생이 중복 생성되지 않는다
-    backend.moveWild(device, 4, { x: 1716, y: 1380 });
+    backend.moveWild(device, 4, { x: 1627, y: 1391 });
     await g.page.waitForTimeout(500);
     m = await mapOf(g);
     assert.equal(m.wilds.filter((w) => w.index === 4).length, 1, '같은 야생을 두 번 만들지 않는다');
@@ -190,9 +190,9 @@ test('야생 ④: 저장된 위치가 더는 유효하지 않으면 재입장 �
   await withDiagnosis(g, 'position-corrected-notice', async () => {
     await enterForest(g);
     assert.deepEqual((await mapOf(g)).notices, [], '정상 입장에는 안내 없음');
-    await g.walkTo('Map', { x: 1420, y: 1100 }, 'keys');
+    await g.walkTo('Map', E2E.trunkNorth, 'keys');
     await serverCatchesUp(g, device);
-    backend.displace(device, { x: 1700, y: 830 }); // 먼지풀(bush_04) 안 — 저장된 위치가 막힌 곳이 된 상황
+    backend.displace(device, { x: 1800, y: 840 }); // 길 둘레의 먼지풀(bush_04) 안 — 저장된 위치가 막힌 곳이 된 상황
     await g.reload();
     await g.until('Map 복원', READY);
     let m = await mapOf(g);
@@ -200,9 +200,9 @@ test('야생 ④: 저장된 위치가 더는 유효하지 않으면 재입장 �
     await g.until('보정 안내', `s.map.notices.length === 1 && window.__dev.texts().includes(${JSON.stringify(CORRECTED_TEXT)})`);
     await g.capture('04_position_corrected_notice');
     // 위치 확정 뒤 입력은 정상이고, 걸어도(작은 이동 보정이 있더라도) 안내가 다시 뜨지 않는다
-    await g.walkTo('Map', { x: 1500, y: 1140 }, 'keys');
+    await g.walkTo('Map', { x: SPAWN.x - 100, y: SPAWN.y - 40 }, 'keys');
     const after = await serverCatchesUp(g, device);
-    assert.ok(after.x < 1560, `보정 뒤 이동: ${JSON.stringify(after)}`);
+    assert.ok(after.x < SPAWN.x - 50, `보정 뒤 이동: ${JSON.stringify(after)}`);
     m = await mapOf(g);
     assert.deepEqual(m.notices, [CORRECTED_TEXT], '한 번만');
     // 다음 재접속: 위치가 유효하므로 안내 없음
@@ -220,7 +220,7 @@ test('야생 ⑤: 640×360 — 복원이 늦어지면 연결 상태 안내와 �
   const g = await Game.open(browser, `${vite.url}/?device=${device}`, device, SMALL);
   await withDiagnosis(g, 'restore-slow-retry', async () => {
     await enterForest(g);
-    await g.walkTo('Map', { x: 1480, y: 1060 }, 'joystick');
+    await g.walkTo('Map', { x: 1488, y: 1880 }, 'joystick');
     const before = await serverCatchesUp(g, device);
     const room = backend.session(device)!.code;
     assert.equal(backend.roomCount(), 1);
@@ -253,9 +253,9 @@ test('야생 ⑤: 640×360 — 복원이 늦어지면 연결 상태 안내와 �
     // 4) 맨 처음 붙잡아 둔 낡은 응답이 이제야 도착한다 — 화면도 세션도 그대로다
     hold.release(1);
     hold.restore();
-    await g.walkTo('Map', { x: before.x - 160, y: before.y + 40 }, 'joystick');
+    await g.walkTo('Map', { x: before.x, y: before.y + 100 }, 'joystick');
     const after = await serverCatchesUp(g, device);
-    assert.ok(after.x < before.x - 100, `복원 뒤 이동이 서버에 반영: ${JSON.stringify(after)}`);
+    assert.ok(after.y > before.y + 60, `복원 뒤 이동이 서버에 반영: ${JSON.stringify(after)}`);
     m = await mapOf(g);
     const st = await g.state();
     assert.ok(st.scenes.includes('Map') && !st.scenes.includes('Boot') && !st.scenes.includes('Village'));
@@ -266,7 +266,7 @@ test('야생 ⑤: 640×360 — 복원이 늦어지면 연결 상태 안내와 �
 
 test('야생 ⑥: 일반 야생 전투 도중 새로고침 → 같은 전투·라운드·유닛 상태로 복원(스토리 대화로 돌아가지 않음) → 승리·포획 결과 → Map 복귀 → 같은 야생은 다시 조우하지 않는다', async () => {
   const device = 'e2e-wild-battle-reload';
-  const WILD = { index: 2, code: 'muldeuli', x: 1760, y: 1330 };
+  const WILD = { index: 2, code: 'muldeuli', x: 1488, y: 1560 };
   await backend.start(
     withWilds((db) => {
       seedExplorer(device)(db);
@@ -324,7 +324,7 @@ test('야생 ⑥: 일반 야생 전투 도중 새로고침 → 같은 전투·�
     assert.deepEqual(m.wilds.find((w) => w.index === WILD.index), { index: WILD.index, characterCode: WILD.code, x: WILD.x, y: WILD.y, state: 'captured', visible: false });
     assert.ok(!m.miniMap.wilds.some((w) => w.id === `wild-${WILD.index}`), '미니맵에서도 사라진다');
     assert.equal(backend.session(device)!.wilds.find((w) => w.index === WILD.index)!.state, 'captured');
-    await g.walkTo('Map', { x: WILD.x - 90, y: WILD.y }, 'keys');
+    await g.walkTo('Map', { x: WILD.x, y: WILD.y + 90 }, 'keys');
     await g.walkTo('Map', { x: WILD.x, y: WILD.y }, 'keys', 'false', 10);
     await serverCatchesUp(g, device);
     const again = (await g.page.evaluate((i) => (window as any).__dev.rawRequest('battle:start', { spawnIndex: i }), WILD.index)) as { ok: boolean; code: string }; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -344,9 +344,9 @@ test('야생 ⑦: 두 계정(구역을 연 쪽·안 연 쪽)은 같은 서버·�
       seedForest(a, 'rescued')(db);
       seedForest(b, 'rescued')(db);
       db.seed('player_story_event', { player_id: backend.playerByDeviceIn(db, b), event_id: 'forest_first_knot_equipped' }); // b만 구역 개방 이벤트가 있다
-    }, [{ index: 4, code: 'bopuli', x: 1716, y: 1380 }]),
+    }, [{ index: 4, code: 'bopuli', x: 1627, y: 1391 }]),
   );
-  backend.patchStage('forest', (d) => d.layout!.zones.push({ id: 'zone_test_locked', label: '잠긴 곳(시험)', x: 1700, y: 1320, width: 140, height: 120, visibleAfter: 'forest_first_knot_equipped' }));
+  backend.patchStage('forest', (d) => d.layout!.zones.push({ id: 'zone_test_locked', label: '잠긴 곳(시험)', x: 1590, y: 1330, width: 120, height: 120, visibleAfter: 'forest_first_knot_equipped' }));
   const ga = await Game.open(browser, `${vite.url}/?device=${a}`, a);
   const gb = await Game.open(browser, `${vite.url}/?device=${b}`, b);
   await withDiagnosis(ga, 'wild-two-players-a', async () => {

@@ -12,8 +12,8 @@ import type { Room, WildRuntime } from '../src/turby/rooms/types';
 
 const COMPASS = ['opening_fall_completed', 'opening_name_saved', 'story_nubi_granted', 'forest_first_path_started', 'forest_cut_thread_inspected', 'forest_stitchling_battle_won', 'forest_bopul_rescued', 'forest_dansuring_clue_learned', 'forest_compass_granted'];
 const OPENED = [...COMPASS, 'forest_hidden_path_opened'];
-const OPEN_WILD = { index: 0, x: 520, y: 500 }; // 처음부터 열려 있는 곳
-const HIDDEN_WILD = { index: 9, x: 2400, y: 1250 }; // 숨은 길 너머 구역(forest_hidden_path_opened 전에는 잠김)
+const OPEN_WILD = { index: 0, x: 1650, y: 2080 }; // 처음부터 열려 있는 곳
+const HIDDEN_WILD = { index: 9, x: 2300, y: 1000 }; // 숨은 길 너머 구역(forest_hidden_path_opened 전에는 잠김)
 let radius: unknown = 120;
 
 function setup(players: { id: bigint; device: string; events: string[] }[]) {
@@ -50,7 +50,7 @@ test('잠긴 구역의 야생: 응답에 ID·종류·좌표가 실리지 않는�
   assert.deepEqual(b.wilds.map((w) => w.index), [0, 9], '구역이 열린 플레이어에게는 보인다');
   // 숨겨진 야생의 어떤 정보도 응답 어디에도 없다(visible:false로 같이 보내지 않는다)
   const json = JSON.stringify({ self: a.self, corrected: a.corrected, players: a.others, wilds: a.wilds, encounterRadiusPx: a.encounterRadiusPx }); // 게이트웨이가 클라이언트에 보내는 필드 그대로
-  assert.doesNotMatch(json, /"index":9|"x":2400|"y":1250/);
+  assert.doesNotMatch(json, /"index":9|"x":2300|"y":1000/);
   // 재접속(presence:hello)이 쓰는 목록도 같다
   assert.deepEqual(rooms.wildsFor(rooms.roomOf('1')!, '1').map((w) => w.index), [0]);
   assert.deepEqual(rooms.wildsFor(rooms.roomOf('2')!, '2').map((w) => w.index), [0, 9]);

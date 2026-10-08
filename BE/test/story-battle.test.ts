@@ -1,4 +1,5 @@
 // M4-B 스토리 전투 어댑터 테스트(Codex v15 8.5) — 실제 RoomsService·BattleService·StoryService + 메모리 Prisma
+import { BOPULI } from './helpers/forest-geo';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { FakeDb } from './helpers/fake-prisma';
@@ -256,7 +257,7 @@ test('v4 회귀: 일반 야생 전투 — 누비 강제 참가 없음·스토리
   const s = setup({ checkpoint: 'CH01_FIRST_KNOT_EQUIPPED' });
   const weak = s.db.seed('turby_grade', { id: 2, name: '약함', base_attack: 1, base_defense: 0, base_action_power: 0, base_hp: 1 });
   s.db.seed('turby_character', { code: 'bopuli', name: '보풀이', grade_id: weak.id, atk_mod: 0, def_mod: 0, ap_mod: 0, hp_mod: 0 });
-  s.db.seed('stage_wild_spawn', { stage_code: 'forest', spawn_index: 0, character_code: 'bopuli', x: 1250, y: 1010 }); // 시험이 서 있는 자리(공터 지점) 바로 옆
+  s.db.seed('stage_wild_spawn', { stage_code: 'forest', spawn_index: 0, character_code: 'bopuli', x: BOPULI.x + 10, y: BOPULI.y + 10 }); // 시험이 서 있는 자리(공터 지점) 바로 옆
   await enterForest(s);
   const eventsBefore = s.db.rows('player_story_event', { player_id: P }).length;
   const snap = await s.battles.start('1', 0);
@@ -302,7 +303,7 @@ async function normalSetup(wilds: number[] = [0]) {
   const s = setup({ checkpoint: 'CH01_FIRST_KNOT_EQUIPPED' });
   const weak = s.db.seed('turby_grade', { id: 2, name: '약함', base_attack: 1, base_defense: 0, base_action_power: 0, base_hp: 1 });
   s.db.seed('turby_character', { code: 'bopuli', name: '보풀이', grade_id: weak.id, atk_mod: 0, def_mod: 0, ap_mod: 0, hp_mod: 0 });
-  for (const i of wilds) s.db.seed('stage_wild_spawn', { stage_code: 'forest', spawn_index: i, character_code: 'bopuli', x: 1250, y: 1010 + i * 4 });
+  for (const i of wilds) s.db.seed('stage_wild_spawn', { stage_code: 'forest', spawn_index: i, character_code: 'bopuli', x: BOPULI.x + 10, y: BOPULI.y + 10 + i * 4 });
   await enterForest(s);
   return s;
 }

@@ -40,7 +40,7 @@ export function seedBase(db: FakeDb, settings: Record<string, unknown> = {}) {
   db.seed('turby_grade', { id: 2, name: '약함', base_attack: 1, base_defense: 0, base_action_power: 1, base_hp: 1 });
   db.seed('turby_character', { code: 'nubi', name: '누비', grade_id: 1, atk_mod: 0, def_mod: 0, ap_mod: 0, hp_mod: 0 });
   db.seed('turby_character', { code: 'bopuli', name: '보풀이', grade_id: 2, atk_mod: 0, def_mod: 0, ap_mod: 0, hp_mod: 0 });
-  db.seed('stage_wild_spawn', { stage_code: 'forest', spawn_index: 0, character_code: 'bopuli', x: 520, y: 500 });
+  db.seed('stage_wild_spawn', { stage_code: 'forest', spawn_index: 0, character_code: 'bopuli', x: 1650, y: 2080 });
   db.seed('item_definition', { code: 'glowing_yarn_dust', name: '빛나는 실가루', category: 'mission', max_stack: 99 });
   db.seed('item_definition', { code: 'yarn_tremor_compass', name: '실의 떨림을 찾는 나침판', category: 'mission' });
   db.seed('item_definition', { code: 'first_knot', name: '첫 매듭', category: 'relic', story_slot: 'story_1' });

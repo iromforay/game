@@ -12,6 +12,7 @@ import { BattleService } from '../src/turby/battle/battle.service';
 import { BattleError } from '../src/turby/battle/battle-types';
 import { StoryContentService, type StageStoryData } from '../src/turby/story/story-content.service';
 import { reachVerdict } from '../src/turby/rooms/stage-collision';
+import { eastAt, SPAWN, WIND_FRONT, walkRoute } from './helpers/forest-geo';
 
 const real = new StoryContentService();
 const FOREST = real.stage('forest') as StageStoryData;
@@ -67,6 +68,8 @@ function setup(opts: { events: string[]; checkpoint: string; wilds?: { index: nu
     }
     return 'ok' as const;
   };
+  // 길 중심선을 따라 걸어간다(길이 굽어 있어 직선으로는 갈 수 없다)
+  const go = (to: { x: number; y: number }) => walk(...walkRoute({ x: member().x, y: member().y }, to));
   const enter = async (socket = 'sock-1') => {
     await rooms.identify(socket, 'dev-test-encounter');
     if (!rooms.roomOf(P)) {
@@ -75,7 +78,7 @@ function setup(opts: { events: string[]; checkpoint: string; wilds?: { index: nu
     }
     return rooms.enterMap(P, 'down');
   };
-  return { db, rooms, story, battles, walk, enter, member };
+  return { db, rooms, story, battles, walk, go, enter, member };
 }
 
 // 오류 코드와 내부 사유
@@ -93,33 +96,33 @@ async function failure(p: Promise<unknown>): Promise<[string, string | null]> {
   return ['NO_ERROR', null];
 }
 
-// 야생 3번(2100,900)과 그 바로 아래 얇은 울타리(y 904~912)는 실제 회색상자 배치에 있다
-const WILD3 = { index: 3, x: 2100, y: 900 };
+// 야생 3번은 입구 공터 북쪽, 그 바로 아래에 시험이 덧붙인 얇은 울타리(시작 지점 40px 위)가 있다. 시작 지점(울타리 남쪽)에서 가깝지만 막혀 있다
+const FENCE: Blocker = { id: 'test_fence', label: '', x: SPAWN.x - 70, y: SPAWN.y - 40, width: 140, height: 8 };
+const WILD3 = { index: 3, x: SPAWN.x, y: SPAWN.y - 80 };
 
 test('야생 조우: 울타리 반대편에서는 가까워도 시작되지 않고(상태 변화 없음), 돌아서 다가가면 시작된다', async () => {
-  const s = setup({ events: RESCUED, checkpoint: 'CH01_BOPUL_RESCUED', wilds: [WILD3] });
+  const s = setup({ events: RESCUED, checkpoint: 'CH01_BOPUL_RESCUED', wilds: [WILD3], extraBlockers: [FENCE] });
   await s.enter();
-  assert.equal(s.walk({ x: 1900, y: 1120 }, { x: 2100, y: 1000 }, { x: 2100, y: 936 }), 'ok', '울타리 아래쪽까지');
-  assert.ok(Math.hypot(0, 936 - WILD3.y) <= NUMBERS['battle.encounterRadiusPx'], '조우 거리 안');
+  assert.ok(Math.hypot(0, SPAWN.y - WILD3.y) <= NUMBERS['battle.encounterRadiusPx'], '조우 거리 안(울타리 아래쪽 시작 지점)');
   assert.deepEqual(await failure(s.battles.start(P, 3)), ['WILD_UNREACHABLE', 'blocked']);
   assert.equal(s.rooms.roomOf(P)!.wilds[0].state, 'free', '거부된 조우는 야생 상태를 바꾸지 않는다');
   assert.equal(await s.battles.activeSnapshotOf(P), null, '전투도 만들어지지 않는다');
   // 여러 번 요청해도 같다(요청마다 판정)
   assert.deepEqual(await failure(s.battles.start(P, 3)), ['WILD_UNREACHABLE', 'blocked']);
 
-  // 울타리를 돌아 위쪽으로
-  assert.equal(s.walk({ x: 2190, y: 936 }, { x: 2190, y: 880 }, { x: 2110, y: 880 }), 'ok');
+  // 울타리 끝을 돌아 위쪽으로
+  assert.equal(s.walk({ x: SPAWN.x + 110, y: SPAWN.y }, { x: SPAWN.x + 110, y: SPAWN.y - 100 }, { x: SPAWN.x + 30, y: SPAWN.y - 100 }), 'ok');
   const snap = await s.battles.start(P, 3);
   assert.equal(snap.phase, 'party_select');
   assert.equal(s.rooms.roomOf(P)!.wilds[0].state, 'engaged');
 });
 
 test('야생 조우: 닫힌 문 너머·잠긴 구역 안의 야생은 조우할 수 없고, 문이 열린 뒤 안으로 들어가면 정상 조우한다', async () => {
-  const inside = { index: 9, x: 2400, y: 1250 }; // 숨은 구역 안(문에서 60px)
+  const inside = { index: 9, ...eastAt(WIND_FRONT.x + 100) }; // 숨은 구역 안(문 바로 너머)
   const closed = setup({ events: COMPASS, checkpoint: 'CH01_COMPASS_ACQUIRED', wilds: [inside] });
   await closed.enter();
-  assert.equal(closed.walk({ x: 1900, y: 1120 }, { x: 2284, y: 1250 }), 'ok', '닫힌 숨은 길 문 바로 앞');
-  assert.ok(Math.hypot(2284 - inside.x, 0) <= 120, '조우 거리 안');
+  assert.equal(closed.go(WIND_FRONT), 'ok', '닫힌 숨은 길 문 바로 앞');
+  assert.ok(Math.hypot(WIND_FRONT.x - inside.x, WIND_FRONT.y - inside.y) <= 120, '조우 거리 안');
   // 10-06 v1 §2: 잠긴 구역 안의 야생은 이 플레이어에게 없는 것과 같다 — 목록에도 없고 조우 요청도 존재하지 않는 마커와 같은 응답이다
   assert.deepEqual(closed.rooms.wildsFor(closed.rooms.roomOf(P)!, P), []);
   assert.deepEqual(await failure(closed.battles.start(P, 9)), ['INVALID_SPAWN', null], '플레이어는 구역 밖, 야생은 잠긴 구역 안 — 사유(locked_zone)도 드러내지 않는다');
@@ -127,31 +130,34 @@ test('야생 조우: 닫힌 문 너머·잠긴 구역 안의 야생은 조우할
 
   const open = setup({ events: OPENED, checkpoint: 'CH01_COMPASS_ACQUIRED', wilds: [inside] });
   await open.enter();
-  assert.equal(open.walk({ x: 1900, y: 1120 }, { x: 2284, y: 1250 }), 'ok');
+  assert.equal(open.go(WIND_FRONT), 'ok');
   // 문이 열리면 그 문은 가로막힘 판정에서 빠진다: 문 앞에서도, 안으로 들어가서도 조우된다
   assert.equal((await open.battles.start(P, 9)).phase, 'party_select');
   const open2 = setup({ events: OPENED, checkpoint: 'CH01_COMPASS_ACQUIRED', wilds: [inside] });
   await open2.enter();
-  assert.equal(open2.walk({ x: 1900, y: 1120 }, { x: 2284, y: 1250 }, { x: 2380, y: 1250 }), 'ok', '열린 문을 지나 안으로');
+  assert.equal(open2.go(eastAt(WIND_FRONT.x + 70)), 'ok', '열린 문을 지나 안으로');
   assert.equal((await open2.battles.start(P, 9)).phase, 'party_select');
-  // 문 옆의 벽은 그대로 막힌다: 벽 바깥에서 벽 너머의 야생
-  const wall = setup({ events: OPENED, checkpoint: 'CH01_COMPASS_ACQUIRED', wilds: [{ index: 9, x: 2400, y: 1090 }] });
+  // 길 둘레의 벽은 그대로 막힌다: 벽 바깥쪽에서 벽 너머의 야생
+  const behind = { index: 9, x: WIND_FRONT.x + 90, y: WIND_FRONT.y - 140 };
+  const wall = setup({ events: OPENED, checkpoint: 'CH01_COMPASS_ACQUIRED', wilds: [behind] });
   await wall.enter();
-  assert.equal(wall.walk({ x: 1900, y: 1120 }, { x: 2284, y: 1090 }), 'ok');
+  assert.equal(wall.go(WIND_FRONT), 'ok');
+  assert.equal(wall.walk({ x: WIND_FRONT.x, y: WIND_FRONT.y - 65 }), 'ok');
+  assert.ok(Math.hypot(wall.member().x - behind.x, wall.member().y - behind.y) <= 120, '조우 거리 안');
   assert.deepEqual(await failure(wall.battles.start(P, 9)), ['WILD_UNREACHABLE', 'blocked']);
 });
 
 test('스토리 전투: 멀리서 encounterKey만 보내면 거부, 지점에 서 있으면 시작, 이미 진행 중인 전투는 멀리서 재접속해도 이어진다, 이긴 전투는 DONE', async () => {
   const s = setup({ events: STARTED, checkpoint: 'CH01_STARTED' });
   await s.enter();
-  // 시작 지점(공터에서 410px)에서 직접 요청
+  // 시작 지점(공터에서 먼 곳)에서 직접 요청
   assert.deepEqual(await failure(s.battles.startStory(P, 'forest_stitchling_ambush')), ['STORY_EVIDENCE_INVALID', 'too_far']);
   assert.equal(await s.battles.activeSnapshotOf(P), null);
   // 선행 지점·체크포인트 검증은 그대로(위치보다 먼저)
   assert.deepEqual((await failure(s.battles.startStory(P, 'forest_giant_knot')))[0], 'STORY_ENCOUNTER_NOT_AVAILABLE');
 
   const amb = pointOf('forest_bopuli_ambush');
-  assert.equal(s.walk({ x: 1600, y: 1000 }, { x: amb.x + 60, y: amb.y }), 'ok', '공터 지점 반경 안');
+  assert.equal(s.go({ x: amb.x + 60, y: amb.y }), 'ok', '공터 지점 반경 안');
   const first = await s.battles.startStory(P, 'forest_stitchling_ambush');
   assert.equal(first.story?.encounterKey, 'forest_stitchling_ambush');
 
@@ -177,39 +183,40 @@ test('스토리 전투: 탐험 세션 밖·벽 반대편·닫힌 문 너머에�
 
   // 벽 반대편: 공터 지점 아래에 얇은 벽을 덧붙인 배치
   const amb = pointOf('forest_bopuli_ambush');
-  const wall: Blocker = { id: 'test_wall', label: '', x: amb.x - 80, y: amb.y + 40, width: 160, height: 10 };
+  const wall: Blocker = { id: 'test_wall', label: '', x: amb.x - 60, y: amb.y + 40, width: 120, height: 10 };
   const s = setup({ events: STARTED, checkpoint: 'CH01_STARTED', extraBlockers: [wall] });
   await s.enter();
-  assert.equal(s.walk({ x: 1600, y: 1080 }, { x: amb.x, y: amb.y + 80 }), 'ok', '벽 아래쪽(지점에서 80px)');
+  assert.equal(s.go({ x: amb.x, y: amb.y + 80 }), 'ok', '벽 아래쪽(지점에서 80px)');
   assert.deepEqual(await failure(s.battles.startStory(P, 'forest_stitchling_ambush')), ['STORY_EVIDENCE_INVALID', 'blocked']);
-  assert.equal(s.walk({ x: amb.x + 120, y: amb.y + 80 }, { x: amb.x + 120, y: amb.y }, { x: amb.x + 40, y: amb.y }), 'ok', '벽을 돌아서');
+  assert.equal(s.walk({ x: amb.x + 110, y: amb.y + 80 }, { x: amb.x + 110, y: amb.y }, { x: amb.x + 40, y: amb.y }), 'ok', '벽을 돌아서');
   assert.equal((await s.battles.startStory(P, 'forest_stitchling_ambush')).phase, 'party_select');
 
-  // 거대 매듭: 숨은 길을 열었지만 문 밖에서 요청(지점까지 336px) → 거리로 거부. 안으로 걸어가면 시작
+  // 거대 매듭: 숨은 길을 열었지만 문 앞에서 요청(지점까지 먼 거리) → 거리로 거부. 안으로 걸어가면 시작
   const g = setup({ events: OPENED, checkpoint: 'CH01_COMPASS_ACQUIRED' });
   await g.enter();
-  assert.equal(g.walk({ x: 1900, y: 1120 }, { x: 2284, y: 1250 }), 'ok');
+  assert.equal(g.go(WIND_FRONT), 'ok');
   assert.deepEqual(await failure(g.battles.startStory(P, 'forest_giant_knot')), ['STORY_EVIDENCE_INVALID', 'too_far']);
-  assert.equal(g.walk(pointOf('forest_giant_knot')), 'ok');
+  assert.equal(g.go(pointOf('forest_giant_knot')), 'ok');
   assert.equal((await g.battles.startStory(P, 'forest_giant_knot')).story?.encounterKey, 'forest_giant_knot');
 });
 
 test('같은 충돌 데이터·같은 판정: 한 자리에서 벽에 막힌 수집·이야기 지점·야생 조우·스토리 전투가 모두 "blocked"로 거부되고, 벽이 없으면 모두 승인된다', async () => {
-  const amb = pointOf('forest_bopuli_ambush'); // (1240,1000)
-  const d2 = pointOf('forest_dust_02'); // (1360,1120)
-  const here = { x: 1300, y: 1070 };
-  const wild = { index: 7, x: 1300, y: 1010 };
-  // 서 있는 자리의 위(지점·야생 쪽)와 아래(실가루 쪽)에 얇은 벽
+  const amb = pointOf('forest_bopuli_ambush'); // 공터 한가운데(남쪽)
+  const d2 = pointOf('forest_dust_01'); // 공터 위쪽 길의 실가루(북쪽)
+  const here = { x: 1490, y: 1363 };
+  const wild = { index: 7, x: 1530, y: 1300 };
+  // 서 있는 자리의 위(실가루·야생 쪽)와 아래(공터 지점 쪽)에 시험이 덧붙인 얇은 벽
   const walls: Blocker[] = [
-    { id: 'test_north', label: '', x: 1100, y: 1040, width: 400, height: 10 },
-    { id: 'test_south', label: '', x: 1100, y: 1090, width: 400, height: 10 },
+    { id: 'test_north', label: '', x: 1430, y: 1318, width: 120, height: 10 },
+    { id: 'test_south', label: '', x: 1430, y: 1405, width: 120, height: 10 },
   ];
   for (const d of [amb, d2, wild]) assert.ok(Math.hypot(here.x - d.x, here.y - d.y) <= 104, '모두 거리 한도 안');
 
   const run = async (extraBlockers: Blocker[], events: string[], checkpoint: string) => {
     const s = setup({ events, checkpoint, wilds: [wild], extraBlockers });
     await s.enter();
-    assert.equal(s.walk({ x: 1560, y: 1070 }, here), 'ok', '두 벽 사이의 통로로 들어온다');
+    assert.equal(s.go({ x: 1600, y: 1530 }), 'ok');
+    assert.equal(s.walk({ x: 1600, y: here.y }, here), 'ok', '두 벽 사이의 통로로 옆에서 들어온다');
     return s;
   };
   // 구조 전(CH01_STARTED): 이야기 지점·스토리 전투·야생
@@ -219,9 +226,9 @@ test('같은 충돌 데이터·같은 판정: 한 자리에서 벽에 막힌 수
   assert.deepEqual(await failure(s.battles.start(P, 7)), ['WILD_UNREACHABLE', 'blocked'], '야생 조우');
   // 구조 뒤(CH01_BOPUL_RESCUED): 수집
   s = await run(walls, RESCUED, 'CH01_BOPUL_RESCUED');
-  assert.deepEqual(await failure(s.story.collectObject(1n, 'forest_glowing_dust', 'forest_dust_02')), ['STORY_EVIDENCE_INVALID', 'blocked'], '수집');
+  assert.deepEqual(await failure(s.story.collectObject(1n, 'forest_glowing_dust', 'forest_dust_01')), ['STORY_EVIDENCE_INVALID', 'blocked'], '수집');
   // 이동도 같은 벽에 막힌다
-  assert.equal(s.walk({ x: here.x, y: 1010 }), 'blocked');
+  assert.equal(s.walk({ x: here.x, y: 1290 }), 'blocked');
   // 네 판정이 쓰는 함수가 같은 답을 낸다(직접 호출)
   const m = s.member();
   assert.equal(s.rooms.reachOf(s.rooms.roomOf(P)!, P, d2), 'blocked');
@@ -232,6 +239,6 @@ test('같은 충돌 데이터·같은 판정: 한 자리에서 벽에 막힌 수
   assert.ok((await s.story.trigger(1n, 'forest_bopuli_ambush')).play, '이야기 지점');
   assert.equal((await s.battles.startStory(P, 'forest_stitchling_ambush')).phase, 'party_select', '스토리 전투');
   s = await run([], RESCUED, 'CH01_BOPUL_RESCUED');
-  assert.equal((await s.story.collectObject(1n, 'forest_glowing_dust', 'forest_dust_02')).collected, 1, '수집');
+  assert.equal((await s.story.collectObject(1n, 'forest_glowing_dust', 'forest_dust_01')).collected, 1, '수집');
   assert.equal((await s.battles.start(P, 7)).phase, 'party_select', '야생 조우');
 });

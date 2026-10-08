@@ -31,9 +31,9 @@ export function seedExplorer(device: string) {
     db.seed('turby_character', { code: 'geumbiti', name: '금빛이', grade_id: 3, atk_mod: 0, def_mod: 0, ap_mod: 0, hp_mod: 0 });
     const bopuli = (db.rows('turby_character', { code: 'bopuli' })[0] as { id: number }).id;
     for (let i = 0; i < 12; i++) db.seed('turby_instance', { owner_player_id: player.id, character_id: bopuli, acquired_via: 'shop' });
-    // 좌표는 클라이언트 숲 배치(config/stages/forest.ts)의 5번·3번 자리 — 서버는 (지역, 번호)로 야생 종류와 거리를 판정
-    db.seed('stage_wild_spawn', { stage_code: 'forest', spawn_index: 5, character_code: 'bopuli', x: 1400, y: 1800 });
-    db.seed('stage_wild_spawn', { stage_code: 'forest', spawn_index: 3, character_code: 'geumbiti', x: 2100, y: 900 });
+    // 좌표는 최종 지도의 열린 곳: 5번은 공터 위쪽 첫 길(공터 아래 시험 야생과 겹치지 않음), 3번은 입구 공터 서쪽 끝 — 서버는 (지역, 번호)로 야생 종류와 거리를 판정
+    db.seed('stage_wild_spawn', { stage_code: 'forest', spawn_index: 5, character_code: 'bopuli', x: 1470, y: 1300 });
+    db.seed('stage_wild_spawn', { stage_code: 'forest', spawn_index: 3, character_code: 'geumbiti', x: 1330, y: 2100 });
   };
 }
 

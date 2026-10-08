@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { join } from 'path';
 import { readFileSync } from 'fs';
 import type { Browser } from 'playwright-core';
+import { E2E, SPAWN as GEO_SPAWN, HIDDEN_INSIDE, WIND_GATE, ROOT_GATE, WIND_FRONT, ROOT_FRONT, KNOT } from '../helpers/forest-geo';
 import { Backend, Game, ROOT, freePort, launchBrowser, startVite, withDiagnosis } from './harness';
 import { seedForest } from './fixtures';
 
@@ -53,7 +54,7 @@ async function enterForest(g: Game) {
   await g.clickLabel(exit.prompt);
   await g.waitScene('StageSelect');
   await g.clickLabel('1장 — 숲', { exact: true });
-  await g.until('숲 지도와 이야기 화면', 's.map && s.map.ready && s.map.inRoom && s.map.story && s.map.story.greybox === true');
+  await g.until('숲 지도와 이야기 화면', 's.map && s.map.ready && s.map.inRoom && s.map.story && s.map.story.greybox === false');
 }
 
 // 지점·오브젝트까지 걸어가 안내 버튼이 그 대상을 가리킬 때까지(경유지는 막힌 곳을 돌아가는 길)
@@ -75,17 +76,17 @@ async function press(g: Game, expect: string) {
   await g.clickAt(at.x, at.y, expect);
 }
 
-// 실가루 줍는 순서와 돌아가는 길(회색상자 배치의 먼지풀을 피한다)
+// 실가루 줍는 순서 — 첫 길에서 가까운 것부터 순환 길을 한 바퀴 돈다(경유지는 harness가 길 중심선을 따라 만든다)
 const ROUTE: [number, { x: number; y: number }[]][] = [
-  [2, []],
   [3, []],
   [1, []],
-  [7, []],
-  [9, []],
-  [6, []],
+  [2, []],
   [10, []],
-  [5, [{ x: 1960, y: 1450 }]],
+  [9, []],
   [8, []],
+  [7, []],
+  [6, []],
+  [5, []],
   [4, []],
 ];
 
@@ -100,7 +101,7 @@ test('숲 ①: 보풀이 구조 전에는 실가루가 잠겨 보이고 수집�
     assert.equal((await g.state()).map.goal, false, '의뢰 전에는 수집 목표가 없다');
     // 동선 개요(개발용 화면 축소 — 캡처만을 위한 것이며 조작이 아니다)
     await g.page.evaluate(() => { const cam = (window as any).__game.scene.getScene('Map').cameras.main; cam.setZoom(0.4); }); // eslint-disable-line @typescript-eslint/no-explicit-any
-    await g.capture('01_greybox_forest_overview');
+    await g.capture('01_forest_overview');
     await g.page.evaluate(() => { const cam = (window as any).__game.scene.getScene('Map').cameras.main; cam.setZoom(1); }); // eslint-disable-line @typescript-eslint/no-explicit-any
 
     await walkToTarget(g, dustId(2));
@@ -174,7 +175,7 @@ test('숲 ②: 구조 뒤 실가루 10개를 각 한 번씩 수집 — 중복 �
         const stood = backend.serverPosition(device)!;
         const room = backend.session(device)!.code;
         await g.reload();
-        await g.until('Map 복원', 's.map && s.map.ready && s.map.inRoom && s.map.positioned && s.map.story && s.map.story.greybox === true');
+        await g.until('Map 복원', 's.map && s.map.ready && s.map.inRoom && s.map.positioned && s.map.story && s.map.story.greybox === false');
         s = await story(g);
         assert.deepEqual([s.objects, s.objective?.collected], [left, 5]);
         assert.deepEqual([(await g.state()).map.avatar, backend.session(device)!.code], [stood, room], '같은 자리·같은 탐험 세션');
@@ -186,7 +187,7 @@ test('숲 ②: 구조 뒤 실가루 10개를 각 한 번씩 수집 — 중복 �
     await g.capture('04c_goal_10_of_10');
 
     // 보풀이에게 전달 → 나침판 제작 장면 → 지도에는 숨은 길 지점, 문은 아직 닫혀 있다
-    await walkToTarget(g, 'forest_bopuli_return', 'keys', [{ x: 1600, y: 780 }]);
+    await walkToTarget(g, 'forest_bopuli_return');
     await press(g, "s.scenes.includes('StoryDialogue')");
     await g.advanceDialogue("s.scenes.includes('Map') && !s.scenes.includes('StoryDialogue')");
     await g.until('나침판 뒤 지도', "s.map && s.map.story && s.map.story.points.join() === 'forest_hidden_path'");
@@ -194,7 +195,7 @@ test('숲 ②: 구조 뒤 실가루 10개를 각 한 번씩 수집 — 중복 �
     assert.equal((await g.state()).map.goal, false, '전달이 끝나면 수집 목표가 사라진다');
 
     // 숨은 길: 나침판을 꺼내면 길이 열린다
-    await walkToTarget(g, 'forest_hidden_path', 'keys', [{ x: 1900, y: 1110 }]);
+    await walkToTarget(g, 'forest_hidden_path');
     await press(g, "s.scenes.includes('StoryDialogue')");
     await g.advanceDialogue("s.scenes.includes('Map') && !s.scenes.includes('StoryDialogue')");
     await g.until('문이 열림', "s.map && s.map.story && s.map.story.gates.gate_hidden_path === true && s.map.story.points.join() === 'forest_giant_knot'");
@@ -242,19 +243,18 @@ test('숲 ③: 640×360 — 조이스틱으로 걸어가 수집, 안내 버튼�
     await g.capture('08b_collect_ui_small_after');
 
     // 닫힌 숨은 길 문: 문 쪽으로 계속 밀어도 문 너머로 가지 못한다(나침판 전)
-    await g.walkTo('Map', { x: 1900, y: 1110 }, 'joystick');
-    await g.walkTo('Map', { x: 2240, y: 1250 }, 'joystick');
+    await g.walkTo('Map', WIND_FRONT, 'joystick');
     await g.page.keyboard.down('ArrowRight');
     try {
-      await g.until('문에 닿음', 's.map.avatar.x >= 2270');
-      // 계속 밀어도 문 너머(x > 2300)로 넘어가지 않는다
-      const crossed = await g.page.waitForFunction(() => (window as any).__game.scene.getScene('Map').avatar.x > 2300, null, { timeout: 1500, polling: 50 }).then(() => true, () => false); // eslint-disable-line @typescript-eslint/no-explicit-any
+      await g.until('문에 닿음', `s.map.avatar.x >= ${WIND_GATE.x - 30}`);
+      // 계속 밀어도 문 너머(x > 문 오른쪽 끝)로 넘어가지 않는다
+      const crossed = await g.page.waitForFunction((x) => (window as any).__game.scene.getScene('Map').avatar.x > x, WIND_GATE.x + WIND_GATE.width, { timeout: 1500, polling: 50 }).then(() => true, () => false); // eslint-disable-line @typescript-eslint/no-explicit-any
       assert.equal(crossed, false, '닫힌 문을 지나갔다');
     } finally {
       await g.page.keyboard.up('ArrowRight');
     }
     const av = (await g.state()).map.avatar as { x: number; y: number };
-    assert.ok(av.x < 2300, `닫힌 문(x=2300) 앞에서 멈춤: ${JSON.stringify(av)}`);
+    assert.ok(av.x < WIND_GATE.x, `닫힌 문(x=${WIND_GATE.x}) 앞에서 멈춤: ${JSON.stringify(av)}`);
     assert.equal((await story(g)).gates.gate_hidden_path, false);
   }, backend, device);
   await g.close();

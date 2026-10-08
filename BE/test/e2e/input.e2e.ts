@@ -144,7 +144,7 @@ test('입력 ②: PartySelect 페이지를 넘긴 같은 프레임의 카드 클
     await g.clickLabel('1장 — 숲', { exact: true });
     await g.waitScene('Map');
     await g.until('맵 준비', "(() => { const m = window.__game.scene.getScene('Map'); return m && m.ready; })()");
-    await g.walkTo('Map', { x: 1400, y: 1800 }, 'joystick', "s.scenes.includes('PartySelect')", 8);
+    await g.walkTo('Map', { x: 1470, y: 1300 }, 'joystick', "s.scenes.includes('PartySelect')", 8);
     await g.until('파티 선택', 's.party && s.party.pages > 1 && s.party.selected.length === 1');
     const next = (await g.page.evaluate("window.__dev.find('▶', true)")) as { x: number; y: number };
     const card = (await g.page.evaluate("(() => { const c = window.__game.scene.getScene('PartySelect').layout.cards[2]; return { x: c.x + c.w / 2, y: c.y + c.h / 2 }; })()")) as { x: number; y: number };

@@ -27,7 +27,7 @@ export const FOREST_ASSETS = [
 // 닫힘/열림이 같은 캔버스여야 하는 쌍(전환 때 위치가 튀지 않는다)
 export const SAME_SIZE_PAIRS = [['world/forest/root-gate-closed.png', 'world/forest/root-gate-open.png']];
 // forest.json의 에셋 키 중 검수 대상이 아닌 것(이미 있는 캐릭터 이미지·임시 도형)
-const NOT_FINAL_KEY = /^(turby-|placeholder-)/;
+const NOT_FINAL_KEY = /^(turby-|placeholder-|fog-veil$)/; // fog-veil: 실행 중에 만드는 안개 막(에셋 파일이 아니다)
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
@@ -161,6 +161,9 @@ function duplicateKeys(assetsDir) {
 }
 
 // 결과: { checks: [{ file, check, ok, expected?, actual? }], files: [{ path, width, height, alpha }], ok }
+// 알파 0~8/255는 육안으로 구분되지 않는 투명으로 본다(생성 도구가 모서리에 알파 1을 남기는 경우가 있다)
+const CORNER_ALPHA_MAX = 8;
+
 export function verifyForestAssets({ assetsDir = DEFAULT_ASSETS_DIR, forestJsonPath = DEFAULT_FOREST_JSON, spec = FOREST_ASSETS, pairs = SAME_SIZE_PAIRS } = {}) {
   const checks = [];
   const files = [];
@@ -206,8 +209,8 @@ export function verifyForestAssets({ assetsDir = DEFAULT_ASSETS_DIR, forestJsonP
     if (item.kind === 'alpha') {
       // 네 모서리가 투명
       const corners = [[0, 0], [width - 1, 0], [0, height - 1], [width - 1, height - 1]];
-      const opaque = corners.filter(([x, y]) => img.alphaAt(x, y) !== 0).map(([x, y]) => `(${x},${y})α=${img.alphaAt(x, y)}`);
-      check(item.path, '네 모서리 투명', header.hasAlpha && opaque.length === 0, '네 모서리 모두 알파 0', header.hasAlpha ? (opaque.join(', ') || '모두 투명') : '알파 채널 없음');
+      const opaque = corners.filter(([x, y]) => img.alphaAt(x, y) > CORNER_ALPHA_MAX).map(([x, y]) => `(${x},${y})α=${img.alphaAt(x, y)}`);
+      check(item.path, '네 모서리 투명', header.hasAlpha && opaque.length === 0, `네 모서리 알파 ${CORNER_ALPHA_MAX} 이하(육안으로 투명)`, header.hasAlpha ? (opaque.join(', ') || '모두 투명') : '알파 채널 없음');
     } else {
       // 불투명 배경: 가장자리·주요 이동 영역에 완전 투명 픽셀이 없고, 전체가 불투명
       const firstZero = (inside) => {

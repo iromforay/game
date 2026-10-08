@@ -14,6 +14,8 @@ export interface MapView {
   paths?: { lines: { x: number; y: number }[][]; plaza: { x: number; y: number; w: number; h: number } };
   // 회색상자(임시) 지형: 공개된 구역·길·막힌 곳·문. 최종 지도 에셋이 연결되면 넘기지 않는다
   greybox?: { zones: TerrainRect[]; paths: number[][][]; blockers: TerrainRect[]; gates: (TerrainRect & { open: boolean })[] };
+  // 최종 지도: 대형 배경 그림을 축소해 지도로 쓴다(임시 도형 대신). fog = 아직 열리지 않아 가려진 구역(서버가 내려 준 안개 오버레이와 같은 상태)
+  art?: { assetKey: string; fog: TerrainRect[] };
 }
 interface TerrainRect {
   x: number;
@@ -96,7 +98,7 @@ export class MiniMap {
   // 진단용 요약(화면 상태만)
   get debugState() {
     const gb = this.view.greybox;
-    return { terrain: gb ? { zones: gb.zones.length, paths: gb.paths.length, blockers: gb.blockers.length, gatesClosed: gb.gates.filter((x) => !x.open).length, gatesOpen: gb.gates.filter((x) => x.open).length } : null, legend: this.legendKeys(), wilds: this.markers.filter((m) => m.type === 'wild').map((m) => ({ id: m.id, x: m.x, y: m.y, mini: { x: this.miniOrigin.x + m.x * this.miniScale, y: this.miniOrigin.y + m.y * this.miniScale }, full: { x: this.fullOrigin.x + m.x * this.fullScale, y: this.fullOrigin.y + m.y * this.fullScale } })), scale: { mini: this.miniScale, full: this.fullScale }, open: this.open, legendOpen: this.legendOpen, mode: this.L.mode, selected: this.selectedId, diameter: this.L.mini.diameter, close: this.L.full.close, legendToggle: this.L.full.legendToggle, openButton: this.L.mini.open, labelsOnMap: this.L.full.labelsOnMap };
+    return { art: this.view.art ? { assetKey: this.view.art.assetKey, fog: this.view.art.fog.length } : null, terrain: gb ? { zones: gb.zones.length, paths: gb.paths.length, blockers: gb.blockers.length, gatesClosed: gb.gates.filter((x) => !x.open).length, gatesOpen: gb.gates.filter((x) => x.open).length } : null, legend: this.legendKeys(), wilds: this.markers.filter((m) => m.type === 'wild').map((m) => ({ id: m.id, x: m.x, y: m.y, mini: { x: this.miniOrigin.x + m.x * this.miniScale, y: this.miniOrigin.y + m.y * this.miniScale }, full: { x: this.fullOrigin.x + m.x * this.fullScale, y: this.fullOrigin.y + m.y * this.fullScale } })), scale: { mini: this.miniScale, full: this.fullScale }, open: this.open, legendOpen: this.legendOpen, mode: this.L.mode, selected: this.selectedId, diameter: this.L.mini.diameter, close: this.L.full.close, legendToggle: this.L.full.legendToggle, openButton: this.L.mini.open, labelsOnMap: this.L.full.labelsOnMap };
   }
 
   toggle() {
@@ -230,6 +232,7 @@ export class MiniMap {
     const g = keep(s.add.graphics().setScrollFactor(0).setDepth(DEPTH_HUD));
     g.fillStyle(PAL.cream, 0.6).fillCircle(cx, cy, diameter / 2 - 4);
     this.drawTerrain(g, o.x, o.y, k);
+    this.addArt(keep, o.x, o.y, k, DEPTH_HUD + 0.1);
 
     keep(s.add.image(cx, cy, 'minimap-frame').setDisplaySize(diameter, diameter).setScrollFactor(0).setDepth(DEPTH_HUD + 1));
 
@@ -281,6 +284,7 @@ export class MiniMap {
     this.drawTerrain(g, fo.x, fo.y, k);
     g.fillStyle(PAL.panelInfo, 1).lineStyle(7, PAL.lavender, 1).fillRoundedRect(INFO.x, INFO.y - 14, INFO.w, INFO.h + 28, 18).strokeRoundedRect(INFO.x, INFO.y - 14, INFO.w, INFO.h + 28, 18);
     items.push(g);
+    this.addArt((o) => (items.push(o), o), fo.x, fo.y, k, null);
 
     items.push(s.add.text(FULL.x + 14, FULL.y + 10, `${this.view.title} 지도`, { fontSize: `${F.font.title}px`, color: INK, backgroundColor: '#FFF4DFCC', padding: { x: 6, y: 2 } }));
 
@@ -380,6 +384,19 @@ export class MiniMap {
   private legendKeys() {
     const gb = this.view.greybox;
     return legendEntries(this.markers.map((x) => x.type), this.lastPeers.length > 0, gb ? { path: gb.paths.length > 0, wall: gb.blockers.length > 0, gateClosed: gb.gates.some((x) => !x.open), gateOpen: gb.gates.some((x) => x.open) } : undefined);
+  }
+
+  // 최종 지도 그림과 가려진 구역(안개) — 그림 텍스처가 로드돼 있을 때만. 없으면 아무것도 그리지 않아 기본 지형(회색상자)만 남는다
+  private addArt(keep: <T extends Phaser.GameObjects.GameObject>(o: T) => T, ox: number, oy: number, k: number, depth: number | null) {
+    const art = this.view.art;
+    if (!art || !this.scene.textures.exists(art.assetKey)) return;
+    const img = keep(this.scene.add.image(ox, oy, art.assetKey).setOrigin(0, 0).setDisplaySize(this.view.width * k, this.view.height * k).setScrollFactor(0));
+    const fog = keep(this.scene.add.graphics().setScrollFactor(0));
+    if (depth !== null) {
+      img.setDepth(depth);
+      fog.setDepth(depth + 0.1);
+    }
+    for (const r of art.fog) fog.fillStyle(0x222c34, 0.94).fillRect(ox + r.x * k, oy + r.y * k, r.width * k, r.height * k);
   }
 
   private drawTerrain(g: Phaser.GameObjects.Graphics, ox: number, oy: number, k: number) {

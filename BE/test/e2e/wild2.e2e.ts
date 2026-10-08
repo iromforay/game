@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { join } from 'path';
 import type { Browser } from 'playwright-core';
 import type { FakeDb } from '../helpers/fake-prisma';
+import { E2E, SPAWN as GEO_SPAWN, HIDDEN_INSIDE, WIND_GATE, ROOT_GATE, WIND_FRONT, ROOT_FRONT, KNOT } from '../helpers/forest-geo';
 import { Backend, Game, ROOT, freePort, launchBrowser, startVite, withDiagnosis } from './harness';
 import { seedExplorer } from './fixtures';
 
@@ -23,7 +24,7 @@ after(async () => {
   await backend?.stop();
 });
 
-const READY = 's.map && s.map.ready && s.map.inRoom && s.map.positioned && s.map.story && s.map.story.greybox === true';
+const READY = 's.map && s.map.ready && s.map.inRoom && s.map.positioned && s.map.story && s.map.story.greybox === false';
 const BLOCKED_TEXT = '길이 막혀 있어요. 돌아서 가까이 가 보세요.';
 type Wild = { index: number; characterCode: string; x: number; y: number; state: string; visible: boolean };
 type MapState = { avatar: { x: number; y: number }; unreachableWilds: number; notices: string[]; captured: number; wilds: Wild[] };
@@ -63,7 +64,7 @@ const sturdy = (db: FakeDb) => {
 
 test('반경 ①: 서버 조우 반경이 40보다 작을 때 — 클라이언트는 서버 값(25)을 쓰고, 35px 거리에서는 조우하지 않고 20px 안에서만 조우한다', async () => {
   const device = 'e2e-radius-small';
-  const WILD = { index: 2, code: 'muldeuli', x: 1760, y: 1330 };
+  const WILD = { index: 2, code: 'muldeuli', x: 1488, y: 1560 };
   await backend.start(withWilds((db) => { seedExplorer(device)(db); sturdy(db); }, [WILD]), { 'battle.encounterRadiusPx': 25 });
   const g = await Game.open(browser, `${vite.url}/?device=${device}`, device);
   await withDiagnosis(g, 'radius-small', async () => {
@@ -92,7 +93,7 @@ test('반경 ①: 서버 조우 반경이 40보다 작을 때 — 클라이언�
 
 test('반경 ②: 서버 반경이 40보다 클 때(150) 먼 거리에서 자동 조우한다 — 설정을 바꾸면 재접속 없이 다음 Map 입장에서 새 값을 쓴다', async () => {
   const device = 'e2e-radius-large';
-  const WILD = { index: 2, code: 'muldeuli', x: 1760, y: 1330 };
+  const WILD = { index: 2, code: 'muldeuli', x: 1488, y: 1560 };
   await backend.start(withWilds((db) => { seedExplorer(device)(db); sturdy(db); }, [WILD]), { 'battle.encounterRadiusPx': 150 });
   const g = await Game.open(browser, `${vite.url}/?device=${device}`, device);
   await withDiagnosis(g, 'radius-large', async () => {
@@ -132,14 +133,14 @@ test('반경 ②: 서버 반경이 40보다 클 때(150) 먼 거리에서 자동
 test('이동 유지: 조우 요청이 서버에서 처리되는 동안에도 걸을 수 있고, 그 사이 다른 야생에 승인되면 늦게 온 거부 응답이 전투 전환을 덮지 않는다', async () => {
   const device = 'e2e-wild-move-while-pending';
   const FENCED = 3; // 울타리 너머(서버가 blocked로 거부)
-  const NEAR = { index: 7, code: 'bopuli', x: 2000, y: 1200 };
+  const NEAR = { index: 7, code: 'bopuli', x: 1330, y: 1980 }; // 입구 공터 서쪽(울타리·다른 야생과 떨어진 자리)
   await backend.start(withWilds(seedExplorer(device), [NEAR]), { 'battle.encounterRadiusPx': 100 });
+  backend.patchStage('forest', (d) => d.layout!.blockers.push(E2E.fence)); // 시험이 덧붙인 울타리 — 3번 야생(강한 야생)을 시작 지점 바로 위로 옮겨 그 너머에 둔다
   const hold = backend.holdBattleStart(FENCED); // 3번 야생의 조우 요청 처리를 붙잡는다(느린 서버)
   const g = await Game.open(browser, `${vite.url}/?device=${device}`, device);
   await withDiagnosis(g, 'wild-move-while-pending', async () => {
     await enterForest(g);
-    await g.walkTo('Map', { x: 1900, y: 1110 }, 'keys');
-    await g.walkTo('Map', { x: 2100, y: 990 }, 'keys');
+    backend.moveWild(device, FENCED, { x: E2E.fenceWild.x, y: E2E.fenceWild.y }); // 울타리 너머(시작 지점 바로 위)
     await g.until('조우 요청이 서버에 도착해 붙잡힘', 'true');
     while (hold.calls < 1) await g.page.waitForFunction(() => true, null, { polling: 50 });
     const before = await serverCatchesUp(g, device);
@@ -151,7 +152,7 @@ test('이동 유지: 조우 요청이 서버에서 처리되는 동안에도 걸
     assert.ok(moved.x < before.x - 60, `요청 중에도 이동: ${JSON.stringify(before)} → ${JSON.stringify(moved)}`);
     assert.equal(hold.calls, 1, '같은 야생으로 중복 요청을 보내지 않았다');
     await g.capture('05_wild_request_pending_still_moving');
-    // 다른 야생(7번)에 정상 접근 → 승인되어 파티 선택으로 넘어간다
+    // 다른 야생(7번)에 정상 접근 → 승인되어 파티 선택으로 넘어간다(울타리 끝을 돌아 첫 길로)
     await g.walkTo('Map', { x: NEAR.x, y: NEAR.y }, 'keys', "s.scenes.includes('PartySelect')", 6);
     await g.waitScene('PartySelect');
     // 이제야 처음 요청(3번)의 거부 응답이 도착한다 — 이미 시작한 전투 전환을 덮지 않는다
@@ -169,11 +170,11 @@ test('이동 유지: 조우 요청이 서버에서 처리되는 동안에도 걸
 test('이동 유지: 막힌 야생에 대한 거부 안내(3초 억제)가 떠 있는 동안에도 계속 걷는다', async () => {
   const device = 'e2e-wild-blocked-keep-moving';
   await backend.start(seedExplorer(device), { 'battle.encounterRadiusPx': 100 });
+  backend.patchStage('forest', (d) => d.layout!.blockers.push(E2E.fence));
   const g = await Game.open(browser, `${vite.url}/?device=${device}`, device);
   await withDiagnosis(g, 'wild-blocked-keep-moving', async () => {
     await enterForest(g);
-    await g.walkTo('Map', { x: 1900, y: 1110 }, 'keys');
-    await g.walkTo('Map', { x: 2100, y: 990 }, 'keys');
+    backend.moveWild(device, 3, { x: E2E.fenceWild.x, y: E2E.fenceWild.y }); // 울타리 너머(시작 지점 바로 위)
     await g.until('거부 안내', `s.map.unreachableWilds >= 1 && window.__dev.texts().includes(${JSON.stringify(BLOCKED_TEXT)})`);
     const at = await serverCatchesUp(g, device);
     await g.capture('06a_blocked_wild_notice_before_moving');
@@ -198,7 +199,7 @@ const results = (device: string) => backend.db.rows('battle_result', { player_id
 
 test('결과 새로고침 ①(적 행동 직전): 내 차례에 새로고침 → 같은 전투·상태로 복원 → 한 라운드만 진행(적 행동이 두 번 일어나지 않음) → 승리·포획은 한 번', async () => {
   const device = 'e2e-battle-reload-before-enemy';
-  const WILD = { index: 2, code: 'muldeuli', x: 1760, y: 1330 };
+  const WILD = { index: 2, code: 'muldeuli', x: 1488, y: 1560 };
   await backend.start(withWilds((db) => { seedExplorer(device)(db); sturdy(db); }, [WILD]));
   const g = await Game.open(browser, `${vite.url}/?device=${device}`, device);
   await withDiagnosis(g, 'battle-reload-before-enemy', async () => {
@@ -224,7 +225,7 @@ test('결과 새로고침 ①(적 행동 직전): 내 차례에 새로고침 →
 
 test('결과 새로고침 ②(정산 직전): 정산이 실패한 채 새로고침 → 결과 화면 복원, 서버가 재정산 → 포획 한 번·같은 야생 재조우 없음', async () => {
   const device = 'e2e-battle-reload-before-settle';
-  const WILD = { index: 2, code: 'muldeuli', x: 1760, y: 1330 };
+  const WILD = { index: 2, code: 'muldeuli', x: 1488, y: 1560 };
   await backend.start(withWilds((db) => { seedExplorer(device)(db); sturdy(db); }, [WILD]), { 'battle.resolvedRetentionSeconds': 600 });
   const g = await Game.open(browser, `${vite.url}/?device=${device}`, device);
   await withDiagnosis(g, 'battle-reload-before-settle', async () => {
@@ -252,7 +253,7 @@ test('결과 새로고침 ②(정산 직전): 정산이 실패한 채 새로고�
 
 test('결과 새로고침 ③④(정산 직후·포획 성공 뒤 Map 복귀 직전·Map 복귀 직후): 결과가 사라지지 않고 보상은 한 번, 확인(Map 복귀) 뒤에는 결과가 다시 나오지 않고 같은 야생이 다시 나타나지 않는다', async () => {
   const device = 'e2e-battle-reload-after-settle';
-  const WILD = { index: 2, code: 'muldeuli', x: 1760, y: 1330 };
+  const WILD = { index: 2, code: 'muldeuli', x: 1488, y: 1560 };
   await backend.start(withWilds((db) => { seedExplorer(device)(db); sturdy(db); }, [WILD]), { 'battle.resolvedRetentionSeconds': 600 });
   const g = await Game.open(browser, `${vite.url}/?device=${device}`, device);
   await withDiagnosis(g, 'battle-reload-after-settle', async () => {
@@ -291,7 +292,7 @@ test('결과 새로고침 ③④(정산 직후·포획 성공 뒤 Map 복귀 직
 
 test('복원 실패 → 마을 → 연결 회복: 두 버튼, 마을 복귀는 요청 한 번(방을 만들지 않음), 낡은 응답이 마을 화면을 덮지 않고, 연결이 돌아오면 남은 전투를 안내한다', async () => {
   const device = 'e2e-restore-escape';
-  const WILD = { index: 2, code: 'muldeuli', x: 1760, y: 1330 };
+  const WILD = { index: 2, code: 'muldeuli', x: 1488, y: 1560 };
   await backend.start(withWilds((db) => { seedExplorer(device)(db); sturdy(db); }, [WILD]));
   const g = await Game.open(browser, `${vite.url}/?device=${device}`, device);
   await withDiagnosis(g, 'restore-escape-village', async () => {
@@ -332,7 +333,7 @@ test('복원 실패 → 마을 → 연결 회복: 두 버튼, 마을 복귀는 �
 
 test('결과 확인 계약: 확인 요청을 여러 번 보내도 같은 성공·보상 1회, 서버가 결과를 내려 준 것만으로는 확인되지 않고(새로고침해도 다시 열림), 확인 뒤에는 다시 열리지 않는다', async () => {
   const device = 'e2e-result-ack-twice';
-  const WILD = { index: 2, code: 'muldeuli', x: 1760, y: 1330 };
+  const WILD = { index: 2, code: 'muldeuli', x: 1488, y: 1560 };
   await backend.start(withWilds((db) => { seedExplorer(device)(db); sturdy(db); }, [WILD]), { 'battle.resolvedRetentionSeconds': 600 });
   const g = await Game.open(browser, `${vite.url}/?device=${device}`, device);
   await withDiagnosis(g, 'result-ack-twice', async () => {
@@ -360,8 +361,8 @@ test('결과 확인 계약: 확인 요청을 여러 번 보내도 같은 성공�
 
 test('결과 복원 범위: 보존 기간이 지난 결과는 복원하지 않고(보상은 남음), 진행 중 전투가 있으면 오래된 종료 결과보다 우선한다', async () => {
   const device = 'e2e-result-retention-priority';
-  const A = { index: 2, code: 'muldeuli', x: 1760, y: 1330 };
-  const B = { index: 9, code: 'muldeuli', x: 1760, y: 1340 };
+  const A = { index: 2, code: 'muldeuli', x: 1488, y: 1572 }; // 시작 지점에서 올라오면 A가 먼저 닿는다(B는 A 위쪽 12px)
+  const B = { index: 9, code: 'muldeuli', x: 1488, y: 1572 }; // A와 같은 자리 — 같은 거리에서 둘 다 닿는다(낮은 번호 A가 먼저 조우)
   // 보존 기간 2초
   await backend.start(withWilds((db) => { seedExplorer(device)(db); sturdy(db); }, [A, B]), { 'battle.resolvedRetentionSeconds': 2 });
   const g = await Game.open(browser, `${vite.url}/?device=${device}`, device);
@@ -404,7 +405,7 @@ test('결과 복원 범위: 보존 기간이 지난 결과는 복원하지 않�
 
 test('마을 복귀 뒤 미확인 전투 결과: 연결이 돌아오면 "확인하지 않은 전투 결과가 있어요." + 결과 보기 — 진행 중 전투 문구와 다르고, 결과 보기를 누르면 같은 결과 화면(보상 1회)', async () => {
   const device = 'e2e-restore-result-prompt';
-  const WILD = { index: 2, code: 'muldeuli', x: 1760, y: 1330 };
+  const WILD = { index: 2, code: 'muldeuli', x: 1488, y: 1560 };
   await backend.start(withWilds((db) => { seedExplorer(device)(db); sturdy(db); }, [WILD]), { 'battle.resolvedRetentionSeconds': 600 });
   const g = await Game.open(browser, `${vite.url}/?device=${device}`, device);
   await withDiagnosis(g, 'restore-result-prompt', async () => {
@@ -436,8 +437,8 @@ test('마을 복귀 뒤 미확인 전투 결과: 연결이 돌아오면 "확인�
 
 test('미확인 결과 우회 방지(v4 §2): 확인 전 직접 새 방 생성·야생 전투 시작은 거부(복원할 전투 ID 포함), 마을 UI의 새 활동은 결과 화면으로 복원, 확인 뒤 새 활동 정상 시작', async () => {
   const device = 'e2e-result-gate';
-  const A = { index: 2, code: 'muldeuli', x: 1760, y: 1330 };
-  const B = { index: 9, code: 'muldeuli', x: 1760, y: 1340 };
+  const A = { index: 2, code: 'muldeuli', x: 1488, y: 1572 }; // 시작 지점에서 올라오면 A가 먼저 닿는다(B는 A 위쪽 12px)
+  const B = { index: 9, code: 'muldeuli', x: 1488, y: 1572 }; // A와 같은 자리 — 같은 거리에서 둘 다 닿는다(낮은 번호 A가 먼저 조우)
   await backend.start(withWilds((db) => { seedExplorer(device)(db); sturdy(db); }, [A, B]), { 'battle.resolvedRetentionSeconds': 600 });
   const g = await Game.open(browser, `${vite.url}/?device=${device}`, device);
   await withDiagnosis(g, 'result-gate', async () => {

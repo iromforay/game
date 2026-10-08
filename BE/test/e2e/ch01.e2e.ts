@@ -226,7 +226,7 @@ test('1장 E2E ③: 여러 터비 PartySelect 페이지 이동·선택 유지 �
       assert.ok(!(await g.state()).scenes.includes('StoryDialogue'), '장착까지 끝난 계정은 숲 재진입 때 이야기 재생 없음');
 
       // 11) 약한 야생에게 걸어가 조우 → 여러 페이지 PartySelect
-      await g.walkTo('Map', { x: 1400, y: 1800 }, 'joystick', "s.scenes.includes('PartySelect')", 8);
+      await g.walkTo('Map', { x: 1470, y: 1300 }, 'joystick', "s.scenes.includes('PartySelect')", 8);
       await g.until('일반 파티 선택(여러 페이지)', 's.party && !s.party.story && s.party.pages > 1 && s.party.selected.length === 1');
       const card = async (i: number) => (await g.page.evaluate((k) => { const c = (window as any).__game.scene.getScene('PartySelect').layout.cards[k]; return { x: c.x + c.w / 2, y: c.y + c.h / 2 }; }, i)) as { x: number; y: number }; // eslint-disable-line @typescript-eslint/no-explicit-any
       await g.clickLabel('▶', { exact: true, expect: 's.party.page === 1' });
@@ -250,9 +250,8 @@ test('1장 E2E ③: 여러 터비 PartySelect 페이지 이동·선택 유지 �
 
       // 강한 야생: 약한 터비 한 마리만 데려가 패배 → 포획 실패 결과
       await g.until('맵 준비', "(() => { const m = window.__game.scene.getScene('Map'); return m && m.ready; })()");
-      // 야생 3번 아래에는 울타리가 있다(10-02 v5) — 먼지풀과 울타리를 돌아 위쪽에서 다가간다. 전투 뒤에는 싸우던 자리에서 이어진다
-      for (const w of [{ x: 1960, y: 1450 }, { x: 2190, y: 960 }, { x: 2190, y: 870 }]) await g.walkTo('Map', w, 'joystick', "s.scenes.includes('PartySelect')");
-      await g.walkTo('Map', { x: 2100, y: 890 }, 'joystick', "s.scenes.includes('PartySelect')", 8);
+      // 강한 야생 3번은 입구 공터 서쪽 끝에 있다 — 전투 뒤에는 싸우던 자리(공터 위쪽 첫 길)에서 이어지고, 길을 따라 내려가 다가간다
+      await g.walkTo('Map', { x: 1330, y: 2100 }, 'joystick', "s.scenes.includes('PartySelect')", 8);
       await g.until('파티 선택', 's.party && s.party.selected.length === 1');
       const c0 = await card(0);
       await g.clickAt(c0.x, c0.y, 's.party.selected.length === 0');

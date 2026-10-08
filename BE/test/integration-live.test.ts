@@ -1,6 +1,7 @@
 // v4 §5 실제 프런트·서버 통합 경로 — 실제 NestJS 터비 앱(컨트롤러·소켓 게이트웨이·서비스)을 임의 포트에 띄우고,
 // 프런트와 같은 방식(HTTP /player/me/* + X-Turby-Session, socket.io presence:hello·room·map·battle)으로 접속한다.
 // DB만 테스트 격리 환경(FakeDb)으로 바꾼다. 1장 대화는 프런트의 실제 대화 진행기(dialogueRunner)로, 전투 판정은 프런트 battleView로 돌린다.
+import { SPAWN, walkRoute } from './helpers/forest-geo';
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'fs';
@@ -149,17 +150,19 @@ const serverPos = (c: Client) => {
   return { room, x: m.x, y: m.y, solids: solidsFor(room.collision, m.storyEvents) };
 };
 async function moveTo(c: Client, to: { x: number; y: number }): Promise<boolean> {
+  // 길 중심선을 따라가는 경유지를 한 점씩 보고한다. 서버가 승인하지 않아 위치가 더는 나아가지 않으면(닫힌 문 등) false
   const at = serverPos(c);
-  const path = routeTo(at.solids, { x: at.x, y: at.y }, to);
-  if (!path) return false;
-  for (const p of path) c.socket.emit('map:move', { x: p.x, y: p.y, dir: 'down' });
-  // map:move는 응답이 없다 — 서버 위치가 목적지가 될 때까지 기다린다
-  for (let i = 0; i < 200; i++) {
-    const now = serverPos(c);
-    if (now.x === to.x && now.y === to.y) return true;
-    await new Promise((res) => setTimeout(res, 5));
+  for (const p of walkRoute({ x: at.x, y: at.y }, to)) {
+    c.socket.emit('map:move', { x: p.x, y: p.y, dir: 'down' });
+    let ok = false;
+    for (let i = 0; i < 100 && !ok; i++) {
+      const now = serverPos(c);
+      ok = Math.abs(now.x - p.x) < 0.5 && Math.abs(now.y - p.y) < 0.5;
+      if (!ok) await new Promise((res) => setTimeout(res, 5));
+    }
+    if (!ok) return false;
   }
-  throw new Error(`서버가 이동을 승인하지 않음: ${JSON.stringify(to)} (현재 ${JSON.stringify({ x: serverPos(c).x, y: serverPos(c).y })})`);
+  return true;
 }
 const goTo = async (c: Client, id: string) => assert.equal(await moveTo(c, pointOf(id)), true, `${id}까지 가는 길이 있어야 한다`);
 
@@ -221,7 +224,7 @@ test('통합 2: 숲 진입 → 걷는 장면 → 잘린 실 지점 → 공터 �
 
   // 지도: 지금 열린 지점은 잘린 실 하나, 실가루 10개는 잠긴 채로 보인다
   let view = await viewOf(c);
-  assert.equal(view.greybox, true);
+  assert.equal(view.greybox, false, "최종 지도");
   assert.deepEqual(view.points.map((p) => p.id), ['forest_cut_thread']);
   assert.deepEqual([view.objects.length, view.objects.every((o) => o.state === 'locked')], [10, true]);
   // 구조 전 실가루 수집 거부(가까이 있어도), 닫힌 지점·좌표 밖 요청 거부
@@ -318,7 +321,7 @@ test('통합 3: 실가루 10개 수집(동시 10건·재접속·다른 지역·�
   await c.req('room:create', { stageCode: 'forest' });
   await c.req('room:start');
   const fresh = await c.req<{ self: { x: number; y: number } }>('map:enter', { dir: 'down' });
-  assert.deepEqual([fresh.self.x, fresh.self.y], [1600, 1200], '끝난 세션 뒤 새 입장은 시작 지점');
+  assert.deepEqual([fresh.self.x, fresh.self.y], [SPAWN.x, SPAWN.y], '끝난 세션 뒤 새 입장은 시작 지점');
   for (let i = 6; i <= 10; i++) {
     const id = `forest_dust_${String(i).padStart(2, '0')}`;
     await goTo(c, id);
@@ -399,7 +402,7 @@ test('통합 3: 실가루 10개 수집(동시 10건·재접속·다른 지역·�
 
 test('통합 4(회귀): 일반 야생 전투 — 야생 마커는 서버가 위치·상태를 내려 준다(입장·상태 방송·재접속에서 같은 ID), 누비 강제 참가·스토리 표식 없음, 포획 보상 지급, 포획 뒤 재조우 없음 / 일반 장비 슬롯 장착', async () => {
   type Wild = { index: number; characterCode: string; x: number; y: number; state: string; visible: boolean };
-  const WILD0 = { index: 0, characterCode: 'bopuli', x: 520, y: 500 }; // 서버 DB(stage_wild_spawn)의 값 — 클라이언트 설정에는 좌표가 없다
+  const WILD0 = { index: 0, characterCode: 'bopuli', x: 1650, y: 2080 }; // 서버 DB(stage_wild_spawn)의 값 — 클라이언트 설정에는 좌표가 없다
   const c = new Client('dev-test-live-1');
   await c.identify();
   await c.connect();
@@ -414,7 +417,7 @@ test('통합 4(회귀): 일반 야생 전투 — 야생 마커는 서버가 위�
   const changes: Wild[] = [];
   c.socket.on('wild:changed', (w: Wild) => changes.push(w));
   assert.equal((await c.req('battle:start', { spawnIndex: 0 })).code, 'TOO_FAR', '야생 터비에게서 멀다');
-  assert.equal(await moveTo(c, { x: 500, y: 500 }), true);
+  assert.equal(await moveTo(c, { x: WILD0.x, y: WILD0.y }), true);
   const start = await c.req<{ snapshot: Snap & { spawnIndex: number } }>('battle:start', { spawnIndex: 0 });
   assert.equal(start.ok, true);
   assert.equal(start.snapshot.story, undefined, '일반 전투에는 스토리 표식 없음');

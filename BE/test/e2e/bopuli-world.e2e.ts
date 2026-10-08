@@ -1,11 +1,11 @@
-// 10-06 v7 §2: 기존 turby-bopuli 이미지를 월드 표시 크기(160×160)로 보풀이 공터에 놓았을 때의 판정 자료(캡처).
-// 먼지실 오버레이 최종 PNG는 아직 없으므로 시험 페이지에서만 단색 반투명 캔버스를 같은 키로 주입해 "연결 범위와 크기"만 본다 — 제품 에셋에는 추가하지 않는다.
+// 10-06 v7 §2·v8: 기존 turby-bopuli 이미지(월드 표시 160×160)와 최종 먼지실 오버레이(256×256)가 보풀이 공터에서 같은 자리에 놓이는지 크기·위치를 단정하고 캡처한다.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'path';
 import type { Browser } from 'playwright-core';
 import { Backend, Game, ROOT, freePort, launchBrowser, startVite, withDiagnosis } from './harness';
 import { seedForest } from './fixtures';
+import { BOPULI } from '../helpers/forest-geo';
 
 let backend: Backend;
 let vite: { url: string; close: () => Promise<void> };
@@ -24,7 +24,6 @@ after(async () => {
 
 const SMALL = { width: 640, height: 360 };
 const READY = 's.map && s.map.ready && s.map.inRoom && s.map.positioned && s.map.story';
-const BOPULI = { x: 1240, y: 1000 };
 
 async function enterForest(g: Game) {
   await g.waitScene('Village');
@@ -53,7 +52,6 @@ const bopuliImage = (g: Game) =>
 test('보풀이 월드 표시 ①: 구조 뒤 정상 보풀이를 공터에 160×160으로 단독 표시(1280×720)', async () => {
   const device = 'e2e-bopuli-normal';
   await backend.start(seedForest(device, 'rescued'));
-  backend.patchStage('forest', (d) => (d.greybox = true)); // 회색상자 그대로
   const g = await Game.open(browser, `${vite.url}/?device=${device}`, device);
   await withDiagnosis(g, 'bopuli-normal-1280', async () => {
     await enterForest(g);
@@ -65,31 +63,24 @@ test('보풀이 월드 표시 ①: 구조 뒤 정상 보풀이를 공터에 160�
   await g.close();
 });
 
-test('보풀이 월드 표시 ②: 구조 전, 먼지실 오버레이(단색 반투명 fixture)가 보풀이 위에 같은 위치·256×256으로 덮인다(1280×720)', async () => {
+test('보풀이 월드 표시 ②: 구조 전, 먼지실 오버레이(최종 에셋)가 보풀이 위에 같은 위치·256×256으로 덮인다(1280×720)', async () => {
   const device = 'e2e-bopuli-tangled';
   await backend.start(seedForest(device, 'cut'));
   const g = await Game.open(browser, `${vite.url}/?device=${device}`, device);
   await withDiagnosis(g, 'bopuli-tangled-1280', async () => {
     await enterForest(g);
     await standNearBopuli(g, device); // 새로고침으로 페이지가 다시 열린 뒤에 fixture를 주입한다(텍스처는 페이지 메모리에만 있다)
-    // 시험 페이지에만: 연결 범위와 크기를 보기 위한 단색 반투명 캔버스(미술 아님)
-    await g.page.evaluate(() => {
-      const t = (window as any).__game.textures.createCanvas('bopuli-tangled-overlay', 256, 256); // eslint-disable-line @typescript-eslint/no-explicit-any
-      t.context.fillStyle = 'rgba(40, 20, 60, 0.55)';
-      t.context.fillRect(0, 0, 256, 256);
-      t.refresh();
-      return (window as any).__game.scene.getScene('Map').refreshStageView(); // eslint-disable-line @typescript-eslint/no-explicit-any
-    });
+    await g.page.evaluate(() => (window as any).__game.scene.getScene('Map').refreshStageView()); // eslint-disable-line @typescript-eslint/no-explicit-any
     await g.until('오버레이 연결', "s.map.render.overlays.includes('bopuli-tangled-overlay')");
     const overlays = (await g.page.evaluate(() => (window as any).__dev.state().map.render.overlays)) as string[]; // eslint-disable-line @typescript-eslint/no-explicit-any
-    assert.deepEqual(overlays, ['turby-bopuli', 'bopuli-tangled-overlay'], '구조 전: 보풀이 위에 먼지실 오버레이');
+    assert.deepEqual(overlays, ['fog-veil', 'turby-bopuli', 'bopuli-tangled-overlay'], '구조 전: 보풀이 위에 먼지실 오버레이(안개는 숨은 길)');
     const o = (await g.page.evaluate(() => {
       const m = (window as any).__game.scene.getScene('Map'); // eslint-disable-line @typescript-eslint/no-explicit-any
       const img = m.children.list.find((c: any) => c.type === 'Image' && c.texture.key === 'bopuli-tangled-overlay'); // eslint-disable-line @typescript-eslint/no-explicit-any
       return { w: Math.round(img.displayWidth), h: Math.round(img.displayHeight), x: img.x, y: img.y, originY: img.originY };
     })) as { w: number; h: number; x: number; y: number; originY: number };
     assert.deepEqual([o.w, o.h, o.x, o.y, o.originY], [256, 256, BOPULI.x, BOPULI.y, 0.9]);
-    await g.capture('02_bopuli_with_tangled_overlay_fixture_1280x720');
+    await g.capture('02_bopuli_with_tangled_overlay_1280x720');
   }, backend, device);
   await g.close();
 });

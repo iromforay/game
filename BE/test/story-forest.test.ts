@@ -70,7 +70,7 @@ test('오브젝트 ID: 실가루는 forest_dust_01~10 고정, 지역 데이터�
     assert.ok(pointOf(o.id), `${o.id} 좌표`);
     assert.ok(o.assetKey && o.label && o.prompt, `${o.id} 표시 정보`);
   }
-  assert.equal(FOREST.greybox, true, '회색상자(임시) 표시');
+  assert.equal(FOREST.greybox, false, '최종 지도(회색상자 단계 끝)');
 });
 
 test('이야기 지점: 여덟 지점이 정의돼 있고, 지도에 놓이는 지점은 좌표·표시 정보를 가진다. 완료 이벤트·전투 키·재생 범위는 실제 데이터에 있다', () => {
@@ -254,7 +254,7 @@ test('지도에 보이는 것: 진행에 따라 활성 지점만, 구조 전 실
     assert.ok(view.layout!.blockers.some((b) => b.id === 'wall_hidden_top'), `${label}: 바깥 벽`);
     const inner = view.layout!.paths.some((path) => path.some(([x]) => x > 2300));
     assert.equal(inner, hiddenZone, `${label}: 문 안쪽 길`);
-    assert.equal(view.layout!.paths.some((path) => path.some(([x]) => x === 2240)), events.includes('forest_compass_granted'), `${label}: 숨은 길로 가는 길은 나침판 뒤에`);
+    assert.equal(view.layout!.paths.some((path) => path.some(([x]) => x === pointOf('forest_hidden_path').x)), events.includes('forest_compass_granted'), `${label}: 숨은 길로 가는 길은 나침판 뒤에`);
     assert.ok(view.layout!.blockers.every((b) => !('visibleAfter' in b)) && view.gates.every((g) => !('openEvent' in g)), '규칙 필드는 내려 주지 않는다');
     for (const p of view.points) assert.deepEqual([p.x, p.y], [pointOf(p.id).x, pointOf(p.id).y]);
   }
@@ -272,7 +272,8 @@ test('최종 에셋 연결 계약(10-06 v2): 배경 키·진행별 오버레이�
   const after = await setup('CH01_COMPASS_ACQUIRED', [...base, 'forest_hidden_path_opened']).service.stageData(P1, 'forest');
   assert.deepEqual(before.render.background, { assetKey: 'forest-base' });
   // 개방 전: 숨은 길 오버레이 없음, 먼지바람 문은 닫힘(닫힘 텍스처 키 + 충돌), 길 자체가 내려가지 않는다
-  assert.deepEqual(before.render.overlays.map((o) => o.id), ['npc_bopuli'], '숨은 길 오버레이 없음(보풀이 NPC만)');
+  assert.deepEqual(before.render.overlays.map((o) => o.id), ['fog_hidden_path', 'npc_bopuli'], '숨은 길 오버레이 없음 — 길은 안개가 가리고 보풀이 NPC만 보인다');
+  assert.deepEqual(after.render.overlays.map((o) => o.id).includes('fog_hidden_path'), false, '개방 뒤에는 안개가 걷힌다');
   const windBefore = before.gates.find((g) => g.id === 'gate_hidden_path')!;
   assert.deepEqual([windBefore.open, windBefore.closedAssetKey, windBefore.openAssetKey], [false, 'dust-wind-closed', null]);
   // 개방 뒤: 같은 스냅샷에서 오버레이 공개 + 문 열림(열림 텍스처 없음 = 먼지바람이 사라진다) + 실뿌리 문이 닫힘 상태로 나타남
@@ -280,7 +281,7 @@ test('최종 에셋 연결 계약(10-06 v2): 배경 키·진행별 오버레이�
   const windAfter = after.gates.find((g) => g.id === 'gate_hidden_path')!;
   assert.deepEqual([windAfter.open, windAfter.openAssetKey], [true, null]);
   const root = after.gates.find((g) => g.id === 'gate_root')!;
-  assert.deepEqual([root.open, root.closedAssetKey, root.openAssetKey, root.art], [false, 'root-gate-closed', 'root-gate-open', { x: 2880, y: 1468, width: 480, height: 520, pivot: [0.5, 0.92] }]);
+  assert.deepEqual([root.open, root.closedAssetKey, root.openAssetKey, root.art], [false, 'root-gate-closed', 'root-gate-open', { x: 2960, y: 1050, width: 480, height: 520, pivot: [0.5, 0.92] }]);
   // 실뿌리 문: 첫 매듭 장착 뒤에 같은 문이 열림 텍스처로
   const equipped = await setup('CH01_FIRST_KNOT_EQUIPPED', [...base, 'forest_hidden_path_opened', 'forest_giant_knot_defeated', 'forest_first_knot_awakened', 'forest_first_knot_equipped']).service.stageData(P1, 'forest');
   const rootOpen = equipped.gates.find((g) => g.id === 'gate_root')!;
@@ -315,8 +316,8 @@ test('월드 표시 상태 조건(10-06 v6): 거대 매듭은 숨은 길 개방 
   const DEFEATED = [...OPEN, 'forest_giant_knot_defeated'];
   const EQUIPPED = [...DEFEATED, 'forest_first_knot_awakened', 'forest_first_knot_equipped'];
   // 보풀이: 구조 전(먼지실에 붙잡힘) → 구조 뒤 정상, 전달·장 진행 뒤에도 NPC는 남는다
-  assert.deepEqual(await ids('CH01_STARTED', RESCUED.slice(0, 5)), ['npc_bopuli', 'npc_bopuli_tangled']);
-  assert.deepEqual(await ids('CH01_BOPUL_RESCUED', RESCUED), ['npc_bopuli']);
+  assert.deepEqual(await ids('CH01_STARTED', RESCUED.slice(0, 5)), ['fog_hidden_path', 'npc_bopuli', 'npc_bopuli_tangled']);
+  assert.deepEqual(await ids('CH01_BOPUL_RESCUED', RESCUED), ['fog_hidden_path', 'npc_bopuli']);
   assert.ok((await ids('CH01_COMPASS_ACQUIRED', [...RESCUED, 'forest_compass_granted'])).includes('npc_bopuli'), '실가루 전달 뒤에도 NPC 유지');
   // 거대 매듭: 개방 전 없음 → 개방 뒤 표시 → 격파 기록 직후 제거
   assert.ok(!(await ids('CH01_COMPASS_ACQUIRED', [...RESCUED, 'forest_compass_granted'])).includes('prop_giant_knot_map'));
@@ -332,6 +333,6 @@ test('월드 표시 상태 조건(10-06 v6): 거대 매듭은 숨은 길 개방 
   assert.deepEqual([by('npc_dansuring').assetKey, by('npc_dansuring').width, by('npc_dansuring').height, by('npc_dansuring').pivot, by('npc_dansuring').layer], ['dansuring', 192, 192, [0.5, 0.82], 'story']);
   const knot = (await setup('CH01_COMPASS_ACQUIRED', OPEN).service.stageData(P1, 'forest')).render.overlays.find((o) => o.id === 'prop_giant_knot_map')!;
   assert.deepEqual([knot.assetKey, knot.width, knot.height, knot.pivot, knot.forPoints], ['giant-thread-knot-map', 512, 512, [0.5, 0.88], ['forest_giant_knot']]);
-  assert.equal(view.render.markerMode, 'fallback', '에셋 미전달 단계에서는 임시 표식을 유지한다');
+  assert.equal(view.render.markerMode, 'final', '최종 에셋이 모두 연결돼 임시 표식은 그림이 있는 대상에서 없어진다');
   assert.deepEqual(view.gates.find((g) => g.id === 'gate_root')!.art!.pivot, [0.5, 0.92], '실뿌리 문 피벗(하단 중앙 0.92) — 닫힘·열림 같은 캔버스·피벗');
 });

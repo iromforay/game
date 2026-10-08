@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { join } from 'path';
 import { readFileSync } from 'fs';
 import type { Browser } from 'playwright-core';
+import { E2E, SPAWN as GEO_SPAWN, HIDDEN_INSIDE, WIND_GATE, ROOT_GATE, WIND_FRONT, ROOT_FRONT, KNOT } from '../helpers/forest-geo';
 import { Backend, Game, ROOT, freePort, launchBrowser, startVite, withDiagnosis } from './harness';
 import { seedForest } from './fixtures';
 
@@ -25,6 +26,7 @@ after(async () => {
 
 const FOREST = JSON.parse(readFileSync(join(ROOT, 'BE/story-data/save-a-turby/stages/forest.json'), 'utf8')) as { spawnPoint: { x: number; y: number }; points: { id: string; x: number; y: number }[] };
 const SPAWN = FOREST.spawnPoint;
+const GATE = WIND_GATE;
 const pointOf = (id: string) => FOREST.points.find((p) => p.id === id)!;
 const SMALL = { width: 640, height: 360 };
 type MapState = {
@@ -32,7 +34,7 @@ type MapState = {
   positioned: boolean;
   corrections: number;
   lastCorrection: string | null;
-  miniMap: { open: boolean; legendOpen: boolean; legend: string[]; terrain: { zones: number; paths: number; blockers: number; gatesClosed: number; gatesOpen: number } | null; openButton: { x: number; y: number }; legendToggle: { x: number; y: number; w: number; h: number } | null };
+  miniMap: { open: boolean; legendOpen: boolean; legend: string[]; art: { assetKey: string; fog: number } | null; terrain: { zones: number; paths: number; blockers: number; gatesClosed: number; gatesOpen: number } | null; openButton: { x: number; y: number }; legendToggle: { x: number; y: number; w: number; h: number } | null };
   story: { points: string[]; gates: Record<string, boolean>; prompt: string | null; promptText: string | null; interact: { x: number; y: number } };
 };
 const mapOf = async (g: Game) => (await g.state()).map as MapState;
@@ -45,7 +47,7 @@ async function enterForest(g: Game) {
   await g.clickLabel(exit.prompt);
   await g.waitScene('StageSelect');
   await g.clickLabel('1장 — 숲', { exact: true });
-  await g.until('숲 지도·서버 위치 배치', 's.map && s.map.ready && s.map.inRoom && s.map.positioned && s.map.story && s.map.story.greybox === true');
+  await g.until('숲 지도·서버 위치 배치', 's.map && s.map.ready && s.map.inRoom && s.map.positioned && s.map.story && s.map.story.greybox === false');
 }
 async function walkToTarget(g: Game, id: string, via: { x: number; y: number }[] = [], how: 'keys' | 'joystick' = 'keys') {
   for (const w of via) await g.walkTo('Map', w, how);
@@ -95,7 +97,7 @@ test('위치 ①: 시작 지점 배치 → 좌표를 끼운 입장 요청 무시
     await g.capture('01_first_entry_spawn_point');
 
     // 좌표를 끼운 입장 요청(옛 형식·변조): 응답은 서버 위치 그대로, 서버 상태도 그대로
-    const hacked = (await g.page.evaluate(() => (window as any).__dev.rawRequest('map:enter', { x: 2620, y: 1250, dir: 'down' }))) as { self: { x: number; y: number }; corrected: boolean }; // eslint-disable-line @typescript-eslint/no-explicit-any
+    const hacked = (await g.page.evaluate((k) => (window as any).__dev.rawRequest('map:enter', { x: k.x, y: k.y, dir: 'down' }), { x: KNOT.x, y: KNOT.y })) as { self: { x: number; y: number }; corrected: boolean }; // eslint-disable-line @typescript-eslint/no-explicit-any
     assert.deepEqual([hacked.self.x, hacked.self.y, hacked.corrected], [SPAWN.x, SPAWN.y, false]);
     assert.deepEqual(backend.serverPosition(device), SPAWN);
 
@@ -107,25 +109,26 @@ test('위치 ①: 시작 지점 배치 → 좌표를 끼운 입장 요청 무시
     // 전체 지도(숨은 길을 열기 전): 길·벽·닫힌 문은 보이고, 문 안쪽 구역·안쪽 벽·안쪽 문은 없다
     await openFullMap(g);
     m = await mapOf(g);
-    assert.deepEqual(m.miniMap.terrain, { zones: 4, paths: 3, blockers: 10, gatesClosed: 1, gatesOpen: 0 });
-    assert.deepEqual(m.miniMap.legend, ['player', 'story', 'wild', 'path', 'wall', 'gateClosed']);
-    await g.capture('07_full_map_greybox_paths_walls_gate');
+    // 최종 지도: 배경 그림을 줄여 쓰고(임시 도형 없음), 아직 열리지 않은 숨은 길 구역은 안개로 가려져 있다
+    assert.deepEqual([m.miniMap.terrain, m.miniMap.art], [null, { assetKey: 'forest-base', fog: 1 }]);
+    assert.deepEqual(m.miniMap.legend, ['player', 'story', 'wild']);
+    await g.capture('07_full_map_final_fog_before_open');
     await g.capture('08a_full_map_hidden_zone_before');
     await closeFullMap(g);
 
     // 닫힌 숨은 길 문: 화면에서도 막히고(클라이언트 충돌), 문 너머로 옮겨 보고해도 서버가 되돌린다
-    await walkToTarget(g, 'forest_hidden_path', [{ x: 1900, y: 1110 }]);
-    await g.walkTo('Map', { x: 2270, y: 1250 }, 'keys');
+    await walkToTarget(g, 'forest_hidden_path');
+    await g.walkTo('Map', WIND_FRONT, 'keys');
     await g.page.keyboard.down('ArrowRight');
     try {
-      await g.until('문에 닿음', 's.map.avatar.x >= 2278');
-      const crossed = await g.page.waitForFunction(() => (window as any).__game.scene.getScene('Map').avatar.x > 2300, null, { timeout: 1200, polling: 50 }).then(() => true, () => false); // eslint-disable-line @typescript-eslint/no-explicit-any
+      await g.until('문에 닿음', `s.map.avatar.x >= ${GATE.x - 30}`);
+      const crossed = await g.page.waitForFunction((x) => (window as any).__game.scene.getScene('Map').avatar.x > x, GATE.x + GATE.width, { timeout: 1200, polling: 50 }).then(() => true, () => false); // eslint-disable-line @typescript-eslint/no-explicit-any
       assert.equal(crossed, false, '닫힌 문을 지나갔다');
     } finally {
       await g.page.keyboard.up('ArrowRight');
     }
     const front = await serverCatchesUp(g, device);
-    assert.ok(front.x < 2300, `서버 위치도 문 앞: ${JSON.stringify(front)}`);
+    assert.ok(front.x < GATE.x, `서버 위치도 문 앞: ${JSON.stringify(front)}`);
     await g.capture('03_hidden_path_gate_closed');
     m = await tamperJump(g, { x: front.x + 80, y: front.y }); // 속도 한도 안의 짧은 점프로 문을 건너뛴다
     assert.equal(m.lastCorrection, 'tunnel', '선분이 닫힌 문을 관통');
@@ -150,16 +153,16 @@ test('위치 ①: 시작 지점 배치 → 좌표를 끼운 입장 요청 무시
     const c0 = (await mapOf(g)).corrections;
     await walkToTarget(g, 'forest_giant_knot');
     const inside = await serverCatchesUp(g, device);
-    assert.ok(inside.x > 2340, `열린 문을 지나 안쪽: ${JSON.stringify(inside)}`);
+    assert.ok(inside.x > GATE.x + GATE.width + 100, `열린 문을 지나 안쪽: ${JSON.stringify(inside)}`);
     assert.equal((await mapOf(g)).corrections, c0, '정상 이동에는 보정이 없다');
     assert.equal((await mapOf(g)).story.promptText, '거대 매듭에 다가가기');
 
     // 닫힌 실뿌리 문(첫 매듭 장착 전)
-    await g.walkTo('Map', { x: 2830, y: 1250 }, 'keys');
+    await g.walkTo('Map', ROOT_FRONT, 'keys');
     await g.page.keyboard.down('ArrowRight');
     try {
-      await g.until('실뿌리 문에 닿음', 's.map.avatar.x >= 2838');
-      const crossed = await g.page.waitForFunction(() => (window as any).__game.scene.getScene('Map').avatar.x > 2860, null, { timeout: 1200, polling: 50 }).then(() => true, () => false); // eslint-disable-line @typescript-eslint/no-explicit-any
+      await g.until('실뿌리 문에 닿음', `s.map.avatar.x >= ${ROOT_GATE.x - 30}`);
+      const crossed = await g.page.waitForFunction((x) => (window as any).__game.scene.getScene('Map').avatar.x > x, ROOT_GATE.x + ROOT_GATE.width, { timeout: 1200, polling: 50 }).then(() => true, () => false); // eslint-disable-line @typescript-eslint/no-explicit-any
       assert.equal(crossed, false, '닫힌 실뿌리 문을 지나갔다');
     } finally {
       await g.page.keyboard.up('ArrowRight');
@@ -172,8 +175,7 @@ test('위치 ①: 시작 지점 배치 → 좌표를 끼운 입장 요청 무시
     // 전체 지도(숨은 길을 연 뒤): 안쪽 구역·안쪽 벽·닫힌 실뿌리 문이 나타난다. 실뿌리 문 너머 구역은 아직 없다
     await openFullMap(g);
     m = await mapOf(g);
-    assert.deepEqual(m.miniMap.terrain, { zones: 5, paths: 4, blockers: 12, gatesClosed: 1, gatesOpen: 1 });
-    assert.deepEqual(m.miniMap.legend, ['player', 'story', 'wild', 'path', 'wall', 'gateClosed', 'gateOpen']);
+    assert.deepEqual([m.miniMap.terrain, m.miniMap.art], [null, { assetKey: 'forest-base', fog: 0 }], '숨은 길이 열리면 안개가 걷힌다');
     await g.capture('08b_full_map_hidden_zone_after');
     await closeFullMap(g);
   }, backend, device);
@@ -189,21 +191,21 @@ test('위치 ②: 첫 매듭 장착 뒤 — 시작 지점에서 출발해 열린
     let m = await mapOf(g);
     assert.deepEqual([m.avatar, backend.serverPosition(device)], [SPAWN, SPAWN], '진행과 무관하게 시작 지점');
     assert.deepEqual([m.story.gates, m.story.points], [{ gate_hidden_path: true, gate_root: true }, ['forest_dansuring']]);
-    await walkToTarget(g, 'forest_dansuring', [{ x: 1900, y: 1110 }, { x: 2240, y: 1250 }, { x: 2800, y: 1250 }]);
+    await walkToTarget(g, 'forest_dansuring');
     m = await mapOf(g);
     assert.equal(m.story.promptText, '단수링 살펴보기');
     assert.equal(m.corrections, 0, '열린 문 두 개를 지나는 동안 서버 보정 없음');
     const s = await serverCatchesUp(g, device);
-    assert.ok(s.x > 2900, `실뿌리 문 너머: ${JSON.stringify(s)}`);
+    assert.ok(s.x > ROOT_GATE.x, `실뿌리 문 안쪽: ${JSON.stringify(s)}`);
     await g.capture('06_root_gate_open_after_first_knot');
     await openFullMap(g);
-    assert.deepEqual((await mapOf(g)).miniMap.terrain, { zones: 6, paths: 5, blockers: 12, gatesClosed: 0, gatesOpen: 2 });
+    assert.deepEqual([(await mapOf(g)).miniMap.terrain, (await mapOf(g)).miniMap.art], [null, { assetKey: 'forest-base', fog: 0 }]);
     await closeFullMap(g);
   }, backend, device);
   await g.close();
 });
 
-test('위치 ③: 640×360 — 전체 지도의 범례를 접었다 펼칠 수 있고, 조이스틱 이동도 서버가 승인하며, 먼지풀 건너편의 실가루는 주울 수 없다', async () => {
+test('위치 ③: 640×360 — 전체 지도의 범례를 접었다 펼칠 수 있고, 조이스틱 이동도 서버가 승인하며, 멀리 있는 실가루는 주울 수 없다', async () => {
   const device = 'e2e-pos-small';
   await backend.start(seedForest(device, 'rescued'));
   const g = await Game.open(browser, `${vite.url}/?device=${device}`, device, SMALL);
@@ -217,23 +219,22 @@ test('위치 ③: 640×360 — 전체 지도의 범례를 접었다 펼칠 수 �
     const t = m.miniMap.legendToggle!;
     await g.clickAt(t.x + t.w / 2, t.y + t.h / 2, 's.map.miniMap.legendOpen === true');
     m = await mapOf(g);
-    assert.deepEqual(m.miniMap.legend, ['player', 'story', 'dust', 'wild', 'path', 'wall', 'gateClosed']);
+    assert.deepEqual(m.miniMap.legend, ['player', 'story', 'dust', 'wild']);
     await g.capture('09_full_map_legend_small');
     await g.clickAt(t.x + t.w / 2, t.y + t.h / 2, 's.map.miniMap.legendOpen === false');
     await closeFullMap(g);
 
-    // 조이스틱으로 먼지풀 아래(실가루 04의 건너편)까지: 안내 버튼이 없고, 직접 요청해도 서버가 거부한다.
-    // (이 배치에서는 먼지풀 두께 때문에 건너편이 거리 한도도 넘는다 — "가까운데 벽에 막힘"은 서버 단위 테스트가 따로 확인한다)
-    await g.walkTo('Map', { x: 1760, y: 1000 }, 'joystick');
-    await g.walkTo('Map', { x: 1760, y: 910 }, 'joystick');
+    // 조이스틱으로 갈림길 쪽 길까지: 멀리 있는 실가루(04)는 안내 버튼이 없고, 직접 요청해도 서버가 거부한다.
+    // ("가까운데 벽에 막힘"은 서버 단위 테스트가 따로 확인한다)
+    await g.walkTo('Map', { x: 1488, y: 1880 }, 'joystick');
     const at = await serverCatchesUp(g, device);
-    assert.ok(at.y > 854, `먼지풀 아래: ${JSON.stringify(at)}`);
+    assert.ok(at.y < SPAWN.y - 80, `첫 길을 따라 올라감: ${JSON.stringify(at)}`);
     assert.equal((await mapOf(g)).corrections, 0, '조이스틱 이동은 모두 승인');
-    assert.equal((await mapOf(g)).story.prompt, null, '건너편의 실가루는 누를 대상이 아니다');
+    assert.equal((await mapOf(g)).story.prompt, null, '멀리 있는 실가루는 누를 대상이 아니다');
     const p = backend.playerByDevice(device)!;
     const token = (backend.db.rows('player', { id: p.id })[0] as { session_token: string }).session_token;
     const direct = await fetch(`http://127.0.0.1:${backend.port}/player/me/story/objectives/forest_glowing_dust/progress`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Turby-Session': token }, body: JSON.stringify({ objectId: 'forest_dust_04' }) });
-    assert.deepEqual([direct.status, ((await direct.json()) as { code: string }).code], [422, 'STORY_EVIDENCE_INVALID'], '먼지풀 건너편에서는 주울 수 없다');
+    assert.deepEqual([direct.status, ((await direct.json()) as { code: string }).code], [422, 'STORY_EVIDENCE_INVALID'], '멀리서는 주울 수 없다');
     assert.equal(backend.db.rows('player_story_objective_progress', { player_id: p.id }).length, 0);
   }, backend, device);
   await g.close();

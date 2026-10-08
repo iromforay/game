@@ -337,6 +337,8 @@ export class BattleScene extends Phaser.Scene {
       const { x, y } = this.tileToWorld(u.col, u.row);
       view.container.setPosition(x, y).setAlpha(u.stunned || u.inactive ? 0.4 : 1).setVisible(!u.fled);
       view.hpText.setText(this.hpLabel(u)).setAlpha(u.stunned || u.inactive ? 0.6 : 1).setVisible(!u.fled);
+      // 쓰러진·이탈한 유닛의 그림은 입력을 받지 않는다 — 그 칸으로 이동하려는 누름이 그림에 가로막히지 않게(부서진 거대 매듭의 실 칸 등)
+      for (const o of view.container.list) if (o.input) o.input.enabled = !(u.stunned || u.inactive);
       this.placeLabel(view.hpText, u, x, y);
     }
     this.drawBlocked(this.snap.blocked ?? []);
