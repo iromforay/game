@@ -60,7 +60,7 @@ function workspace() {
 process.on('exit', () => TMP.forEach((d) => rmSync(d, { recursive: true, force: true })));
 
 type Spec = { path: string; width: number; height: number; kind: 'opaque' | 'alpha' };
-// 실제 규격 그대로 13개를 만든다. over로 파일 하나를 다른 PNG로 바꾸거나(문자열 경로 → Buffer) 빼 둘 수 있다
+// 실제 규격 그대로 12개를 만든다. over로 파일 하나를 다른 PNG로 바꾸거나(문자열 경로 → Buffer) 빼 둘 수 있다
 function build(dir: string, over: Record<string, Buffer | null> = {}) {
   for (const s of FOREST_ASSETS as Spec[]) {
     const file = join(dir, s.path);
@@ -80,16 +80,16 @@ const fail = (dir: string, over: Record<string, Buffer | null>) => {
 };
 const lines = (r: { checks: { ok: boolean; file: string; check: string; expected?: string; actual?: string }[] }) => r.checks.filter((c) => !c.ok).map((c) => `${c.file}|${c.check}|${c.expected}|${c.actual}`);
 
-test('모두 규격대로면 통과: 종료 코드 0, 13개 파일의 크기와 검수 결과 요약, 아무것도 쓰지 않는다(읽기 전용)', () => {
+test('모두 규격대로면 통과: 종료 코드 0, 12개 파일의 크기와 검수 결과 요약, 아무것도 쓰지 않는다(읽기 전용)', () => {
   const dir = workspace();
   build(dir);
   const before = snapshot(dir);
   const r = run(dir);
   assert.equal(r.status, 0, r.stderr + r.stdout);
-  assert.match(r.stdout, /숲 에셋 13개 검수 통과/);
+  assert.match(r.stdout, /숲 에셋 12개 검수 통과/);
   for (const s of FOREST_ASSETS as Spec[]) assert.ok(r.stdout.includes(`${s.path} — ${s.width}×${s.height}`), `${s.path} 요약`);
   assert.deepEqual(snapshot(dir), before, '파일을 만들거나 바꾸지 않았다');
-  assert.equal(readdirSync(dir, { recursive: true }).filter((f) => String(f).endsWith('.png')).length, 13);
+  assert.equal(readdirSync(dir, { recursive: true }).filter((f) => String(f).endsWith('.png')).length, 12);
 });
 
 test('에셋이 없으면 실패(정상): 종료 코드 1, 파일명·기대값·실제값을 함께 출력한다', () => {
@@ -122,12 +122,12 @@ test('PNG가 아니거나 크기가 다르면 파일명·기대값·실제값을
 test('투명 PNG: 알파 채널이 없거나 모서리가 불투명하면 실패, 팔레트+tRNS 투명도는 알파로 인정한다', () => {
   const dir = workspace();
   const r = fail(dir, {
-    'world/forest/hidden-path-reveal-v2.png': png(1959, 803, { mode: 'rgb' }), // 알파 채널 없음
+    'world/forest/hidden-area-thicket-locked.png': png(1448, 1086, { mode: 'rgb' }), // 알파 채널 없음
     'world/forest/root-gate-closed.png': png(480, 520, { fill: [0, 0, 0, 0], edits: [[0, 519, [10, 10, 10, 255]]] }), // 왼쪽 아래 모서리 불투명
     'world/forest/root-gate-open.png': png(480, 520, { mode: 'palette', fill: [0, 0, 0, 0] }), // tRNS 알파 — 통과해야 한다
   });
   const f = lines(r);
-  assert.ok(f.some((x) => x.startsWith('world/forest/hidden-path-reveal-v2.png|알파 채널|있음|없음')));
+  assert.ok(f.some((x) => x.startsWith('world/forest/hidden-area-thicket-locked.png|알파 채널|있음|없음')));
   assert.ok(f.some((x) => x.startsWith('world/forest/root-gate-closed.png|네 모서리 투명|네 모서리 알파 8 이하(육안으로 투명)|(0,519)α=255')));
   assert.ok(!f.some((x) => x.startsWith('world/forest/root-gate-open.png')), '팔레트 tRNS는 알파로 인정');
   assert.equal(decodePng(png(4, 4, { mode: 'palette', fill: [0, 0, 0, 0] })).hasAlpha, true);
@@ -164,14 +164,14 @@ test('파일명으로 계산되는 assetKey가 forest.json과 일치해야 한�
   build(dir);
   const forest = JSON.parse(readFileSync(DEFAULT_FOREST_JSON, 'utf8'));
   // forest.json이 다른 키를 가리킨다
-  forest.render.overlays.find((o: { assetKey: string }) => o.assetKey === 'hidden-path-reveal-v2').assetKey = 'hidden-path-revealed';
+  forest.render.overlays.find((o: { assetKey: string }) => o.assetKey === 'hidden-area-thicket-locked').assetKey = 'hidden-area-thicket-lockedx';
   forest.storyPoints[0].assetKey = 'placeholder-point'; // 임시 키는 검수 대상이 아니다
   const wrong = join(workspace(), 'forest.json');
   writeFileSync(wrong, JSON.stringify(forest));
   const r = verifyForestAssets({ assetsDir: dir, forestJsonPath: wrong });
   const f = lines(r);
-  assert.ok(f.includes('hidden-path-reveal-v2.png|forest.json에 assetKey 있음|forest.json의 assetKey "hidden-path-reveal-v2"|없음'));
-  assert.ok(f.includes('forest.json|assetKey "hidden-path-revealed"의 검수 대상 파일|hidden-path-revealed.png|검수 목록에 없음'));
+  assert.ok(f.includes('hidden-area-thicket-locked.png|forest.json에 assetKey 있음|forest.json의 assetKey "hidden-area-thicket-locked"|없음'));
+  assert.ok(f.includes('forest.json|assetKey "hidden-area-thicket-lockedx"의 검수 대상 파일|hidden-area-thicket-lockedx.png|검수 목록에 없음'));
   // 다른 폴더에 같은 파일명이 있으면 로더가 덮어쓴다
   mkdirSync(join(dir, 'ui'), { recursive: true });
   writeFileSync(join(dir, 'ui', 'dansuring.png'), png(8, 8));
@@ -182,12 +182,12 @@ test('파일명으로 계산되는 assetKey가 forest.json과 일치해야 한�
   assert.ok(missing.some((x) => x.startsWith('forest.json|지역 데이터 읽기|')));
 });
 
-test('현재 forest.json의 최종 에셋 키가 정확히 검수 대상 13개와 같다(런타임 키 = 파일명)', () => {
+test('현재 forest.json의 최종 에셋 키가 정확히 검수 대상 12개와 같다(런타임 키 = 파일명)', () => {
   const dir = workspace();
   build(dir);
   const r = verifyForestAssets({ assetsDir: dir });
   assert.equal(r.ok, true, formatReport(r));
-  assert.equal(r.checks.filter((c) => c.check === 'forest.json에 assetKey 있음').length, 13);
+  assert.equal(r.checks.filter((c) => c.check === 'forest.json에 assetKey 있음').length, 12);
   assert.equal(r.checks.filter((c) => c.file === 'forest.json').length > 0 && r.checks.filter((c) => c.file === 'forest.json').every((c) => c.ok), true, 'forest.json의 키는 전부 검수 목록에 있다');
 });
 

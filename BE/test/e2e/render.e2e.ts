@@ -83,9 +83,9 @@ test('렌더링 ②: 최종 에셋 — 대형 배경 한 장(tileSprite 0)·먼�
     // 서버에 숨은 길 개방 이벤트를 기록 → 화면 데이터를 다시 받으면 오버레이·문·충돌이 함께 바뀐다
     backend.grantEvent(device, 'forest_hidden_path_opened');
     await g.page.evaluate(() => (window as any).__game.scene.getScene('Map').refreshStageView());
-    await g.until('개방 반영', "s.map.render.overlays.length === 4 && s.map.story.gates.gate_hidden_path === true");
+    await g.until('개방 반영', "s.map.render.overlays.length === 3 && s.map.story.gates.gate_hidden_path === true");
     r = await renderOf(g);
-    assert.deepEqual(r.overlays, ['hidden-path-reveal-v2', 'hidden-yarn-path', 'giant-thread-knot-map', 'turby-bopuli'], '수풀이 걷히고 숨은 길 그림과 거대 매듭이 나타난다');
+    assert.deepEqual(r.overlays, ['hidden-yarn-path', 'giant-thread-knot-map', 'turby-bopuli'], '수풀이 걷히고 안내 실과 거대 매듭이 나타난다');
     assert.deepEqual(r.gates.map((x) => [x.id, x.open, x.art]), [['gate_hidden_path', true, null], ['gate_root', false, 'root-gate-closed']], '먼지바람은 사라지고 실뿌리 문이 닫힘 그림으로 나타난다');
     assert.equal(r.tileSprites, 0);
     assert.equal(r.overlays.includes('hidden-area-thicket-locked'), false);

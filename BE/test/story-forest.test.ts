@@ -2,7 +2,7 @@
 // 좌표는 회색상자(임시) 값이다. 여기서는 "좌표가 무엇이든 지켜져야 하는 규칙"만 확인한다.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { createHash } from 'crypto';
 import { HttpException } from '@nestjs/common';
@@ -278,7 +278,7 @@ test('최종 에셋 연결 계약(10-06 v2): 배경 키·진행별 오버레이�
   const windBefore = before.gates.find((g) => g.id === 'gate_hidden_path')!;
   assert.deepEqual([windBefore.open, windBefore.closedAssetKey, windBefore.openAssetKey], [false, 'dust-wind-closed', null]);
   // 개방 뒤: 같은 스냅샷에서 오버레이 공개 + 문 열림(열림 텍스처 없음 = 먼지바람이 사라진다) + 실뿌리 문이 닫힘 상태로 나타남
-  assert.deepEqual(after.render.overlays.map((o) => o.assetKey), ['hidden-path-reveal-v2', 'hidden-yarn-path', 'giant-thread-knot-map', 'turby-bopuli']);
+  assert.deepEqual(after.render.overlays.map((o) => o.assetKey), ['hidden-yarn-path', 'giant-thread-knot-map', 'turby-bopuli']);
   const windAfter = after.gates.find((g) => g.id === 'gate_hidden_path')!;
   assert.deepEqual([windAfter.open, windAfter.openAssetKey], [true, null]);
   const root = after.gates.find((g) => g.id === 'gate_root')!;
@@ -341,7 +341,7 @@ test('월드 표시 상태 조건(10-06 v6): 거대 매듭은 숨은 길 개방 
 });
 
 // 10-08 v1 §1·§2: 월드 그림 표시 크기·피벗·위치 계약과 HUD 안전영역
-test('표시 크기·피벗 계약(10-08 v1): 보풀이 128/먼지실 176 같은 바닥 접점, 먼지바람 240×270, 숨은 길 ≤480×280·실 높이 80~110, 매듭 320 중심=지점, 문 300×325 닫힘·열림 같은 위치, 단수링 96', async () => {
+test('표시 크기·피벗 계약(10-08 v1): 보풀이 128/먼지실 176 같은 바닥 접점, 먼지바람 240×270, 별도 바닥 패치 없음·안내 실 폭 180~230, 매듭 320 중심=지점, 문 300×325 닫힘·열림 같은 위치, 단수링 96', async () => {
   const OPEN = [...RESCUED, 'forest_compass_granted', 'forest_hidden_path_opened'];
   const view = await setup('CH01_FIRST_KNOT_EQUIPPED', [...OPEN, 'forest_giant_knot_defeated', 'forest_first_knot_awakened', 'forest_first_knot_equipped']).service.stageData(P1, 'forest');
   const by = (id: string) => view.render.overlays.find((o) => o.id === id)!;
@@ -349,10 +349,9 @@ test('표시 크기·피벗 계약(10-08 v1): 보풀이 128/먼지실 176 같은
   const bop = by('npc_bopuli');
   assert.deepEqual([bop.width, bop.height, tangled.width, tangled.height], [128, 128, 176, 176]);
   assert.deepEqual([tangled.x, tangled.y, tangled.pivot], [bop.x, bop.y, bop.pivot], '두 그림의 바닥 접점(피벗과 위치)이 같다 — 오버레이가 사라져도 보풀이는 그대로');
-  const reveal = by('overlay_hidden_path_reveal');
+  assert.equal(view.render.overlays.some((o) => o.id === 'overlay_hidden_path_reveal'), false, '별도 바닥 패치 없음(10-08 v5)');
   const yarn = by('overlay_hidden_yarn_path');
-  assert.ok(reveal.width <= 480 && reveal.height <= 280, '숨은 길 그림 480×280 이하');
-  assert.ok(yarn.height >= 80 && yarn.height <= 110, '숨은 길 실 높이 80~110');
+  assert.ok(yarn.width >= 180 && yarn.width <= 230 && Math.abs(yarn.width / yarn.height - 3) < 0.05, '안내 실 폭 180~230·원본 3:1 비율');
   const knot = by('prop_giant_knot_map');
   void knot;
   const wind = (await setup('CH01_COMPASS_ACQUIRED', [...RESCUED, 'forest_compass_granted']).service.stageData(P1, 'forest')).gates.find((g) => g.id === 'gate_hidden_path')!;
@@ -378,25 +377,29 @@ test('수풀 잠금(10-08 v4): 배경은 항상 forest-base, 개방 전 수풀�
     assert.equal(JSON.stringify(v).includes('fog-veil'), false, '검은 안개 키 없음');
   }
   const thicket = before.render.overlays.find((o) => o.id === 'hidden_area_thicket_locked')!;
-  assert.deepEqual([thicket.assetKey, thicket.x, thicket.y, thicket.width, thicket.height, thicket.pivot], ['hidden-area-thicket-locked', 2550, 930, 1300, 780, [0.5, 0.5]]);
+  assert.deepEqual([thicket.assetKey, thicket.x, thicket.y, thicket.width, thicket.height, thicket.pivot], ['hidden-area-thicket-locked', 2020, 990, 540, 405, [0.5, 0.5]]);
   const ids = (v: typeof before) => v.render.overlays.map((o) => o.id);
-  assert.equal(ids(before).some((i) => i === 'overlay_hidden_path_reveal' || i === 'overlay_hidden_yarn_path'), false, '개방 전 새 길은 표시하지 않는다');
+  assert.equal(ids(before).includes('overlay_hidden_yarn_path'), false, '개방 전 안내 실은 표시하지 않는다');
+  assert.equal(JSON.stringify([before, after]).includes('hidden-path-reveal'), false, '별도 바닥 패치 키가 서버 응답에 없다(10-08 v5)');
   assert.equal(ids(after).includes('hidden_area_thicket_locked'), false, '개방 뒤 수풀 제거');
-  const reveal = after.render.overlays.find((o) => o.id === 'overlay_hidden_path_reveal')!;
-  assert.deepEqual([reveal.assetKey, reveal.x, reveal.y, reveal.width, reveal.height, reveal.pivot], ['hidden-path-reveal-v2', 2100, 990, 480, 197, [0.5, 0.5]]);
+  assert.deepEqual(after.render.overlays.filter((o) => o.assetKey.startsWith('hidden-')).map((o) => o.assetKey), ['hidden-yarn-path'], '개방 뒤 길 안내 오버레이는 안내 실뿐');
+  const yarnO = after.render.overlays.find((o) => o.id === 'overlay_hidden_yarn_path')!;
+  assert.deepEqual([yarnO.x, yarnO.y, yarnO.width, yarnO.height], [1960, 985, 190, 63]);
+  const knotO = after.render.overlays.find((o) => o.id === 'prop_giant_knot_map')!;
+  assert.ok(yarnO.x + yarnO.width / 2 <= knotO.x - knotO.width / 2, '안내 실과 거대 매듭 객체 경계가 겹치지 않는다');
   assert.ok(ids(after).includes('overlay_hidden_yarn_path'));
   assert.deepEqual([before.gates.find((g) => g.id === 'gate_hidden_path')!.open, after.gates.find((g) => g.id === 'gate_hidden_path')!.open], [false, true], '먼지바람 문이 같은 스냅샷에서 개방');
-  // 위치 허용 범위: 수풀 ±100px·±15%, 바닥 ±80px·±15% (지시서 §3)
-  assert.ok(Math.abs(thicket.x - 2550) <= 100 && Math.abs(thicket.y - 930) <= 100 && Math.abs(thicket.width / 1300 - 1) <= 0.15);
-  assert.ok(Math.abs(reveal.x - 2100) <= 80 && Math.abs(reveal.y - 990) <= 80 && Math.abs(reveal.width / 480 - 1) <= 0.15);
+  // 허용 범위(10-08 v5): 수풀 중심 x 2020~2140·y 880~1000·폭 540~700, 안내 실 x 1930~2000
+  assert.ok(thicket.x >= 2020 && thicket.x <= 2140 && thicket.y >= 880 && thicket.y <= 1000 && thicket.width >= 540 && thicket.width <= 700 && Math.abs(thicket.width / thicket.height - 1448 / 1086) < 0.01);
+  assert.ok(Math.abs(yarnO.x - 1960) <= 40 && Math.abs(yarnO.y - 985) <= 25);
 });
 
-test('신규 PNG 고정(10-08 v4): hidden-area-thicket-locked 1448×1086 · hidden-path-reveal-v2 1959×803, 알파 채널, SHA-256', () => {
+test('신규 PNG 고정(10-08 v4): hidden-area-thicket-locked 1448×1086 · 알파 채널, SHA-256(바닥 패치 v2는 런타임에 없음)', () => {
   const dir = join(__dirname, '..', '..', 'save-a-turby', 'src', 'assets', 'world', 'forest');
   const want: [string, number, number, string][] = [
     ['hidden-area-thicket-locked.png', 1448, 1086, '61b0fdb7ffedd845a00e7a9671474238f4dc3e597e514a112f4e87045c3da272'],
-    ['hidden-path-reveal-v2.png', 1959, 803, '4a5e4e08fb5aad65e4ca5f7b0c374d2497c23959db1dc7f5c663b927bda2ae9e'],
   ];
+  assert.equal(existsSync(join(dir, 'hidden-path-reveal-v2.png')), false, '별도 바닥 패치 런타임 파일은 없는 것이 정상');
   for (const [f, w, h, sha] of want) {
     const buf = readFileSync(join(dir, f));
     assert.equal(buf.readUInt32BE(16), w, `${f} 너비`);

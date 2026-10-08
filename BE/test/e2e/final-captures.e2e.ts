@@ -135,17 +135,17 @@ async function shootOnce(shot: Shot, size: { width: number; height: number }) {
   }
 }
 
-const FRONT = { x: 1800, y: 1000 }; // 먼지바람 앞(잠금·개방 비교는 같은 좌표)
+const FRONT = { x: 1866, y: 1000 }; // 먼지바람 앞(잠금·개방 비교는 같은 좌표)
 const SHOTS_1280: Shot[] = [
-  { name: 'v4_01_thicket_locked_1280', seed: 'compass', at: FRONT },
-  { name: 'v4_02_just_opened_1280', seed: 'compass', at: FRONT, lateEvents: OPENED },
-  { name: 'v4_03_hidden_path_floor_1280', seed: 'compass', events: OPENED, at: { x: 2030, y: 990 } },
-  { name: 'v4_04_path_to_giant_knot_1280', seed: 'compass', events: OPENED, at: { x: 2060, y: 985 } },
+  { name: 'v5_01_thicket_locked_1280', seed: 'compass', at: FRONT },
+  { name: 'v5_02_just_opened_1280', seed: 'compass', at: FRONT, lateEvents: OPENED },
+  { name: 'v5_03_hidden_path_floor_1280', seed: 'compass', events: OPENED, at: { x: 2000, y: 990 } },
+  { name: 'v5_04_path_to_giant_knot_1280', seed: 'compass', events: OPENED, at: { x: 2060, y: 985 } },
 ];
 const SHOTS_640: Shot[] = [
-  { name: 'v4_05_thicket_locked_640', seed: 'compass', at: FRONT },
-  { name: 'v4_06_just_opened_640', seed: 'compass', at: FRONT, lateEvents: OPENED },
-  { name: 'v4_07_path_and_giant_knot_640', seed: 'compass', events: OPENED, at: { x: 2060, y: 985 } },
+  { name: 'v5_05_thicket_locked_640', seed: 'compass', at: FRONT },
+  { name: 'v5_06_just_opened_640', seed: 'compass', at: FRONT, lateEvents: OPENED },
+  { name: 'v5_07_path_and_giant_knot_640', seed: 'compass', events: OPENED, at: { x: 2060, y: 985 } },
 ];
 
 test('최종 캡처 1280×720', async () => {

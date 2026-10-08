@@ -9,11 +9,10 @@ const here = dirname(fileURLToPath(import.meta.url));
 export const DEFAULT_ASSETS_DIR = join(here, '..', 'src', 'assets');
 export const DEFAULT_FOREST_JSON = join(here, '..', '..', 'BE', 'story-data', 'save-a-turby', 'stages', 'forest.json');
 
-// 검수 대상 13개: 경로(assets 기준), 규격, 종류(opaque = 불투명 배경 / alpha = 투명 PNG)
+// 검수 대상 12개: 경로(assets 기준), 규격, 종류(opaque = 불투명 배경 / alpha = 투명 PNG)
 export const FOREST_ASSETS = [
   { path: 'world/forest/forest-base.png', width: 3200, height: 2400, kind: 'opaque' },
   { path: 'world/forest/hidden-area-thicket-locked.png', width: 1448, height: 1086, kind: 'alpha' },
-  { path: 'world/forest/hidden-path-reveal-v2.png', width: 1959, height: 803, kind: 'alpha' },
   { path: 'world/forest/dust-wind-closed.png', width: 320, height: 360, kind: 'alpha' },
   { path: 'world/forest/root-gate-closed.png', width: 480, height: 520, kind: 'alpha' },
   { path: 'world/forest/root-gate-open.png', width: 480, height: 520, kind: 'alpha' },
