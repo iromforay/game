@@ -43,7 +43,7 @@ test('최종 배경 키(텍스처)가 있고 회색상자 단계가 끝났으면
   // 화면 코드: 최종 분기는 add.image 한 장, tileSprite는 지역 배치가 없는 분기(tile)에만 한 곳
   const map = src('scenes/MapScene.ts');
   assert.equal([...map.matchAll(/tileSprite\(/g)].length, 1);
-  assert.match(map, /plan\.background\.mode === 'final'\) this\.add\.image\(0, 0, plan\.background\.assetKey\)\.setOrigin\(0, 0\)\.setDisplaySize\(plan\.background\.width, plan\.background\.height\)\.setDepth\(MAP_DEPTH\.background\);\s*else if \(plan\.background\.mode === 'greybox' && view\?\.layout\) this\.drawGreybox\(view, width, height\);\s*else this\.add\.tileSprite\(/);
+  assert.match(map, /plan\.background\.mode === 'final'\) this\.bgImage = this\.add\.image\(0, 0, plan\.background\.assetKey\)\.setOrigin\(0, 0\)\.setDisplaySize\(plan\.background\.width, plan\.background\.height\)\.setDepth\(MAP_DEPTH\.background\);\s*else if \(plan\.background\.mode === 'greybox' && view\?\.layout\) this\.drawGreybox\(view, width, height\);\s*else this\.add\.tileSprite\(/);
 });
 
 test('배경 텍스처가 없으면(미납품·로드 실패) 임시 회색상자가 유지되고, 회색상자 단계(greybox:true)에서는 배경이 있어도 바꾸지 않는다', () => {
@@ -163,4 +163,34 @@ test('표식 모드 final: 그림이 모두 연결되면 거대 매듭·보풀�
   assert.equal(plan.markerMode, 'final');
   const map = src('scenes/MapScene.ts');
   assert.match(map, /if \(ap\?\.marker \?\? true\) \{/, '표식은 계획이 허용할 때만');
+});
+
+// 10-08 v2 §3·§5: 잠금 배경 전환 계약 — 계약 시험용 fixture에서만 backgroundLocked·unlockedBy를 쓴다(운영 데이터는 아직 참조하지 않는다)
+const withLock = (over: { locked?: string; by?: string; unlocked?: boolean } = {}): StageView => {
+  const v = view();
+  v.render = { ...v.render!, ...(over.locked ? { backgroundLocked: over.locked } : {}), ...(over.by ? { unlockedBy: over.by } : {}), ...(over.unlocked !== undefined ? { backgroundUnlocked: over.unlocked } : {}) };
+  return v;
+};
+const bgKey = (v: StageView, has: (k: string) => boolean) => {
+  const b = planStageRender(v, has, SIZE).background;
+  return b.mode === 'final' ? [b.assetKey, !!b.locked] : b.mode;
+};
+
+test('잠금 배경: 미지정이면 기존 배경, 잠금 필드가 하나만 있어도 기존 배경', () => {
+  assert.deepEqual(bgKey(view(), all), ['forest-base', false]);
+  assert.deepEqual(bgKey(withLock({ locked: 'forest-base-locked' }), all), ['forest-base', false], '해제 이벤트 이름이 없으면 기존 배경');
+  assert.deepEqual(bgKey(withLock({ by: 'ev' }), all), ['forest-base', false]);
+});
+test('잠금 배경: 이벤트 미완료면 잠금 배경, 완료되면 기존 배경, 잠금 이미지가 없으면(로드 실패) 기존 배경', () => {
+  assert.deepEqual(bgKey(withLock({ locked: 'forest-base-locked', by: 'forest_hidden_path_opened', unlocked: false }), all), ['forest-base-locked', true]);
+  assert.deepEqual(bgKey(withLock({ locked: 'forest-base-locked', by: 'forest_hidden_path_opened', unlocked: true }), all), ['forest-base', false]);
+  assert.deepEqual(bgKey(withLock({ locked: 'forest-base-locked', by: 'forest_hidden_path_opened', unlocked: false }), (k) => k !== 'forest-base-locked'), ['forest-base', false]);
+});
+test('배경 전환은 충돌·카메라 경계·월드 그림 계획을 바꾸지 않는다(같은 스냅샷에서 배경 키만 달라진다)', () => {
+  const a = planStageRender(withLock({ locked: 'forest-base-locked', by: 'e', unlocked: false }), all, SIZE);
+  const b = planStageRender(withLock({ locked: 'forest-base-locked', by: 'e', unlocked: true }), all, SIZE);
+  assert.deepEqual([a.bounds, a.overlays, a.gates, a.points, a.objects], [b.bounds, b.overlays, b.gates, b.points, b.objects]);
+  assert.deepEqual(solidRects(withLock({ locked: 'x', by: 'e', unlocked: false })), solidRects(withLock({ locked: 'x', by: 'e', unlocked: true })));
+  const scene = src('scenes/MapScene.ts');
+  assert.match(scene, /this\.bgImage\.setTexture\(plan\.background\.assetKey\)/, '같은 이미지 객체의 텍스처만 바꾼다(씬 재시작 없음)');
 });

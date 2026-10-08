@@ -7,7 +7,7 @@ import { join } from 'path';
 import { HttpException } from '@nestjs/common';
 import { FakeDb } from './helpers/fake-prisma';
 import { StoryService } from '../src/turby/story/story.service';
-import { StoryContentService, type StageStoryData } from '../src/turby/story/story-content.service';
+import { StoryContentService, validateRender, type StageStoryData } from '../src/turby/story/story-content.service';
 import { StageAccessService } from '../src/turby/story/stage-access.service';
 import { collisionOf, lockedZonesFor, reachVerdict, solidsFor } from '../src/turby/rooms/stage-collision';
 import { CHECKPOINTS, EVENT_BY_ID, ENCOUNTER_BY_KEY, OBJECTIVE_BY_KEY, STORY_TRIGGERS, FIRST_PATH_INTRO, type StoryPlayRange } from '../src/turby/story/story-data';
@@ -281,7 +281,7 @@ test('최종 에셋 연결 계약(10-06 v2): 배경 키·진행별 오버레이�
   const windAfter = after.gates.find((g) => g.id === 'gate_hidden_path')!;
   assert.deepEqual([windAfter.open, windAfter.openAssetKey], [true, null]);
   const root = after.gates.find((g) => g.id === 'gate_root')!;
-  assert.deepEqual([root.open, root.closedAssetKey, root.openAssetKey, root.art], [false, 'root-gate-closed', 'root-gate-open', { x: 2850, y: 1050, width: 300, height: 325, pivot: [0.5, 0.92] }]);
+  assert.deepEqual([root.open, root.closedAssetKey, root.openAssetKey, root.art], [false, 'root-gate-closed', 'root-gate-open', { x: 2800, y: 1050, width: 300, height: 325, pivot: [0.5, 0.92] }]);
   // 실뿌리 문: 첫 매듭 장착 뒤에 같은 문이 열림 텍스처로
   const equipped = await setup('CH01_FIRST_KNOT_EQUIPPED', [...base, 'forest_hidden_path_opened', 'forest_giant_knot_defeated', 'forest_first_knot_awakened', 'forest_first_knot_equipped']).service.stageData(P1, 'forest');
   const rootOpen = equipped.gates.find((g) => g.id === 'gate_root')!;
@@ -372,6 +372,35 @@ test('HUD 안전영역(10-08 v1 §2): 목표 중심은 지도 오른쪽 끝에�
   const targets = [...FOREST.points.map((p) => [p.id, p.x] as [string, number]), ...FOREST.render!.overlays!.map((o) => [o.id, o.x] as [string, number])];
   for (const [id, x] of targets) assert.ok(x <= limit, `${id} x=${x} > ${limit}`);
   const door = FOREST.layout!.gates.find((g) => g.id === 'gate_root')!;
+  // 카메라가 지도 오른쪽 끝에 멈춰도 문 그림의 오른쪽 끝(보수적 사각형)이 HUD 시작(논리 1064, 640×360 실측 x=532)에서 16px 이상 떨어진다
+  assert.ok(door.art!.x + door.art!.width / 2 - 1920 <= 1064 - 16, `문 오른쪽 끝 ${door.art!.x + door.art!.width / 2}`);
+  const knot = FOREST.points.find((p) => p.id === 'forest_giant_knot')!;
+  assert.deepEqual([knot.x, FOREST.points.find((p) => p.id === 'forest_first_knot_awaken')!.x, FOREST.render!.overlays!.find((o) => o.id === 'prop_giant_knot_map')!.x], [2220, 2220, 2220], '매듭 그림·전투·각성 지점이 같은 중심');
   const dansuring = FOREST.points.find((p) => p.id === 'forest_dansuring')!;
   assert.ok(Math.abs(dansuring.x - door.art!.x) <= 120, '단수링은 열린 문 중앙 근처(좌우 120px 이내)');
+});
+
+// 10-08 v2 §3.1: 잠금 배경 필드 — 두 필드가 모두 있을 때만 내려가고, 해제 여부는 같은 스냅샷의 이벤트로 정해진다(시험용 지역 데이터 fixture)
+test('잠금 배경 계약: 미지정이면 필드 없음, 둘 다 있으면 이벤트 전 backgroundUnlocked=false·후 true, 하나만 있으면 내려가지 않는다. 형식이 틀리면 서버가 뜨지 않는다', async () => {
+  const withRender = async (patch: (r: NonNullable<StageStoryData['render']>) => void, events: string[]) => {
+    const s = setup('CH01_COMPASS_ACQUIRED', events);
+    const stage: StageStoryData = JSON.parse(JSON.stringify(FOREST));
+    patch(stage.render!);
+    const fake = Object.assign(Object.create(content) as typeof content, { stage: (c: string) => (c === 'forest' ? stage : content.stage(c)) });
+    const svc = new StoryService(s.db.client(), { roomOf: () => undefined, memberPosition: () => null, reachOf: () => 'ok', noteStoryEvents: () => undefined } as never, { numberOr: (_k: string, d: number) => d, flag: (_k: string, d: boolean) => d } as never, fake, new StageAccessService(s.db.client(), { numberOr: (_k: string, d: number) => d, flag: (_k: string, d: boolean) => d } as never));
+    return (await svc.stageData(P1, 'forest')).render;
+  };
+  const base = [...RESCUED, 'forest_compass_granted'];
+  const none = await withRender(() => undefined, base);
+  assert.deepEqual([none.backgroundLocked, none.unlockedBy, none.backgroundUnlocked], [undefined, undefined, undefined], '운영 데이터는 잠금 배경을 참조하지 않는다');
+  const lock = (r: NonNullable<StageStoryData['render']>) => { r.backgroundLocked = 'forest-base-locked'; r.unlockedBy = 'forest_hidden_path_opened'; };
+  const before = await withRender(lock, base);
+  assert.deepEqual([before.background, before.backgroundLocked, before.unlockedBy, before.backgroundUnlocked], [{ assetKey: 'forest-base' }, 'forest-base-locked', 'forest_hidden_path_opened', false]);
+  const after = await withRender(lock, [...base, 'forest_hidden_path_opened']);
+  assert.equal(after.backgroundUnlocked, true);
+  const half = await withRender((r) => { r.backgroundLocked = 'forest-base-locked'; }, base);
+  assert.deepEqual([half.backgroundLocked, half.backgroundUnlocked], [undefined, undefined], '하나만 있으면 기존 배경');
+  const bad = JSON.parse(JSON.stringify(FOREST)) as StageStoryData;
+  bad.render!.backgroundLocked = 'Bad Key!';
+  assert.throws(() => validateRender(bad, 'forest'), /backgroundLocked/);
 });

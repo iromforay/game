@@ -53,7 +53,7 @@ export interface StageStoryData {
   // visibleAfter: 그 이벤트 전에는 지도·화면에 내려 주지 않는다(숨은 구역의 내부 정보). 통과 불가 판정은 표시 여부와 무관하게 서버가 한다
   layout?: { zones: StageZone[]; paths: StagePath[]; blockers: (StageRect & { visibleAfter?: string })[]; gates: StageGateData[] };
   // 10-06 v2(최종 에셋 연결 계약): 대형 배경과 진행 상태별 오버레이의 런타임 에셋 키. 에셋이 없으면 화면이 회색상자·임시 도형을 그대로 쓴다
-  render?: { markerMode?: 'fallback' | 'final'; background?: { assetKey: string }; overlays?: StageOverlayData[] };
+  render?: { markerMode?: 'fallback' | 'final'; background?: { assetKey: string }; backgroundLocked?: string; unlockedBy?: string; overlays?: StageOverlayData[] }; // backgroundLocked+unlockedBy: 이벤트 전에 쓰는 잠금 배경(둘 다 있어야 한다)
 }
 
 // 문: 충돌 사각형(x·y·width·height)과 그림(art, 중심 좌표)은 따로다 — 그림이 충돌 영역보다 커도 판정은 사각형으로만 한다.
@@ -96,6 +96,8 @@ export function validateRender(data: StageStoryData, stageCode: string): void {
   if (render !== undefined) {
     if (render.markerMode !== undefined && render.markerMode !== 'fallback' && render.markerMode !== 'final') bad.push("render.markerMode: 'fallback' 또는 'final'");
     if (render.background !== undefined) key(render.background.assetKey, 'render.background.assetKey');
+    if (render.backgroundLocked !== undefined) key(render.backgroundLocked, 'render.backgroundLocked');
+    if (render.unlockedBy !== undefined && typeof render.unlockedBy !== 'string') bad.push('render.unlockedBy: 이벤트 이름이 아니다');
     const ids = new Set<string>();
     (render.overlays ?? []).forEach((o, i) => {
       const at = `render.overlays[${i}]`;

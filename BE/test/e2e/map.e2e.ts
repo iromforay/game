@@ -63,7 +63,7 @@ test('맵 ①: 탐험 HUD — 640×360 배치(지역 이름·포획·마을로·
     // 조금 걸어서 위치를 만든 뒤 resize — 위치·방·목표가 그대로이고 맵 씬은 다시 시작되지 않는다
     await g.until('위치 배치', 's.map.positioned === true');
     const start = (await g.state()).map.avatar;
-    await g.walkTo('Map', { x: start.x + 160, y: start.y + 90 }, 'joystick', 'false', 12);
+    await g.walkTo('Map', { x: start.x - 100, y: start.y + 40 }, 'joystick', 'false', 12);
     const before = (await g.state()).map;
     const gen = await g.page.evaluate("window.__game.scene.getScene('Map').generation");
     const listeners = await g.page.evaluate("window.__game.scale.listenerCount('resize')");

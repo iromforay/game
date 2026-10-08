@@ -107,7 +107,7 @@ export interface StageViewDto {
   // 문: open은 서버가 openEvent로 한 번만 정한 값 — 화면의 그림(닫힘/열림 키)과 클라이언트 충돌 예측이 모두 이 값을 쓴다
   gates: { id: string; label: string; x: number; y: number; width: number; height: number; open: boolean; closedAssetKey: string | null; openAssetKey: string | null; art: { x: number; y: number; width: number; height: number; pivot?: [number, number] } | null }[];
   // 최종 에셋 연결: 대형 배경 키와 지금 보이는 오버레이·월드 오브젝트(진행 상태별). 없으면 회색상자·임시 도형 유지. markerMode final = 에셋이 연결된 대상의 임시 표식(고리·마름모·라벨)을 없앤다
-  render: { markerMode: 'fallback' | 'final'; background: { assetKey: string } | null; overlays: { id: string; assetKey: string; x: number; y: number; width: number; height: number; pivot?: [number, number]; layer: 'overlay' | 'story'; forPoints: string[] }[] };
+  render: { markerMode: 'fallback' | 'final'; background: { assetKey: string } | null; backgroundLocked?: string; unlockedBy?: string; backgroundUnlocked?: boolean; overlays: { id: string; assetKey: string; x: number; y: number; width: number; height: number; pivot?: [number, number]; layer: 'overlay' | 'story'; forPoints: string[] }[] };
   layout: { zones: StageRect[]; paths: number[][][]; blockers: StageRect[] } | null;
   objectives: { key: string; collected: number; required: number; active: boolean }[];
 }
@@ -481,6 +481,8 @@ export class StoryService {
       render: {
         markerMode: data.render?.markerMode ?? 'fallback',
         background: data.render?.background ? { assetKey: data.render.background.assetKey } : null,
+        // 잠금 배경 전환(10-08 v2): 두 필드가 모두 있을 때만 내려 주고, 해제 여부는 같은 스냅샷의 이벤트로 한 번만 정한다
+        ...(data.render?.backgroundLocked && data.render?.unlockedBy ? { backgroundLocked: data.render.backgroundLocked, unlockedBy: data.render.unlockedBy, backgroundUnlocked: snap.events.has(data.render.unlockedBy) } : {}),
         // 오버레이도 같은 스냅샷의 이벤트로 판정한다 — 숨은 길의 그림·문·충돌이 한 번에 바뀐다
         overlays: (data.render?.overlays ?? []).filter((o) => (!o.visibleAfter || snap.events.has(o.visibleAfter)) && !(o.hiddenAfter && snap.events.has(o.hiddenAfter))).map((o) => ({ id: o.id, assetKey: o.assetKey, x: o.x, y: o.y, width: o.width, height: o.height, ...(o.pivot ? { pivot: o.pivot } : {}), layer: o.layer ?? 'overlay', forPoints: o.forPoints ?? [] })),
       },

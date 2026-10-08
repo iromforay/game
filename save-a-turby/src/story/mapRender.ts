@@ -15,7 +15,7 @@ export const MAP_DEPTH = {
 } as const;
 
 export type BackgroundPlan =
-  | { mode: 'final'; assetKey: string; width: number; height: number } // 대형 배경 한 장을 지도 크기로 맞춘다
+  | { mode: 'final'; assetKey: string; width: number; height: number; locked?: boolean } // 대형 배경 한 장을 지도 크기로 맞춘다
   | { mode: 'greybox' } // 임시 회색상자(최종 배경이 없거나 아직 회색상자 단계)
   | { mode: 'tile' }; // 지역 배치가 없는 다른 지역의 기존 반복 배경(최종 숲 분기에서는 쓰지 않는다)
 
@@ -57,10 +57,13 @@ export type HasTexture = (assetKey: string) => boolean;
 export function planStageRender(view: StageView | null, has: HasTexture, fallbackSize: { width: number; height: number }): StageRenderPlan {
   const size = view?.size ?? fallbackSize;
   const bounds = { x: 0, y: 0, width: size.width, height: size.height };
-  const bgKey = view?.render?.background?.assetKey ?? null;
+  // 잠금 배경(10-08 v2): 잠금 키·해제 이벤트가 모두 있고 아직 해제 전이며 잠금 이미지가 로드돼 있을 때만. 아니면 기존 배경(로드 실패도 폴백)
+  const r = view?.render;
+  const lockedKey = r?.backgroundLocked && r.unlockedBy && !r.backgroundUnlocked && has(r.backgroundLocked) ? r.backgroundLocked : null;
+  const bgKey = lockedKey ?? view?.render?.background?.assetKey ?? null;
   // 최종 배경: 회색상자 단계가 끝났고(greybox:false) 대형 배경 텍스처가 실제로 있을 때만. 키만 있고 텍스처가 없으면 임시 배치가 유지된다
   let background: BackgroundPlan;
-  if (view && !view.greybox && bgKey && has(bgKey)) background = { mode: 'final', assetKey: bgKey, width: size.width, height: size.height };
+  if (view && !view.greybox && bgKey && has(bgKey)) background = { mode: 'final', assetKey: bgKey, width: size.width, height: size.height, ...(lockedKey ? { locked: true } : {}) };
   else if (view?.layout) background = { mode: 'greybox' };
   else background = { mode: 'tile' };
 

@@ -40,6 +40,13 @@ interface Shot {
   complete?: boolean; // 1장 완료 + 지역 선택 화면(2장 개방)
 }
 
+// 두 사각형의 겹침 사각형(겹치지 않으면 0 크기)
+function area2(a: { left: number; top: number; right: number; bottom: number }, b: { left: number; top: number; right: number; bottom: number }) {
+  const left = Math.max(a.left, b.left);
+  const top = Math.max(a.top, b.top);
+  return { left, top, right: Math.max(left, Math.min(a.right, b.right)), bottom: Math.max(top, Math.min(a.bottom, b.bottom)) };
+}
+
 async function reachMap(g: Game) {
   await g.until('숲 지도 또는 입구 장면', `(${READY}) || s.scenes.includes('StoryDialogue')`);
   if ((await g.state()).scenes.includes('StoryDialogue')) await g.advanceDialogue("s.scenes.includes('Map') && !s.scenes.includes('StoryDialogue')");
@@ -93,36 +100,47 @@ async function shootOnce(shot: Shot, size: { width: number; height: number }) {
       await g.page.waitForTimeout(600);
     }
     await g.capture(shot.name);
-    // 목표의 화면 좌표(논리 1280×720)와 HUD 안전영역 판정을 기록한다
-    const info = (await g.page.evaluate(() => {
+    // 10-08 v2 §2: 캡처 해상도의 실제 화면 좌표로 목표 경계와 HUD(미니맵·인벤토리·터비 버튼) 경계를 재서 겹친 픽셀을 기록한다
+    const box = (await g.page.locator('canvas').boundingBox())!;
+    const k = box.width / 1280; // 논리 1280 → 실제 화면 px
+    const raw = (await g.page.evaluate(() => {
       const m = (window as any).__game.scene.getScene('Map'); // eslint-disable-line @typescript-eslint/no-explicit-any
       const cam = m.cameras.main;
       const v = m.stageView;
-      const to = (x: number, y: number) => ({ x: Math.round((x - cam.worldView.x) * cam.zoom), y: Math.round((y - cam.worldView.y) * cam.zoom) });
-      return [...v.points.map((p: any) => ({ id: p.id, ...to(p.x, p.y) })), ...v.render.overlays.filter((o: any) => o.assetKey !== 'fog-veil').map((o: any) => ({ id: o.id, ...to(o.x, o.y) })), ...v.gates.filter((g: any) => g.art).map((g: any) => ({ id: g.id, ...to(g.art.x, g.art.y) }))];
-    })) as { id: string; x: number; y: number }[];
-    const hudRight = size.width === 640 ? 1280 - 250 : 1280 - 170;
-    HUD_LOG.push({ shot: shot.name, size: `${size.width}x${size.height}`, targets: info.filter((t) => t.x >= -200 && t.x <= 1500).map((t) => ({ ...t, inHud: t.x > hudRight && t.y < 260 })) });
+      const toL = (x: number, y: number) => ({ x: (x - cam.worldView.x) * cam.zoom, y: (y - cam.worldView.y) * cam.zoom });
+      const rect = (id: string, x: number, y: number, w: number, h: number, pv: number[]) => { const a = toL(x - w * pv[0], y - h * pv[1]); return { id, l: a.x, t: a.y, r: a.x + w * cam.zoom, b: a.y + h * cam.zoom }; };
+      const items = [
+        ...v.render.overlays.filter((o: any) => o.assetKey !== 'fog-veil').map((o: any) => rect(o.id, o.x, o.y, o.width, o.height, o.pivot ?? [0.5, 0.5])),
+        ...v.gates.filter((g2: any) => g2.art).map((g2: any) => rect(g2.id, g2.art.x, g2.art.y, g2.art.width, g2.art.height, g2.art.pivot ?? [0.5, 0.5])),
+      ];
+      const h = m.hud;
+      const hud = [['miniMap', h.miniMap], ['inventory', h.inventory], ['turbys', h.turbys]].map(([id, r]: any) => ({ id, l: r.x, t: r.y, r: r.x + r.w, b: r.y + r.h }));
+      return { items, hud };
+    })) as { items: { id: string; l: number; t: number; r: number; b: number }[]; hud: { id: string; l: number; t: number; r: number; b: number }[] };
+    const px = (o: { l: number; t: number; r: number; b: number }) => ({ left: Math.round(box.x + o.l * k), top: Math.round(box.y + o.t * k), right: Math.round(box.x + o.r * k), bottom: Math.round(box.y + o.b * k) });
+    const hudBounds = raw.hud.map((h) => ({ id: h.id, ...px(h) }));
+    const area = (a: { left: number; top: number; right: number; bottom: number }, b: { left: number; top: number; right: number; bottom: number }) => Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left)) * Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+    const screenRect = { left: 0, top: 0, right: size.width, bottom: size.height };
+    HUD_LOG.push({
+      shot: shot.name, viewportWidth: size.width, viewportHeight: size.height, hudBounds,
+      targets: raw.items.map((t) => {
+        const targetBounds = px(t);
+        const vis = area(targetBounds, screenRect);
+        const hits = hudBounds.map((h) => ({ hud: h.id, visibleIntersectionPx: area(area2(targetBounds, screenRect), h), gapToHudLeftPx: h.left - targetBounds.right })).filter((x) => x.visibleIntersectionPx > 0);
+        return { id: t.id, targetBounds, offscreen: vis === 0, visibleIntersectionPx: hits.reduce((n, x) => n + x.visibleIntersectionPx, 0), hits };
+      }),
+    });
   } finally {
     await g.close();
   }
 }
 
 const SHOTS_1280: Shot[] = [
-  { name: 'v1_01_cut_thread', seed: 'started', at: { x: 1488, y: 1850 } },
-  { name: 'v1_02a_bopuli_before', seed: 'cut', at: { x: 1490, y: 1570 } },
-  { name: 'v1_02b_bopuli_after', seed: 'rescued', at: { x: 1490, y: 1570 } },
-  { name: 'v1_03_dust_wind', seed: 'compass', at: { x: 1820, y: 1002 } },
-  { name: 'v1_04_hidden_path', seed: 'compass', events: OPENED, at: { x: 1960, y: 985 } },
-  { name: 'v1_05_giant_knot', seed: 'compass', events: OPENED, at: { x: 2250, y: 1000 } },
-  { name: 'v1_06a_root_gate_closed', seed: 'compass', events: OPENED, lateEvents: ['forest_giant_knot_defeated', 'forest_first_knot_awakened'], at: { x: 2740, y: 985 } },
-  { name: 'v1_06b_root_gate_open', seed: 'equipped', at: { x: 2740, y: 985 } },
-  { name: 'v1_07_open_gate_dansuring', seed: 'equipped', at: { x: 2790, y: 1015 } },
+  { name: 'v2_01_giant_knot_1280', seed: 'compass', events: OPENED, at: { x: 2060, y: 985 } },
 ];
 const SHOTS_640: Shot[] = [
-  { name: 'v1_s08_bopuli', seed: 'cut', at: { x: 1490, y: 1570 } },
-  { name: 'v1_s09_hidden_path', seed: 'compass', events: OPENED, at: { x: 1960, y: 985 } },
-  { name: 'v1_s10_open_gate_dansuring', seed: 'equipped', at: { x: 2790, y: 1015 } },
+  { name: 'v2_02_giant_knot_hud_640', seed: 'compass', events: OPENED, at: { x: 2060, y: 985 } },
+  { name: 'v2_03_open_gate_dansuring_640', seed: 'equipped', at: { x: 2740, y: 1012 } },
 ];
 
 test('최종 캡처 1280×720', async () => {

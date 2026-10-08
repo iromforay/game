@@ -174,6 +174,7 @@ export class MapScene extends Phaser.Scene {
     // Phaser는 scene.start()로 재진입해도 같은 씬 인스턴스를 재사용하므로, 여기서 초기화 안 하면
     // 맵 복귀할 때마다(전투 후 등) 마커가 중복 누적됨(실제로 겪은 버그) — 매번 새로 채움
     this.markers = [];
+    this.bgImage = undefined; // 씬을 다시 시작하면 이전 배경 객체는 파괴됐다
 
     const stage = getStage(this.stageCode);
     const gen = this.generation;
@@ -196,7 +197,7 @@ export class MapScene extends Phaser.Scene {
     const plan = planStageRender(view, (key) => this.textures.exists(key), { width, height });
     this.cameras.main.setBounds(plan.bounds.x, plan.bounds.y, plan.bounds.width, plan.bounds.height);
     this.renderMode = plan.background.mode;
-    if (plan.background.mode === 'final') this.add.image(0, 0, plan.background.assetKey).setOrigin(0, 0).setDisplaySize(plan.background.width, plan.background.height).setDepth(MAP_DEPTH.background);
+    if (plan.background.mode === 'final') this.bgImage = this.add.image(0, 0, plan.background.assetKey).setOrigin(0, 0).setDisplaySize(plan.background.width, plan.background.height).setDepth(MAP_DEPTH.background);
     else if (plan.background.mode === 'greybox' && view?.layout) this.drawGreybox(view, width, height);
     else this.add.tileSprite(0, 0, width, height, `bg-${stage.code}`).setOrigin(0, 0);
 
@@ -340,6 +341,8 @@ export class MapScene extends Phaser.Scene {
     ensureFogTexture(this.textures); // 가려진 구역의 안개(서버가 이벤트 전까지만 내려 준다) — 실행 중에 만드는 막이라 에셋이 아니다
     const plan: StageRenderPlan = planStageRender(view, (key) => this.textures.exists(key), { width: this.stageWidth, height: this.stageHeight });
     this.lastPlan = plan;
+    // 잠금 배경 ↔ 기존 배경 전환: 같은 이미지 객체의 텍스처만 바꾼다(플레이어·카메라·충돌·소품은 그대로)
+    if (plan.background.mode === 'final' && this.bgImage && this.bgImage.texture.key !== plan.background.assetKey) this.bgImage.setTexture(plan.background.assetKey).setDisplaySize(plan.background.width, plan.background.height);
     for (const o of plan.overlays) keep(this.add.image(o.x, o.y, o.assetKey).setOrigin(o.pivot[0], o.pivot[1]).setDisplaySize(o.width, o.height).setDepth(o.depth));
     for (const g of plan.gates) {
       const gate = view!.gates.find((x) => x.id === g.id)!;
@@ -628,6 +631,7 @@ export class MapScene extends Phaser.Scene {
 
   private renderMode: StageRenderPlan['background']['mode'] = 'tile';
   private lastPlan: StageRenderPlan | null = null;
+  private bgImage?: Phaser.GameObjects.Image;
 
   // 진단용 요약(렌더링): 배경 방식·오버레이·문 그림·tileSprite 수 — 최종 에셋 연결 전후를 눈으로 보지 않고도 확인한다
   get debugRender() {
