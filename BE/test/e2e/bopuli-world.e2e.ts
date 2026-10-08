@@ -73,7 +73,7 @@ test('보풀이 월드 표시 ②: 구조 전, 먼지실 오버레이(최종 에
     await g.page.evaluate(() => (window as any).__game.scene.getScene('Map').refreshStageView()); // eslint-disable-line @typescript-eslint/no-explicit-any
     await g.until('오버레이 연결', "s.map.render.overlays.includes('bopuli-tangled-overlay')");
     const overlays = (await g.page.evaluate(() => (window as any).__dev.state().map.render.overlays)) as string[]; // eslint-disable-line @typescript-eslint/no-explicit-any
-    assert.deepEqual(overlays, ['fog-veil', 'turby-bopuli', 'bopuli-tangled-overlay'], '구조 전: 보풀이 위에 먼지실 오버레이(안개는 숨은 길)');
+    assert.deepEqual(overlays, ['hidden-area-thicket-locked', 'turby-bopuli', 'bopuli-tangled-overlay'], '구조 전: 보풀이 위에 먼지실 오버레이(수풀은 숨은 길)');
     const o = (await g.page.evaluate(() => {
       const m = (window as any).__game.scene.getScene('Map'); // eslint-disable-line @typescript-eslint/no-explicit-any
       const img = m.children.list.find((c: any) => c.type === 'Image' && c.texture.key === 'bopuli-tangled-overlay'); // eslint-disable-line @typescript-eslint/no-explicit-any

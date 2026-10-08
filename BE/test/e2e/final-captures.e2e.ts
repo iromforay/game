@@ -110,7 +110,7 @@ async function shootOnce(shot: Shot, size: { width: number; height: number }) {
       const toL = (x: number, y: number) => ({ x: (x - cam.worldView.x) * cam.zoom, y: (y - cam.worldView.y) * cam.zoom });
       const rect = (id: string, x: number, y: number, w: number, h: number, pv: number[]) => { const a = toL(x - w * pv[0], y - h * pv[1]); return { id, l: a.x, t: a.y, r: a.x + w * cam.zoom, b: a.y + h * cam.zoom }; };
       const items = [
-        ...v.render.overlays.filter((o: any) => o.assetKey !== 'fog-veil').map((o: any) => rect(o.id, o.x, o.y, o.width, o.height, o.pivot ?? [0.5, 0.5])),
+        ...v.render.overlays.map((o: any) => rect(o.id, o.x, o.y, o.width, o.height, o.pivot ?? [0.5, 0.5])),
         ...v.gates.filter((g2: any) => g2.art).map((g2: any) => rect(g2.id, g2.art.x, g2.art.y, g2.art.width, g2.art.height, g2.art.pivot ?? [0.5, 0.5])),
       ];
       const h = m.hud;
@@ -135,12 +135,17 @@ async function shootOnce(shot: Shot, size: { width: number; height: number }) {
   }
 }
 
+const FRONT = { x: 1800, y: 1000 }; // 먼지바람 앞(잠금·개방 비교는 같은 좌표)
 const SHOTS_1280: Shot[] = [
-  { name: 'v2_01_giant_knot_1280', seed: 'compass', events: OPENED, at: { x: 2060, y: 985 } },
+  { name: 'v4_01_thicket_locked_1280', seed: 'compass', at: FRONT },
+  { name: 'v4_02_just_opened_1280', seed: 'compass', at: FRONT, lateEvents: OPENED },
+  { name: 'v4_03_hidden_path_floor_1280', seed: 'compass', events: OPENED, at: { x: 2030, y: 990 } },
+  { name: 'v4_04_path_to_giant_knot_1280', seed: 'compass', events: OPENED, at: { x: 2060, y: 985 } },
 ];
 const SHOTS_640: Shot[] = [
-  { name: 'v2_02_giant_knot_hud_640', seed: 'compass', events: OPENED, at: { x: 2060, y: 985 } },
-  { name: 'v2_03_open_gate_dansuring_640', seed: 'equipped', at: { x: 2740, y: 1012 } },
+  { name: 'v4_05_thicket_locked_640', seed: 'compass', at: FRONT },
+  { name: 'v4_06_just_opened_640', seed: 'compass', at: FRONT, lateEvents: OPENED },
+  { name: 'v4_07_path_and_giant_knot_640', seed: 'compass', events: OPENED, at: { x: 2060, y: 985 } },
 ];
 
 test('최종 캡처 1280×720', async () => {

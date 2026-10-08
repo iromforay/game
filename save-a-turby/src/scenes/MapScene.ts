@@ -26,13 +26,13 @@ import { collectStoryObject, fetchStageView, fetchStory, triggerStory } from '..
 import { DELIVERY_ITEM_NAME, deliveryGoalText, shortageText, type StoryDelivery, type StoryPlay } from '../story/storyFlow';
 import { CLIENT_BODY_HALF, collectedText, nearestInteractable, promptText, solidRects, stepWithSolids, type Interactable, type StageRect, type StageView } from '../story/storyStage';
 import { MAP_DEPTH, planStageRender, type StageRenderPlan } from '../story/mapRender';
-import { ensureFogTexture, FOG_KEY } from '../story/fogTexture';
 import { recoverUnackedResult } from '../state/unackedResult';
 import { deferredRestore } from '../state/restoreAttempt';
 import { resumeBattle } from './VillageScene';
 import { NoticeGate, POSITION_CORRECTED_TEXT, WILD_HINT_ENGAGED, WILD_HINT_NEAR, WILD_NOTICE_REPEAT_MS, wildNoticeKey, wildUnreachableText } from '../story/mapNotices';
 
 // 배치된 자리 바로 옆(조우 반경 안)의 야생은 반경의 이 배수 밖으로 벗어난 뒤에야 다시 조우한다. 서버 반경이 크게 바뀌어도 같은 비율로 동작한다
+const THICKET_KEY = 'hidden-area-thicket-locked'; // 개방 전 숨은 구역을 가리는 수풀 오버레이(미니맵 썸네일에도 같이 그린다)
 const QUIET_EXIT_FACTOR = 1.1;
 const WILD_RECHECK_MS = 1500; // 서버가 "닿지 않는다"고 한 야생을 다시 물어보기까지의 간격
 const AVATAR_HALF = CLIENT_BODY_HALF; // 막힌 곳 판정에 쓰는 아바타 몸 반지름(px) — 서버와 같은 geometry 계약의 값
@@ -338,7 +338,6 @@ export class MapScene extends Phaser.Scene {
       return o;
     };
     // 같은 서버 화면 데이터(view) 한 번으로 문 그림·오버레이·충돌(this.solids)을 함께 바꾼다 — 숨은 길의 그림과 통과 가능 여부가 어긋나지 않는다
-    ensureFogTexture(this.textures); // 가려진 구역의 안개(서버가 이벤트 전까지만 내려 준다) — 실행 중에 만드는 막이라 에셋이 아니다
     const plan: StageRenderPlan = planStageRender(view, (key) => this.textures.exists(key), { width: this.stageWidth, height: this.stageHeight });
     this.lastPlan = plan;
     // 잠금 배경 ↔ 기존 배경 전환: 같은 이미지 객체의 텍스처만 바꾼다(플레이어·카메라·충돌·소품은 그대로)
@@ -398,9 +397,9 @@ export class MapScene extends Phaser.Scene {
         : { id: `wild-${m.index}`, type: 'wild' as const, name: this.characterName(m.info.characterCode), x: m.info.x, y: m.info.y, hint: m.info.state === 'engaged' ? WILD_HINT_ENGAGED : WILD_HINT_NEAR },
     );
     // 전체 지도·미니맵: 회색상자 모드에서만 길·벽·문·공개된 구역을 임시 도형으로 그린다(최종 지도가 오면 이 임시 배경은 없어진다)
-    // 최종 배경이면 배경 그림을 축소해 지도로 쓰고(가려진 구역은 안개 그대로), 임시 도형은 그리지 않는다
+    // 최종 배경이면 배경 그림을 축소해 지도로 쓰고(가려진 구역은 수풀 오버레이 그대로), 임시 도형은 그리지 않는다
     const plan = this.lastPlan;
-    const art = plan?.background.mode === 'final' ? { assetKey: plan.background.assetKey, fog: plan.overlays.filter((o) => o.assetKey === FOG_KEY).map((o) => ({ x: o.x - o.width * o.pivot[0], y: o.y - o.height * o.pivot[1], width: o.width, height: o.height })) } : undefined;
+    const art = plan?.background.mode === 'final' ? { assetKey: plan.background.assetKey, covers: plan.overlays.filter((o) => o.assetKey === THICKET_KEY).map((o) => ({ assetKey: o.assetKey, x: o.x - o.width * o.pivot[0], y: o.y - o.height * o.pivot[1], width: o.width, height: o.height })) } : undefined;
     const terrain = !art && view?.layout ? { zones: view.layout.zones, paths: view.layout.paths, blockers: view.layout.blockers, gates: view.gates } : undefined;
     this.miniMap?.setScene({ ...this.mapView, greybox: terrain, art }, [...wildMarkers, ...storyMarkers]);
   }

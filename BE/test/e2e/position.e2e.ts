@@ -34,7 +34,7 @@ type MapState = {
   positioned: boolean;
   corrections: number;
   lastCorrection: string | null;
-  miniMap: { open: boolean; legendOpen: boolean; legend: string[]; art: { assetKey: string; fog: number } | null; terrain: { zones: number; paths: number; blockers: number; gatesClosed: number; gatesOpen: number } | null; openButton: { x: number; y: number }; legendToggle: { x: number; y: number; w: number; h: number } | null };
+  miniMap: { open: boolean; legendOpen: boolean; legend: string[]; art: { assetKey: string; covers: number } | null; terrain: { zones: number; paths: number; blockers: number; gatesClosed: number; gatesOpen: number } | null; openButton: { x: number; y: number }; legendToggle: { x: number; y: number; w: number; h: number } | null };
   story: { points: string[]; gates: Record<string, boolean>; prompt: string | null; promptText: string | null; interact: { x: number; y: number } };
 };
 const mapOf = async (g: Game) => (await g.state()).map as MapState;
@@ -109,10 +109,10 @@ test('위치 ①: 시작 지점 배치 → 좌표를 끼운 입장 요청 무시
     // 전체 지도(숨은 길을 열기 전): 길·벽·닫힌 문은 보이고, 문 안쪽 구역·안쪽 벽·안쪽 문은 없다
     await openFullMap(g);
     m = await mapOf(g);
-    // 최종 지도: 배경 그림을 줄여 쓰고(임시 도형 없음), 아직 열리지 않은 숨은 길 구역은 안개로 가려져 있다
-    assert.deepEqual([m.miniMap.terrain, m.miniMap.art], [null, { assetKey: 'forest-base', fog: 1 }]);
+    // 최종 지도: 배경 그림을 줄여 쓰고(임시 도형 없음), 아직 열리지 않은 숨은 길 구역은 수풀로 가려져 있다
+    assert.deepEqual([m.miniMap.terrain, m.miniMap.art], [null, { assetKey: 'forest-base', covers: 1 }]);
     assert.deepEqual(m.miniMap.legend, ['player', 'story', 'wild']);
-    await g.capture('07_full_map_final_fog_before_open');
+    await g.capture('07_full_map_final_thicket_before_open');
     await g.capture('08a_full_map_hidden_zone_before');
     await closeFullMap(g);
 
@@ -175,7 +175,7 @@ test('위치 ①: 시작 지점 배치 → 좌표를 끼운 입장 요청 무시
     // 전체 지도(숨은 길을 연 뒤): 안쪽 구역·안쪽 벽·닫힌 실뿌리 문이 나타난다. 실뿌리 문 너머 구역은 아직 없다
     await openFullMap(g);
     m = await mapOf(g);
-    assert.deepEqual([m.miniMap.terrain, m.miniMap.art], [null, { assetKey: 'forest-base', fog: 0 }], '숨은 길이 열리면 안개가 걷힌다');
+    assert.deepEqual([m.miniMap.terrain, m.miniMap.art], [null, { assetKey: 'forest-base', covers: 0 }], '숨은 길이 열리면 수풀이 걷힌다');
     await g.capture('08b_full_map_hidden_zone_after');
     await closeFullMap(g);
   }, backend, device);
@@ -199,7 +199,7 @@ test('위치 ②: 첫 매듭 장착 뒤 — 시작 지점에서 출발해 열린
     assert.ok(s.x > ROOT_GATE.x - 30, `실뿌리 문 앞(열려 있어 단수링이 닿는 거리): ${JSON.stringify(s)}`);
     await g.capture('06_root_gate_open_after_first_knot');
     await openFullMap(g);
-    assert.deepEqual([(await mapOf(g)).miniMap.terrain, (await mapOf(g)).miniMap.art], [null, { assetKey: 'forest-base', fog: 0 }]);
+    assert.deepEqual([(await mapOf(g)).miniMap.terrain, (await mapOf(g)).miniMap.art], [null, { assetKey: 'forest-base', covers: 0 }]);
     await closeFullMap(g);
   }, backend, device);
   await g.close();

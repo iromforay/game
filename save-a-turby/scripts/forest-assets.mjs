@@ -9,10 +9,11 @@ const here = dirname(fileURLToPath(import.meta.url));
 export const DEFAULT_ASSETS_DIR = join(here, '..', 'src', 'assets');
 export const DEFAULT_FOREST_JSON = join(here, '..', '..', 'BE', 'story-data', 'save-a-turby', 'stages', 'forest.json');
 
-// 검수 대상 12개: 경로(assets 기준), 규격, 종류(opaque = 불투명 배경 / alpha = 투명 PNG)
+// 검수 대상 13개: 경로(assets 기준), 규격, 종류(opaque = 불투명 배경 / alpha = 투명 PNG)
 export const FOREST_ASSETS = [
   { path: 'world/forest/forest-base.png', width: 3200, height: 2400, kind: 'opaque' },
-  { path: 'world/forest/hidden-path-reveal.png', width: 960, height: 560, kind: 'alpha' },
+  { path: 'world/forest/hidden-area-thicket-locked.png', width: 1448, height: 1086, kind: 'alpha' },
+  { path: 'world/forest/hidden-path-reveal-v2.png', width: 1959, height: 803, kind: 'alpha' },
   { path: 'world/forest/dust-wind-closed.png', width: 320, height: 360, kind: 'alpha' },
   { path: 'world/forest/root-gate-closed.png', width: 480, height: 520, kind: 'alpha' },
   { path: 'world/forest/root-gate-open.png', width: 480, height: 520, kind: 'alpha' },
@@ -27,7 +28,7 @@ export const FOREST_ASSETS = [
 // 닫힘/열림이 같은 캔버스여야 하는 쌍(전환 때 위치가 튀지 않는다)
 export const SAME_SIZE_PAIRS = [['world/forest/root-gate-closed.png', 'world/forest/root-gate-open.png']];
 // forest.json의 에셋 키 중 검수 대상이 아닌 것(이미 있는 캐릭터 이미지·임시 도형)
-const NOT_FINAL_KEY = /^(turby-|placeholder-|fog-veil$)/; // fog-veil: 실행 중에 만드는 안개 막(에셋 파일이 아니다)
+const NOT_FINAL_KEY = /^(turby-|placeholder-)/;
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 

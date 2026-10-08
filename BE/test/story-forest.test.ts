@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import { createHash } from 'crypto';
 import { HttpException } from '@nestjs/common';
 import { FakeDb } from './helpers/fake-prisma';
 import { StoryService } from '../src/turby/story/story.service';
@@ -272,12 +273,12 @@ test('최종 에셋 연결 계약(10-06 v2): 배경 키·진행별 오버레이�
   const after = await setup('CH01_COMPASS_ACQUIRED', [...base, 'forest_hidden_path_opened']).service.stageData(P1, 'forest');
   assert.deepEqual(before.render.background, { assetKey: 'forest-base' });
   // 개방 전: 숨은 길 오버레이 없음, 먼지바람 문은 닫힘(닫힘 텍스처 키 + 충돌), 길 자체가 내려가지 않는다
-  assert.deepEqual(before.render.overlays.map((o) => o.id), ['fog_hidden_path', 'npc_bopuli'], '숨은 길 오버레이 없음 — 길은 안개가 가리고 보풀이 NPC만 보인다');
-  assert.deepEqual(after.render.overlays.map((o) => o.id).includes('fog_hidden_path'), false, '개방 뒤에는 안개가 걷힌다');
+  assert.deepEqual(before.render.overlays.map((o) => o.id), ['hidden_area_thicket_locked', 'npc_bopuli'], '숨은 길 오버레이 없음 — 길은 수풀이 가리고 보풀이 NPC만 보인다');
+  assert.deepEqual(after.render.overlays.map((o) => o.id).includes('hidden_area_thicket_locked'), false, '개방 뒤에는 수풀이 걷힌다');
   const windBefore = before.gates.find((g) => g.id === 'gate_hidden_path')!;
   assert.deepEqual([windBefore.open, windBefore.closedAssetKey, windBefore.openAssetKey], [false, 'dust-wind-closed', null]);
   // 개방 뒤: 같은 스냅샷에서 오버레이 공개 + 문 열림(열림 텍스처 없음 = 먼지바람이 사라진다) + 실뿌리 문이 닫힘 상태로 나타남
-  assert.deepEqual(after.render.overlays.map((o) => o.assetKey), ['hidden-path-reveal', 'hidden-yarn-path', 'giant-thread-knot-map', 'turby-bopuli']);
+  assert.deepEqual(after.render.overlays.map((o) => o.assetKey), ['hidden-path-reveal-v2', 'hidden-yarn-path', 'giant-thread-knot-map', 'turby-bopuli']);
   const windAfter = after.gates.find((g) => g.id === 'gate_hidden_path')!;
   assert.deepEqual([windAfter.open, windAfter.openAssetKey], [true, null]);
   const root = after.gates.find((g) => g.id === 'gate_root')!;
@@ -318,8 +319,8 @@ test('월드 표시 상태 조건(10-06 v6): 거대 매듭은 숨은 길 개방 
   const DEFEATED = [...OPEN, 'forest_giant_knot_defeated'];
   const EQUIPPED = [...DEFEATED, 'forest_first_knot_awakened', 'forest_first_knot_equipped'];
   // 보풀이: 구조 전(먼지실에 붙잡힘) → 구조 뒤 정상, 전달·장 진행 뒤에도 NPC는 남는다
-  assert.deepEqual(await ids('CH01_STARTED', RESCUED.slice(0, 5)), ['fog_hidden_path', 'npc_bopuli', 'npc_bopuli_tangled']);
-  assert.deepEqual(await ids('CH01_BOPUL_RESCUED', RESCUED), ['fog_hidden_path', 'npc_bopuli']);
+  assert.deepEqual(await ids('CH01_STARTED', RESCUED.slice(0, 5)), ['hidden_area_thicket_locked', 'npc_bopuli', 'npc_bopuli_tangled']);
+  assert.deepEqual(await ids('CH01_BOPUL_RESCUED', RESCUED), ['hidden_area_thicket_locked', 'npc_bopuli']);
   assert.ok((await ids('CH01_COMPASS_ACQUIRED', [...RESCUED, 'forest_compass_granted'])).includes('npc_bopuli'), '실가루 전달 뒤에도 NPC 유지');
   // 거대 매듭: 개방 전 없음 → 개방 뒤 표시 → 격파 기록 직후 제거
   assert.ok(!(await ids('CH01_COMPASS_ACQUIRED', [...RESCUED, 'forest_compass_granted'])).includes('prop_giant_knot_map'));
@@ -364,6 +365,45 @@ test('표시 크기·피벗 계약(10-08 v1): 보풀이 128/먼지실 176 같은
   const knotPoint = view.points.length >= 0 ? FOREST.points.find((p) => p.id === 'forest_giant_knot')! : null;
   const knotView = (await setup('CH01_COMPASS_ACQUIRED', OPEN).service.stageData(P1, 'forest')).render.overlays.find((o) => o.id === 'prop_giant_knot_map')!;
   assert.deepEqual([knotView.x, knotView.y, knotView.pivot], [knotPoint!.x, knotPoint!.y, [0.5, 0.5]], '매듭 그림 중심 = 전투 시작 지점');
+});
+
+// 10-08 v4: 털실 수풀 잠금 오버레이 — 배경은 개방 전후 forest-base 그대로, 수풀·새 바닥 에셋 크기·알파·해시 고정, 검은 안개 키 없음
+test('수풀 잠금(10-08 v4): 배경은 항상 forest-base, 개방 전 수풀만·개방 뒤 수풀 제거와 새 바닥+안내 실 표시, fog-veil 키가 응답에 없다', async () => {
+  const base = [...RESCUED, 'forest_compass_granted'];
+  const before = await setup('CH01_COMPASS_ACQUIRED', base).service.stageData(P1, 'forest');
+  const after = await setup('CH01_COMPASS_ACQUIRED', [...base, 'forest_hidden_path_opened']).service.stageData(P1, 'forest');
+  for (const v of [before, after]) {
+    assert.deepEqual(v.render.background, { assetKey: 'forest-base' }, '배경은 개방 전후 같은 한 장');
+    assert.equal(v.render.backgroundLocked, undefined, '운영 데이터는 backgroundLocked를 쓰지 않는다');
+    assert.equal(JSON.stringify(v).includes('fog-veil'), false, '검은 안개 키 없음');
+  }
+  const thicket = before.render.overlays.find((o) => o.id === 'hidden_area_thicket_locked')!;
+  assert.deepEqual([thicket.assetKey, thicket.x, thicket.y, thicket.width, thicket.height, thicket.pivot], ['hidden-area-thicket-locked', 2550, 930, 1300, 780, [0.5, 0.5]]);
+  const ids = (v: typeof before) => v.render.overlays.map((o) => o.id);
+  assert.equal(ids(before).some((i) => i === 'overlay_hidden_path_reveal' || i === 'overlay_hidden_yarn_path'), false, '개방 전 새 길은 표시하지 않는다');
+  assert.equal(ids(after).includes('hidden_area_thicket_locked'), false, '개방 뒤 수풀 제거');
+  const reveal = after.render.overlays.find((o) => o.id === 'overlay_hidden_path_reveal')!;
+  assert.deepEqual([reveal.assetKey, reveal.x, reveal.y, reveal.width, reveal.height, reveal.pivot], ['hidden-path-reveal-v2', 2100, 990, 480, 197, [0.5, 0.5]]);
+  assert.ok(ids(after).includes('overlay_hidden_yarn_path'));
+  assert.deepEqual([before.gates.find((g) => g.id === 'gate_hidden_path')!.open, after.gates.find((g) => g.id === 'gate_hidden_path')!.open], [false, true], '먼지바람 문이 같은 스냅샷에서 개방');
+  // 위치 허용 범위: 수풀 ±100px·±15%, 바닥 ±80px·±15% (지시서 §3)
+  assert.ok(Math.abs(thicket.x - 2550) <= 100 && Math.abs(thicket.y - 930) <= 100 && Math.abs(thicket.width / 1300 - 1) <= 0.15);
+  assert.ok(Math.abs(reveal.x - 2100) <= 80 && Math.abs(reveal.y - 990) <= 80 && Math.abs(reveal.width / 480 - 1) <= 0.15);
+});
+
+test('신규 PNG 고정(10-08 v4): hidden-area-thicket-locked 1448×1086 · hidden-path-reveal-v2 1959×803, 알파 채널, SHA-256', () => {
+  const dir = join(__dirname, '..', '..', 'save-a-turby', 'src', 'assets', 'world', 'forest');
+  const want: [string, number, number, string][] = [
+    ['hidden-area-thicket-locked.png', 1448, 1086, '61b0fdb7ffedd845a00e7a9671474238f4dc3e597e514a112f4e87045c3da272'],
+    ['hidden-path-reveal-v2.png', 1959, 803, '4a5e4e08fb5aad65e4ca5f7b0c374d2497c23959db1dc7f5c663b927bda2ae9e'],
+  ];
+  for (const [f, w, h, sha] of want) {
+    const buf = readFileSync(join(dir, f));
+    assert.equal(buf.readUInt32BE(16), w, `${f} 너비`);
+    assert.equal(buf.readUInt32BE(20), h, `${f} 높이`);
+    assert.ok([4, 6].includes(buf[25]), `${f} 알파 채널(컬러 타입 ${buf[25]})`);
+    assert.equal(createHash('sha256').update(buf).digest('hex'), sha, `${f} SHA-256`);
+  }
 });
 
 test('HUD 안전영역(10-08 v1 §2): 목표 중심은 지도 오른쪽 끝에서 카메라가 멈춰도 오른쪽 HUD(데스크톱 170px·640×360은 논리 250px) 안에 들지 않고, 단수링은 문 안쪽에 있다', () => {
