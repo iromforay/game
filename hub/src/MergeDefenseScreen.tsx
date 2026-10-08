@@ -398,7 +398,6 @@ export function MergeDefenseScreen({ onExit }: { onExit: () => void }) {
       collectSilver(runId, selectedStage.id, silver, kills, discovered)
         .catch(() => profile)
         .then((nextProfile) => won ? saveMergeStageClear(selectedStage.id).catch(() => nextProfile) : nextProfile)
-        .then((nextProfile) => won && selectedStage.id === 2 ? unlockSpellbladeRecipe() : nextProfile)
         .then((nextProfile) => {
           setProfile(nextProfile);
           if (won) {

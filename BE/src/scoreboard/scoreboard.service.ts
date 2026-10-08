@@ -145,11 +145,13 @@ export class ScoreboardService {
   async unlockMergeDefenseSpellblade(token: string | undefined) {
     const accountId = await this.accounts.resolveAccountId(token);
     if (!accountId) throw new UnauthorizedException({ message: '로그인이 필요합니다', code: 'NOT_LOGGED_IN' });
-    await this.mergeProfile(accountId);
-    const profile = await this.prisma.merge_defense_profile.update({
-      where: { account_id: accountId },
-      data: { spellblade_recipe_unlocked: true },
-    });
+    // 1-2 클리어 직후 복수 클라이언트 요청이 겹쳐도 동일 행을 읽고 다시 쓰는 경쟁이 발생하지 않도록
+    // MySQL의 원자적 upsert로 해금을 멱등적으로 처리한다.
+    await this.prisma.$executeRaw`
+      INSERT INTO merge_defense_profile (account_id, spellblade_recipe_unlocked)
+      VALUES (${accountId}, TRUE)
+      ON DUPLICATE KEY UPDATE spellblade_recipe_unlocked = TRUE`;
+    const profile = await this.prisma.merge_defense_profile.findUniqueOrThrow({ where: { account_id: accountId } });
     return this.mergeProfileResponse(profile);
   }
 
