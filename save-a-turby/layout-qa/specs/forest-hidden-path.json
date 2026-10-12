@@ -1,6 +1,6 @@
 {
   "name": "forest-hidden-path-locked",
-  "description": "1장 숲 잠금 입구 — v6 좌표 예시(도구 예시일 뿐 운영 좌표를 바꾸지 않는다). HUD 값은 mapHudLayout(1, 0.5)에서 가져온 논리 좌표. 수풀 경계 상자는 플레이어 위치(1866)를 포함하지만 플레이어 깊이(0)가 수풀(-15)보다 높아 가려지지 않는다 — 그래서 수풀×플레이어는 mustNotOverlap이 아니라 depthOrder로 검사한다.",
+  "description": "1장 숲 잠금 입구 — v6 좌표 예시(도구 예시일 뿐 운영 좌표를 바꾸지 않는다). HUD 값은 mapHudLayout(1, 0.5)에서 가져온 논리 좌표. 수풀 경계 상자는 플레이어 위치(1866)를 포함하지만 플레이어 깊이(0)가 수풀(-4)보다 높아 가려지지 않는다 — 그래서 수풀×플레이어는 mustNotOverlap이 아니라 depthOrder로 검사한다. 10-12 v8: 수풀은 먼지바람 그림(-5)보다 앞(-4)에 그린다.",
   "world": {
     "width": 3200,
     "height": 2400
@@ -41,7 +41,7 @@
         0.5,
         0.5
       ],
-      "depth": -15,
+      "depth": -4,
       "range": {
         "x": [
           1970,
@@ -202,8 +202,8 @@
     ],
     "depthOrder": [
       [
-        "thicket",
         "dust_wind",
+        "thicket",
         "player"
       ]
     ]

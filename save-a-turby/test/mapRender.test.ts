@@ -196,18 +196,21 @@ test('배경 전환은 충돌·카메라 경계·월드 그림 계획을 바꾸�
 });
 
 // 10-08 v6: 잠금 수풀 — 표시값 고정, 렌더 깊이(수풀 < 먼지바람 < 플레이어), 상단 목표 버튼·오른쪽 HUD와의 화면 간격
-test('잠금 수풀(10-08 v6): (2010,1020) 380×181 고정, 먼지바람·플레이어보다 아래 깊이, 먼지바람 앞 위치에서 목표 버튼과 20/10px 이상·오른쪽 HUD·플레이어 교차 0', async () => {
+test('잠금 수풀(10-08 v6): (2010,1020) 380×181 고정, 먼지바람보다 앞·플레이어보다 뒤 깊이, 먼지바람 앞 위치에서 목표 버튼과 20/10px 이상·오른쪽 HUD·플레이어 교차 0', async () => {
   const { mapHudLayout } = await import('../src/ui/screenLayouts.ts');
   const forest = JSON.parse(readFileSync(fileURLToPath(new URL('../../BE/story-data/save-a-turby/stages/forest.json', import.meta.url)), 'utf8'));
   const t = forest.render.overlays.find((o: { id: string }) => o.id === 'hidden_area_thicket_locked');
   assert.deepEqual([t.assetKey, t.x, t.y, t.width, t.height, t.pivot, t.hiddenAfter], ['hidden-area-thicket-locked', 2010, 1020, 380, 181, [0.5, 0.5], 'forest_hidden_path_opened']);
   assert.ok(Math.abs(t.width / t.height - 1817 / 866) < 0.02, '원본 비율 유지');
-  assert.ok(MAP_DEPTH.overlay < MAP_DEPTH.story && MAP_DEPTH.story < MAP_DEPTH.actors, '수풀(overlay) < 먼지바람·문(story) < 플레이어(actors)');
+  assert.equal(t.layer, 'story', '수풀은 story 층(먼지바람 그림과 같은 층이지만 오버레이가 이야기 대상 위에 쌓인다 — 10-12 v8)');
+  assert.ok(MAP_DEPTH.story < MAP_DEPTH.story + 1 && MAP_DEPTH.story + 1 < MAP_DEPTH.actors, '먼지바람·문(story) < 수풀(story 오버레이) < 플레이어(actors)');
   const wind = forest.layout.gates.find((g: { id: string }) => g.id === 'gate_hidden_path');
   // 같은 계획에서 수풀 깊이가 먼지바람 그림 깊이(story)보다 낮다
   const view = { bounds: { x: 0, y: 0, w: 3200, h: 2400 }, gates: [{ ...wind, open: false, closedAssetKey: 'dust-wind-closed', openAssetKey: null }], render: { background: { assetKey: 'forest-base' }, overlays: [t] }, layout: { zones: [], paths: [], blockers: [] }, points: [], objects: [] } as unknown as StageView;
   const plan = planStageRender(view, () => true, SIZE);
-  assert.equal(plan.overlays.find((o) => o.id === 'hidden_area_thicket_locked')!.depth, MAP_DEPTH.overlay);
+  const thicketDepth = plan.overlays.find((o) => o.id === 'hidden_area_thicket_locked')!.depth;
+  assert.ok(thicketDepth > MAP_DEPTH.story && thicketDepth < MAP_DEPTH.actors, `수풀 깊이 ${thicketDepth}: 먼지바람 그림(${MAP_DEPTH.story})보다 앞, 플레이어(${MAP_DEPTH.actors})보다 뒤`);
+  assert.ok(src('scenes/MapScene.ts').includes('const DEPTH_STORY = MAP_DEPTH.story;'), '문(먼지바람) 그림은 story 깊이');
   // 먼지바람 앞(플레이어 충돌선 직전)에서 카메라는 플레이어 중심(논리 640×360)
   const stand = { x: wind.x - 24, y: 1000 };
   const toScreen = (x: number, y: number) => ({ x: x - stand.x + 640, y: y - stand.y + 360 });

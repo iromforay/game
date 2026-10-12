@@ -155,15 +155,9 @@ async function shootOnce(shot: Shot, size: { width: number; height: number }) {
   }
 }
 
-const FRONT = { x: 1866, y: 1000 }; // 먼지바람 앞(잠금 전·해제 후 같은 플레이어·카메라 위치)
-const SHOTS_1280: Shot[] = [
-  { name: 'v7_01_locked_1280', seed: 'compass', at: FRONT },
-  { name: 'v7_02_opened_1280', seed: 'compass', at: FRONT, lateEvents: OPENED },
-];
-const SHOTS_640: Shot[] = [
-  { name: 'v7_03_locked_640', seed: 'compass', at: FRONT },
-  { name: 'v7_04_opened_640', seed: 'compass', at: FRONT, lateEvents: OPENED },
-];
+const FRONT = { x: 1866, y: 1000 }; // 먼지바람 앞(10-12 v7과 같은 플레이어·카메라 위치)
+const SHOTS_1280: Shot[] = [{ name: 'v8_01_locked_layer', seed: 'compass', at: FRONT }];
+const SHOTS_640: Shot[] = [{ name: 'v8_02_locked_layer', seed: 'compass', at: FRONT }];
 
 test('최종 캡처 1280×720', async () => {
   for (const s of SHOTS_1280) await shoot(s, { width: 1280, height: 720 });
