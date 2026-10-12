@@ -23,20 +23,36 @@ const nativeImport = new Function('p', 'return import(p)') as (p: string) => Pro
 
 // 이 프로세스가 이미 내준 포트는 다시 내주지 않는다 — 서버 포트는 before에서 고르고 테스트 본문에서 여는데,
 // 그 사이 Vite가 같은 포트를 받으면 서버 기동이 실패한다(같은 파일의 테스트가 한꺼번에 실패).
+// 병렬 shard(E2E_PORT_BASE)에서는 shard마다 겹치지 않는 포트 범위(base ~ base+999) 안에서만 고르고 실제로 비어 있는지 확인한다 —
+// 운영체제가 준 번호를 닫은 뒤 나중에 다시 바인딩하는 사이에 다른 프로세스가 같은 번호를 받는 경합을 없앤다.
+// 후보가 막혀 있으면(EADDRINUSE) 제한된 횟수만 다른 번호로 다시 고르고, 끝까지 실패하면 숨기지 않고 오류로 끝낸다.
 const handedOut = new Set<number>();
-export function freePort(): Promise<number> {
+const PORT_PICK_ATTEMPTS = 50;
+function probe(port: number): Promise<number> {
   return new Promise((resolve, reject) => {
     const s = createServer();
     s.once('error', reject);
-    s.listen(0, '127.0.0.1', () => {
-      const { port } = s.address() as { port: number };
-      s.close(() => {
-        if (handedOut.has(port)) return freePort().then(resolve, reject);
-        handedOut.add(port);
-        resolve(port);
-      });
+    s.listen(port, '127.0.0.1', () => {
+      const { port: got } = s.address() as { port: number };
+      s.close(() => resolve(got));
     });
   });
+}
+export async function freePort(): Promise<number> {
+  const base = process.env.E2E_PORT_BASE ? Number(process.env.E2E_PORT_BASE) : null;
+  let lastError: unknown;
+  for (let attempt = 0; attempt < PORT_PICK_ATTEMPTS; attempt += 1) {
+    try {
+      const port = await probe(base === null ? 0 : base + Math.floor(Math.random() * 1000));
+      if (handedOut.has(port)) continue;
+      handedOut.add(port);
+      return port;
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== 'EADDRINUSE') throw e;
+      lastError = e;
+    }
+  }
+  throw new Error(`사용 가능한 포트를 ${PORT_PICK_ATTEMPTS}번 시도했지만 찾지 못했다(${base === null ? 'OS 지정' : `범위 ${base}~${base + 999}`}): ${(lastError as Error | undefined)?.message ?? ''}`);
 }
 
 // ---------- 서버(테스트마다 새 DB) ----------
@@ -51,7 +67,10 @@ export class Backend {
     // 조우 반경은 서버 설정이 유일한 정본(10-06 v1 §3) — E2E 기본은 실제 걸음으로 닿을 만한 60px. 반경을 보는 시험은 settings로 덮어쓴다
     seedBase(this.db, { 'room.reconnectGraceMs': 30_000, 'battle.encounterRadiusPx': 60, ...settings });
     seed?.(this.db);
-    ({ app: this.app } = await startTurbyApp(this.db, this.port));
+    const started = await startTurbyApp(this.db, this.port);
+    this.app = started.app;
+    // 클라이언트(Vite)는 이 포트로 서버에 접속하도록 이미 설정돼 있다 — 실제로 바인딩된 포트와 같아야 한다
+    if (started.port !== this.port) throw new Error(`서버가 예상과 다른 포트에 바인딩됐다: ${started.port} ≠ ${this.port}`);
   }
   async stop() {
     await this.app?.close();
@@ -187,7 +206,6 @@ export class Backend {
 
 // ---------- 프런트(Vite 개발 서버) ----------
 export async function startVite(root: string, env: Record<string, string>): Promise<{ url: string; close: () => Promise<void> }> {
-  const port = await freePort();
   const saved: Record<string, string | undefined> = {};
   for (const [k, v] of Object.entries(env)) {
     saved[k] = process.env[k];
@@ -195,13 +213,29 @@ export async function startVite(root: string, env: Record<string, string>): Prom
   }
   const { pathToFileURL } = await import('url');
   const vite = await nativeImport(pathToFileURL(require.resolve('vite', { paths: [root] })).href);
-  const server = await vite.createServer({ root, configFile: join(root, 'vite.config.ts'), logLevel: 'error', clearScreen: false, server: { port, strictPort: true, host: '127.0.0.1', hmr: false } });
-  await server.listen();
+  // 포트는 고르는 순간과 실제로 여는 순간이 달라서 드물게 EADDRINUSE가 난다 — 제한된 횟수만 새 번호로 다시 시도하고, 끝까지 실패하면 그대로 던진다
+  const cacheDir = process.env.VITE_CACHE_DIR; // 병렬 shard마다 의존성 캐시를 따로 쓴다(없으면 기본 위치)
+  let server: { listen: () => Promise<unknown>; close: () => Promise<void> } | undefined;
+  let port = 0;
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3 && !server; attempt += 1) {
+    port = await freePort();
+    try {
+      const candidate = await vite.createServer({ root, configFile: join(root, 'vite.config.ts'), logLevel: 'error', clearScreen: false, ...(cacheDir ? { cacheDir } : {}), server: { port, strictPort: true, host: '127.0.0.1', hmr: false } });
+      await candidate.listen();
+      server = candidate;
+    } catch (e) {
+      lastError = e;
+      if (!/EADDRINUSE|already in use|Port \d+ is already/i.test(String((e as Error)?.message ?? e))) throw e;
+    }
+  }
+  if (!server) throw lastError;
   for (const [k, v] of Object.entries(saved)) {
     if (v === undefined) delete process.env[k];
     else process.env[k] = v;
   }
-  return { url: `http://127.0.0.1:${port}`, close: () => server.close() };
+  const started = server;
+  return { url: `http://127.0.0.1:${port}`, close: () => started.close() };
 }
 
 // ---------- 브라우저 ----------

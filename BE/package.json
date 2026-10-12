@@ -25,7 +25,8 @@
     "test:e2e:map": "npm run build -w turby-stage-geometry --prefix .. && node scripts/run-e2e-group.mjs map",
     "test:e2e:battle": "npm run build -w turby-stage-geometry --prefix .. && node scripts/run-e2e-group.mjs battle",
     "test:e2e:visual": "npm run build -w turby-stage-geometry --prefix .. && node scripts/run-e2e-group.mjs visual",
-    "test:e2e:inventory": "npm run build -w turby-stage-geometry --prefix .. && node scripts/run-e2e-group.mjs inventory"
+    "test:e2e:inventory": "npm run build -w turby-stage-geometry --prefix .. && node scripts/run-e2e-group.mjs inventory",
+    "test:e2e:parallel": "npm run build -w turby-stage-geometry --prefix .. && node scripts/run-e2e-parallel.mjs"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.15",
