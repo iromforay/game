@@ -1,4 +1,4 @@
-// 10-02 v1 §5·§7: main 통합 회귀 — 허브 게임 목록에 터비 구하기와 광고게임이 함께 있고, 광고게임 두 개가 허브에서 실제로 열린다.
+// 10-02 v1 §5·§7: main 통합 회귀 — 허브 게임 목록에 터비 구하기와 광고게임이 함께 있고, 대표 광고게임 두 개가 허브에서 실제로 열린다.
 // 허브의 계정·커비·멀티 서버 주소는 쓰지 않는 로컬 포트로 막는다(운영 서버에 요청하지 않음).
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -39,12 +39,13 @@ test('허브 통합: 게임 목록에 터비 구하기와 광고게임이 함께
   await page.getByRole('button', { name: /광고게임/ }).waitFor();
   await shot('1280x800_01_hub_game_list.png');
 
-  // 2) 광고게임 목록: 두 게임 모두 시작 가능
+  // 2) 광고게임 목록: 출시 3개와 기획 중 2개를 표시하고, 출시 게임만 시작 가능
   await page.getByRole('button', { name: /광고게임/ }).click();
   const cards = page.locator('.ad-game-card');
-  assert.equal(await cards.count(), 2);
-  assert.deepEqual(await page.locator('.ad-game-title').allTextContents(), ['숫자 게이트 러너', '숫자 용사 탑']);
-  assert.equal(await page.locator('.ad-game-card:disabled').count(), 0, '둘 다 시작 가능');
+  assert.equal(await cards.count(), 5);
+  assert.deepEqual(await page.locator('.ad-game-title').allTextContents(), ['숫자 게이트 러너', '숫자 용사 탑', '머지 디펜스', '달콤상점', '내 방이 던전']);
+  assert.equal(await page.locator('.ad-game-card:not(:disabled)').count(), 3, '출시 게임 세 개는 시작 가능');
+  assert.equal(await page.locator('.ad-game-card:disabled').count(), 2, '기획 중 게임 두 개는 비활성');
   await shot('1280x800_02_ad_game_catalog.png');
 
   // 3) 숫자 용사 탑: 집안 지도 → 놀이방 → 스테이지 목록
