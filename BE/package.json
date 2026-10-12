@@ -19,7 +19,13 @@
     "start:turby": "node dist/turby-main.js",
     "start:kirby": "node dist/kirby-main.js",
     "test": "node --experimental-strip-types --no-warnings --test -r ts-node/register/transpile-only test/*.test.ts",
-    "test:e2e": "node --no-warnings --test --test-concurrency=1 -r ts-node/register/transpile-only test/e2e/*.e2e.ts"
+    "test:e2e": "node --no-warnings --test --test-concurrency=1 -r ts-node/register/transpile-only test/e2e/*.e2e.ts",
+    "test:e2e:smoke": "npm run build -w turby-stage-geometry --prefix .. && node scripts/run-e2e-group.mjs smoke",
+    "test:e2e:story": "npm run build -w turby-stage-geometry --prefix .. && node scripts/run-e2e-group.mjs story",
+    "test:e2e:map": "npm run build -w turby-stage-geometry --prefix .. && node scripts/run-e2e-group.mjs map",
+    "test:e2e:battle": "npm run build -w turby-stage-geometry --prefix .. && node scripts/run-e2e-group.mjs battle",
+    "test:e2e:visual": "npm run build -w turby-stage-geometry --prefix .. && node scripts/run-e2e-group.mjs visual",
+    "test:e2e:inventory": "npm run build -w turby-stage-geometry --prefix .. && node scripts/run-e2e-group.mjs inventory"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.15",

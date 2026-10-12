@@ -1,0 +1,211 @@
+{
+  "name": "forest-hidden-path-locked",
+  "description": "1장 숲 잠금 입구 — v6 좌표 예시(도구 예시일 뿐 운영 좌표를 바꾸지 않는다). HUD 값은 mapHudLayout(1, 0.5)에서 가져온 논리 좌표. 수풀 경계 상자는 플레이어 위치(1866)를 포함하지만 플레이어 깊이(0)가 수풀(-15)보다 높아 가려지지 않는다 — 그래서 수풀×플레이어는 mustNotOverlap이 아니라 depthOrder로 검사한다.",
+  "world": {
+    "width": 3200,
+    "height": 2400
+  },
+  "logical": {
+    "width": 1280,
+    "height": 720
+  },
+  "background": "../../src/assets/world/forest/forest-base.png",
+  "camera": {
+    "center": {
+      "x": 1866,
+      "y": 1000
+    },
+    "zoom": 1
+  },
+  "viewports": [
+    {
+      "id": "1280x720",
+      "width": 1280,
+      "height": 720
+    },
+    {
+      "id": "640x360",
+      "width": 640,
+      "height": 360
+    }
+  ],
+  "targets": [
+    {
+      "id": "thicket",
+      "image": "../../src/assets/world/forest/hidden-area-thicket-locked.png",
+      "x": 1990,
+      "y": 1020,
+      "width": 380,
+      "height": 285,
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "depth": -15,
+      "range": {
+        "x": [
+          1970,
+          2010
+        ],
+        "y": [
+          980,
+          1020
+        ],
+        "width": [
+          360,
+          400
+        ]
+      }
+    },
+    {
+      "id": "dust_wind",
+      "image": "../../src/assets/world/forest/dust-wind-closed.png",
+      "x": 1990,
+      "y": 1004,
+      "width": 240,
+      "height": 270,
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "depth": -5
+    },
+    {
+      "id": "player",
+      "x": 1866,
+      "y": 1000,
+      "width": 32,
+      "height": 32,
+      "pivot": [
+        0.5,
+        0.5
+      ],
+      "depth": 0
+    }
+  ],
+  "hud": [
+    {
+      "id": "miniMap",
+      "rect": {
+        "x": 1120,
+        "y": 16,
+        "width": 144,
+        "height": 145
+      },
+      "overrides": {
+        "640x360": {
+          "x": 1068,
+          "y": 12,
+          "width": 200,
+          "height": 207
+        }
+      }
+    },
+    {
+      "id": "inventory",
+      "rect": {
+        "x": 1144,
+        "y": 169,
+        "width": 120,
+        "height": 32
+      },
+      "overrides": {
+        "640x360": {
+          "x": 1064,
+          "y": 227,
+          "width": 200,
+          "height": 80
+        }
+      }
+    },
+    {
+      "id": "turbys",
+      "rect": {
+        "x": 1144,
+        "y": 209,
+        "width": 120,
+        "height": 32
+      },
+      "overrides": {
+        "640x360": {
+          "x": 1064,
+          "y": 315,
+          "width": 200,
+          "height": 80
+        }
+      }
+    },
+    {
+      "id": "objective_button",
+      "rect": {
+        "x": 500,
+        "y": 102,
+        "width": 280,
+        "height": 44
+      },
+      "overrides": {
+        "640x360": {
+          "x": 430,
+          "y": 137,
+          "width": 420,
+          "height": 80
+        }
+      }
+    }
+  ],
+  "rules": {
+    "onscreen": [
+      "thicket",
+      "dust_wind",
+      "player"
+    ],
+    "mustNotOverlap": [
+      [
+        "thicket",
+        "objective_button"
+      ],
+      [
+        "thicket",
+        "miniMap"
+      ],
+      [
+        "thicket",
+        "inventory"
+      ],
+      [
+        "thicket",
+        "turbys"
+      ],
+      [
+        "dust_wind",
+        "objective_button"
+      ]
+    ],
+    "hudAvoid": [
+      {
+        "targets": [
+          "thicket",
+          "player"
+        ],
+        "hud": "all"
+      }
+    ],
+    "minGap": [
+      {
+        "a": "thicket",
+        "b": "objective_button",
+        "min": {
+          "1280x720": 20,
+          "640x360": 10
+        }
+      }
+    ],
+    "depthOrder": [
+      [
+        "thicket",
+        "dust_wind",
+        "player"
+      ]
+    ]
+  }
+}

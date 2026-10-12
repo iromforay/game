@@ -28,3 +28,5 @@ lerna-debug.log*
 /design
 /download
 /docs
+# 10-12 v1: layout-qa 생성물
+save-a-turby/layout-qa/out/

@@ -12,6 +12,7 @@
     "pretest": "npm run build -w turby-stage-geometry --prefix ..",
     "preview": "vite preview",
     "verify:forest-assets": "node scripts/verify-forest-assets.mjs",
+    "layout-qa": "node scripts/layout-qa.mjs layout-qa/specs/forest-hidden-path.json",
     "test": "node --experimental-strip-types --no-warnings --test test/*.test.ts"
   },
   "devDependencies": {
