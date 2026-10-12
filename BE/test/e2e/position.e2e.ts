@@ -34,7 +34,7 @@ type MapState = {
   positioned: boolean;
   corrections: number;
   lastCorrection: string | null;
-  miniMap: { open: boolean; legendOpen: boolean; legend: string[]; art: { assetKey: string; covers: number } | null; terrain: { zones: number; paths: number; blockers: number; gatesClosed: number; gatesOpen: number } | null; openButton: { x: number; y: number }; legendToggle: { x: number; y: number; w: number; h: number } | null };
+  miniMap: { open: boolean; legendOpen: boolean; legend: string[]; art: { assetKey: string; covers: number } | null; terrain: { zones: number; paths: number; blockers: number; gatesClosed: number; gatesOpen: number } | null; openButton: { x: number; y: number }; fullLabels: { id: string; text: string; bounds: { x: number; y: number; width: number; height: number }; panelIntersection: number; insideMap: boolean; coversOwnMarkerCenter: boolean; otherMarkerOverlapPx2: number }[]; markerCounts: { dust: number; wild: number; story: number }; legendToggle: { x: number; y: number; w: number; h: number } | null };
   story: { points: string[]; gates: Record<string, boolean>; prompt: string | null; promptText: string | null; interact: { x: number; y: number } };
 };
 // 지도 기호 텍스처 키(save-a-turby/src/assets/mapMarkerSpecs.ts의 MAP_MARKER_KEYS와 같다 — 단위 시험이 목록을 고정한다)
@@ -117,6 +117,10 @@ test('위치 ①: 시작 지점 배치 → 좌표를 끼운 입장 요청 무시
     // 최종 지도: 배경 그림을 줄여 쓰고(임시 도형 없음), 아직 열리지 않은 숨은 길 구역은 수풀로 가려져 있다
     assert.deepEqual([m.miniMap.terrain, m.miniMap.art], [null, { assetKey: 'forest-base', covers: 1 }]);
     assert.deepEqual(m.miniMap.legend, ['player', 'story', 'wild']);
+    // 10-12 v4: 전체 지도 이름표는 0~1개, 지도 안에 완전히 포함되고 오른쪽 패널과 교차하지 않으며 반복 대상(실가루·야생)에는 달지 않는다
+    assert.ok(m.miniMap.fullLabels.length <= 1, `전체 지도 이름표 ${JSON.stringify(m.miniMap.fullLabels.map((l) => l.text))}`);
+    for (const l of m.miniMap.fullLabels) assert.deepEqual([l.insideMap, l.panelIntersection, l.coversOwnMarkerCenter, l.otherMarkerOverlapPx2], [true, 0, false, 0], `이름표 ${l.id}`);
+    assert.equal(m.miniMap.fullLabels.some((l) => /실가루|^야생/.test(l.text)), false, '실가루·야생 터비 이름표 없음');
     const missingInMap = await g.page.evaluate((keys: string[]) => { const t = (window as any).__game.scene.getScene('Map').textures; return keys.filter((k) => !t.exists(k)); }, MAP_MARKER_KEYS); // eslint-disable-line @typescript-eslint/no-explicit-any
     assert.deepEqual(missingInMap, [], '탐험 지도: 지도 기호 텍스처(10-12 v3)');
     await g.capture('07_full_map_final_thicket_before_open');

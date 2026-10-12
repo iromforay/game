@@ -5,6 +5,7 @@ import { displayScaleOf } from './responsive';
 import { miniMapLayout, type MiniMapLayout } from './screenLayouts';
 import { LEGEND_LABEL, legendEntries, type MarkerType } from './screenStates';
 import { markerTextureKey } from '../assets/mapMarkerSpecs';
+import { REPEATING_TYPES, containedIn, intersectionArea, placeMapLabel, selectMapLabels } from './mapLabels';
 
 // 미니맵/전체화면 지도가 그릴 지역 — 마을은 길·광장(paths)이 있고, 야생 맵은 경계(bounds)만 있다
 export interface MapView {
@@ -32,6 +33,8 @@ export interface MapMarker {
   x: number;
   y: number;
   hint: string;
+  active?: boolean; // 이야기 지점: 지금 진행 가능한가(전체 지도 이름표 선택용, 생략하면 활성)
+  order?: number; // 이야기 진행 순서(작을수록 먼저)
 }
 
 // 코덱스 시각 QA(2026-09-21): 파스텔 팔레트
@@ -68,6 +71,7 @@ export class MiniMap {
   private legendOpen = false;
   private selectedId = '';
   private hidden = new Set<string>();
+  private fullLabelTexts = new Map<string, Phaser.GameObjects.Text>(); // 전체 지도 위 이름표(진단·경계 판정용)
   private markerObjs = new Map<string, Phaser.GameObjects.GameObject[]>(); // 마커 id → 미니맵·전체 지도 표시 오브젝트(목적지 별을 즉시 켜고 끄는 데 쓴다)
   private peerViews = new Map<string, { mini: Phaser.GameObjects.Arc | Phaser.GameObjects.Image; full: Phaser.GameObjects.Arc | Phaser.GameObjects.Image; text: Phaser.GameObjects.Text }>();
   private lastPeers: { id: string; x: number; y: number; color: number; slot: number }[] = [];
@@ -94,10 +98,30 @@ export class MiniMap {
   get rect() {
     return this.L.mini.rect;
   }
+  // 전체 지도 이름표 진단(10-12 v4): 이름표 수·경계, 지도 그림 영역, 오른쪽 패널, 교차 면적, 아이콘 수
+  private debugLabels() {
+    const F = this.L.full;
+    const mapRect = { x: F.map.x, y: F.map.y, width: F.map.w, height: F.map.h };
+    const infoRect = { x: F.info.x, y: F.info.y - 14, width: F.info.w, height: F.info.h + 28 };
+    const labels = [...this.fullLabelTexts.entries()].map(([id, t]) => {
+      const b = t.getBounds();
+      const bounds = { x: Math.round(b.x * 100) / 100, y: Math.round(b.y * 100) / 100, width: Math.round(b.width * 100) / 100, height: Math.round(b.height * 100) / 100 };
+      const sizeOf = (type: MarkerType) => (type === 'target' ? F.target : F.marker);
+      const rectOf = (mm: MapMarker) => { const sz = sizeOf(mm.type); return { x: this.fullOrigin.x + mm.x * this.fullScale - sz / 2, y: this.fullOrigin.y + mm.y * this.fullScale - sz / 2, width: sz, height: sz }; };
+      const own = this.markers.find((x) => x.id === id);
+      const ownRect = own ? rectOf(own) : null;
+      const center = ownRect ? { x: ownRect.x + ownRect.width / 2 - 1, y: ownRect.y + ownRect.height / 2 - 1, width: 2, height: 2 } : null;
+      const otherIconOverlap = this.markers.filter((x) => x.id !== id).reduce((n, x) => n + intersectionArea(bounds, rectOf(x)), 0);
+      return { id, text: t.text, bounds, panelIntersection: intersectionArea(bounds, infoRect), insideMap: containedIn(bounds, mapRect), coversOwnMarkerCenter: center ? intersectionArea(bounds, center) > 0 : false, otherMarkerOverlapPx2: Math.round(otherIconOverlap * 100) / 100 };
+    });
+    const count = (type: MarkerType) => this.markers.filter((x) => x.type === type).length;
+    return { fullLabels: labels, fullMapRect: mapRect, infoRect, markerCounts: { dust: count('dust'), wild: count('wild'), story: count('story') } };
+  }
+
   // 진단용 요약(화면 상태만)
   get debugState() {
     const gb = this.view.greybox;
-    return { art: this.view.art ? { assetKey: this.view.art.assetKey, covers: this.view.art.covers.length } : null, terrain: gb ? { zones: gb.zones.length, paths: gb.paths.length, blockers: gb.blockers.length, gatesClosed: gb.gates.filter((x) => !x.open).length, gatesOpen: gb.gates.filter((x) => x.open).length } : null, legend: this.legendKeys(), wilds: this.markers.filter((m) => m.type === 'wild').map((m) => ({ id: m.id, x: m.x, y: m.y, mini: { x: this.miniOrigin.x + m.x * this.miniScale, y: this.miniOrigin.y + m.y * this.miniScale }, full: { x: this.fullOrigin.x + m.x * this.fullScale, y: this.fullOrigin.y + m.y * this.fullScale } })), scale: { mini: this.miniScale, full: this.fullScale }, open: this.open, legendOpen: this.legendOpen, mode: this.L.mode, selected: this.selectedId, diameter: this.L.mini.diameter, close: this.L.full.close, legendToggle: this.L.full.legendToggle, openButton: this.L.mini.open, labelsOnMap: this.L.full.labelsOnMap };
+    return { art: this.view.art ? { assetKey: this.view.art.assetKey, covers: this.view.art.covers.length } : null, terrain: gb ? { zones: gb.zones.length, paths: gb.paths.length, blockers: gb.blockers.length, gatesClosed: gb.gates.filter((x) => !x.open).length, gatesOpen: gb.gates.filter((x) => x.open).length } : null, legend: this.legendKeys(), wilds: this.markers.filter((m) => m.type === 'wild').map((m) => ({ id: m.id, x: m.x, y: m.y, mini: { x: this.miniOrigin.x + m.x * this.miniScale, y: this.miniOrigin.y + m.y * this.miniScale }, full: { x: this.fullOrigin.x + m.x * this.fullScale, y: this.fullOrigin.y + m.y * this.fullScale } })), scale: { mini: this.miniScale, full: this.fullScale }, open: this.open, legendOpen: this.legendOpen, mode: this.L.mode, selected: this.selectedId, diameter: this.L.mini.diameter, close: this.L.full.close, legendToggle: this.L.full.legendToggle, openButton: this.L.mini.open, labelsOnMap: this.L.full.labelsOnMap, ...this.debugLabels() };
   }
 
   toggle() {
@@ -287,6 +311,10 @@ export class MiniMap {
 
     items.push(s.add.text(FULL.x + 14, FULL.y + 10, `${this.view.title} 지도`, { fontSize: `${F.font.title}px`, color: INK, backgroundColor: '#FFF4DFCC', padding: { x: 6, y: 2 } }));
 
+    this.fullLabelTexts.clear();
+    const pendingLabels: { id: string; t: Phaser.GameObjects.Text; px: number; py: number; size: number }[] = [];
+    const iconRects: { id: string; x: number; y: number; width: number; height: number }[] = [];
+    const labels = selectMapLabels(this.markers, { targetId: this.destinationId });
     for (const m of this.markers) {
       const px = fo.x + m.x * k;
       const py = fo.y + m.y * k;
@@ -296,13 +324,27 @@ export class MiniMap {
       icon.on('pointerdown', () => this.select(m.id));
       this.trackMarker(m.id, icon);
       items.push(icon);
-      // 이름표: 보통 화면은 마커 아래에, 작은 화면은 서로 겹치므로 지도에서 빼고 오른쪽 정보·범례 영역에서 보여 준다
-      if (F.labelsOnMap) items.push(s.add.text(px, py + size / 2 + 8, m.name, { fontSize: `${F.font.label}px`, color: INK, backgroundColor: '#FFF4DFE6', padding: { x: 5, y: 2 } }).setOrigin(0.5, 0));
+      iconRects.push({ id: m.id, x: px - size / 2, y: py - size / 2, width: size, height: size });
+      // 이름표(10-12 v4): 반복 대상(실가루·야생 터비·완료/비활성 이야기 지점)은 아이콘만, 활성 이야기 목표는 최대 1개만 지도 위에 표시한다.
+      // 집·장터·출구 같은 고정 장소는 보통 화면에서만 이름표를 단다(작은 화면은 서로 겹치므로 오른쪽 정보·범례 영역에서 보여 준다)
+      const repeating = REPEATING_TYPES.includes(m.type);
+      if (m.id === labels.labelId || (!repeating && m.type !== 'target' && F.labelsOnMap)) {
+        const t = s.add.text(0, 0, m.name, { fontSize: `${F.font.label}px`, color: INK, backgroundColor: '#FFF4DFE6', padding: { x: 5, y: 2 } });
+        pendingLabels.push({ id: m.id, t, px, py, size });
+      }
       if (m.type !== 'target' && m.id === this.destinationId) {
         const ring = s.add.image(px, py, 'marker-current').setDisplaySize(size * 1.6, size * 1.6);
         this.pulse(ring);
         items.push(ring);
       }
+    }
+    // 이름표는 모든 아이콘 뒤에 놓아(위에 그려) 다른 마커 아이콘에 가려지지 않게 하고, 다른 마커를 덮지 않는 자리를 고른다
+    for (const p of pendingLabels) {
+      const others = iconRects.filter((r) => r.id !== p.id);
+      const at = placeMapLabel({ x: p.px, y: p.py }, p.size, { width: p.t.width, height: p.t.height }, { x: FULL.x, y: FULL.y, width: FULL.w, height: FULL.h }, 8, others);
+      p.t.setPosition(at.x, at.y);
+      items.push(p.t);
+      this.fullLabelTexts.set(p.id, p.t);
     }
     this.fullPlayer = s.add.image(0, 0, 'marker-player').setDisplaySize(F.player, F.player);
     items.push(this.fullPlayer);

@@ -10,6 +10,7 @@ import { seedForest } from './fixtures';
 
 import { writeFileSync, mkdirSync } from 'fs';
 const HUD_LOG: unknown[] = [];
+const LABEL_LOG: unknown[] = []; // 전체 지도 이름표 경계 판정(10-12 v4)
 let backend: Backend;
 let vite: { url: string; close: () => Promise<void> };
 let browser: Browser;
@@ -20,6 +21,7 @@ before(async () => {
 });
 after(async () => {
   if (process.env.E2E_CAPTURE_DIR && HUD_LOG.length) { mkdirSync(process.env.E2E_CAPTURE_DIR, { recursive: true }); writeFileSync(join(process.env.E2E_CAPTURE_DIR, 'hud_safe_area.json'), JSON.stringify(HUD_LOG, null, 1)); }
+  if (process.env.E2E_CAPTURE_DIR && LABEL_LOG.length) { mkdirSync(process.env.E2E_CAPTURE_DIR, { recursive: true }); writeFileSync(join(process.env.E2E_CAPTURE_DIR, 'full_map_labels.json'), JSON.stringify(LABEL_LOG, null, 1)); }
   await browser?.close();
   await vite?.close();
   await backend?.stop();
@@ -104,6 +106,15 @@ async function shootOnce(shot: Shot, size: { width: number; height: number }) {
       const b = ((await g.state()).map as { miniMap: { openButton: { x: number; y: number } } }).miniMap.openButton;
       await g.clickAt(b.x, b.y, 's.map.miniMap.open === true');
     }
+    if (shot.fullMap) {
+      const mm = ((await g.state()).map as { miniMap: Record<string, unknown> }).miniMap as { fullLabels: { id: string; bounds: unknown; panelIntersection: number; insideMap: boolean; coversOwnMarkerCenter: boolean; otherMarkerOverlapPx2: number }[]; fullMapRect: unknown; infoRect: unknown; markerCounts: { dust: number } };
+      LABEL_LOG.push({
+        shot: shot.name, viewportWidth: size.width, viewportHeight: size.height,
+        labelCount: mm.fullLabels.length, labelIds: mm.fullLabels.map((l) => l.id), labelBounds: mm.fullLabels.map((l) => l.bounds),
+        mapBounds: mm.fullMapRect, panelBounds: mm.infoRect, labelPanelIntersectionPx2: mm.fullLabels.map((l) => l.panelIntersection), labelsInsideMap: mm.fullLabels.map((l) => l.insideMap), coversOwnMarkerCenter: mm.fullLabels.map((l) => l.coversOwnMarkerCenter), otherMarkerOverlapPx2: mm.fullLabels.map((l) => l.otherMarkerOverlapPx2),
+        markerCounts: mm.markerCounts,
+      });
+    }
     await g.capture(shot.name);
     // 10-08 v2 §2: 캡처 해상도의 실제 화면 좌표로 목표 경계와 HUD(미니맵·인벤토리·터비 버튼) 경계를 재서 겹친 픽셀을 기록한다
     const box = (await g.page.locator('canvas').boundingBox())!;
@@ -144,13 +155,15 @@ async function shootOnce(shot: Shot, size: { width: number; height: number }) {
   }
 }
 
-const DUST = { x: 1487, y: 1300 }; // 실가루·이야기 지점·야생 마커가 함께 있는 공터 근처(10-12 v2의 실가루 구역과 같은 상태)
+const DUST = { x: 1487, y: 1300 }; // 실가루 10개가 모두 남은 수집 단계(0/10)
+const WIND = { x: 1866, y: 1000 }; // 먼지바람 앞 — 숨은 길 활성 목표
 const SHOTS_1280: Shot[] = [
-  { name: 'v3_01_minimap_dust_story_1280', seed: 'rescued', at: DUST },
-  { name: 'v3_03_full_map_legend_1280', seed: 'rescued', at: DUST, fullMap: true },
+  { name: 'v4_01_full_map_dust_stage_1280', seed: 'rescued', at: DUST, fullMap: true },
+  { name: 'v4_03_full_map_hidden_path_1280', seed: 'compass', at: WIND, fullMap: true },
 ];
 const SHOTS_640: Shot[] = [
-  { name: 'v3_02_minimap_dust_story_640', seed: 'rescued', at: DUST },
+  { name: 'v4_02_full_map_dust_stage_640', seed: 'rescued', at: DUST, fullMap: true },
+  { name: 'v4_04_full_map_hidden_path_640', seed: 'compass', at: WIND, fullMap: true },
 ];
 
 test('최종 캡처 1280×720', async () => {

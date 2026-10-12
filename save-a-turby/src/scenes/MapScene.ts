@@ -387,7 +387,7 @@ export class MapScene extends Phaser.Scene {
   private refreshMiniMap() {
     const view = this.stageView;
     const storyMarkers: MapMarker[] = [
-      ...(view?.points ?? []).map((pt) => ({ id: pt.id, type: 'story' as const, name: pt.label, x: pt.x, y: pt.y, hint: pt.prompt })),
+      ...(view?.points ?? []).map((pt, i) => ({ id: pt.id, type: 'story' as const, name: pt.label, x: pt.x, y: pt.y, hint: pt.prompt, order: i })), // 서버가 내려 준 순서 = 이야기 진행 순서
       ...(view?.objects ?? []).map((o) => ({ id: o.id, type: 'dust' as const, name: o.label, x: o.x, y: o.y, hint: o.state === 'locked' ? '아직 모을 수 없어요' : o.prompt })),
     ];
     // 야생 터비: 지금 보이는 것만(포획·도망은 서버가 visible=false로 내려 준다). 좌표는 화면의 마커와 같은 서버 값
