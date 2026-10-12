@@ -377,7 +377,7 @@ test('수풀 잠금(10-08 v4): 배경은 항상 forest-base, 개방 전 수풀�
     assert.equal(JSON.stringify(v).includes('fog-veil'), false, '검은 안개 키 없음');
   }
   const thicket = before.render.overlays.find((o) => o.id === 'hidden_area_thicket_locked')!;
-  assert.deepEqual([thicket.assetKey, thicket.x, thicket.y, thicket.width, thicket.height, thicket.pivot], ['hidden-area-thicket-locked', 2020, 990, 540, 405, [0.5, 0.5]]);
+  assert.deepEqual([thicket.assetKey, thicket.x, thicket.y, thicket.width, thicket.height, thicket.pivot], ['hidden-area-thicket-locked', 1990, 1020, 380, 285, [0.5, 0.5]]);
   const ids = (v: typeof before) => v.render.overlays.map((o) => o.id);
   assert.equal(ids(before).includes('overlay_hidden_yarn_path'), false, '개방 전 안내 실은 표시하지 않는다');
   assert.equal(JSON.stringify([before, after]).includes('hidden-path-reveal'), false, '별도 바닥 패치 키가 서버 응답에 없다(10-08 v5)');
@@ -389,8 +389,8 @@ test('수풀 잠금(10-08 v4): 배경은 항상 forest-base, 개방 전 수풀�
   assert.ok(yarnO.x + yarnO.width / 2 <= knotO.x - knotO.width / 2, '안내 실과 거대 매듭 객체 경계가 겹치지 않는다');
   assert.ok(ids(after).includes('overlay_hidden_yarn_path'));
   assert.deepEqual([before.gates.find((g) => g.id === 'gate_hidden_path')!.open, after.gates.find((g) => g.id === 'gate_hidden_path')!.open], [false, true], '먼지바람 문이 같은 스냅샷에서 개방');
-  // 허용 범위(10-08 v5): 수풀 중심 x 2020~2140·y 880~1000·폭 540~700, 안내 실 x 1930~2000
-  assert.ok(thicket.x >= 2020 && thicket.x <= 2140 && thicket.y >= 880 && thicket.y <= 1000 && thicket.width >= 540 && thicket.width <= 700 && Math.abs(thicket.width / thicket.height - 1448 / 1086) < 0.01);
+  // 허용 범위(10-08 v5): 수풀 중심 x 1970~2010·y 980~1020·폭 360~400(v6), 안내 실 x 1930~2000
+  assert.ok(thicket.x >= 1970 && thicket.x <= 2010 && thicket.y >= 980 && thicket.y <= 1020 && thicket.width >= 360 && thicket.width <= 400 && Math.abs(thicket.width / thicket.height - 1448 / 1086) < 0.01);
   assert.ok(Math.abs(yarnO.x - 1960) <= 40 && Math.abs(yarnO.y - 985) <= 25);
 });
 

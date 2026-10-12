@@ -114,8 +114,10 @@ async function shootOnce(shot: Shot, size: { width: number; height: number }) {
         ...v.gates.filter((g2: any) => g2.art).map((g2: any) => rect(g2.id, g2.art.x, g2.art.y, g2.art.width, g2.art.height, g2.art.pivot ?? [0.5, 0.5])),
       ];
       const h = m.hud;
-      const hud = [['miniMap', h.miniMap], ['inventory', h.inventory], ['turbys', h.turbys]].map(([id, r]: any) => ({ id, l: r.x, t: r.y, r: r.x + r.w, b: r.y + r.h }));
-      return { items, hud };
+      const hud = [['miniMap', h.miniMap], ['inventory', h.inventory], ['turbys', h.turbys], ['interact', h.interact]].map(([id, r]: any) => ({ id, l: r.x, t: r.y, r: r.x + r.w, b: r.y + r.h }));
+      const av = m.avatar;
+      const player = rect('player', av.x, av.y, 32, 32, [0.5, 0.5]);
+      return { items: [...items, player], hud };
     })) as { items: { id: string; l: number; t: number; r: number; b: number }[]; hud: { id: string; l: number; t: number; r: number; b: number }[] };
     const px = (o: { l: number; t: number; r: number; b: number }) => ({ left: Math.round(box.x + o.l * k), top: Math.round(box.y + o.t * k), right: Math.round(box.x + o.r * k), bottom: Math.round(box.y + o.b * k) });
     const hudBounds = raw.hud.map((h) => ({ id: h.id, ...px(h) }));
@@ -127,7 +129,9 @@ async function shootOnce(shot: Shot, size: { width: number; height: number }) {
         const targetBounds = px(t);
         const vis = area(targetBounds, screenRect);
         const hits = hudBounds.map((h) => ({ hud: h.id, visibleIntersectionPx: area(area2(targetBounds, screenRect), h), gapToHudLeftPx: h.left - targetBounds.right })).filter((x) => x.visibleIntersectionPx > 0);
-        return { id: t.id, targetBounds, offscreen: vis === 0, visibleIntersectionPx: hits.reduce((n, x) => n + x.visibleIntersectionPx, 0), hits };
+        const btn = hudBounds.find((h) => h.id === 'interact')!;
+        const gapBelowObjectiveButtonPx = targetBounds.left < btn.right && btn.left < targetBounds.right ? targetBounds.top - btn.bottom : null; // 목표(상호작용) 버튼 아래쪽 간격(실제 화면 px, 가로로 겹칠 때만)
+        return { id: t.id, targetBounds, offscreen: vis === 0, visibleIntersectionPx: hits.reduce((n, x) => n + x.visibleIntersectionPx, 0), hits, gapBelowObjectiveButtonPx };
       }),
     });
   } finally {
@@ -137,15 +141,13 @@ async function shootOnce(shot: Shot, size: { width: number; height: number }) {
 
 const FRONT = { x: 1866, y: 1000 }; // 먼지바람 앞(잠금·개방 비교는 같은 좌표)
 const SHOTS_1280: Shot[] = [
-  { name: 'v5_01_thicket_locked_1280', seed: 'compass', at: FRONT },
-  { name: 'v5_02_just_opened_1280', seed: 'compass', at: FRONT, lateEvents: OPENED },
-  { name: 'v5_03_hidden_path_floor_1280', seed: 'compass', events: OPENED, at: { x: 2000, y: 990 } },
-  { name: 'v5_04_path_to_giant_knot_1280', seed: 'compass', events: OPENED, at: { x: 2060, y: 985 } },
+  { name: 'v6_01_locked_1280', seed: 'compass', at: FRONT },
+  { name: 'v6_02_just_opened_1280', seed: 'compass', at: FRONT, lateEvents: OPENED },
 ];
 const SHOTS_640: Shot[] = [
-  { name: 'v5_05_thicket_locked_640', seed: 'compass', at: FRONT },
-  { name: 'v5_06_just_opened_640', seed: 'compass', at: FRONT, lateEvents: OPENED },
-  { name: 'v5_07_path_and_giant_knot_640', seed: 'compass', events: OPENED, at: { x: 2060, y: 985 } },
+  { name: 'v6_03_locked_640', seed: 'compass', at: FRONT },
+  { name: 'v6_04_just_opened_640', seed: 'compass', at: FRONT, lateEvents: OPENED },
+  { name: 'v6_05_yarn_and_giant_knot_640', seed: 'compass', events: OPENED, at: { x: 2060, y: 985 } },
 ];
 
 test('최종 캡처 1280×720', async () => {

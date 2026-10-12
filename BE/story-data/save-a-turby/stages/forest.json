@@ -52,7 +52,7 @@
     "markerMode": "final",
     "background": {"assetKey": "forest-base"},
     "overlays": [
-      {"id": "hidden_area_thicket_locked", "assetKey": "hidden-area-thicket-locked", "x": 2020, "y": 990, "width": 540, "height": 405, "pivot": [0.5, 0.5], "layer": "overlay", "forPoints": ["forest_hidden_path"], "hiddenAfter": "forest_hidden_path_opened"},
+      {"id": "hidden_area_thicket_locked", "assetKey": "hidden-area-thicket-locked", "x": 1990, "y": 1020, "width": 380, "height": 285, "pivot": [0.5, 0.5], "layer": "overlay", "forPoints": ["forest_hidden_path"], "hiddenAfter": "forest_hidden_path_opened"},
       {"id": "prop_cut_thread", "assetKey": "cut-yarn-strand", "x": 1488, "y": 1715, "width": 360, "height": 150, "pivot": [0.5, 0.5], "layer": "story", "forPoints": ["forest_cut_thread"], "hiddenAfter": "forest_cut_thread_inspected"},
       {"id": "overlay_hidden_yarn_path", "assetKey": "hidden-yarn-path", "x": 1960, "y": 985, "width": 190, "height": 63, "pivot": [0.5, 0.5], "visibleAfter": "forest_hidden_path_opened"},
       {"id": "prop_giant_knot_map", "assetKey": "giant-thread-knot-map", "x": 2220, "y": 1040, "width": 320, "height": 320, "pivot": [0.5, 0.5], "layer": "story", "forPoints": ["forest_giant_knot"], "visibleAfter": "forest_hidden_path_opened", "hiddenAfter": "forest_giant_knot_defeated"},

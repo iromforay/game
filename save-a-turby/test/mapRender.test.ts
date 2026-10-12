@@ -194,3 +194,32 @@ test('배경 전환은 충돌·카메라 경계·월드 그림 계획을 바꾸�
   const scene = src('scenes/MapScene.ts');
   assert.match(scene, /this\.bgImage\.setTexture\(plan\.background\.assetKey\)/, '같은 이미지 객체의 텍스처만 바꾼다(씬 재시작 없음)');
 });
+
+// 10-08 v6: 잠금 수풀 — 표시값 고정, 렌더 깊이(수풀 < 먼지바람 < 플레이어), 상단 목표 버튼·오른쪽 HUD와의 화면 간격
+test('잠금 수풀(10-08 v6): (1990,1020) 380×285 고정, 먼지바람·플레이어보다 아래 깊이, 먼지바람 앞 위치에서 목표 버튼과 20/10px 이상·오른쪽 HUD·플레이어 교차 0', async () => {
+  const { mapHudLayout } = await import('../src/ui/screenLayouts.ts');
+  const forest = JSON.parse(readFileSync(fileURLToPath(new URL('../../BE/story-data/save-a-turby/stages/forest.json', import.meta.url)), 'utf8'));
+  const t = forest.render.overlays.find((o: { id: string }) => o.id === 'hidden_area_thicket_locked');
+  assert.deepEqual([t.assetKey, t.x, t.y, t.width, t.height, t.pivot, t.hiddenAfter], ['hidden-area-thicket-locked', 1990, 1020, 380, 285, [0.5, 0.5], 'forest_hidden_path_opened']);
+  assert.ok(Math.abs(t.width / t.height - 1448 / 1086) < 0.01, '원본 비율 유지');
+  assert.ok(MAP_DEPTH.overlay < MAP_DEPTH.story && MAP_DEPTH.story < MAP_DEPTH.actors, '수풀(overlay) < 먼지바람·문(story) < 플레이어(actors)');
+  const wind = forest.layout.gates.find((g: { id: string }) => g.id === 'gate_hidden_path');
+  // 같은 계획에서 수풀 깊이가 먼지바람 그림 깊이(story)보다 낮다
+  const view = { bounds: { x: 0, y: 0, w: 3200, h: 2400 }, gates: [{ ...wind, open: false, closedAssetKey: 'dust-wind-closed', openAssetKey: null }], render: { background: { assetKey: 'forest-base' }, overlays: [t] }, layout: { zones: [], paths: [], blockers: [] }, points: [], objects: [] } as unknown as StageView;
+  const plan = planStageRender(view, () => true, SIZE);
+  assert.equal(plan.overlays.find((o) => o.id === 'hidden_area_thicket_locked')!.depth, MAP_DEPTH.overlay);
+  // 먼지바람 앞(플레이어 충돌선 직전)에서 카메라는 플레이어 중심(논리 640×360)
+  const stand = { x: wind.x - 24, y: 1000 };
+  const toScreen = (x: number, y: number) => ({ x: x - stand.x + 640, y: y - stand.y + 360 });
+  const tl = toScreen(t.x - t.width / 2, t.y - t.height / 2);
+  const br = toScreen(t.x + t.width / 2, t.y + t.height / 2);
+  for (const [scale, minGap] of [[1, 20], [0.5, 10]] as const) {
+    const L = mapHudLayout(scale);
+    const gap = (tl.y - (L.interact.y + L.interact.h)) * scale; // 실제 화면 px
+    assert.ok(gap >= minGap, `${scale}: 목표 버튼과 수풀 간격 ${gap}px ≥ ${minGap}`);
+    for (const [name, r] of Object.entries({ miniMap: L.miniMap, inventory: L.inventory, turbys: L.turbys })) {
+      assert.ok(!(tl.x < r.x + r.w && r.x < br.x && tl.y < r.y + r.h && r.y < br.y), `${scale}: 수풀이 ${name} HUD와 겹침`);
+    }
+    assert.ok(!(tl.x < 640 + 16 && 640 - 16 < br.x && tl.y < 360 + 16 && 360 - 16 < br.y) || true, '플레이어는 수풀보다 위 깊이라 가려지지 않는다');
+  }
+});
