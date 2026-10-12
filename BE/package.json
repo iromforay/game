@@ -6,13 +6,27 @@
     "node": "22.23.1"
   },
   "scripts": {
+    "prebuild": "npm run build -w turby-stage-geometry --prefix ..",
+    "pretest": "npm run build -w turby-stage-geometry --prefix ..",
+    "pretest:e2e": "npm run build -w turby-stage-geometry --prefix ..",
+    "predev": "npm run build -w turby-stage-geometry --prefix ..",
+    "predev:turby": "npm run build -w turby-stage-geometry --prefix ..",
     "dev": "ts-node --transpile-only src/main.ts",
     "dev:turby": "ts-node --transpile-only src/turby-main.ts",
     "dev:kirby": "ts-node --transpile-only src/kirby-main.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/main.js",
     "start:turby": "node dist/turby-main.js",
-    "start:kirby": "node dist/kirby-main.js"
+    "start:kirby": "node dist/kirby-main.js",
+    "test": "node --experimental-strip-types --no-warnings --test -r ts-node/register/transpile-only test/*.test.ts",
+    "test:e2e": "node --no-warnings --test --test-concurrency=1 -r ts-node/register/transpile-only test/e2e/*.e2e.ts",
+    "test:e2e:smoke": "npm run build -w turby-stage-geometry --prefix .. && node scripts/run-e2e-group.mjs smoke",
+    "test:e2e:story": "npm run build -w turby-stage-geometry --prefix .. && node scripts/run-e2e-group.mjs story",
+    "test:e2e:map": "npm run build -w turby-stage-geometry --prefix .. && node scripts/run-e2e-group.mjs map",
+    "test:e2e:battle": "npm run build -w turby-stage-geometry --prefix .. && node scripts/run-e2e-group.mjs battle",
+    "test:e2e:visual": "npm run build -w turby-stage-geometry --prefix .. && node scripts/run-e2e-group.mjs visual",
+    "test:e2e:inventory": "npm run build -w turby-stage-geometry --prefix .. && node scripts/run-e2e-group.mjs inventory",
+    "test:e2e:parallel": "npm run build -w turby-stage-geometry --prefix .. && node scripts/run-e2e-parallel.mjs"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.15",
@@ -26,10 +40,12 @@
     "redis": "^4.7.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
-    "socket.io": "^4.8.1"
+    "socket.io": "^4.8.1",
+    "turby-stage-geometry": "*"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
+    "playwright-core": "^1.63.0",
     "prisma": "^6.2.1",
     "ts-node": "^10.9.2",
     "typescript": "~5.7.3"

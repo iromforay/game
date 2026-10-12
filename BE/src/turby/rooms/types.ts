@@ -1,3 +1,4 @@
+import type { StageCollision } from './stage-collision';
 export type Facing = 'down' | 'left' | 'right' | 'up';
 export type RoomVisibility = 'private'; // 멀티 제거: 방은 항상 플레이어 1인 전용(공개 목록·참가 없음)
 export type RoomPhase = 'lobby' | 'playing';
@@ -17,6 +18,9 @@ export interface RoomMember {
   dir: Facing;
   lastMoveAt: number;
   graceTimer: NodeJS.Timeout | null;
+  // 10-02 v4: 서버 권위 위치. placed = 이 탐험 세션에서 서버가 위치를 정해 준 적이 있는가(없으면 시작 지점부터)
+  placed: boolean;
+  storyEvents: Set<string>; // 문·구역 판정에 쓰는 이 플레이어의 완료 이벤트(입장 때 읽고, 이벤트가 기록되면 갱신)
 }
 
 export type WildState = 'free' | 'engaged' | 'captured' | 'removed';
@@ -31,9 +35,15 @@ export interface WildRuntime {
   battleId: string | null; // engaged일 때 이 야생과 싸우는 전투
 }
 
+// 클라이언트에 내려 주는 야생 마커(10-02 v6 §1) — 위치의 유일한 정본은 서버(stage_wild_spawn)다. 클라이언트는 이 좌표로만 마커를 놓는다.
+// index = 서버 야생 마커 ID(지역 안에서 고유, 전투·상태 방송·재접속 뒤에도 같은 값)
 export interface WildDto {
   index: number;
+  characterCode: string; // 표시 키(터비 종류)
+  x: number;
+  y: number;
   state: WildState;
+  visible: boolean; // 지도에 보이는가(free·engaged). captured·removed는 이 탐험 세션에서 다시 나오지 않는다
 }
 
 export interface Room {
@@ -47,6 +57,7 @@ export interface Room {
   phase: RoomPhase;
   members: RoomMember[]; // 입장 순서 — 호스트 승계 기준
   wilds: WildRuntime[];
+  collision: StageCollision; // 지도 경계·시작 지점·막힌 곳·문(지역 데이터)
 }
 
 export interface MemberDto {

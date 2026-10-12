@@ -5,6 +5,12 @@ export function gameError(status: number, code: string, message: string) {
   return new HttpException({ code, message }, status);
 }
 
+// 경로·본문으로 받은 숫자 ID(플레이어·터비). 숫자 문자열이 아니면 BigInt 변환 예외(500) 대신 400으로 거절한다
+export function parseId(value: unknown, what = 'ID'): bigint {
+  if (typeof value !== 'string' || !/^\d{1,20}$/.test(value)) throw gameError(400, 'INVALID_ID', `${what} 정보가 올바르지 않습니다.`);
+  return BigInt(value);
+}
+
 export const INSTANCE_INCLUDE = {
   turby_character: { include: { turby_grade: true } },
   player_base_slot: true,

@@ -22,4 +22,15 @@ export class SettingsService implements OnModuleInit {
     if (typeof v !== 'number' || !Number.isFinite(v)) throw new Error(`game_setting "${key}" is missing or not a number`);
     return v;
   }
+
+  // 스토리 M1에서 추가한 설정은 SQL 적용 전에도 서버가 뜨도록 기본값을 받는다
+  numberOr(key: string, fallback: number): number {
+    const v = this.values.get(key);
+    return typeof v === 'number' && Number.isFinite(v) ? v : fallback;
+  }
+
+  flag(key: string, fallback: boolean): boolean {
+    const v = this.values.get(key);
+    return typeof v === 'boolean' ? v : fallback;
+  }
 }

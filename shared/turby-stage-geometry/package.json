@@ -1,0 +1,28 @@
+{
+  "name": "turby-stage-geometry",
+  "private": true,
+  "version": "0.0.0",
+  "description": "터비 구하기 지역 geometry 계약 — 서버(BE)와 프런트(save-a-turby)가 같이 쓰는 순수 모듈(의존성 없음, Node·브라우저 공용)",
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js",
+      "default": "./dist/esm/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": ["dist"],
+  "sideEffects": false,
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "verify:isolated": "node scripts/verify-isolated-build.mjs",
+    "test": "node --experimental-strip-types --no-warnings --test test/*.test.ts"
+  },
+  "devDependencies": {
+    "typescript": "~6.0.2"
+  }
+}

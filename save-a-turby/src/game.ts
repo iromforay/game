@@ -7,11 +7,17 @@ import { StageSelectScene } from './scenes/StageSelectScene';
 import { MapScene } from './scenes/MapScene';
 import { PartySelectScene } from './scenes/PartySelectScene';
 import { BattleScene } from './scenes/BattleScene';
+import { BootScene } from './scenes/BootScene';
+import { OpeningScene } from './scenes/OpeningScene';
+import { StoryDialogueScene } from './scenes/StoryDialogueScene';
 import { inventory } from './state/inventory';
+import { session } from './api/client';
+import { installImmediateInput } from './ui/inputReady';
 
 export async function mountGame(parent: HTMLElement | string): Promise<Phaser.Game> {
   // VillageScene이 동기적으로 인벤토리(타레 등)를 읽으므로, 씬 생성 전에 서버 조회를 먼저 끝내둠(오펜스타워의 loadHero 패턴과 동일)
   await inventory.init();
+  const unwatchSession = watchSession(parent);
 
   const config: Phaser.Types.Core.GameConfig = {
     type: Phaser.AUTO,
@@ -29,10 +35,35 @@ export async function mountGame(parent: HTMLElement | string): Promise<Phaser.Ga
       // body도 동일하게 flex 중앙정렬이라 문제없음).
       autoCenter: Phaser.Scale.NO_CENTER,
     },
-    scene: [VillageScene, HomeScene, MarketScene, StageSelectScene, MapScene, PartySelectScene, BattleScene],
+    // 첫 씬 Boot가 서버 스토리 상태로 오프닝/마을을 고른다(M3)
+    scene: [BootScene, VillageScene, HomeScene, MarketScene, StageSelectScene, MapScene, PartySelectScene, BattleScene, OpeningScene, StoryDialogueScene],
   };
 
-  return new Phaser.Game(config);
+  const game = new Phaser.Game(config);
+  installImmediateInput(game); // 다시 그린 직후의 탭도 새 버튼에 닿게(ui/inputReady.ts)
+  // 게임을 닫으면 세션 감시도 푼다 — 허브에서 게임을 다시 열 때마다 리스너가 쌓이지 않게(10-01 v1 §5 감사)
+  game.events.once(Phaser.Core.Events.DESTROY, unwatchSession);
+  return game;
+}
+
+// 스토리 M1-B: 세션 토큰 재식별까지 실패하면(state/session.ts) 요청을 반복하지 않고 재접속 안내를 띄운다.
+function watchSession(parent: HTMLElement | string): () => void {
+  const host = typeof parent === 'string' ? document.getElementById(parent) : parent;
+  return session.onChange((state) => {
+    if (state !== 'reconnect_required' || !host || host.querySelector('.turby-session-lost')) return;
+    const box = document.createElement('div');
+    box.className = 'turby-session-lost';
+    box.style.cssText = 'position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:rgba(16,8,32,.86);color:#fff;font:16px sans-serif;z-index:10;text-align:center;padding:16px';
+    const msg = document.createElement('p');
+    msg.textContent = '접속 정보를 확인할 수 없습니다. 다시 접속해 주세요.';
+    const btn = document.createElement('button');
+    btn.textContent = '다시 접속';
+    btn.style.cssText = 'min-width:120px;min-height:44px;font-size:16px';
+    btn.onclick = () => location.reload();
+    box.append(msg, btn);
+    if (getComputedStyle(host).position === 'static') host.style.position = 'relative';
+    host.appendChild(box);
+  });
 }
 
 export * from './config/constants';

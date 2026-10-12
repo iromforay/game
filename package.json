@@ -2,7 +2,12 @@
   "name": "game-monorepo",
   "private": true,
   "version": "0.0.0",
+  "scripts": {
+    "build:shared": "npm run build -w turby-stage-geometry",
+    "postinstall": "npm run build:shared"
+  },
   "workspaces": [
+    "shared/turby-stage-geometry",
     "hub",
     "tower-defense",
     "offense-tower",

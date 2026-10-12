@@ -1,0 +1,15 @@
+{
+  "key": "forest_stitchling_ambush",
+  "_note": "임시 전투 정의(기능 검증용 수치, 밸런스 정본 아님 — Codex v15 8.3). 1장 첫 전투: 실밥이 무리, 속박, 붙잡힌 보풀이(공격 불가·행동 불가·보호 대상), 일부 도주 연출.",
+  "cornerEscape": false,
+  "objectives": {
+    "win": [{ "kind": "defeat_all" }],
+    "lose": [{ "kind": "protect", "unitIds": ["bopuli"] }]
+  },
+  "units": [
+    { "unitId": "bopuli", "side": "neutral", "characterCode": "bopuli", "name": "보풀이", "col": 9, "row": 4, "attack": 0, "defense": 4, "actionPower": 0, "maxHp": 20, "targetable": false, "threatened": false, "canAct": false },
+    { "unitId": "stitchling_a", "side": "wild", "characterCode": "stitchling", "name": "실밥이", "col": 7, "row": 3, "attack": 5, "defense": 1, "actionPower": 2, "maxHp": 12, "onHit": { "kind": "bind", "turns": 2, "movePenalty": 1 } },
+    { "unitId": "stitchling_b", "side": "wild", "characterCode": "stitchling", "name": "실밥이", "col": 7, "row": 5, "attack": 5, "defense": 1, "actionPower": 2, "maxHp": 12, "onHit": { "kind": "bind", "turns": 2, "movePenalty": 1 }, "exitOnDefeat": "flee" },
+    { "unitId": "stitchling_c", "side": "wild", "characterCode": "stitchling", "name": "실밥이", "col": 8, "row": 4, "attack": 4, "defense": 1, "actionPower": 2, "maxHp": 10, "exitOnDefeat": "flee" }
+  ]
+}

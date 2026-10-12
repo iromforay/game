@@ -1,6 +1,7 @@
 import { getPlayerId } from './player';
 import {
   ApiError,
+  fetchTurbys,
   identifyPlayer,
   moveToShelf as apiMoveToShelf,
   moveToBag as apiMoveToBag,
@@ -78,6 +79,7 @@ class InventoryStore {
     }
   }
 
+  // 화면 표시·구 경로 호환용. 권한 판단은 서버가 세션 토큰으로 한다(스토리 M1-B)
   getPlayerId(): string {
     return this.dbPlayerId ?? this.deviceUuid;
   }
@@ -106,28 +108,43 @@ class InventoryStore {
   }
 
   // 4.2: 가방(소지) → 선반(기지 보관) 특정 슬롯으로 이동
-  async moveToShelf(turbyId: string, slotIndex: number): Promise<{ ok: true } | { ok: false; error: string }> {
-    if (!this.dbPlayerId) return { ok: false, error: 'offline' };
+  // 서버가 거절하면(예: SHELF_SLOT_OCCUPIED — 다른 기기·탭이 먼저 그 칸을 씀) 서버 목록으로 다시 맞춘다
+  async moveToShelf(turbyId: string, slotIndex: number): Promise<{ ok: true } | { ok: false; error: string; code: string | null }> {
+    if (!this.dbPlayerId) return { ok: false, error: 'offline', code: null };
     try {
-      const updated = await apiMoveToShelf(this.dbPlayerId, turbyId, slotIndex);
+      const updated = await apiMoveToShelf(turbyId, slotIndex);
       this.replace(updated);
       return { ok: true };
     } catch (err) {
       console.warn('[inventory] 선반 이동 실패:', err);
-      return { ok: false, error: String(err) };
+      const code = err instanceof ApiError ? err.code : null;
+      if (err instanceof ApiError) await this.refreshTurbys();
+      return { ok: false, error: String(err), code };
+    }
+  }
+
+  // 보유 터비를 서버 정본으로 다시 받는다(실패하면 지금 상태 유지)
+  async refreshTurbys(): Promise<void> {
+    try {
+      this.owned = await fetchTurbys();
+      saveCache(this.deviceUuid, this.owned);
+    } catch (err) {
+      console.warn('[inventory] 터비 목록 재조회 실패:', err);
     }
   }
 
   // 4.2: 선반(기지 보관) → 가방(소지)으로 이동
-  async moveToBag(turbyId: string): Promise<{ ok: true } | { ok: false; error: string }> {
-    if (!this.dbPlayerId) return { ok: false, error: 'offline' };
+  async moveToBag(turbyId: string): Promise<{ ok: true } | { ok: false; error: string; code: string | null }> {
+    if (!this.dbPlayerId) return { ok: false, error: 'offline', code: null };
     try {
-      const updated = await apiMoveToBag(this.dbPlayerId, turbyId);
+      const updated = await apiMoveToBag(turbyId);
       this.replace(updated);
       return { ok: true };
     } catch (err) {
       console.warn('[inventory] 가방 이동 실패:', err);
-      return { ok: false, error: String(err) };
+      const code = err instanceof ApiError ? err.code : null;
+      if (err instanceof ApiError) await this.refreshTurbys();
+      return { ok: false, error: String(err), code };
     }
   }
 
@@ -138,7 +155,7 @@ class InventoryStore {
   async refreshItems(): Promise<void> {
     if (!this.dbPlayerId) return;
     try {
-      this.items = await fetchItems(this.dbPlayerId);
+      this.items = await fetchItems();
     } catch (err) {
       console.warn('[inventory] 아이템 조회 실패:', err);
     }
@@ -150,7 +167,7 @@ class InventoryStore {
     const requestId = this.pendingRequests.get(product.id) ?? newRequestId();
     this.pendingRequests.set(product.id, requestId);
     try {
-      const res = await purchaseProduct(this.dbPlayerId, product.id, requestId);
+      const res = await purchaseProduct(product.id, requestId);
       this.pendingRequests.delete(product.id);
       this.tareBalance = res.tareBalance;
       if (res.turby && !this.owned.some((t) => t.id === res.turby!.id)) this.owned.push(res.turby);
@@ -168,11 +185,11 @@ class InventoryStore {
 
   // 3.1: 아이템 장착/해제 — 서버가 소유권·수량·슬롯을 검증하고 최종 스탯을 계산해서 돌려줌
   async equip(turbyId: string, itemCode: string) {
-    return this.runEquipment(() => equipItem(this.dbPlayerId!, turbyId, itemCode));
+    return this.runEquipment(() => equipItem(turbyId, itemCode));
   }
 
   async unequip(turbyId: string, slotKey: string) {
-    return this.runEquipment(() => unequipItem(this.dbPlayerId!, turbyId, slotKey));
+    return this.runEquipment(() => unequipItem(turbyId, slotKey));
   }
 
   private async runEquipment(call: () => Promise<OwnedTurby>): Promise<{ ok: true } | { ok: false; message: string }> {

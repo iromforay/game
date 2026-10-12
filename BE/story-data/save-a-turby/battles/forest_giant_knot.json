@@ -1,0 +1,19 @@
+{
+  "key": "forest_giant_knot",
+  "_note": "임시 전투 정의(기능 검증용 수치, 밸런스 정본 아님 — Codex v15 8.3). 1장 보스 거대 실밥 매듭: 바깥 검은 실 3가닥을 순서대로 끊어야 중심부가 드러나고, 끊어진 길이 2라운드마다 다시 엉킨다. 실밥이 2마리가 속박을 건다.",
+  "cornerEscape": false,
+  "objectives": {
+    "win": [{ "kind": "defeat_units", "unitIds": ["giant_knot"] }]
+  },
+  "terrainRules": [
+    { "everyRounds": 2, "cells": [{ "col": 5, "row": 2 }, { "col": 5, "row": 6 }], "mode": "toggle" }
+  ],
+  "units": [
+    { "unitId": "giant_knot", "side": "wild", "characterCode": "giant_thread_knot", "name": "거대 실밥 매듭", "col": 9, "row": 4, "attack": 6, "defense": 2, "actionPower": 0, "maxHp": 40, "canAct": false },
+    { "unitId": "outer_strand_1", "side": "wild", "characterCode": "giant_thread_knot_strand", "name": "바깥 검은 실", "col": 8, "row": 4, "attack": 0, "defense": 1, "actionPower": 0, "maxHp": 10, "canAct": false, "partOf": "giant_knot", "breakOrder": 1 },
+    { "unitId": "outer_strand_2", "side": "wild", "characterCode": "giant_thread_knot_strand", "name": "바깥 검은 실", "col": 9, "row": 3, "attack": 0, "defense": 1, "actionPower": 0, "maxHp": 10, "canAct": false, "partOf": "giant_knot", "breakOrder": 2 },
+    { "unitId": "outer_strand_3", "side": "wild", "characterCode": "giant_thread_knot_strand", "name": "바깥 검은 실", "col": 9, "row": 5, "attack": 0, "defense": 1, "actionPower": 0, "maxHp": 10, "canAct": false, "partOf": "giant_knot", "breakOrder": 3 },
+    { "unitId": "knot_stitchling_a", "side": "wild", "characterCode": "stitchling", "name": "실밥이", "col": 6, "row": 3, "attack": 5, "defense": 1, "actionPower": 2, "maxHp": 12, "onHit": { "kind": "bind", "turns": 2, "movePenalty": 1 } },
+    { "unitId": "knot_stitchling_b", "side": "wild", "characterCode": "stitchling", "name": "실밥이", "col": 6, "row": 5, "attack": 5, "defense": 1, "actionPower": 2, "maxHp": 12, "onHit": { "kind": "bind", "turns": 2, "movePenalty": 1 }, "exitOnDefeat": "flee" }
+  ]
+}

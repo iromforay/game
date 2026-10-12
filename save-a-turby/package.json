@@ -5,16 +5,23 @@
   "type": "module",
   "main": "./src/game.ts",
   "scripts": {
+    "predev": "npm run build -w turby-stage-geometry --prefix ..",
     "dev": "vite",
+    "prebuild": "npm run build -w turby-stage-geometry --prefix ..",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "pretest": "npm run build -w turby-stage-geometry --prefix ..",
+    "preview": "vite preview",
+    "verify:forest-assets": "node scripts/verify-forest-assets.mjs",
+    "layout-qa": "node scripts/layout-qa.mjs layout-qa/specs/forest-hidden-path.json",
+    "test": "node --experimental-strip-types --no-warnings --test test/*.test.ts"
   },
   "devDependencies": {
     "typescript": "~6.0.2",
     "vite": "^8.2.2"
   },
   "dependencies": {
-    "phaser": "^3.90.0",
-    "socket.io-client": "^4.8.1"
+    "phaser": "3.90.0",
+    "socket.io-client": "^4.8.1",
+    "turby-stage-geometry": "*"
   }
 }

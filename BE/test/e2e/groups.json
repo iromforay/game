@@ -1,0 +1,29 @@
+{
+  "_note": "E2E 그룹 manifest(10-12 v1). 파일명은 이 폴더 기준으로 명시한다(wildcard 금지). 한 파일이 여러 그룹에 속할 수 있다. 전체 실행(npm run test:e2e)은 이 manifest와 무관하게 test/e2e/*.e2e.ts 전체다.",
+  "groups": {
+    "smoke": {
+      "purpose": "로그인·허브·지도 진입·핵심 렌더",
+      "files": ["hub.e2e.ts", "hub-ad.e2e.ts", "map.e2e.ts", "render.e2e.ts"]
+    },
+    "story": {
+      "purpose": "1장 흐름·복원",
+      "files": ["ch01.e2e.ts", "chapter1-full.e2e.ts", "forest.e2e.ts", "restore.e2e.ts"]
+    },
+    "map": {
+      "purpose": "입력·위치·지도·월드 렌더",
+      "files": ["input.e2e.ts", "map.e2e.ts", "position.e2e.ts", "render.e2e.ts", "bopuli-world.e2e.ts"]
+    },
+    "battle": {
+      "purpose": "야생 조우·전투·정산",
+      "files": ["wild.e2e.ts", "wild2.e2e.ts"]
+    },
+    "visual": {
+      "purpose": "캡처·미리보기·화면",
+      "files": ["final-captures.e2e.ts", "previews.e2e.ts", "screens.e2e.ts"]
+    },
+    "inventory": {
+      "purpose": "선반·보유 상태",
+      "files": ["shelf.e2e.ts"]
+    }
+  }
+}
