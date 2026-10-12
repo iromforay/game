@@ -13,6 +13,7 @@ import { MiniMap } from '../ui/MiniMap';
 import type { MapMarker, MapView } from '../ui/MiniMap';
 import { loadWorldImages } from '../assets/loader';
 import { ensureUiPlaceholders } from '../assets/placeholders';
+import { ensureMapMarkerTextures } from '../assets/mapMarkers';
 import { loadChapterStatuses, getCurrentChapter } from '../config/story';
 import { roomClient, RoomApiError } from '../net/roomClient';
 import { battleClient } from '../net/battleClient';
@@ -187,6 +188,7 @@ export class MapScene extends Phaser.Scene {
     });
     if (gen !== this.generation || !this.sys.isActive()) return;
     ensureUiPlaceholders(this);
+    ensureMapMarkerTextures(this); // 지도 기호(정식 UI)
     // 지도 크기는 서버의 지역 화면 응답이 정한다(서버 충돌 판정과 같은 값). 응답을 받지 못했을 때만 설정의 임시 크기를 쓴다
     const width = (this.stageWidth = view?.size?.width ?? stage.width);
     const height = (this.stageHeight = view?.size?.height ?? stage.height);

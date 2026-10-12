@@ -28,8 +28,8 @@ export const STORY_SLOT_LABEL = '이야기 슬롯';
 export const STORY_SLOT_LOCK = '해제 불가';
 
 // ----- 지도 범례: 색이 아니라 모양·표식으로 구분한다. 지도에 실제로 있는 종류만 보여 준다 -----
-// story·dust: 탐험 지도의 이야기 지점·수집 오브젝트(임시 도형)
-// wild: 야생 터비(서버가 내려 준 위치 — 10-02 v6)
+// story·dust·wild: 탐험 지도의 정식 UI 기호(코드로 생성, assets/mapMarkers.ts) — 색이 아니라 실루엣으로 종류를 구분한다
+// story = 이야기 지점, dust = 수집 오브젝트, wild = 야생 터비(서버가 내려 준 위치 — 10-02 v6)
 export type MarkerType = 'home' | 'market' | 'exit' | 'target' | 'story' | 'dust' | 'wild';
 // path·wall·gateClosed·gateOpen: 회색상자(임시) 지형 — 지도에 있을 때만 범례에 나온다
 export type TerrainKey = 'path' | 'wall' | 'gateClosed' | 'gateOpen';
@@ -44,7 +44,7 @@ export const LEGEND_LABEL: Record<LegendKey, string> = {
   story: '이야기 지점 — 겹동그라미',
   dust: '빛나는 실가루 — 마름모',
   wild: '야생 터비 ▲',
-  path: '길 — 굵은 선(임시)',
+  path: '길 — 굵은 선',
   wall: '막힌 곳 — 어두운 사각형',
   gateClosed: '닫힌 문 — 채운 사각형',
   gateOpen: '열린 문 — 테두리만',

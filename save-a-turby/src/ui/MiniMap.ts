@@ -4,6 +4,7 @@ import type { Rect } from '../config/village';
 import { displayScaleOf } from './responsive';
 import { miniMapLayout, type MiniMapLayout } from './screenLayouts';
 import { LEGEND_LABEL, legendEntries, type MarkerType } from './screenStates';
+import { markerTextureKey } from '../assets/mapMarkerSpecs';
 
 // 미니맵/전체화면 지도가 그릴 지역 — 마을은 길·광장(paths)이 있고, 야생 맵은 경계(bounds)만 있다
 export interface MapView {
@@ -41,9 +42,7 @@ const TERRAIN = { zone: 0xfff4df, path: 0xb7a98f, wall: 0x4a4f4a, gate: 0x8a6fc0
 const DEPTH_HUD = 4000;
 const DEPTH_MODAL = 5000;
 
-function markerTexture(type: MarkerType) {
-  return type === 'target' ? 'marker-current' : `marker-${type}`;
-}
+const markerTexture = markerTextureKey;
 
 // docs/save_a_turby_asset.md §7.7 — 우측 상단 원형 미니맵 + 전체화면 지도(M/Esc/닫기 버튼).
 // 마커는 색이 아니라 서로 다른 실루엣(marker-*)으로 구분하고, 위치·목적지는 게임 데이터로 그린다.

@@ -38,6 +38,7 @@ interface Shot {
   lateEvents?: string[]; // 지도에 들어선 뒤 기록하는 이벤트(이어 보기 장면이 입장을 가로채지 않게)
   at?: { x: number; y: number }; // 없으면 시작 지점
   complete?: boolean; // 1장 완료 + 지역 선택 화면(2장 개방)
+  fullMap?: boolean; // 전체 지도(범례 포함)를 연 상태로 찍는다
 }
 
 // 두 사각형의 겹침 사각형(겹치지 않으면 0 크기)
@@ -99,6 +100,10 @@ async function shootOnce(shot: Shot, size: { width: number; height: number }) {
       await g.page.evaluate(() => (window as any).__game.scene.getScene('Map').refreshStageView()); // eslint-disable-line @typescript-eslint/no-explicit-any
       await g.page.waitForTimeout(600);
     }
+    if (shot.fullMap) {
+      const b = ((await g.state()).map as { miniMap: { openButton: { x: number; y: number } } }).miniMap.openButton;
+      await g.clickAt(b.x, b.y, 's.map.miniMap.open === true');
+    }
     await g.capture(shot.name);
     // 10-08 v2 §2: 캡처 해상도의 실제 화면 좌표로 목표 경계와 HUD(미니맵·인벤토리·터비 버튼) 경계를 재서 겹친 픽셀을 기록한다
     const box = (await g.page.locator('canvas').boundingBox())!;
@@ -139,17 +144,13 @@ async function shootOnce(shot: Shot, size: { width: number; height: number }) {
   }
 }
 
-const CUT = { x: 1490, y: 1600 }; // 잘린 실오라기·보풀이 구역
-const DUST = { x: 1487, y: 1300 }; // 실가루 수집 구역(공터 근처)
-const KNOT = { x: 2060, y: 985 }; // 숨은 길·거대 매듭 구역
+const DUST = { x: 1487, y: 1300 }; // 실가루·이야기 지점·야생 마커가 함께 있는 공터 근처(10-12 v2의 실가루 구역과 같은 상태)
 const SHOTS_1280: Shot[] = [
-  { name: 'v2_01_cut_thread_bopuli_1280', seed: 'started', at: CUT },
-  { name: 'v2_02_dust_area_1280', seed: 'rescued', at: DUST },
-  { name: 'v2_03_hidden_path_giant_knot_1280', seed: 'compass', events: OPENED, at: KNOT },
+  { name: 'v3_01_minimap_dust_story_1280', seed: 'rescued', at: DUST },
+  { name: 'v3_03_full_map_legend_1280', seed: 'rescued', at: DUST, fullMap: true },
 ];
 const SHOTS_640: Shot[] = [
-  { name: 'v2_04_cut_thread_bopuli_640', seed: 'started', at: CUT },
-  { name: 'v2_05_hidden_path_giant_knot_640', seed: 'compass', events: OPENED, at: KNOT },
+  { name: 'v3_02_minimap_dust_story_640', seed: 'rescued', at: DUST },
 ];
 
 test('최종 캡처 1280×720', async () => {

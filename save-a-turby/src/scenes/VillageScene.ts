@@ -13,6 +13,7 @@ import { CANVAS_HEIGHT, AVATAR_SPEED } from '../config/constants';
 import { AVATAR_IMAGE, BACKGROUND_TILES } from '../assets/registry';
 import { loadWorldImages } from '../assets/loader';
 import { ensureVillagePlaceholders } from '../assets/placeholders';
+import { ensureMapMarkerTextures } from '../assets/mapMarkers';
 import { getVillageLayout, getVillagePaths } from '../config/village';
 import { loadChapterStatuses, getCurrentChapter } from '../config/story';
 import { OPENING_REQUIRED_MESSAGE, openingLocked } from '../story/storyClient';
@@ -102,6 +103,7 @@ export class VillageScene extends Phaser.Scene {
     if (gen !== this.generation || !this.sys.isActive()) return; // 기다리는 사이 화면이 바뀜
     const layout = this.layout;
     ensureVillagePlaceholders(this, layout);
+    ensureMapMarkerTextures(this); // 지도 기호(정식 UI)
 
     this.cameras.main.setBackgroundColor('#3a3626');
     this.cameras.main.fadeIn(250);

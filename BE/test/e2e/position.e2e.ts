@@ -37,11 +37,16 @@ type MapState = {
   miniMap: { open: boolean; legendOpen: boolean; legend: string[]; art: { assetKey: string; covers: number } | null; terrain: { zones: number; paths: number; blockers: number; gatesClosed: number; gatesOpen: number } | null; openButton: { x: number; y: number }; legendToggle: { x: number; y: number; w: number; h: number } | null };
   story: { points: string[]; gates: Record<string, boolean>; prompt: string | null; promptText: string | null; interact: { x: number; y: number } };
 };
+// 지도 기호 텍스처 키(save-a-turby/src/assets/mapMarkerSpecs.ts의 MAP_MARKER_KEYS와 같다 — 단위 시험이 목록을 고정한다)
+const MAP_MARKER_KEYS = ['marker-player', 'marker-home', 'marker-market', 'marker-exit', 'marker-locked', 'marker-story', 'marker-dust', 'marker-wild', 'marker-current'];
 const mapOf = async (g: Game) => (await g.state()).map as MapState;
 
 async function enterForest(g: Game) {
   await g.waitScene('Village');
   await g.until('마을 준비', 's.village && s.village.ready');
+  // 10-12 v3: 마을 장면이 준비된 시점에 지도 기호(정식 UI) 텍스처가 모두 있다 — 마을 지도에서도 같은 기호를 쓴다
+  const missingInVillage = await g.page.evaluate((keys: string[]) => { const t = (window as any).__game.scene.getScene('Village').textures; return keys.filter((k) => !t.exists(k)); }, MAP_MARKER_KEYS); // eslint-disable-line @typescript-eslint/no-explicit-any
+  assert.deepEqual(missingInVillage, [], '마을: 지도 기호 텍스처');
   const exit = (await g.page.evaluate(() => (window as any).__game.scene.getScene('Village').layout.interactions.find((i: any) => i.type === 'exit'))) as { zone: { x: number; y: number; w: number; h: number }; prompt: string }; // eslint-disable-line @typescript-eslint/no-explicit-any
   await g.walkTo('Village', { x: exit.zone.x + exit.zone.w / 2, y: exit.zone.y + exit.zone.h / 2 }, 'keys', "s.village && s.village.prompt === 'exit'");
   await g.clickLabel(exit.prompt);
@@ -112,6 +117,8 @@ test('위치 ①: 시작 지점 배치 → 좌표를 끼운 입장 요청 무시
     // 최종 지도: 배경 그림을 줄여 쓰고(임시 도형 없음), 아직 열리지 않은 숨은 길 구역은 수풀로 가려져 있다
     assert.deepEqual([m.miniMap.terrain, m.miniMap.art], [null, { assetKey: 'forest-base', covers: 1 }]);
     assert.deepEqual(m.miniMap.legend, ['player', 'story', 'wild']);
+    const missingInMap = await g.page.evaluate((keys: string[]) => { const t = (window as any).__game.scene.getScene('Map').textures; return keys.filter((k) => !t.exists(k)); }, MAP_MARKER_KEYS); // eslint-disable-line @typescript-eslint/no-explicit-any
+    assert.deepEqual(missingInMap, [], '탐험 지도: 지도 기호 텍스처(10-12 v3)');
     await g.capture('07_full_map_final_thicket_before_open');
     await g.capture('08a_full_map_hidden_zone_before');
     await closeFullMap(g);
