@@ -641,6 +641,26 @@ export class MapScene extends Phaser.Scene {
       gates: plan.gates.map((g) => ({ id: g.id, open: g.open, art: g.art?.assetKey ?? null, placeholder: g.placeholder })),
       tileSprites: this.children.list.filter((c) => c.type === 'TileSprite').length,
       imageObjects: this.storyLayer.filter((o) => o.type === 'Image').length,
+      ...this.debugPlaceholders(plan),
+    };
+  }
+
+  // 개발 진단 전용(사용자 화면에 표시하지 않는다): 정상 로드 상태의 최종 숲에서 임시 표시가 0인지 확인하는 수치
+  private debugPlaceholders(plan: StageRenderPlan) {
+    const flat: Phaser.GameObjects.GameObject[] = [];
+    const walk = (o: Phaser.GameObjects.GameObject) => {
+      flat.push(o);
+      if (o.type === 'Container') for (const c of (o as Phaser.GameObjects.Container).list) walk(c);
+    };
+    for (const o of this.storyLayer) walk(o);
+    const texts = flat.filter((o) => o.type === 'Text') as Phaser.GameObjects.Text[];
+    const sceneTexts = this.children.list.filter((o) => o.type === 'Text') as Phaser.GameObjects.Text[];
+    return {
+      worldImages: flat.filter((o) => o.type === 'Image').length + plan.overlays.length, // 실제 에셋 월드 오브젝트(이야기 대상 그림 + 오버레이)
+      placeholderMarkers: this.storyLayer.filter((o) => o.type === 'Container' && (o as Phaser.GameObjects.Container).list.some((c) => c.type === 'Arc' || c.type === 'Graphics')).length, // 임시 고리·마름모
+      placeholderGates: plan.gates.filter((g) => g.placeholder).length + flat.filter((o) => o.type === 'Rectangle').length, // 임시 문 사각형
+      tempLabels: texts.length + sceneTexts.filter((t) => /\(임시\)/.test(t.text)).length, // 임시 대상 label(대상·문 글자)
+      greyboxNotices: sceneTexts.filter((t) => t.text.includes('회색상자')).length,
     };
   }
 

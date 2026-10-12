@@ -223,3 +223,26 @@ test('잠금 수풀(10-08 v6): (1990,1020) 380×285 고정, 먼지바람·플레
     assert.ok(!(tl.x < 640 + 16 && 640 - 16 < br.x && tl.y < 360 + 16 && 360 - 16 < br.y) || true, '플레이어는 수풀보다 위 깊이라 가려지지 않는다');
   }
 });
+
+// 10-12 v2: 최종 숲 데이터(실제 forest.json)에서 정상 로드 시 임시 표식이 계획에 없고, 텍스처 로딩 실패 시에는 폴백이 남는다
+test('최종 숲 데이터: 모든 에셋이 로드되면 이야기 지점·수집물에 임시 표식이 없고, 월드 그림 로드 실패 시 임시 표식 폴백이 남는다', () => {
+  const forest = JSON.parse(readFileSync(fileURLToPath(new URL('../../BE/story-data/save-a-turby/stages/forest.json', import.meta.url)), 'utf8'));
+  const view = {
+    size: { width: 3200, height: 2400 }, greybox: false, bounds: { x: 0, y: 0, w: 3200, h: 2400 },
+    render: forest.render, layout: forest.layout,
+    gates: forest.layout.gates.map((g: Record<string, unknown>) => ({ ...g, open: false })),
+    points: forest.storyPoints, objects: forest.objects.map((o: Record<string, unknown>, i: number) => ({ ...o, x: 1000 + i * 10, y: 1000, radius: 56, state: 'available' })),
+  } as unknown as StageView;
+  const loaded = (k: string) => k !== 'placeholder-point'; // 데이터에 남은 호환용 키는 텍스처가 없다
+  const plan = planStageRender(view, loaded, SIZE);
+  assert.equal(plan.background.mode, 'final');
+  assert.deepEqual(plan.points.filter((p) => p.assetKey === 'placeholder-point').map((p) => p.id), [], 'placeholder-point는 그림 계획에 없다');
+  assert.deepEqual(plan.points.filter((p) => p.marker).map((p) => p.id), [], '임시 고리·글자 표식 0');
+  assert.deepEqual(plan.objects.filter((o) => o.marker || !o.assetKey).map((o) => o.id), [], '실가루는 모두 실제 그림');
+  assert.deepEqual(plan.gates.filter((g) => g.placeholder).map((g) => g.id), [], '임시 문 사각형 0');
+  // 폴백 유지: 월드 그림·실가루·문 그림이 로드 실패하면 대상이 사라지지 않고 임시 표식이 남는다
+  const failed = planStageRender(view, (k) => k === 'forest-base', SIZE);
+  assert.ok(failed.points.length > 0 && failed.points.every((p) => p.marker), '로딩 실패: 모든 지점에 임시 표식');
+  assert.ok(failed.objects.every((o) => o.marker), '로딩 실패: 실가루에 임시 표식');
+  assert.ok(failed.gates.some((g) => g.placeholder), '로딩 실패: 문은 임시 사각형');
+});

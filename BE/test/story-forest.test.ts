@@ -2,7 +2,7 @@
 // 좌표는 회색상자(임시) 값이다. 여기서는 "좌표가 무엇이든 지켜져야 하는 규칙"만 확인한다.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readdirSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { createHash } from 'crypto';
 import { HttpException } from '@nestjs/common';
@@ -407,6 +407,60 @@ test('신규 PNG 고정(10-08 v4): hidden-area-thicket-locked 1448×1086 · 알�
     assert.ok([4, 6].includes(buf[25]), `${f} 알파 채널(컬러 타입 ${buf[25]})`);
     assert.equal(createHash('sha256').update(buf).digest('hex'), sha, `${f} SHA-256`);
   }
+});
+
+// 10-12 v2 §2·§3: 사용자에게 보이는 label에 임시 표시가 없고, 이야기 대상마다 최종 에셋(월드 그림)이 대신한다
+test('최종 숲 label(10-12 v2): (임시) 표기가 없고 권장 문구와 같다, prompt는 그대로', () => {
+  const raw = JSON.parse(readFileSync(join(content.dir, 'stages', 'forest.json'), 'utf8')) as { objects: { id: string; label: string; prompt: string }[]; storyPoints: { id: string; label: string; prompt: string }[] };
+  const want: Record<string, string> = {
+    forest_cut_thread: '잘린 실오라기', forest_bopuli_ambush: '보풀이 공터', forest_bopuli_return: '보풀이', forest_hidden_path: '먼지바람에 가린 길',
+    forest_giant_knot: '거대 실밥 매듭', forest_first_knot_awaken: '끊어진 오래된 실', forest_dansuring: '실뿌리 문',
+  };
+  for (const p of raw.storyPoints) assert.equal(p.label, want[p.id], `${p.id} label`);
+  assert.equal(raw.objects.length, 10);
+  for (const o of raw.objects) assert.equal(o.label, '빛나는 실가루', `${o.id} label`);
+  const texts: string[] = [];
+  const walk = (v: unknown) => { if (typeof v === 'string') texts.push(v); else if (Array.isArray(v)) v.forEach(walk); else if (v && typeof v === 'object') Object.entries(v).forEach(([k, x]) => { if (k !== '_note') walk(x); }); };
+  walk(JSON.parse(readFileSync(join(content.dir, 'stages', 'forest.json'), 'utf8')));
+  assert.deepEqual(texts.filter((t) => /임시|회색상자/.test(t)), [], '사용자 대상 문자열에 임시·회색상자 표기 없음');
+  assert.deepEqual(raw.storyPoints.map((p) => p.prompt), ['잘린 실 살펴보기', '보풀이에게 다가가기', '보풀이에게 실가루 건네기', '나침판 꺼내기', '거대 매듭에 다가가기', '첫 매듭 살펴보기', '단수링 살펴보기'], 'prompt 문구는 변경하지 않는다');
+});
+
+test('최종 숲 대상별 대체 에셋(10-12 v2): 모든 이야기 지점·수집물·문이 실제 PNG 월드 그림으로 대체된다 — placeholder-point는 어디에서도 그림 역할을 하지 않는다', () => {
+  const assets = join(__dirname, '..', '..', 'save-a-turby', 'src', 'assets');
+  // 런타임 키 = 파일명(확장자 제외) 또는 turby/<이름>.png → turby-<이름> (registry.ts의 키 규칙)
+  const files = (readdirSync(assets, { recursive: true }) as string[]).map((f) => String(f).split('\\').join('/')).filter((f) => f.endsWith('.png') && !f.startsWith('orgin/'));
+  const has = (key: string) => files.some((f) => f.endsWith(`/${key}.png`) || f === `${key}.png` || f === `turby/${key.replace(/^turby-/, '')}.png`);
+  const raw = JSON.parse(readFileSync(join(content.dir, 'stages', 'forest.json'), 'utf8')) as {
+    render: { markerMode: string; overlays: { id: string; assetKey: string; forPoints?: string[] }[] };
+    objects: { id: string; assetKey: string }[]; storyPoints: { id: string; assetKey: string }[];
+    layout: { gates: { id: string; closedAssetKey: string; openAssetKey: string | null; art?: { assetKey?: string } }[] };
+  };
+  assert.equal(raw.render.markerMode, 'final');
+  for (const o of raw.render.overlays) assert.ok(has(o.assetKey), `오버레이 ${o.id}: ${o.assetKey}.png 있음`);
+  const coverOf = (pid: string) => raw.render.overlays.filter((o) => (o.forPoints ?? []).includes(pid)).map((o) => o.assetKey);
+  const expected: Record<string, { by: string; keys: string[] }> = {
+    forest_cut_thread: { by: '월드 오버레이', keys: ['cut-yarn-strand'] },
+    forest_bopuli_ambush: { by: '월드 오버레이(NPC)', keys: ['turby-bopuli'] },
+    forest_bopuli_return: { by: '월드 오버레이(NPC)', keys: ['turby-bopuli'] },
+    forest_hidden_path: { by: '수풀 오버레이 + 먼지바람 문 그림', keys: ['hidden-area-thicket-locked'] },
+    forest_giant_knot: { by: '월드 오버레이', keys: ['giant-thread-knot-map'] },
+    forest_dansuring: { by: '월드 오버레이(단수링)', keys: ['dansuring'] },
+  };
+  for (const p of raw.storyPoints) {
+    if (p.id === 'forest_first_knot_awaken') { // 지점 자체가 실제 그림(오래된 실)
+      assert.ok(has(p.assetKey) && p.assetKey === 'ancient-yarn-strand', `${p.id}: 지점 그림 ${p.assetKey}`);
+      continue;
+    }
+    assert.deepEqual(coverOf(p.id), expected[p.id].keys, `${p.id}: ${expected[p.id].by}`);
+    // 데이터 호환용 키는 남아 있어도 된다 — 런타임에는 텍스처가 없어(플레이스홀더 이미지를 만들지 않음) 그려지지 않는다
+    assert.ok(p.assetKey === 'placeholder-point' || has(p.assetKey), `${p.id}: assetKey ${p.assetKey}`);
+  }
+  for (const o of raw.objects) assert.ok(has(o.assetKey) && o.assetKey === 'glowing-yarn-dust', `${o.id}: 실가루 그림`);
+  const wind = raw.layout.gates.find((g) => g.id === 'gate_hidden_path')!;
+  const root = raw.layout.gates.find((g) => g.id === 'gate_root')!;
+  assert.ok(has(wind.closedAssetKey) && wind.openAssetKey === null, '먼지바람: 닫힘 그림, 열리면 사라짐');
+  assert.ok(has(root.closedAssetKey) && has(root.openAssetKey!), '실뿌리 문: 닫힘·열림 그림');
 });
 
 test('HUD 안전영역(10-08 v1 §2): 목표 중심은 지도 오른쪽 끝에서 카메라가 멈춰도 오른쪽 HUD(데스크톱 170px·640×360은 논리 250px) 안에 들지 않고, 단수링은 문 안쪽에 있다', () => {

@@ -27,25 +27,25 @@
     {"id": "forest_dansuring", "x": 2820, "y": 1010, "radius": 72}
   ],
   "objects": [
-    {"id": "forest_dust_01", "objectiveKey": "forest_glowing_dust", "group": "near_clearing", "assetKey": "glowing-yarn-dust", "label": "실가루(임시)", "prompt": "빛나는 실가루 줍기"},
-    {"id": "forest_dust_02", "objectiveKey": "forest_glowing_dust", "group": "near_clearing", "assetKey": "glowing-yarn-dust", "label": "실가루(임시)", "prompt": "빛나는 실가루 줍기"},
-    {"id": "forest_dust_03", "objectiveKey": "forest_glowing_dust", "group": "near_clearing", "assetKey": "glowing-yarn-dust", "label": "실가루(임시)", "prompt": "빛나는 실가루 줍기"},
-    {"id": "forest_dust_04", "objectiveKey": "forest_glowing_dust", "group": "detour", "assetKey": "glowing-yarn-dust", "label": "실가루(임시)", "prompt": "빛나는 실가루 줍기"},
-    {"id": "forest_dust_05", "objectiveKey": "forest_glowing_dust", "group": "detour", "assetKey": "glowing-yarn-dust", "label": "실가루(임시)", "prompt": "빛나는 실가루 줍기"},
-    {"id": "forest_dust_06", "objectiveKey": "forest_glowing_dust", "group": "detour", "assetKey": "glowing-yarn-dust", "label": "실가루(임시)", "prompt": "빛나는 실가루 줍기"},
-    {"id": "forest_dust_07", "objectiveKey": "forest_glowing_dust", "group": "detour", "assetKey": "glowing-yarn-dust", "label": "실가루(임시)", "prompt": "빛나는 실가루 줍기"},
-    {"id": "forest_dust_08", "objectiveKey": "forest_glowing_dust", "group": "near_wild", "assetKey": "glowing-yarn-dust", "label": "실가루(임시)", "prompt": "빛나는 실가루 줍기"},
-    {"id": "forest_dust_09", "objectiveKey": "forest_glowing_dust", "group": "near_wild", "assetKey": "glowing-yarn-dust", "label": "실가루(임시)", "prompt": "빛나는 실가루 줍기"},
-    {"id": "forest_dust_10", "objectiveKey": "forest_glowing_dust", "group": "near_wild", "assetKey": "glowing-yarn-dust", "label": "실가루(임시)", "prompt": "빛나는 실가루 줍기"}
+    {"id": "forest_dust_01", "objectiveKey": "forest_glowing_dust", "group": "near_clearing", "assetKey": "glowing-yarn-dust", "label": "빛나는 실가루", "prompt": "빛나는 실가루 줍기"},
+    {"id": "forest_dust_02", "objectiveKey": "forest_glowing_dust", "group": "near_clearing", "assetKey": "glowing-yarn-dust", "label": "빛나는 실가루", "prompt": "빛나는 실가루 줍기"},
+    {"id": "forest_dust_03", "objectiveKey": "forest_glowing_dust", "group": "near_clearing", "assetKey": "glowing-yarn-dust", "label": "빛나는 실가루", "prompt": "빛나는 실가루 줍기"},
+    {"id": "forest_dust_04", "objectiveKey": "forest_glowing_dust", "group": "detour", "assetKey": "glowing-yarn-dust", "label": "빛나는 실가루", "prompt": "빛나는 실가루 줍기"},
+    {"id": "forest_dust_05", "objectiveKey": "forest_glowing_dust", "group": "detour", "assetKey": "glowing-yarn-dust", "label": "빛나는 실가루", "prompt": "빛나는 실가루 줍기"},
+    {"id": "forest_dust_06", "objectiveKey": "forest_glowing_dust", "group": "detour", "assetKey": "glowing-yarn-dust", "label": "빛나는 실가루", "prompt": "빛나는 실가루 줍기"},
+    {"id": "forest_dust_07", "objectiveKey": "forest_glowing_dust", "group": "detour", "assetKey": "glowing-yarn-dust", "label": "빛나는 실가루", "prompt": "빛나는 실가루 줍기"},
+    {"id": "forest_dust_08", "objectiveKey": "forest_glowing_dust", "group": "near_wild", "assetKey": "glowing-yarn-dust", "label": "빛나는 실가루", "prompt": "빛나는 실가루 줍기"},
+    {"id": "forest_dust_09", "objectiveKey": "forest_glowing_dust", "group": "near_wild", "assetKey": "glowing-yarn-dust", "label": "빛나는 실가루", "prompt": "빛나는 실가루 줍기"},
+    {"id": "forest_dust_10", "objectiveKey": "forest_glowing_dust", "group": "near_wild", "assetKey": "glowing-yarn-dust", "label": "빛나는 실가루", "prompt": "빛나는 실가루 줍기"}
   ],
   "storyPoints": [
-    {"id": "forest_cut_thread", "kind": "inspect", "assetKey": "placeholder-point", "label": "잘린 실오라기(임시)", "prompt": "잘린 실 살펴보기"},
-    {"id": "forest_bopuli_ambush", "kind": "battle", "assetKey": "placeholder-point", "label": "보풀이 공터(임시)", "prompt": "보풀이에게 다가가기"},
-    {"id": "forest_bopuli_return", "kind": "npc", "assetKey": "placeholder-point", "label": "보풀이(임시)", "prompt": "보풀이에게 실가루 건네기"},
-    {"id": "forest_hidden_path", "kind": "gate", "assetKey": "placeholder-point", "label": "먼지바람에 가린 길(임시)", "prompt": "나침판 꺼내기"},
-    {"id": "forest_giant_knot", "kind": "battle", "assetKey": "placeholder-point", "label": "거대 실밥 매듭(임시)", "prompt": "거대 매듭에 다가가기"},
-    {"id": "forest_first_knot_awaken", "kind": "inspect", "assetKey": "ancient-yarn-strand", "label": "끊어진 오래된 실(임시)", "prompt": "첫 매듭 살펴보기"},
-    {"id": "forest_dansuring", "kind": "discover", "assetKey": "placeholder-point", "label": "실뿌리 문(임시)", "prompt": "단수링 살펴보기"}
+    {"id": "forest_cut_thread", "kind": "inspect", "assetKey": "placeholder-point", "label": "잘린 실오라기", "prompt": "잘린 실 살펴보기"},
+    {"id": "forest_bopuli_ambush", "kind": "battle", "assetKey": "placeholder-point", "label": "보풀이 공터", "prompt": "보풀이에게 다가가기"},
+    {"id": "forest_bopuli_return", "kind": "npc", "assetKey": "placeholder-point", "label": "보풀이", "prompt": "보풀이에게 실가루 건네기"},
+    {"id": "forest_hidden_path", "kind": "gate", "assetKey": "placeholder-point", "label": "먼지바람에 가린 길", "prompt": "나침판 꺼내기"},
+    {"id": "forest_giant_knot", "kind": "battle", "assetKey": "placeholder-point", "label": "거대 실밥 매듭", "prompt": "거대 매듭에 다가가기"},
+    {"id": "forest_first_knot_awaken", "kind": "inspect", "assetKey": "ancient-yarn-strand", "label": "끊어진 오래된 실", "prompt": "첫 매듭 살펴보기"},
+    {"id": "forest_dansuring", "kind": "discover", "assetKey": "placeholder-point", "label": "실뿌리 문", "prompt": "단수링 살펴보기"}
   ],
   "render": {
     "_note": "최종 에셋 연결 계약. assetKey는 save-a-turby/src/assets의 파일명(확장자 제외) 런타임 키다. hidden-area-thicket-locked은 개방 전 숨은 구역을 가리는 털실 수풀 오버레이(이벤트 뒤 제거). 해당 이미지가 없으면 화면은 회색상자·임시 도형을 그대로 쓴다.",

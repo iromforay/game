@@ -139,15 +139,17 @@ async function shootOnce(shot: Shot, size: { width: number; height: number }) {
   }
 }
 
-const FRONT = { x: 1866, y: 1000 }; // 먼지바람 앞(잠금·개방 비교는 같은 좌표)
+const CUT = { x: 1490, y: 1600 }; // 잘린 실오라기·보풀이 구역
+const DUST = { x: 1487, y: 1300 }; // 실가루 수집 구역(공터 근처)
+const KNOT = { x: 2060, y: 985 }; // 숨은 길·거대 매듭 구역
 const SHOTS_1280: Shot[] = [
-  { name: 'v6_01_locked_1280', seed: 'compass', at: FRONT },
-  { name: 'v6_02_just_opened_1280', seed: 'compass', at: FRONT, lateEvents: OPENED },
+  { name: 'v2_01_cut_thread_bopuli_1280', seed: 'started', at: CUT },
+  { name: 'v2_02_dust_area_1280', seed: 'rescued', at: DUST },
+  { name: 'v2_03_hidden_path_giant_knot_1280', seed: 'compass', events: OPENED, at: KNOT },
 ];
 const SHOTS_640: Shot[] = [
-  { name: 'v6_03_locked_640', seed: 'compass', at: FRONT },
-  { name: 'v6_04_just_opened_640', seed: 'compass', at: FRONT, lateEvents: OPENED },
-  { name: 'v6_05_yarn_and_giant_knot_640', seed: 'compass', events: OPENED, at: { x: 2060, y: 985 } },
+  { name: 'v2_04_cut_thread_bopuli_640', seed: 'started', at: CUT },
+  { name: 'v2_05_hidden_path_giant_knot_640', seed: 'compass', events: OPENED, at: KNOT },
 ];
 
 test('최종 캡처 1280×720', async () => {

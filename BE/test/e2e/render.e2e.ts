@@ -23,7 +23,7 @@ after(async () => {
 });
 
 const READY = 's.map && s.map.ready && s.map.inRoom && s.map.positioned && s.map.story';
-type Render = { background: string; overlays: string[]; gates: { id: string; open: boolean; art: string | null; placeholder: boolean }[]; tileSprites: number; imageObjects: number };
+type Render = { background: string; overlays: string[]; gates: { id: string; open: boolean; art: string | null; placeholder: boolean }[]; tileSprites: number; imageObjects: number; worldImages: number; placeholderMarkers: number; placeholderGates: number; tempLabels: number; greyboxNotices: number };
 const renderOf = async (g: Game) => ((await g.state()).map as { render: Render }).render;
 
 async function enterForest(g: Game) {
@@ -54,6 +54,7 @@ test('렌더링 ①: 에셋이 없는 키는 임시 도형으로 폴백하고(�
     assert.equal(r.background, 'greybox', '배경 텍스처가 없어 임시 회색상자');
     assert.equal(r.tileSprites, 0, '반복 타일을 쓰지 않는다');
     assert.deepEqual(r.overlays, [], '월드 그림이 없으면 오버레이는 그리지 않는다(임시 도형만 남는다)');
+    assert.ok(r.placeholderMarkers + r.placeholderGates + r.tempLabels + r.greyboxNotices > 0, '진단 수치가 실제로 임시 표시를 센다(대조군): 폴백에서는 0이 아니다');
     // 먼지바람 문: 닫힘 그림이 없으므로 임시 사각형
     assert.deepEqual(r.gates.map((x) => [x.id, x.art, x.placeholder]), [['gate_hidden_path', null, true]]);
     const st = (await g.state()).map.story as { points: string[]; objects: string[] };
@@ -121,6 +122,54 @@ test('렌더링 ③: 보풀이는 구조 전 먼지실 오버레이, 구조 뒤 
     await refresh();
     await g.until('단수링 표시', "s.map.render.overlays.includes('dansuring')");
     await g.capture('20_dansuring_after_first_knot_equipped');
+  }, backend, device);
+  await g.close();
+});
+
+// 10-12 v2 §3·§4: 최종 숲(markerMode final) 정상 로드에서는 진행 단계마다 임시 표시가 하나도 없다 — 임시 마름모·고리·문 사각형·(임시) 글자·회색상자 안내 0
+test('렌더링 ④: 정상 로드한 최종 숲은 이야기 진행 단계마다 placeholder 마커·문·임시 label·회색상자 안내가 0이다', async () => {
+  const device = 'e2e-render-noplaceholder';
+  await backend.start(seedForest(device, 'started'));
+  const g = await Game.open(browser, `${vite.url}/?device=${device}`, device);
+  await withDiagnosis(g, 'render-no-placeholder', async () => {
+    // 시작 단계는 숲 입구 장면이 먼저 나온다 — 장면이 끝난 뒤 지도에서 확인한다
+    await g.waitScene('Village');
+    await g.until('마을 준비', 's.village && s.village.ready');
+    const exit = (await g.page.evaluate(() => (window as any).__game.scene.getScene('Village').layout.interactions.find((i: any) => i.type === 'exit'))) as { zone: { x: number; y: number; w: number; h: number }; prompt: string }; // eslint-disable-line @typescript-eslint/no-explicit-any
+    await g.walkTo('Village', { x: exit.zone.x + exit.zone.w / 2, y: exit.zone.y + exit.zone.h / 2 }, 'keys', "s.village && s.village.prompt === 'exit'");
+    await g.clickLabel(exit.prompt);
+    await g.waitScene('StageSelect');
+    await g.clickLabel('1장 — 숲', { exact: true });
+    await g.until('숲 지도 또는 입구 장면', `(${READY}) || s.scenes.includes('StoryDialogue')`);
+    if ((await g.state()).scenes.includes('StoryDialogue')) await g.advanceDialogue("s.scenes.includes('Map') && !s.scenes.includes('StoryDialogue')");
+    await g.until('숲 지도', READY);
+    const refresh = () => g.page.evaluate(() => (window as any).__game.scene.getScene('Map').refreshStageView()); // eslint-disable-line @typescript-eslint/no-explicit-any
+    const seen: string[] = [];
+    const check = async (stage: string) => {
+      await g.page.waitForTimeout(400);
+      const r = await renderOf(g);
+      const pts = (await g.state()).map as { story: { points: string[]; objects: string[]; gates: Record<string, boolean> } };
+      seen.push(`${stage}: points=${pts.story.points.length} objects=${pts.story.objects.length} worldImages=${r.worldImages}`);
+      assert.equal(r.background, 'final', `${stage}: 배경`);
+      assert.deepEqual([r.placeholderMarkers, r.placeholderGates, r.tempLabels, r.greyboxNotices], [0, 0, 0, 0], `${stage}: 임시 표시(마커·문·label·회색상자 안내) — ${JSON.stringify(r)} · 대상 ${JSON.stringify(pts.story.points)}`);
+      assert.equal(r.tileSprites, 0, `${stage}: tileSprite`);
+    };
+    await check('1 잘린 실(시작)');
+    const steps: [string, string[]][] = [
+      ['2 보풀이 전투(잘린 실 조사 뒤)', ['forest_cut_thread_inspected']],
+      ['3 보풀이 구조(실가루 수집·귀환)', ['forest_stitchling_battle_won', 'forest_bopul_rescued', 'forest_dansuring_clue_learned']],
+      ['4 나침판·먼지바람', ['forest_compass_granted']],
+      ['5 숨은 길 개방·거대 매듭', ['forest_hidden_path_opened']],
+      ['6 거대 매듭 격파·첫 매듭 각성', ['forest_giant_knot_defeated']],
+      ['7 첫 매듭 각성 뒤', ['forest_first_knot_awakened']],
+      ['8 첫 매듭 장착·실뿌리 문·단수링', ['forest_first_knot_equipped']],
+    ];
+    for (const [stage, events] of steps) {
+      for (const e of events) backend.grantEvent(device, e);
+      await refresh();
+      await check(stage);
+    }
+    console.log(seen.join(' | '));
   }, backend, device);
   await g.close();
 });
