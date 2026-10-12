@@ -7,6 +7,11 @@ export const battleClient = {
     return (await roomClient.request<{ snapshot: BattleSnapshot }>('battle:start', { spawnIndex })).snapshot;
   },
 
+  // M4-B/C: 대화의 storyBattle 항목 → 서버 스토리 전투(이미 이긴 전투는 STORY_ENCOUNTER_DONE 오류)
+  async startStory(encounterKey: string): Promise<BattleSnapshot> {
+    return (await roomClient.request<{ snapshot: BattleSnapshot }>('battle:story:start', { encounterKey })).snapshot;
+  },
+
   // 조우 초대에 참전/불참으로 응답
   respond(battleId: string, join: boolean): Promise<BattleResponse> {
     return roomClient.request<BattleResponse>('battle:respond', { battleId, join });
@@ -24,6 +29,12 @@ export const battleClient = {
   // 파티 선택을 포기하거나 전투에서 빠진다(보상 없음, 마지막 참전자면 전투 취소)
   leave(battleId: string): Promise<BattleResponse> {
     return roomClient.request<BattleResponse>('battle:leave', { battleId });
+  },
+
+  // 10-06 v3 §2: 결과 화면을 보여 준 뒤 사용자가 돌아가기를 선택했을 때 보내는 명시적 결과 확인(여러 번 보내도 같은 성공)
+  async ackResult(battleId: string): Promise<void> {
+    await roomClient.request<{ acknowledged: true }>('battle:result:ack', { battleId });
+    if (roomClient.activeBattle?.battleId === battleId) roomClient.activeBattle = null; // 확인한 결과를 접속 인증 때 받아 둔 값으로 다시 안내하지 않는다
   },
 
   snapshot(battleId: string): Promise<BattleResponse> {

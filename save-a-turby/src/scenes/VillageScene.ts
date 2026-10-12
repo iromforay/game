@@ -1,16 +1,30 @@
+import type { BattleSnapshot } from '../net/battleTypes';
 import Phaser from 'phaser';
-import { CANVAS_WIDTH, CANVAS_HEIGHT, AVATAR_SPEED } from '../config/constants';
+import { apiStoryClient } from '../story/apiStoryClient';
+import { getPlayerId } from '../state/player';
+import type { StoryDialogueData } from './StoryDialogueScene';
+import { chapterOfStage } from '../story/storyFlow';
+import { InventoryWindow } from '../ui/InventoryWindow';
+import { displayScaleOf } from '../ui/responsive';
+import { watchLayout } from '../ui/relayout';
+import { villageHudLayout, type VillageHudLayout } from '../ui/screenLayouts';
+import { playStory } from '../story/playStory';
+import { CANVAS_HEIGHT, AVATAR_SPEED } from '../config/constants';
 import { AVATAR_IMAGE, BACKGROUND_TILES } from '../assets/registry';
 import { loadWorldImages } from '../assets/loader';
 import { ensureVillagePlaceholders } from '../assets/placeholders';
+import { ensureMapMarkerTextures } from '../assets/mapMarkers';
 import { getVillageLayout, getVillagePaths } from '../config/village';
-import { getStoryChapters, getChapterStatuses, getCurrentChapter } from '../config/story';
+import { loadChapterStatuses, getCurrentChapter } from '../config/story';
+import { OPENING_REQUIRED_MESSAGE, openingLocked } from '../story/storyClient';
 import type { Rect, VillageInteraction, VillageLayout } from '../config/village';
 import { VirtualJoystick } from '../ui/VirtualJoystick';
 import { MiniMap } from '../ui/MiniMap';
 import type { MapMarker, MapView } from '../ui/MiniMap';
 import { inventory } from '../state/inventory';
 import { roomClient } from '../net/roomClient';
+import { deferredRestore, promptKindOf, RESTORE_PROMPT, shouldPromptBattle } from '../state/restoreAttempt';
+import { feltPanel, pillButton, TEXT } from '../ui/kit';
 
 type Facing = 'down' | 'left' | 'right' | 'up';
 const FACING_ROW: Record<Facing, number> = { down: 0, left: 1, right: 2, up: 3 };
@@ -59,6 +73,10 @@ export class VillageScene extends Phaser.Scene {
   private ready = false;
   private locked = false;
   private paused = false;
+  private hud!: VillageHudLayout;
+  private hudObjs: Phaser.GameObjects.GameObject[] = [];
+  private invWindow: InventoryWindow | null = null;
+  private generation = 0; // 화면을 다시 만들 때마다 증가 — 이전 화면의 늦은 응답이 새 화면에 덧그리지 않게
 
   constructor() {
     super('Village');
@@ -71,16 +89,21 @@ export class VillageScene extends Phaser.Scene {
   }
 
   async create() {
+    const gen = ++this.generation;
     this.ready = false;
     this.locked = false;
     this.paused = false;
     this.activeInteraction = null;
     this.facing = 'down';
     this.moveAngle = Math.PI / 2;
+    this.hudObjs = [];
+    this.invWindow = null;
 
     this.layout = await getVillageLayout();
+    if (gen !== this.generation || !this.sys.isActive()) return; // 기다리는 사이 화면이 바뀜
     const layout = this.layout;
     ensureVillagePlaceholders(this, layout);
+    ensureMapMarkerTextures(this); // 지도 기호(정식 UI)
 
     this.cameras.main.setBackgroundColor('#3a3626');
     this.cameras.main.fadeIn(250);
@@ -106,12 +129,27 @@ export class VillageScene extends Phaser.Scene {
     this.createAvatar();
     this.createHud();
     this.createPrompt();
+    // 창 크기가 바뀌어 배치 기준이 달라지면 HUD와 안내 버튼만 다시 그린다(걷던 위치·열린 창은 그대로)
+    watchLayout(this, () => {
+      this.createHud();
+      this.createPrompt();
+      this.miniMap?.relayout(); // 미니맵·전체 지도도 새 배율로(열려 있으면 열린 채)
+    });
 
     // 미니맵의 현재 목적지는 스토리 진행(docs/Turby_story.md)에서 온다 — 지금 열려 있는 장의 맵으로 가는 출구
-    const current = getCurrentChapter(getChapterStatuses(await getStoryChapters(), inventory.getAll()));
-    const storyHint = current
-      ? `${current.chapter.titleKo}: ${current.stageName}에서 '${current.clearCharacterName}'를 직접 포획해 보세요.`
-      : '모든 장을 완료했어요. 다음 이야기를 기다려 주세요.';
+    const { ok: storyOk, statuses } = await loadChapterStatuses();
+    if (gen !== this.generation || !this.sys.isActive()) return;
+    const current = getCurrentChapter(statuses);
+    // 안내 문구: 구 판정(롤백)에서만 포획 안내. 서버 상태를 못 받으면 완료로 오해하지 않게 따로 안내한다.
+    const storyHint = !storyOk
+      ? '지역 정보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.'
+      : openingLocked(statuses)
+        ? OPENING_REQUIRED_MESSAGE
+        : current
+        ? current.legacyTargetCode
+          ? `${current.chapter.titleKo}: ${current.stageName}에서 '${current.clearCharacterName}'를 직접 포획해 보세요.`
+          : `${current.chapter.titleKo}: ${current.stageName} 탐험`
+        : '모든 장을 완료했어요. 다음 이야기를 기다려 주세요.';
     const markers: MapMarker[] = layout.interactions.map((it) => ({
       id: it.id,
       type: it.type,
@@ -171,29 +209,50 @@ ${storyHint}` : it.hint,
     this.playAvatarAnim(false);
   }
 
+  // HUD: 재화·지역 이름·인벤토리 버튼(villageHudLayout — 표시 배율별 크기, 서로 겹치지 않음). 창 크기가 바뀌면 HUD만 다시 그린다
   private createHud() {
-    const coinPanel = this.add.image(16, 16, 'hud-coin-panel').setOrigin(0, 0).setDisplaySize(192, 58).setDepth(DEPTH_HUD);
-    this.add
-      .text(coinPanel.x + 96, coinPanel.y + 29, `타레 ${inventory.getTareBalance()}`, { fontSize: '20px', color: HUD_TEXT })
-      .setOrigin(0.5)
-      .setDepth(DEPTH_HUD + 1);
+    this.hudObjs.forEach((o) => o.destroy());
+    const L = (this.hud = villageHudLayout(displayScaleOf(this.scale.displaySize.width)));
+    const fix = <T extends Phaser.GameObjects.GameObject>(o: T) => {
+      (o as unknown as Phaser.GameObjects.Image).setScrollFactor(0);
+      this.hudObjs.push(o);
+      return o;
+    };
+    this.hudObjs = [];
+    fix(this.add.image(L.coin.x, L.coin.y, 'hud-coin-panel').setOrigin(0, 0).setDisplaySize(L.coin.w, L.coin.h).setDepth(DEPTH_HUD));
+    fix(this.add.text(L.coin.x + L.coin.w / 2, L.coin.y + L.coin.h / 2, `타레 ${inventory.getTareBalance()}`, { fontSize: `${L.font.coin}px`, color: HUD_TEXT }).setOrigin(0.5).setDepth(DEPTH_HUD + 1));
+    fix(this.add.image(L.title.x, L.title.y, 'hud-area-panel').setOrigin(0, 0).setDisplaySize(L.title.w, L.title.h).setDepth(DEPTH_HUD));
+    fix(this.add.text(L.title.x + L.title.w / 2, L.title.y + L.title.h / 2, '마을', { fontSize: `${L.font.title}px`, color: HUD_TEXT }).setOrigin(0.5).setDepth(DEPTH_HUD + 1));
 
-    this.add.image(CANVAS_WIDTH / 2, 16, 'hud-area-panel').setOrigin(0.5, 0).setDisplaySize(240, 48).setDepth(DEPTH_HUD);
-    this.add.text(CANVAS_WIDTH / 2, 40, '마을', { fontSize: '22px', color: HUD_TEXT }).setOrigin(0.5).setDepth(DEPTH_HUD + 1);
+    // v3 M4-D: 아이템 인벤토리(창이 열린 동안 이동 멈춤). 창 자체는 한 번만 만든다(HUD를 다시 그려도 열린 창·리스너가 늘지 않게)
+    this.invWindow ??= new InventoryWindow(this, { onClose: () => (this.locked = false), onPlay: (play) => playStory(this, play, 'forest') });
+    const V = L.inventory;
+    const invBox = fix(this.add.rectangle(V.x, V.y, V.w, V.h, 0x5a3a8a).setOrigin(0, 0).setDepth(DEPTH_HUD + 1));
+    fix(this.add.text(V.x + V.w / 2, V.y + V.h / 2, '인벤토리', { fontSize: `${L.font.button}px`, color: '#ffffff' }).setOrigin(0.5).setDepth(DEPTH_HUD + 2));
+    invBox.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+      if (this.invWindow!.isVisible || this.paused) return;
+      this.locked = true;
+      void this.invWindow!.open();
+    });
 
-    this.add
-      .text(16, CANVAS_HEIGHT - 20, `플레이어: ${inventory.getPlayerId().slice(0, 8)}`, { fontSize: '11px', color: '#ffffff' })
-      .setOrigin(0, 1)
-      .setAlpha(0.45)
-      .setDepth(DEPTH_HUD);
+    fix(
+      this.add
+        .text(16, CANVAS_HEIGHT - 20, `플레이어: ${inventory.getPlayerId().slice(0, 8)}`, { fontSize: '11px', color: '#ffffff' })
+        .setOrigin(0, 1)
+        .setAlpha(0.45)
+        .setDepth(DEPTH_HUD),
+    );
   }
 
+  // 상호작용 안내 버튼(들어가기 등): 아바타 머리 위. 크기·글자는 표시 배율에 맞춘다
   private createPrompt() {
-    const bg = this.add.image(0, 0, 'prompt-interact').setDisplaySize(190, 64);
-    this.promptLabel = this.add.text(0, 0, '', { fontSize: '19px', color: HUD_TEXT }).setOrigin(0.5);
-    this.prompt = this.add.container(0, 0, [bg, this.promptLabel]).setDepth(DEPTH_PROMPT).setVisible(false);
+    this.prompt?.destroy();
+    const P = this.hud.prompt;
+    const bg = this.add.image(0, 0, 'prompt-interact').setDisplaySize(P.w, P.h);
+    this.promptLabel = this.add.text(0, 0, this.activeInteraction?.prompt ?? '', { fontSize: `${this.hud.font.prompt}px`, color: HUD_TEXT }).setOrigin(0.5);
+    this.prompt = this.add.container(0, 0, [bg, this.promptLabel]).setDepth(DEPTH_PROMPT).setVisible(!!this.activeInteraction);
     bg.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
-      if (this.activeInteraction && !this.paused) this.triggerInteraction(this.activeInteraction);
+      if (this.activeInteraction && !this.paused && !this.locked) this.triggerInteraction(this.activeInteraction);
     });
   }
 
@@ -214,15 +273,55 @@ ${storyHint}` : it.hint,
   }
 
   // 4-B: 새로고침·재접속으로 돌아왔을 때 서버에 진행 중인 전투가 있으면 그 전투로 이어서 들어간다(서버에 닿지 않으면 조용히 무시)
+  // 10-06 v1 §6: 복원 화면에서 서버를 확인하지 못한 채 마을로 나온 경우(deferredRestore)에는 연결이 돌아왔을 때 접속 인증 결과를 다시 확인하고,
+  // 활성 전투가 남아 있으면 자동으로 끌고 가지 않고 새 활동을 시작하기 전에 복원 안내를 보인다
   private resumeBattleIfAny() {
     void roomClient
       .connect()
-      .then(() => {
-        const battle = roomClient.activeBattle;
-        if (!battle || !this.scene.isActive()) return;
-        this.scene.start('Battle', { stageCode: battle.stageCode, capturedIndices: [], removedIndices: [], snapshot: battle });
-      })
+      .then(() => this.checkServerBattle())
       .catch(() => undefined);
+    if (deferredRestore.isPending) {
+      const off = roomClient.on('reconnected', () => this.checkServerBattle());
+      this.events.once('shutdown', off);
+    }
+  }
+
+  private checkServerBattle() {
+    if (!this.scene.isActive()) return;
+    const battle = roomClient.activeBattle;
+    if (!shouldPromptBattle(deferredRestore.isPending, battle)) {
+      if (!battle) deferredRestore.clear(); // 서버가 "남은 전투 없음"을 확인했다
+      else resumeBattle(this, battle);
+      return;
+    }
+    this.showRestorePrompt(battle!);
+  }
+
+  private restorePrompt: Phaser.GameObjects.GameObject[] = [];
+
+  private showRestorePrompt(battle: BattleSnapshot) {
+    if (this.restorePrompt.length > 0) return; // 접속 인증 결과가 여러 번 와도 한 번만
+    this.locked = true; // 안내에 답하기 전에는 새 활동(집·시장·모험)을 시작하지 않는다
+    this.joystick.setEnabled(false);
+    const cx = this.scale.width / 2;
+    const cy = CANVAS_HEIGHT / 2;
+    const objs: Phaser.GameObjects.GameObject[] = [
+      this.add.rectangle(cx, cy, this.scale.width, CANVAS_HEIGHT, 0x4a3a44, 0.55).setInteractive(),
+      feltPanel(this, cx - 300, cy - 130, 600, 260, { radius: 28, strokeW: 6 }),
+      this.add.text(cx, cy - 40, RESTORE_PROMPT[promptKindOf(battle)].text, { fontSize: '24px', color: TEXT.body, align: 'center', wordWrap: { width: 520 } }).setOrigin(0.5),
+      pillButton(this, cx, cy + 60, 280, 76, RESTORE_PROMPT[promptKindOf(battle)].button, 'primary', () => {
+        deferredRestore.clear();
+        resumeBattle(this, battle);
+      }),
+    ];
+    for (const o of objs) (o as Phaser.GameObjects.Text).setScrollFactor?.(0).setDepth?.(5000);
+    this.restorePrompt = objs;
+    this.events.once('shutdown', () => (this.restorePrompt = []));
+  }
+
+  // 진단용 요약(화면 상태만)
+  get debugRestorePrompt() {
+    return { shown: this.restorePrompt.length > 0, deferred: deferredRestore.isPending };
   }
 
   update(_time: number, delta: number) {
@@ -263,7 +362,7 @@ ${storyHint}` : it.hint,
 
     const hit = this.layout.interactions.find((it) => Phaser.Geom.Rectangle.Contains(new Phaser.Geom.Rectangle(it.zone.x, it.zone.y, it.zone.w, it.zone.h), this.avatar.x, this.avatar.y));
     this.setActiveInteraction(hit ?? null);
-    if (hit) this.prompt.setPosition(this.avatar.x, this.avatar.y - 84 - 44); // 문·입구 그림을 가리지 않게 캐릭터 머리 위에 표시
+    if (hit) this.prompt.setPosition(this.avatar.x, this.avatar.y - this.hud.prompt.lift - 44); // 문·입구 그림을 가리지 않게 캐릭터 머리 위에 표시
     if (hit && k.interact.some((key) => Phaser.Input.Keyboard.JustDown(key))) this.triggerInteraction(hit);
   }
 
@@ -288,4 +387,24 @@ ${storyHint}` : it.hint,
       else this.scene.start('StageSelect');
     });
   }
+}
+
+// 진행 중이던 전투로 이어서 들어간다(Boot의 복원과 마을의 재접속이 같은 진입을 쓴다).
+// M4-C: 스토리 전투면 끝난 뒤 그 전투 항목부터 대화를 잇는다(대화 위치 복원). 그 구간 뒤는 맵 재입장 때 서버가 알려 준다
+export function resumeBattle(scene: Phaser.Scene, battle: BattleSnapshot) {
+  const returnTo = battle.story ? { scene: 'StoryDialogue', mode: 'start' as const, data: storyResumeData(battle.stageCode, battle.story.encounterKey) } : undefined;
+  scene.scene.start('Battle', { stageCode: battle.stageCode, capturedIndices: [], removedIndices: [], snapshot: battle, returnTo });
+}
+
+// 새로고침으로 스토리 전투부터 복원할 때의 대화 화면 데이터: 끝나면 그 지역 맵으로(재입장 시 서버가 다음 구간을 알려 줌)
+function storyResumeData(stageCode: string, encounterKey: string): StoryDialogueData {
+  return {
+    client: apiStoryClient,
+    seenKey: `turby_seen_segments:${getPlayerId()}`,
+    stageCode,
+    resumeBattle: { encounterKey, chapterCode: chapterOfStage(stageCode) },
+    onDone: (s) => {
+      s.scene.start('Map', { stageCode });
+    },
+  };
 }

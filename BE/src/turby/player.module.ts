@@ -10,9 +10,32 @@ import { RoomsGateway } from './rooms/rooms.gateway';
 import { SettingsService } from './rooms/settings.service';
 import { BattleService } from './battle/battle.service';
 import { BattleGateway } from './battle/battle.gateway';
+import { SessionService } from './session.service';
+import { InventoryService } from './inventory.service';
+import { MeController } from './me.controller';
+import { StoryController } from './story/story.controller';
+import { StoryService } from './story/story.service';
+import { StoryContentService } from './story/story-content.service';
+import { StageAccessService } from './story/stage-access.service';
 
 @Module({
-  controllers: [PlayerController, ShopController],
-  providers: [PrismaService, PlayerService, ShopService, EquipmentService, SettingsService, RoomsService, RoomsGateway, BattleService, BattleGateway],
+  // 순서 중요: /player/me/* 가 구 경로 /player/:playerId/* 보다 먼저 등록돼야 'me'가 playerId로 잡히지 않는다
+  controllers: [MeController, StoryController, PlayerController, ShopController],
+  providers: [
+    PrismaService,
+    SettingsService,
+    SessionService,
+    PlayerService,
+    ShopService,
+    EquipmentService,
+    InventoryService,
+    RoomsService,
+    RoomsGateway,
+    BattleService,
+    BattleGateway,
+    StoryContentService,
+    StageAccessService,
+    StoryService,
+  ],
 })
 export class PlayerModule {}

@@ -63,8 +63,12 @@ model item_definition {
   def_bonus       Int                      @default(0)
   ap_bonus        Int                      @default(0)
   hp_bonus        Int                      @default(0)
-  player_item     player_item[]
-  turby_equipment turby_equipment[]
+  // 스토리 M1(2026-09-29, docs/dev/save-a-turby/m0/m0_design.md 2.2) — 가방 칸 계산과 이야기 유물 슬롯
+  max_stack            Int                    @default(1) @db.UnsignedSmallInt
+  story_slot           String?                @db.VarChar(20)
+  player_item          player_item[]
+  turby_equipment      turby_equipment[]
+  player_item_overflow player_item_overflow[]
 }
 
 model shop_product {
@@ -141,6 +145,8 @@ model player {
   exp                                                    Int                @default(0) @db.UnsignedInt
   created_at                                             DateTime           @default(now()) @db.Timestamp(0)
   updated_at                                             DateTime           @default(now()) @db.Timestamp(0)
+  // 스토리 M1: identify()가 발급하고 /player/me/* 와 소켓 hello가 검증(커비 kirby_player.session_token과 같은 방식)
+  session_token                                          String?            @unique(map: "uq_player_session_token") @db.VarChar(64)
   battle_result_battle_result_player_idToplayer          battle_result[]    @relation("battle_result_player_idToplayer")
   battle_result_battle_result_opponent_player_idToplayer battle_result[]    @relation("battle_result_opponent_player_idToplayer")
   market_listing_market_listing_seller_player_idToplayer market_listing[]   @relation("market_listing_seller_player_idToplayer")
@@ -148,6 +154,10 @@ model player {
   player_base_slot                                       player_base_slot[]
   player_item                                            player_item[]
   turby_instance                                         turby_instance[]
+  player_story_progress                                  player_story_progress?
+  player_story_event                                     player_story_event[]
+  player_story_objective_progress                        player_story_objective_progress[]
+  player_item_overflow                                   player_item_overflow[]
 }
 
 model player_base_slot {
@@ -164,6 +174,12 @@ model player_item {
   player_id          BigInt          @db.UnsignedBigInt
   item_definition_id Int             @db.UnsignedInt
   quantity           Int             @default(0) @db.UnsignedInt
+  // 스토리 M1 인벤토리: 수량이 0이 되어도 행을 지우지 않는다(first_acquired_at = 수집 기록)
+  first_acquired_at  DateTime?       @db.Timestamp(0)
+  last_acquired_at   DateTime?       @db.Timestamp(0)
+  is_new             Boolean         @default(false)
+  is_locked          Boolean         @default(false)
+  used_at            DateTime?       @db.Timestamp(0)
   player             player          @relation(fields: [player_id], references: [id], onUpdate: Restrict, map: "player_item_ibfk_1")
   item_definition    item_definition @relation(fields: [item_definition_id], references: [id], onUpdate: Restrict, map: "player_item_ibfk_2")
 
@@ -214,6 +230,9 @@ model turby_instance {
   def_bonus        Int                         @default(0)
   ap_bonus         Int                         @default(0)
   hp_bonus         Int                         @default(0)
+  // 스토리 M1: 이야기 누비(판매·거래·폐기 불가). is_locked(사용자 잠금)와 섞어 쓰지 않는다
+  is_story_companion Boolean                   @default(false)
+  story_progress   player_story_progress?
   battle_result    battle_result[]
   market_listing   market_listing?
   turby_equipment  turby_equipment[]
@@ -226,9 +245,78 @@ model turby_instance {
   @@index([owner_player_id], map: "owner_player_id")
 }
 
+// ===== 터비 구하기 스토리 모드 M1 (docs/dev/save-a-turby/m0/m0_design.md 2절, prisma/sql/2026-09-29_turby_story_m1.sql) =====
+
+// 플레이어당 한 행. 장(chapter)은 checkpoint 접두어에서 계산한다.
+model player_story_progress {
+  player_id                    BigInt                       @id @db.UnsignedBigInt
+  checkpoint                   String                       @default("OPENING_NOT_STARTED") @db.VarChar(40)
+  story_nubi_turby_instance_id BigInt?                      @unique(map: "uq_story_nubi") @db.UnsignedBigInt
+  nubi_growth_stage            Int                          @default(0) @db.UnsignedTinyInt
+  origin                       player_story_progress_origin @default(new)
+  created_at                   DateTime                     @default(now()) @db.Timestamp(0)
+  updated_at                   DateTime                     @default(now()) @updatedAt @db.Timestamp(0)
+  player                       player                       @relation(fields: [player_id], references: [id], onDelete: Cascade, onUpdate: Restrict)
+  story_nubi                   turby_instance?              @relation(fields: [story_nubi_turby_instance_id], references: [id], onDelete: SetNull, onUpdate: Restrict)
+}
+
+enum player_story_progress_origin {
+  new
+  legacy_backfill
+}
+
+// 영구 효과의 멱등 키 — (player_id, event_id) unique가 마지막 방어선
+model player_story_event {
+  id           BigInt                    @id @default(autoincrement()) @db.UnsignedBigInt
+  player_id    BigInt                    @db.UnsignedBigInt
+  event_id     String                    @db.VarChar(64)
+  source       player_story_event_source @default(story)
+  completed_at DateTime                  @default(now()) @db.Timestamp(0)
+  player       player                    @relation(fields: [player_id], references: [id], onDelete: Cascade, onUpdate: Restrict)
+
+  @@unique([player_id, event_id], map: "uq_story_event")
+}
+
+enum player_story_event_source {
+  story
+  legacy_backfill
+}
+
+// 수집 오브젝트 한 개 = 한 행(실가루 dust_01~dust_10 등)
+model player_story_objective_progress {
+  id            BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  player_id     BigInt   @db.UnsignedBigInt
+  objective_key String   @db.VarChar(64)
+  object_id     String   @db.VarChar(64)
+  created_at    DateTime @default(now()) @db.Timestamp(0)
+  player        player   @relation(fields: [player_id], references: [id], onDelete: Cascade, onUpdate: Restrict)
+
+  @@unique([player_id, objective_key, object_id], map: "uq_story_objective_object")
+  @@index([player_id, objective_key], map: "idx_story_objective")
+}
+
+// 가방이 가득 찼을 때 일반 보상을 받아 두는 임시 보관함. 멱등 키는 플레이어 범위(player_id, source_key)
+model player_item_overflow {
+  id                 BigInt          @id @default(autoincrement()) @db.UnsignedBigInt
+  player_id          BigInt          @db.UnsignedBigInt
+  item_definition_id Int             @db.UnsignedInt
+  quantity           Int             @db.UnsignedInt
+  source_key         String          @db.VarChar(96)
+  created_at         DateTime        @default(now()) @db.Timestamp(0)
+  expires_at         DateTime?       @db.Timestamp(0)
+  claimed_at         DateTime?       @db.Timestamp(0)
+  player             player          @relation(fields: [player_id], references: [id], onDelete: Cascade, onUpdate: Restrict)
+  item_definition    item_definition @relation(fields: [item_definition_id], references: [id], onUpdate: Restrict)
+
+  @@unique([player_id, source_key], map: "uq_item_overflow_source")
+  @@index([player_id, claimed_at], map: "idx_item_overflow_player")
+  @@index([item_definition_id], map: "idx_item_overflow_item")
+}
+
 enum battle_result_encounter_type {
   wild
   raid
+  story
 }
 
 enum item_definition_category {
@@ -236,6 +324,10 @@ enum item_definition_category {
   consumable
   upgrade
   equipment
+  material
+  mission
+  relic
+  memento
 }
 
 enum shop_product_product_type {

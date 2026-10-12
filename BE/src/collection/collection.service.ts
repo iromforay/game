@@ -17,7 +17,8 @@ export class CollectionService {
     });
 
     const deviceUuid = typeof deviceUuidRaw === 'string' && deviceUuidRaw.length > 0 && deviceUuidRaw.length <= DEVICE_UUID_MAX ? deviceUuidRaw : null;
-    const player = deviceUuid ? await this.prisma.player.findUnique({ where: { device_uuid: deviceUuid } }) : null;
+    // id만 조회: 커비 BE(운영)는 터비 스키마 변경과 따로 배포되므로, 새 컬럼(session_token 등)이 DB에 적용되기 전에도 깨지지 않게 한다
+    const player = deviceUuid ? await this.prisma.player.findUnique({ where: { device_uuid: deviceUuid }, select: { id: true } }) : null;
     const ownedRows = player
       ? await this.prisma.turby_instance.groupBy({
           by: ['character_id'],

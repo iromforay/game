@@ -1,0 +1,778 @@
+{
+  "schemaVersion": 1,
+  "chapterCode": "ch01",
+  "source": "docs/scene/1장.md",
+  "segments": [
+    {
+      "segmentId": "ch01.first_path",
+      "resumeFrom": "CH01_STARTED",
+      "replayOnResume": true,
+      "completesWith": null,
+      "entries": [
+        {
+          "kind": "narration",
+          "dialogueId": "ch01.first_path.001",
+          "text": "두 사람은 먼지풀과 끊어진 실오라기가 뒤엉킨 숲을 걷는다. 누비는 처음 보는 장소라고 말하면서도 갈림길에 설 때마다 망설임 없이 방향을 골랐다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch01.first_path.002",
+          "speaker": "player",
+          "speakerLabel": "{playerName}",
+          "text": "정말 처음 와 본 곳이야?",
+          "portrait": "player",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch01.first_path.003",
+          "speaker": "nubi",
+          "speakerLabel": "누비",
+          "text": "기억에는 없어. 그런데 몸이 길을 알고 있는 것 같아.",
+          "portrait": "nubi",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch01.first_path.004",
+          "text": "바닥의 희미한 실오라기가 누비의 발밑에서 잠깐 빛난다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch01.first_path.005",
+          "text": "두 사람은 빛나는 실오라기 길을 따라 걷다가 길 한가운데에서 갑자기 멈춘다. 이어져 있어야 할 실이 중간에서 반듯하게 잘려 있다. 풀리거나 닳은 흔적은 없고, 누군가 날카로운 것으로 한 번에 끊어 낸 듯 절단면이 매끈하다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch01.first_path.006",
+          "speaker": "player",
+          "speakerLabel": "{playerName}",
+          "text": "이상하다. 실이 풀린 게 아니라 잘린 것 같아.",
+          "portrait": "player",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch01.first_path.007",
+          "text": "누비는 잘린 실 끝에 손을 대 본다. 순간 누비의 몸에서 실 한 가닥이 움찔하지만, 누비는 그 느낌이 무엇인지 알아내지 못한다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch01.first_path.008",
+          "speaker": "nubi",
+          "speakerLabel": "누비",
+          "text": "숲에서는 이런 일도 있나 봐. 먼저 단수링을 찾자.",
+          "portrait": "nubi",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch01.first_path.009",
+          "text": "두 사람은 잘린 실을 뒤로하고 다시 길을 걷는다. 화면은 잠시 그 자리에 남아 서로 닿지 못한 두 실 끝을 보여 준 뒤 두 사람을 따라간다. 주인공과 누비는 이를 이상하게 여기지만 아직 중요한 흔적이라고 생각하지 않는다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch01.first_path.010",
+          "text": "두 사람은 빛을 따라 보풀이 공터에 도착한다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "title",
+          "dialogueId": "ch01.first_path.011",
+          "text": "먼지실에 붙잡힌 보풀이"
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch01.first_path.012",
+          "text": "공터에서는 보풀이 한 마리가 검은 실밥 무리에 둘러싸여 있었다. 살아 있는 것처럼 꿈틀거리는 실밥이들이 보풀이의 몸과 팔다리를 휘감아 검은 매듭을 만들고 있었다. 보풀이는 몸을 빼내려 하지만 실밥이들이 당길 때마다 마음과 다르게 난폭하게 움직인다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch01.first_path.013",
+          "speaker": "bopuli",
+          "speakerLabel": "보풀이",
+          "text": "오지 마! 몸이 마음대로 안 움직여!",
+          "portrait": "bopuli",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch01.first_path.014",
+          "speaker": "nubi",
+          "speakerLabel": "누비",
+          "text": "저 터비가 공격하려는 게 아니야. 저 검은 실밥이들이 몸을 움직이고 있어.",
+          "portrait": "nubi",
+          "expression": "worried",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch01.first_path.015",
+          "text": "실밥이 한 마리가 누비의 발을 향해 튀어 오른다. 누비가 몸을 피하자 나머지 실밥이들도 보풀이에게서 일부 떨어져 나와 두 사람을 에워싼다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "storyBattle",
+          "dialogueId": "ch01.first_path.016",
+          "encounterKey": "forest_stitchling_ambush"
+        }
+      ]
+    },
+    {
+      "segmentId": "ch01.bopul_clue",
+      "resumeFrom": "CH01_STARTED",
+      "replayOnResume": true,
+      "completesWith": "forest_dansuring_clue_learned",
+      "entries": [
+        {
+          "kind": "narration",
+          "dialogueId": "ch01.bopul_clue.001",
+          "text": "마지막 실밥이를 끊자 보풀이를 묶고 있던 검은 매듭도 힘을 잃고 짧은 실 조각으로 풀어진다. 보풀이는 바닥에 털썩 주저앉는다. 풀어진 실 조각 일부가 먼지풀 사이로 기어가듯 달아난다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch01.bopul_clue.002",
+          "speaker": "bopuli",
+          "speakerLabel": "보풀이",
+          "text": "살았다! 너희가 내 실을 풀어 줬구나.",
+          "portrait": "bopuli",
+          "expression": "relieved",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch01.bopul_clue.003",
+          "text": "누비는 보풀이의 몸에 일정한 간격으로 남은 작은 바늘구멍을 발견한다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch01.bopul_clue.004",
+          "speaker": "nubi",
+          "speakerLabel": "누비",
+          "text": "그냥 엉킨 게 아니야. 누가 이 검은 실을 몸에 박아 넣었어.",
+          "portrait": "nubi",
+          "expression": "worried",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch01.bopul_clue.005",
+          "text": "멀리 떨어진 숲 안쪽에서 규칙적인 기계음이 희미하게 들린다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch01.bopul_clue.006",
+          "text": "타닥, 타닥, 타닥……",
+          "cameraCue": null,
+          "soundCue": "sewing-machine-distant"
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch01.bopul_clue.007",
+          "text": "세 사람이 소리가 난 방향을 바라보지만 먼지풀만 흔들릴 뿐 아무것도 보이지 않는다. 잠시 뒤 소리는 멎는다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch01.bopul_clue.008",
+          "speaker": "player",
+          "speakerLabel": "{playerName}",
+          "text": "우리는 단수링을 찾고 있어.",
+          "portrait": "player",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch01.bopul_clue.009",
+          "speaker": "bopuli",
+          "speakerLabel": "보풀이",
+          "text": "단수링이라면 봤어. 검은 실밥이들에게 붙잡히기 전에 숲에서 가장 오래된 실뿌리 문을 지나왔거든.",
+          "portrait": "bopuli",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch01.bopul_clue.010",
+          "text": "보풀이는 바닥에 세 갈래로 갈라진 실뿌리 모양을 그린다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch01.bopul_clue.011",
+          "speaker": "bopuli",
+          "speakerLabel": "보풀이",
+          "text": "세 갈래 실뿌리가 다시 하나로 묶이는 곳에 둥근 문이 있어. 그 문에 아주 오래된 실 한 가닥이 걸려 있고, 단수링은 거기에 끼워져 있었어.",
+          "portrait": "bopuli",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch01.bopul_clue.012",
+          "speaker": "nubi",
+          "speakerLabel": "누비",
+          "text": "숲 깊은 곳이라는 것만 알았는데…… 이제 어디를 찾아야 하는지 알겠어.",
+          "portrait": "nubi",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch01.bopul_clue.013",
+          "speaker": "bopuli",
+          "speakerLabel": "보풀이",
+          "text": "하지만 먼지바람이 실뿌리를 전부 덮어서 지금은 길을 볼 수 없어. 빛나는 실가루 열 개를 찾아서 내게 가져와 줘. 그러면 실의 떨림을 찾는 나침판을 만들어 줄게.",
+          "portrait": "bopuli",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        }
+      ]
+    },
+    {
+      "segmentId": "ch01.compass_craft",
+      "resumeFrom": "CH01_BOPUL_RESCUED",
+      "replayOnResume": false,
+      "completesWith": null,
+      "entries": [
+        {
+          "kind": "narration",
+          "dialogueId": "ch01.compass_craft.001",
+          "text": "보풀이는 실가루를 둥글게 모아 한 방향으로 흐르는 떨림을 만들고, 작은 바늘과 크림색 실로 테두리를 단단히 묶는다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch01.compass_craft.002",
+          "text": "빛이 가라앉자 `실의 떨림을 찾는 나침판`이 완성된다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch01.compass_craft.003",
+          "speaker": "bopuli",
+          "speakerLabel": "보풀이",
+          "text": "완성됐어. 이건 실의 떨림을 찾는 나침판이야. 오래된 실과 단수링이 있는 곳을 가리킬 거야.",
+          "portrait": "bopuli",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch01.compass_craft.004",
+          "text": "나침판의 바늘이 빠르게 회전한다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch01.compass_craft.005",
+          "text": "그러다 숲 깊은 곳이 아닌 누비를 향해 멈춘다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch01.compass_craft.006",
+          "text": "잠시 뒤 바늘은 다시 움직여 숲 안쪽을 가리킨다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch01.compass_craft.007",
+          "speaker": "bopuli",
+          "speakerLabel": "보풀이",
+          "text": "어라? 방금 누비를 가리킨 것 같은데?",
+          "portrait": "bopuli",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch01.compass_craft.008",
+          "speaker": "nubi",
+          "speakerLabel": "누비",
+          "text": "고장 난 거겠지. 나는 오래된 실이 아니라, 그냥 풀린누비인걸.",
+          "portrait": "nubi",
+          "expression": "worried",
+          "cameraCue": null,
+          "soundCue": null
+        }
+      ]
+    },
+    {
+      "segmentId": "ch01.hidden_path",
+      "resumeFrom": "CH01_COMPASS_ACQUIRED",
+      "replayOnResume": false,
+      "completesWith": null,
+      "entries": [
+        {
+          "kind": "title",
+          "dialogueId": "ch01.hidden_path.001",
+          "text": "누비가 기억하는 매듭"
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch01.hidden_path.002",
+          "text": "실의 떨림을 찾는 나침판을 사용하자 감춰져 있던 실오라기 길이 나타난다. 길 끝의 작은 쉼터에는 달아났던 실밥이들이 숲의 먼지와 오래된 실을 끌어모아 만든 거대 실밥 매듭이 길을 막고 있다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "storyBattle",
+          "dialogueId": "ch01.hidden_path.003",
+          "encounterKey": "forest_giant_knot"
+        }
+      ]
+    },
+    {
+      "segmentId": "ch01.first_knot_awaken",
+      "resumeFrom": "CH01_COMPASS_ACQUIRED",
+      "replayOnResume": true,
+      "completesWith": "forest_first_knot_awakened",
+      "entries": [
+        {
+          "kind": "narration",
+          "dialogueId": "ch01.first_knot_awaken.001",
+          "text": "그 너머에는 중간이 끊어진 오래된 실이 놓여 있다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch01.first_knot_awaken.002",
+          "text": "누비가 실에 손을 올리는 순간, 손가락이 저절로 움직이기 시작한다. 누비는 자신도 모르는 방식으로 끊어진 실을 다시 묶는다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch01.first_knot_awaken.003",
+          "speaker": "player",
+          "speakerLabel": "{playerName}",
+          "text": "누비, 이런 매듭을 만들 줄 알았어?",
+          "portrait": "player",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch01.first_knot_awaken.004",
+          "speaker": "nubi",
+          "speakerLabel": "누비",
+          "text": "아니. 머리로는 전혀 기억나지 않아.",
+          "portrait": "nubi",
+          "expression": "worried",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch01.first_knot_awaken.005",
+          "text": "누비는 자신의 손을 내려다본다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch01.first_knot_awaken.006",
+          "speaker": "nubi",
+          "speakerLabel": "누비",
+          "text": "그런데 손이 먼저 기억했어.",
+          "portrait": "nubi",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch01.first_knot_awaken.007",
+          "text": "끊어진 길이 이어지자 숲 전체가 희미하게 빛난다. 주인공이 처음 누비에게 묶어 준 크림색 매듭과 거대 실밥 매듭에게서 되찾은 매듭심이 동시에 떨리며 하나로 합쳐진다. 서툴렀던 매듭은 이야기 장식 `첫 매듭`으로 각성한다.",
+          "cameraCue": null,
+          "soundCue": null
+        }
+      ]
+    },
+    {
+      "segmentId": "ch01.first_knot_equipped",
+      "resumeFrom": "CH01_FIRST_KNOT_EQUIPPED",
+      "replayOnResume": false,
+      "completesWith": null,
+      "entries": [
+        {
+          "kind": "narration",
+          "dialogueId": "ch01.first_knot_equipped.001",
+          "text": "주인공은 첫 매듭을 누비에게 장착한다. 풀리고 있던 몸이 단단히 고정되고, 누비의 머리 위에는 각성한 크림색 매듭이 자리 잡는다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch01.first_knot_equipped.002",
+          "speaker": "nubi",
+          "speakerLabel": "누비",
+          "text": "실이…… 더는 풀리지 않아.",
+          "portrait": "nubi",
+          "expression": "happy",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch01.first_knot_equipped.003",
+          "speaker": "player",
+          "speakerLabel": "{playerName}",
+          "text": "이제 다 나은 거야?",
+          "portrait": "player",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch01.first_knot_equipped.004",
+          "speaker": "nubi",
+          "speakerLabel": "누비",
+          "text": "아니. 아직 안쪽에서 무언가가 계속 풀리고 있어. 하지만 이 매듭이 시간을 붙잡아 주고 있어.",
+          "portrait": "nubi",
+          "expression": "weak",
+          "cameraCue": null,
+          "soundCue": null
+        }
+      ]
+    },
+    {
+      "segmentId": "ch01.primordial_knot",
+      "resumeFrom": "CH01_FIRST_KNOT_EQUIPPED",
+      "replayOnResume": true,
+      "completesWith": null,
+      "entries": [
+        {
+          "kind": "title",
+          "dialogueId": "ch01.primordial_knot.001",
+          "text": "태초의 매듭"
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch01.primordial_knot.002",
+          "text": "두 사람과 보풀이는 숲 가장 깊은 곳에 도착한다. 거대한 실뿌리가 둥근 문처럼 얽혀 있고, 오래된 실 한 가닥에는 작은 고리 터비가 끼워져 있다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch01.primordial_knot.003",
+          "text": "단수링이 누비를 바라본다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch01.primordial_knot.004",
+          "speaker": "dansuring",
+          "speakerLabel": "단수링",
+          "text": "오래도록 기다렸어.",
+          "portrait": "dansuring",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch01.primordial_knot.005",
+          "text": "단수링은 누비의 주위를 천천히 돌며 몸의 실을 센다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch01.primordial_knot.006",
+          "speaker": "dansuring",
+          "speakerLabel": "단수링",
+          "text": "스물한 단, 스물두 단…… 스물세 단.",
+          "portrait": "dansuring",
+          "expression": "counting",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch01.primordial_knot.007",
+          "text": "단수링의 움직임이 멈춘다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch01.primordial_knot.008",
+          "speaker": "dansuring",
+          "speakerLabel": "단수링",
+          "text": "역시 네 실은 내가 기억하는 자리에서 이어져 있어.",
+          "portrait": "dansuring",
+          "expression": "counting",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch01.primordial_knot.009",
+          "speaker": "nubi",
+          "speakerLabel": "누비",
+          "text": "나를 알고 있어?",
+          "portrait": "nubi",
+          "expression": "worried",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch01.primordial_knot.010",
+          "speaker": "dansuring",
+          "speakerLabel": "단수링",
+          "text": "풀리기 전의 너를 알고 있지.",
+          "portrait": "dansuring",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch01.primordial_knot.011",
+          "text": "첫 매듭이 빛나며 거대한 실뿌리 문으로 한 가닥의 빛을 뻗는다. 문 안에 오래된 기억이 펼쳐진다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch01.primordial_knot.012",
+          "text": "거대한 실타래가 풀리며 수많은 실이 집 안 곳곳으로 흩어진다. 그중 푸른 실 한 가닥이 어항을 향해 사라진다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch01.primordial_knot.013",
+          "speaker": "dansuring",
+          "speakerLabel": "단수링",
+          "text": "태초의 실타래가 풀리던 날의 기억이야.",
+          "portrait": "dansuring",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch01.primordial_knot.014",
+          "speaker": "nubi",
+          "speakerLabel": "누비",
+          "text": "저 실이 풀릴 때…… 나도 그곳에 있었던 것 같아.",
+          "portrait": "nubi",
+          "expression": "worried",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch01.primordial_knot.015",
+          "speaker": "dansuring",
+          "speakerLabel": "단수링",
+          "text": "다섯 실의 유물을 모아. 그러면 네가 잃어버린 기억과 이 아이가 돌아갈 길을 함께 찾을 수 있을 거야.",
+          "portrait": "dansuring",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch01.primordial_knot.016",
+          "speaker": "player",
+          "speakerLabel": "{playerName}",
+          "text": "다음 매듭은 어디에 있어?",
+          "portrait": "player",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch01.primordial_knot.017",
+          "text": "단수링이 기억 속 푸른 실을 가리킨다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch01.primordial_knot.018",
+          "speaker": "dansuring",
+          "speakerLabel": "단수링",
+          "text": "물이 모든 것을 물들이는 곳. 어항 속 호수.",
+          "portrait": "dansuring",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch01.primordial_knot.019",
+          "text": "문에서 흘러나온 푸른 빛이 지역 선택 화면의 호수 카드를 밝힌다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch01.primordial_knot.020",
+          "text": "누비는 머리 위의 첫 매듭을 만진다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch01.primordial_knot.021",
+          "speaker": "nubi",
+          "speakerLabel": "누비",
+          "text": "앞으로 네 개가 더 남았어.",
+          "portrait": "nubi",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch01.primordial_knot.022",
+          "speaker": "player",
+          "speakerLabel": "{playerName}",
+          "text": "처음부터 같이 가기로 했잖아.",
+          "portrait": "player",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch01.primordial_knot.023",
+          "text": "주인공이 누비에게 손을 내민다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch01.primordial_knot.024",
+          "speaker": "player",
+          "speakerLabel": "{playerName}",
+          "text": "네 몸이 다 낫고, 내가 집으로 돌아갈 때까지 함께 가자.",
+          "portrait": "player",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch01.primordial_knot.025",
+          "text": "누비는 그 손을 잡는다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch01.primordial_knot.026",
+          "speaker": "nubi",
+          "speakerLabel": "누비",
+          "text": "응. 이번에는 끝까지 기억할게.",
+          "portrait": "nubi",
+          "expression": "happy",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "storyEvent",
+          "dialogueId": "ch01.primordial_knot.027",
+          "eventId": "forest_primordial_knot_seen"
+        },
+        {
+          "kind": "title",
+          "dialogueId": "ch01.primordial_knot.028",
+          "text": "1장 완료 — 첫 매듭"
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch01.primordial_knot.029",
+          "text": "2장 ‘어항 속 호수’가 열렸습니다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch01.primordial_knot.030",
+          "text": "마지막 화면에서 누비의 머리 위 크림색 매듭이 잠깐 빛난다. 단수링은 떠나는 두 사람을 바라보며 혼잣말한다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch01.primordial_knot.031",
+          "speaker": "dansuring",
+          "speakerLabel": "단수링",
+          "text": "잊어버린 건 이름뿐이 아니구나.",
+          "portrait": "dansuring",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch01.primordial_knot.032",
+          "text": "단수링은 더 말하지 않는다.",
+          "cameraCue": null,
+          "soundCue": null
+        }
+      ]
+    }
+  ]
+}
