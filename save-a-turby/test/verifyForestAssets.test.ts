@@ -122,7 +122,7 @@ test('PNG가 아니거나 크기가 다르면 파일명·기대값·실제값을
 test('투명 PNG: 알파 채널이 없거나 모서리가 불투명하면 실패, 팔레트+tRNS 투명도는 알파로 인정한다', () => {
   const dir = workspace();
   const r = fail(dir, {
-    'world/forest/hidden-area-thicket-locked.png': png(1448, 1086, { mode: 'rgb' }), // 알파 채널 없음
+    'world/forest/hidden-area-thicket-locked.png': png(1817, 866, { mode: 'rgb' }), // 알파 채널 없음
     'world/forest/root-gate-closed.png': png(480, 520, { fill: [0, 0, 0, 0], edits: [[0, 519, [10, 10, 10, 255]]] }), // 왼쪽 아래 모서리 불투명
     'world/forest/root-gate-open.png': png(480, 520, { mode: 'palette', fill: [0, 0, 0, 0] }), // tRNS 알파 — 통과해야 한다
   });

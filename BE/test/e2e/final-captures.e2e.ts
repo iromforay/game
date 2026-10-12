@@ -155,15 +155,14 @@ async function shootOnce(shot: Shot, size: { width: number; height: number }) {
   }
 }
 
-const DUST = { x: 1487, y: 1300 }; // 실가루 10개가 모두 남은 수집 단계(0/10)
-const WIND = { x: 1866, y: 1000 }; // 먼지바람 앞 — 숨은 길 활성 목표
+const FRONT = { x: 1866, y: 1000 }; // 먼지바람 앞(잠금 전·해제 후 같은 플레이어·카메라 위치)
 const SHOTS_1280: Shot[] = [
-  { name: 'v4_01_full_map_dust_stage_1280', seed: 'rescued', at: DUST, fullMap: true },
-  { name: 'v4_03_full_map_hidden_path_1280', seed: 'compass', at: WIND, fullMap: true },
+  { name: 'v7_01_locked_1280', seed: 'compass', at: FRONT },
+  { name: 'v7_02_opened_1280', seed: 'compass', at: FRONT, lateEvents: OPENED },
 ];
 const SHOTS_640: Shot[] = [
-  { name: 'v4_02_full_map_dust_stage_640', seed: 'rescued', at: DUST, fullMap: true },
-  { name: 'v4_04_full_map_hidden_path_640', seed: 'compass', at: WIND, fullMap: true },
+  { name: 'v7_03_locked_640', seed: 'compass', at: FRONT },
+  { name: 'v7_04_opened_640', seed: 'compass', at: FRONT, lateEvents: OPENED },
 ];
 
 test('최종 캡처 1280×720', async () => {

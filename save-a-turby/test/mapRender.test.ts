@@ -196,12 +196,12 @@ test('배경 전환은 충돌·카메라 경계·월드 그림 계획을 바꾸�
 });
 
 // 10-08 v6: 잠금 수풀 — 표시값 고정, 렌더 깊이(수풀 < 먼지바람 < 플레이어), 상단 목표 버튼·오른쪽 HUD와의 화면 간격
-test('잠금 수풀(10-08 v6): (1990,1020) 380×285 고정, 먼지바람·플레이어보다 아래 깊이, 먼지바람 앞 위치에서 목표 버튼과 20/10px 이상·오른쪽 HUD·플레이어 교차 0', async () => {
+test('잠금 수풀(10-08 v6): (2010,1020) 380×181 고정, 먼지바람·플레이어보다 아래 깊이, 먼지바람 앞 위치에서 목표 버튼과 20/10px 이상·오른쪽 HUD·플레이어 교차 0', async () => {
   const { mapHudLayout } = await import('../src/ui/screenLayouts.ts');
   const forest = JSON.parse(readFileSync(fileURLToPath(new URL('../../BE/story-data/save-a-turby/stages/forest.json', import.meta.url)), 'utf8'));
   const t = forest.render.overlays.find((o: { id: string }) => o.id === 'hidden_area_thicket_locked');
-  assert.deepEqual([t.assetKey, t.x, t.y, t.width, t.height, t.pivot, t.hiddenAfter], ['hidden-area-thicket-locked', 1990, 1020, 380, 285, [0.5, 0.5], 'forest_hidden_path_opened']);
-  assert.ok(Math.abs(t.width / t.height - 1448 / 1086) < 0.01, '원본 비율 유지');
+  assert.deepEqual([t.assetKey, t.x, t.y, t.width, t.height, t.pivot, t.hiddenAfter], ['hidden-area-thicket-locked', 2010, 1020, 380, 181, [0.5, 0.5], 'forest_hidden_path_opened']);
+  assert.ok(Math.abs(t.width / t.height - 1817 / 866) < 0.02, '원본 비율 유지');
   assert.ok(MAP_DEPTH.overlay < MAP_DEPTH.story && MAP_DEPTH.story < MAP_DEPTH.actors, '수풀(overlay) < 먼지바람·문(story) < 플레이어(actors)');
   const wind = forest.layout.gates.find((g: { id: string }) => g.id === 'gate_hidden_path');
   // 같은 계획에서 수풀 깊이가 먼지바람 그림 깊이(story)보다 낮다
@@ -245,4 +245,27 @@ test('최종 숲 데이터: 모든 에셋이 로드되면 이야기 지점·수�
   assert.ok(failed.points.length > 0 && failed.points.every((p) => p.marker), '로딩 실패: 모든 지점에 임시 표식');
   assert.ok(failed.objects.every((o) => o.marker), '로딩 실패: 실가루에 임시 표식');
   assert.ok(failed.gates.some((g) => g.placeholder), '로딩 실패: 문은 임시 사각형');
+});
+
+// 10-12 v7: 새 수풀(v3 전달본)의 실제 불투명 픽셀이 플레이어가 서는 자리(먼지바람 충돌선 앞)를 거의 덮지 않는다
+test('수풀 v3 불투명 픽셀: 플레이어 위치 32×32와 겹치는 면적 10% 이하, 모서리 거의 투명', async () => {
+  const { decodePng } = await import('../scripts/forest-assets.mjs');
+  const forest = JSON.parse(readFileSync(fileURLToPath(new URL('../../BE/story-data/save-a-turby/stages/forest.json', import.meta.url)), 'utf8'));
+  const t = forest.render.overlays.find((o: { id: string }) => o.id === 'hidden_area_thicket_locked');
+  const wind = forest.layout.gates.find((g: { id: string }) => g.id === 'gate_hidden_path');
+  const img = decodePng(readFileSync(fileURLToPath(new URL('../src/assets/world/forest/hidden-area-thicket-locked.png', import.meta.url)))).pixels();
+  assert.deepEqual([img.width, img.height], [1817, 866]);
+  const left = t.x - t.width * 0.5;
+  const top = t.y - t.height * 0.5;
+  const alphaAtWorld = (wx: number, wy: number) => {
+    const ix = Math.floor(((wx - left) / t.width) * img.width);
+    const iy = Math.floor(((wy - top) / t.height) * img.height);
+    return ix < 0 || iy < 0 || ix >= img.width || iy >= img.height ? 0 : img.alphaAt(ix, iy);
+  };
+  const stand = { x: wind.x - 24, y: 1000 }; // 먼지바람 충돌선 앞 플레이어 위치(캡처·측정과 같은 값)
+  let covered = 0;
+  for (let y = stand.y - 16; y < stand.y + 16; y++) for (let x = stand.x - 16; x < stand.x + 16; x++) if (alphaAtWorld(x, y) > 40) covered += 1;
+  assert.ok(covered <= 1024 * 0.1, `플레이어 자리와 겹치는 불투명 픽셀 ${covered}px² (≤ 102)`);
+  // 원본의 네 모서리는 거의 투명(검수기와 같은 허용 알파 ≤ 8 — 검은 배경·불투명 사각형이 아니다)
+  for (const [x, y] of [[0, 0], [img.width - 1, 0], [0, img.height - 1], [img.width - 1, img.height - 1]]) assert.ok(img.alphaAt(x, y) <= 8, `모서리 (${x},${y}) α=${img.alphaAt(x, y)}`);
 });
