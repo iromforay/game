@@ -1,0 +1,367 @@
+import { useEffect, useRef, useState, type PointerEvent } from 'react';
+import playerImage from './assets/player-paper-sword.png';
+import { collectDungeonResource, completeDungeonZone, deployDungeonRobot, fetchDungeonSave, hasDungeonAccount, saveDungeonProgress, type DungeonRobotAssignment, type DungeonSaveData } from './saveClient';
+import './styles.css';
+
+interface MyRoomDungeonGameProps { onExit?: () => void; }
+interface Position { x: number; y: number; }
+type ResourceId = 'paper' | 'tape' | 'screw' | 'battery';
+interface HarvestObject { id: string; name: string; sprite: number; position: Position; hp: number; maxHp: number; resource: ResourceId; quantity: number; destroyed: boolean; }
+interface Drop { id: string; resource: ResourceId; quantity: number; position: Position; }
+
+const START_POSITION: Position = { x: 48, y: 82 };
+const START_CAMERA: Position = { x: 50, y: 70 };
+const CHAPTER_START_POSITION: Position = { x: 50, y: 79 };
+const ATTACK_DAMAGE = 12;
+const SAVE_KEY = 'my-room-dungeon:save:v1';
+const RESOURCE_INFO: Record<ResourceId, { name: string; icon: string }> = {
+  paper: { name: '종이', icon: '▱' }, tape: { name: '테이프', icon: '◉' },
+  screw: { name: '작은 나사', icon: '✦' }, battery: { name: '건전지', icon: '▮' },
+};
+const INITIAL_OBJECTS: HarvestObject[] = [
+  { id: 'paper-1', name: '구겨진 종이 뭉치', sprite: 0, position: { x: 43, y: 59 }, hp: 24, maxHp: 24, resource: 'paper', quantity: 8, destroyed: false },
+  { id: 'parcel-1', name: '테이프 상자', sprite: 1, position: { x: 35, y: 69 }, hp: 36, maxHp: 36, resource: 'tape', quantity: 4, destroyed: false },
+  { id: 'parts-1', name: '작은 부품통', sprite: 2, position: { x: 56, y: 65 }, hp: 48, maxHp: 48, resource: 'screw', quantity: 3, destroyed: false },
+  { id: 'remote-1', name: '고장 난 리모컨', sprite: 3, position: { x: 61, y: 76 }, hp: 36, maxHp: 36, resource: 'battery', quantity: 1, destroyed: false },
+  { id: 'box-1', name: '대형 종이상자', sprite: 4, position: { x: 31, y: 54 }, hp: 72, maxHp: 72, resource: 'paper', quantity: 20, destroyed: false },
+];
+
+function hasBatchim(word: string) {
+  const last = word.charCodeAt(word.length - 1);
+  return last >= 0xac00 && last <= 0xd7a3 && (last - 0xac00) % 28 !== 0;
+}
+
+function loadSave(): DungeonSaveData {
+  const fallback: DungeonSaveData = { inventory: {}, discovered: [], craftedBots: 0, craftedSwords: 1, clearedZones: [], robotAssignments: {} };
+  if (typeof localStorage === 'undefined') return fallback;
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw) as Partial<DungeonSaveData>;
+    return {
+      inventory: parsed.inventory ?? {},
+      discovered: Array.isArray(parsed.discovered) ? parsed.discovered : [],
+      craftedBots: Math.max(0, Number(parsed.craftedBots ?? 0)),
+      craftedSwords: Math.max(1, Number(parsed.craftedSwords ?? 1)),
+      clearedZones: Array.isArray(parsed.clearedZones) ? parsed.clearedZones : [],
+      robotAssignments: parsed.robotAssignments ?? {},
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+export function MyRoomDungeonGame({ onExit }: MyRoomDungeonGameProps) {
+  const mapRef = useRef<HTMLDivElement>(null);
+  const worldRef = useRef<HTMLDivElement>(null);
+  const collectedByApiRef = useRef(false);
+  const savedGame = useRef(loadSave()).current;
+  const [position, setPosition] = useState(START_POSITION);
+  const [cameraPosition, setCameraPosition] = useState(START_CAMERA);
+  const [facing, setFacing] = useState<'left' | 'right'>('right');
+  const [phase, setPhase] = useState<'idle' | 'moving' | 'approaching' | 'attacking'>('idle');
+  const [targetId, setTargetId] = useState<string | null>(null);
+  const [destination, setDestination] = useState<Position | null>(null);
+  const [objects, setObjects] = useState(INITIAL_OBJECTS);
+  const [drops, setDrops] = useState<Drop[]>([]);
+  const [inventory, setInventory] = useState<Partial<Record<ResourceId, number>>>(savedGame.inventory);
+  const [inventoryOpen, setInventoryOpen] = useState(false);
+  const [discovered, setDiscovered] = useState<Set<ResourceId>>(() => new Set(savedGame.discovered));
+  const [discovery, setDiscovery] = useState<ResourceId | null>(null);
+  const [pickupText, setPickupText] = useState<string | null>(null);
+  const [view, setView] = useState<'chapter' | 'stage'>('chapter');
+  const [chapterPosition, setChapterPosition] = useState(CHAPTER_START_POSITION);
+  const [chapterFacing, setChapterFacing] = useState<'left' | 'right'>('right');
+  const [chapterMoving, setChapterMoving] = useState(false);
+  const [chapterNotice, setChapterNotice] = useState('방 안을 걸어 원하는 장소로 이동하세요.');
+  const chapterTravelTimerRef = useRef<number | null>(null);
+  const zoneCompletionSentRef = useRef((savedGame.clearedZones ?? []).includes('1-1'));
+  const [workbenchOpen, setWorkbenchOpen] = useState(false);
+  const [workbenchTab, setWorkbenchTab] = useState<'robot' | 'weapon' | 'bag'>('robot');
+  const [craftedBots, setCraftedBots] = useState(savedGame.craftedBots);
+  const [craftedSwords, setCraftedSwords] = useState(savedGame.craftedSwords);
+  const [clearedZones, setClearedZones] = useState<Set<string>>(() => new Set(savedGame.clearedZones ?? []));
+  const [robotAssignments, setRobotAssignments] = useState<Record<string, DungeonRobotAssignment>>(savedGame.robotAssignments ?? {});
+  const [robotDeployOpen, setRobotDeployOpen] = useState(false);
+  const [workbenchNotice, setWorkbenchNotice] = useState<string | null>(null);
+  const [serverReady, setServerReady] = useState(!hasDungeonAccount());
+  const [saveStatus, setSaveStatus] = useState<'local' | 'loading' | 'saved' | 'offline'>(hasDungeonAccount() ? 'loading' : 'local');
+
+  const setCameraFor = (next: Position) => {
+    const viewport = mapRef.current?.getBoundingClientRect();
+    const world = worldRef.current?.getBoundingClientRect();
+    if (!viewport || !world) return;
+    const limitX = (viewport.width / world.width) * 50;
+    const limitY = (viewport.height / world.height) * 50;
+    setCameraPosition({ x: Math.min(100 - limitX, Math.max(limitX, next.x)), y: Math.min(100 - limitY, Math.max(limitY, next.y)) });
+  };
+
+  const moveTo = (next: Position, nextPhase: 'moving' | 'approaching') => {
+    setFacing(next.x < position.x ? 'left' : 'right');
+    setDestination(next); setPosition(next); setCameraFor(next); setPhase(nextPhase);
+  };
+
+  const moveToPointer = (event: PointerEvent<HTMLDivElement>) => {
+    const world = worldRef.current?.getBoundingClientRect();
+    if (!world) return;
+    setTargetId(null);
+    moveTo({
+      x: Math.min(97, Math.max(3, ((event.clientX - world.left) / world.width) * 100)),
+      y: Math.min(97, Math.max(3, ((event.clientY - world.top) / world.height) * 100)),
+    }, 'moving');
+  };
+
+  const selectObject = (event: PointerEvent<HTMLButtonElement>, object: HarvestObject) => {
+    event.stopPropagation();
+    if (targetId === object.id) { setTargetId(null); setPhase('idle'); return; }
+    setTargetId(object.id);
+    moveTo({ x: object.position.x, y: Math.min(94, object.position.y + 5.5) }, 'approaching');
+  };
+
+  useEffect(() => {
+    if (phase !== 'approaching' || !targetId) return;
+    const timer = window.setTimeout(() => setPhase('attacking'), 720);
+    return () => window.clearTimeout(timer);
+  }, [phase, targetId]);
+
+  useEffect(() => {
+    if (phase !== 'attacking' || !targetId) return;
+    const timer = window.setInterval(() => setObjects((current) => current.map((object) => object.id === targetId ? { ...object, hp: Math.max(0, object.hp - ATTACK_DAMAGE) } : object)), 580);
+    return () => window.clearInterval(timer);
+  }, [phase, targetId]);
+
+  useEffect(() => {
+    if (!targetId) return;
+    const object = objects.find((item) => item.id === targetId);
+    if (!object || object.hp > 0 || object.destroyed) return;
+    setObjects((current) => current.map((item) => item.id === object.id ? { ...item, destroyed: true } : item));
+    setPhase('idle'); setTargetId(null);
+    const drop: Drop = { id: `drop-${object.id}`, resource: object.resource, quantity: object.quantity, position: object.position };
+    setDrops((current) => [...current, drop]);
+    window.setTimeout(() => {
+      setDrops((current) => current.filter((item) => item.id !== drop.id));
+      // 획득 수량은 /collect가 서버에서 누적한다. 이어지는 상태 감지 PUT으로 중복 반영하지 않는다.
+      collectedByApiRef.current = hasDungeonAccount();
+      setInventory((current) => ({ ...current, [drop.resource]: (current[drop.resource] ?? 0) + drop.quantity }));
+      if (hasDungeonAccount()) {
+        setSaveStatus('loading');
+        collectDungeonResource(drop.resource, drop.quantity)
+          .then(() => setSaveStatus('saved'))
+          .catch(() => setSaveStatus('offline'));
+      }
+      const info = RESOURCE_INFO[drop.resource];
+      setPickupText(`${info.name} ×${drop.quantity}`);
+      window.setTimeout(() => setPickupText(null), 1700);
+      if (!discovered.has(drop.resource)) { setDiscovered((current) => new Set(current).add(drop.resource)); setDiscovery(drop.resource); }
+    }, 1400);
+  }, [objects, targetId, discovered]);
+
+  useEffect(() => {
+    if (!hasDungeonAccount()) return;
+    let cancelled = false;
+    fetchDungeonSave().then(async (remote) => {
+      if (cancelled) return;
+      if (remote.isNew) {
+        await saveDungeonProgress(savedGame);
+      } else {
+        setInventory(remote.inventory);
+        setDiscovered(new Set(remote.discovered));
+        setCraftedBots(remote.craftedBots);
+        setCraftedSwords(remote.craftedSwords);
+        setClearedZones(new Set(remote.clearedZones ?? []));
+        setRobotAssignments(remote.robotAssignments ?? {});
+        zoneCompletionSentRef.current = (remote.clearedZones ?? []).includes('1-1');
+      }
+      if (!cancelled) { setServerReady(true); setSaveStatus('saved'); }
+    }).catch(() => {
+      if (!cancelled) { setServerReady(true); setSaveStatus('offline'); }
+    });
+    return () => { cancelled = true; };
+  }, [savedGame]);
+
+  useEffect(() => {
+    const saveData: DungeonSaveData = {
+      inventory,
+      discovered: [...discovered],
+      craftedBots,
+      craftedSwords,
+      clearedZones: [...clearedZones],
+      robotAssignments,
+    };
+    localStorage.setItem(SAVE_KEY, JSON.stringify(saveData));
+    if (collectedByApiRef.current) {
+      collectedByApiRef.current = false;
+      return;
+    }
+    if (!serverReady || !hasDungeonAccount()) return;
+    setSaveStatus('loading');
+    const timer = window.setTimeout(() => {
+      saveDungeonProgress(saveData).then(() => setSaveStatus('saved')).catch(() => setSaveStatus('offline'));
+    }, 450);
+    return () => window.clearTimeout(timer);
+  }, [inventory, discovered, craftedBots, craftedSwords, clearedZones, robotAssignments, serverReady]);
+
+  useEffect(() => {
+    if (zoneCompletionSentRef.current || drops.length > 0 || !objects.every((object) => object.destroyed)) return;
+    zoneCompletionSentRef.current = true;
+    setClearedZones((current) => new Set(current).add('1-1'));
+    setPickupText('1-1 전체 채집 완료 · 자동 수집 구역 해금!');
+    window.setTimeout(() => setPickupText(null), 2600);
+    if (hasDungeonAccount()) {
+      completeDungeonZone('1-1').catch(() => setSaveStatus('offline'));
+    }
+  }, [objects, drops]);
+
+  const activeTarget = targetId ? objects.find((object) => object.id === targetId) : undefined;
+  const inventoryEntries = (Object.entries(inventory) as [ResourceId, number][]).filter(([, quantity]) => quantity > 0);
+  const canCraftBot = (inventory.paper ?? 0) >= 20 && (inventory.tape ?? 0) >= 8 && (inventory.screw ?? 0) >= 2 && (inventory.battery ?? 0) >= 1;
+  const canCraftSword = (inventory.paper ?? 0) >= 15 && (inventory.tape ?? 0) >= 3;
+
+  const spendResources = (cost: Partial<Record<ResourceId, number>>) => {
+    if (!Object.entries(cost).every(([id, amount]) => (inventory[id as ResourceId] ?? 0) >= (amount ?? 0))) return false;
+    setInventory((current) => {
+      const next = { ...current };
+      Object.entries(cost).forEach(([id, amount]) => {
+        const resourceId = id as ResourceId;
+        const remaining = (next[resourceId] ?? 0) - (amount ?? 0);
+        if (remaining > 0) next[resourceId] = remaining;
+        else delete next[resourceId];
+      });
+      return next;
+    });
+    return true;
+  };
+
+  const enterStage = () => {
+    setObjects(INITIAL_OBJECTS); setDrops([]); setTargetId(null); setPhase('idle');
+    setPosition(START_POSITION); setCameraPosition(START_CAMERA); setView('stage');
+  };
+
+  const moveInChapter = (next: Position, onArrival?: () => void) => {
+    if (chapterTravelTimerRef.current !== null) window.clearTimeout(chapterTravelTimerRef.current);
+    setChapterFacing(next.x < chapterPosition.x ? 'left' : 'right');
+    setChapterPosition(next);
+    setChapterMoving(true);
+    setChapterNotice(onArrival ? '목적지로 이동 중…' : '방 안을 이동 중…');
+    chapterTravelTimerRef.current = window.setTimeout(() => {
+      setChapterMoving(false);
+      setChapterNotice('방 안을 걸어 원하는 장소로 이동하세요.');
+      onArrival?.();
+    }, 720);
+  };
+
+  const moveChapterToPointer = (event: PointerEvent<HTMLDivElement>) => {
+    const map = event.currentTarget.getBoundingClientRect();
+    moveInChapter({
+      x: Math.min(94, Math.max(6, ((event.clientX - map.left) / map.width) * 100)),
+      y: Math.min(92, Math.max(10, ((event.clientY - map.top) / map.height) * 100)),
+    });
+  };
+
+  const visitLockedArea = (name: string) => {
+    setChapterNotice(`${name}은 아직 잠겨 있습니다.`);
+    window.setTimeout(() => setChapterNotice('방 안을 걸어 원하는 장소로 이동하세요.'), 1800);
+  };
+
+  const deployRobotToDesk = () => {
+    if (craftedBots < 1 || robotAssignments['1-1']) return;
+    if (!hasDungeonAccount()) {
+      setCraftedBots((count) => count - 1);
+      setRobotAssignments((current) => ({ ...current, '1-1': { robotId: 'paper-box', status: 'working', remainingUses: 5, startedAt: new Date().toISOString() } }));
+      setRobotDeployOpen(false);
+      return;
+    }
+    setSaveStatus('loading');
+    deployDungeonRobot('1-1').then((remote) => {
+      setCraftedBots(remote.craftedBots);
+      setRobotAssignments(remote.robotAssignments ?? {});
+      setRobotDeployOpen(false);
+      setSaveStatus('saved');
+    }).catch(() => setSaveStatus('offline'));
+  };
+
+  if (view === 'chapter') return <main className="room-dungeon-shell"><section className="room-dungeon-game chapter-home">
+    <header className="room-dungeon-hud"><button type="button" className="room-exit-button" onClick={onExit}>‹</button><div className="room-title-group"><span>CHAPTER 1 · {saveStatus === 'saved' ? '서버 저장됨' : saveStatus === 'loading' ? '저장 중' : saveStatus === 'offline' ? '로컬 백업' : '게스트 저장'}</span><strong>내 방</strong></div><div className="room-resource-preview"><span>●</span> 0</div></header>
+    <div className="chapter-home-map" onPointerDown={moveChapterToPointer}>
+      <div className="chapter-map-title"><small>CHAPTER 1</small><b>내 방 오픈월드</b></div>
+      <button type="button" className="chapter-location location-desk is-open" onPointerDown={(event) => { event.stopPropagation(); moveInChapter({x:24,y:27}, enterStage); }}><b>1-1</b><span>책상 아래</span><em>채집 가능</em></button>
+      <button type="button" className="chapter-location location-bench is-open" onPointerDown={(event) => { event.stopPropagation(); moveInChapter({x:24,y:73}, () => setWorkbenchOpen(true)); }}><b>⚙</b><span>나의 작업대</span><em>제작·강화</em></button>
+      <button type="button" className="chapter-location location-toys is-locked" onPointerDown={(event) => { event.stopPropagation(); moveInChapter({x:72,y:28}, () => visitLockedArea('장난감 상자')); }}><b>1-2</b><span>장난감 상자</span><em>잠김</em></button>
+      <button type="button" className="chapter-location location-closet is-locked" onPointerDown={(event) => { event.stopPropagation(); moveInChapter({x:82,y:48}, () => visitLockedArea('옷장')); }}><b>1-3</b><span>옷장</span><em>잠김</em></button>
+      <button type="button" className="chapter-location location-computer is-locked" onPointerDown={(event) => { event.stopPropagation(); moveInChapter({x:66,y:67}, () => visitLockedArea('컴퓨터 책상')); }}><b>1-4</b><span>컴퓨터 책상</span><em>잠김</em></button>
+      <button type="button" className="chapter-location location-bed is-locked" onPointerDown={(event) => { event.stopPropagation(); moveInChapter({x:80,y:84}, () => visitLockedArea('침대 밑')); }}><b>1-5</b><span>침대 밑</span><em>잠김</em></button>
+      {clearedZones.has('1-1') && <button type="button" className={`auto-collect-pad ${robotAssignments['1-1'] ? 'is-working' : ''}`} onPointerDown={(event) => { event.stopPropagation(); moveInChapter({x:38,y:35}, () => setRobotDeployOpen(true)); }}><i className="mini-craft craft-robot"/><span>{robotAssignments['1-1'] ? '자동 수집 중' : '채집봇 배치'}</span><em>{robotAssignments['1-1'] ? `남은 작업 ${robotAssignments['1-1'].remainingUses}회` : `보유 ${craftedBots}대`}</em></button>}
+      <div className={`chapter-player facing-${chapterFacing} ${chapterMoving ? 'is-moving' : ''}`} style={{left:`${chapterPosition.x}%`,top:`${chapterPosition.y}%`}}><span/><img src={playerImage} alt="내 방의 탐험가" draggable={false}/></div>
+      <div className="chapter-move-guide">{chapterNotice}</div>
+    </div>
+    <footer className="room-dungeon-footer"><button type="button" className="footer-slot is-selected"><span>⌂</span>내 방</button><button type="button" className="footer-slot" onClick={() => setInventoryOpen(true)}><span>▦</span>가방</button><button type="button" className="footer-slot" onClick={() => setWorkbenchOpen(true)}><span>⚒</span>작업대</button><button type="button" className="footer-slot" disabled><span>♙</span>자동 채집</button></footer>
+    {workbenchOpen && <div className="panel-backdrop" onPointerDown={() => setWorkbenchOpen(false)}><section className="workbench-panel" onPointerDown={(event) => event.stopPropagation()}>
+      <header><div><small>MY WORKBENCH</small><h2>나의 작업대</h2></div><button type="button" onClick={() => setWorkbenchOpen(false)}>×</button></header>
+      <nav><button className={workbenchTab === 'robot' ? 'active' : ''} onClick={() => setWorkbenchTab('robot')}>채집봇</button><button className={workbenchTab === 'weapon' ? 'active' : ''} onClick={() => setWorkbenchTab('weapon')}>무기</button><button className={workbenchTab === 'bag' ? 'active' : ''} onClick={() => setWorkbenchTab('bag')}>가방</button></nav>
+      {workbenchTab === 'bag' ? <div className="workbench-bag"><div className="workbench-bag-summary"><b>보유 자원</b><span>{inventoryEntries.length}/32칸 사용</span></div><InventoryGrid entries={inventoryEntries} /><div className="owned-equipment"><div><i className="mini-craft craft-robot"/><span>종이상자 채집봇</span><b>×{craftedBots}</b></div><div><i className="mini-craft craft-sword"/><span>종이검 Lv.1</span><b>×{craftedSwords}</b></div></div><p>작업대를 나가지 않고 제작 재료와 장비를 확인할 수 있습니다.</p></div>
+      : workbenchTab === 'robot' ? <div className="recipe-card"><div className="craft-art craft-robot"><span className="owned-count">보유 {craftedBots}대</span></div><div className="recipe-info"><small>기본형 · 사용 5회</small><h3>종이상자 채집봇</h3><p>책상 아래에서 종이와 테이프를 자동 수집합니다.</p><div className="recipe-cost">{([['paper',20],['tape',8],['screw',2],['battery',1]] as [ResourceId,number][]).map(([id,n]) => <span className={(inventory[id] ?? 0) < n ? 'is-short' : 'is-ready'} key={id}><i className={`resource-icon resource-${id}`}/>{inventory[id] ?? 0}/{n}</span>)}</div><button type="button" disabled={!canCraftBot} onClick={() => { if (spendResources({paper:20,tape:8,screw:2,battery:1})) { setCraftedBots((n) => n + 1); setWorkbenchNotice('종이상자 채집봇 생산 완료!'); window.setTimeout(() => setWorkbenchNotice(null), 1800); } }}>{canCraftBot ? '종이상자 채집봇 생산' : '재료 부족'}</button></div></div>
+      : <div className="recipe-card"><div className="craft-art craft-sword">{craftedSwords > 0 && <span className="owned-badge">보유 중</span>}</div><div className="recipe-info"><small>A등급 · Lv.1</small><h3>종이검 {craftedSwords > 0 && <span className="title-owned">보유 중</span>}</h3><p>종이를 여러 겹 접어 만든 공격력 중심의 기본 검입니다.</p><div className="recipe-cost">{([['paper',15],['tape',3]] as [ResourceId,number][]).map(([id,n]) => <span className={(inventory[id] ?? 0) < n ? 'is-short' : 'is-ready'} key={id}><i className={`resource-icon resource-${id}`}/>{inventory[id] ?? 0}/{n}</span>)}</div><button type="button" disabled={craftedSwords > 0 || !canCraftSword} onClick={() => { if (spendResources({paper:15,tape:3})) { setCraftedSwords(1); setWorkbenchNotice('종이검 제작 완료!'); window.setTimeout(() => setWorkbenchNotice(null), 1800); } }}>{craftedSwords > 0 ? '보유 중' : canCraftSword ? '종이검 제작' : '재료 부족'}</button></div></div>}
+      {workbenchNotice && <div className="workbench-notice">✓ {workbenchNotice}</div>}
+    </section></div>}
+    {inventoryOpen && <InventoryPanel entries={inventoryEntries} onClose={() => setInventoryOpen(false)} />}
+    {robotDeployOpen && <div className="panel-backdrop" onPointerDown={() => setRobotDeployOpen(false)}><section className="robot-deploy-panel" onPointerDown={(event) => event.stopPropagation()}><header><div><small>AUTO COLLECT</small><h2>1-1 채집봇 배치</h2></div><button type="button" onClick={() => setRobotDeployOpen(false)}>×</button></header>{robotAssignments['1-1'] ? <div className="robot-working-card"><i className="mini-craft craft-robot"/><strong>종이상자 채집봇 작업 중</strong><span>남은 작업 {robotAssignments['1-1'].remainingUses}회</span></div> : <div className="robot-choice-card"><i className="mini-craft craft-robot"/><div><strong>종이상자 채집봇</strong><span>보유 {craftedBots}대 · 사용 5회</span></div><button type="button" disabled={craftedBots < 1} onClick={deployRobotToDesk}>{craftedBots > 0 ? '1-1에 배치' : '보유 봇 없음'}</button></div>}</section></div>}
+  </section></main>;
+
+  return <main className="room-dungeon-shell"><section className="room-dungeon-game" aria-label="내 방이 던전">
+    <header className="room-dungeon-hud">
+      <button type="button" className="room-exit-button" onClick={onExit}>‹</button>
+      <div className="room-title-group"><span>CHAPTER 1 · 1-1 · {saveStatus === 'saved' ? '서버 저장됨' : saveStatus === 'loading' ? '저장 중' : saveStatus === 'offline' ? '로컬 백업' : '게스트 저장'}</span><strong>책상 아래</strong></div>
+      <div className="room-resource-preview"><span>●</span> 0</div>
+    </header>
+
+    <div ref={mapRef} className="room-map" onPointerDown={moveToPointer}>
+      <div ref={worldRef} className="room-world" style={{ transform: `translate(-${cameraPosition.x}%, -${cameraPosition.y}%)` }}>
+        <div className="zone-sign zone-sign-desk"><b>1-1</b><span>책상 아래</span></div>
+        <div className="workbench-pin"><span>⚙</span><b>나의 작업대</b></div>
+        <button type="button" className="stage-exit" onPointerDown={(event) => event.stopPropagation()} onClick={() => setView('chapter')}><span>⌂</span><b>채집구역 나가기</b><small>내 방으로 돌아가기</small></button>
+        {objects.map((object) => !object.destroyed && <button type="button" key={object.id}
+          className={`harvest-object sprite-${object.sprite} ${targetId === object.id ? 'is-targeted' : ''} ${phase === 'attacking' && targetId === object.id ? 'is-hit' : ''}`}
+          style={{ left: `${object.position.x}%`, top: `${object.position.y}%` }} onPointerDown={(event) => selectObject(event, object)}>
+          <span className="object-sprite" />
+          {targetId === object.id && <span className="object-health"><i style={{ width: `${(object.hp / object.maxHp) * 100}%` }} /></span>}
+          <span className="object-name">{object.name}</span>
+          {phase === 'attacking' && targetId === object.id && <strong className="damage-number">-{ATTACK_DAMAGE}</strong>}
+        </button>)}
+        {drops.map((drop) => <div key={drop.id} className="resource-drop" style={{ left: `${drop.position.x}%`, top: `${drop.position.y}%` }}><i className={`resource-icon resource-${drop.resource}`} /><b>×{drop.quantity}</b></div>)}
+        {destination && <div className="move-marker" style={{ left: `${destination.x}%`, top: `${destination.y}%` }} />}
+        <div className={`room-player facing-${facing} ${phase !== 'idle' ? `is-${phase}` : ''}`} style={{ left: `${position.x}%`, top: `${position.y}%` }}>
+          <div className="player-shadow" /><img src={playerImage} alt="종이검을 든 탐험가" draggable={false} />{phase === 'attacking' && <span className="sword-swish" />}
+        </div>
+      </div>
+      {activeTarget && <div className="target-banner"><b>{activeTarget.name}</b><span>{phase === 'attacking' ? '자동 공격 중' : '접근 중'}</span></div>}
+      {pickupText && <div className="pickup-toast">획득! <b>{pickupText}</b></div>}
+      {!targetId && !pickupText && <div className="move-guide"><span className="tap-icon">＋</span>사물 선택 또는 빈 바닥 이동</div>}
+    </div>
+
+    <footer className="room-dungeon-footer">
+      <button type="button" className="footer-slot is-selected"><span>⌂</span>탐험</button>
+      <button type="button" className={`footer-slot ${inventoryOpen ? 'is-selected' : ''}`} onClick={() => setInventoryOpen(true)}><span>▦</span>가방</button>
+      <button type="button" className="footer-slot" disabled><span>⚒</span>작업대</button>
+      <button type="button" className="footer-slot" disabled><span>♙</span>자동 채집</button>
+    </footer>
+
+    {inventoryOpen && <InventoryPanel entries={inventoryEntries} onClose={() => setInventoryOpen(false)} />}
+
+    {discovery && <div className="panel-backdrop discovery-backdrop"><section className="discovery-card">
+      <small>NEW RESOURCE</small><h2>찾았다!</h2><div className="discovery-icon"><i className={`resource-icon resource-${discovery}`} /></div><strong>{RESOURCE_INFO[discovery].name}</strong>
+      <p>{hasBatchim(RESOURCE_INFO[discovery].name) ? '을' : '를'} 발견하고 얻었다.</p><button type="button" onClick={() => setDiscovery(null)}>확인</button>
+    </section></div>}
+  </section></main>;
+}
+
+function InventoryPanel({ entries, onClose }: { entries: [ResourceId, number][]; onClose: () => void }) {
+  return <div className="panel-backdrop" onPointerDown={onClose}><section className="inventory-panel" onPointerDown={(event) => event.stopPropagation()}>
+    <header><div><small>INVENTORY</small><h2>가방</h2></div><button type="button" onClick={onClose}>×</button></header>
+    <InventoryGrid entries={entries} />
+    <p>자원은 한 칸에 최대 1,000개까지 보관됩니다.</p>
+  </section></div>;
+}
+
+function InventoryGrid({ entries }: { entries: [ResourceId, number][] }) {
+  return <div className="inventory-grid">{Array.from({ length: 32 }, (_, index) => { const entry = entries[index]; return <div className={`inventory-slot ${entry ? 'has-item' : ''}`} key={index}>{entry && <><i className={`resource-icon resource-${entry[0]}`} /><b>{RESOURCE_INFO[entry[0]].name}</b><em>×{entry[1]}</em></>}</div>; })}</div>;
+}

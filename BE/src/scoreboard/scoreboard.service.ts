@@ -179,6 +179,118 @@ export class ScoreboardService {
     return { ...this.mergeProfileResponse(updated), spent: cost };
   }
 
+  private myRoomDungeonResponse(profile: { inventory_json: string; discovered_json: string; crafted_bots: number; crafted_swords: number; cleared_zones_json: string; robot_assignments_json: string }, isNew = false) {
+    return {
+      inventory: JSON.parse(profile.inventory_json) as Record<string, number>,
+      discovered: JSON.parse(profile.discovered_json) as string[],
+      craftedBots: profile.crafted_bots,
+      craftedSwords: profile.crafted_swords,
+      clearedZones: JSON.parse(profile.cleared_zones_json) as string[],
+      robotAssignments: JSON.parse(profile.robot_assignments_json) as Record<string, unknown>,
+      isNew,
+    };
+  }
+
+  async myRoomDungeonProfile(token: string | undefined) {
+    const accountId = await this.accounts.resolveAccountId(token);
+    if (!accountId) throw new UnauthorizedException({ message: '로그인이 필요합니다', code: 'NOT_LOGGED_IN' });
+    const existing = await this.prisma.my_room_dungeon_profile.findUnique({ where: { account_id: accountId } });
+    const profile = existing ?? await this.prisma.my_room_dungeon_profile.create({ data: { account_id: accountId } });
+    return this.myRoomDungeonResponse(profile, !existing);
+  }
+
+  async saveMyRoomDungeonProfile(token: string | undefined, body: Record<string, unknown>) {
+    const accountId = await this.accounts.resolveAccountId(token);
+    if (!accountId) throw new UnauthorizedException({ message: '로그인이 필요합니다', code: 'NOT_LOGGED_IN' });
+    const resourceIds = ['paper', 'tape', 'screw', 'battery'] as const;
+    const inventoryRaw = body.inventory && typeof body.inventory === 'object' ? body.inventory as Record<string, unknown> : {};
+    const inventory: Record<string, number> = {};
+    for (const resourceId of resourceIds) {
+      const quantity = int(inventoryRaw[resourceId] ?? 0, 0, 1_000_000, `inventory.${resourceId}`);
+      if (quantity > 0) inventory[resourceId] = quantity;
+    }
+    const discoveredRaw = Array.isArray(body.discovered) ? body.discovered.map(String) : [];
+    if (discoveredRaw.some((id) => !resourceIds.includes(id as typeof resourceIds[number]))) {
+      throw new BadRequestException({ message: '알 수 없는 발견 자원', code: 'INVALID_RESOURCE' });
+    }
+    const discovered = [...new Set(discoveredRaw)];
+    const craftedBots = int(body.craftedBots ?? 0, 0, 10_000, 'craftedBots');
+    const craftedSwords = int(body.craftedSwords ?? 1, 1, 100, 'craftedSwords');
+    const profile = await this.prisma.my_room_dungeon_profile.upsert({
+      where: { account_id: accountId },
+      create: { account_id: accountId, inventory_json: JSON.stringify(inventory), discovered_json: JSON.stringify(discovered), crafted_bots: craftedBots, crafted_swords: craftedSwords },
+      update: { inventory_json: JSON.stringify(inventory), discovered_json: JSON.stringify(discovered), crafted_bots: craftedBots, crafted_swords: craftedSwords },
+    });
+    return this.myRoomDungeonResponse(profile);
+  }
+
+  async collectMyRoomDungeonResource(token: string | undefined, body: Record<string, unknown>) {
+    const accountId = await this.accounts.resolveAccountId(token);
+    if (!accountId) throw new UnauthorizedException({ message: '로그인이 필요합니다', code: 'NOT_LOGGED_IN' });
+    const resourceIds = ['paper', 'tape', 'screw', 'battery'] as const;
+    const resource = typeof body.resource === 'string' ? body.resource : '';
+    if (!resourceIds.includes(resource as typeof resourceIds[number])) {
+      throw new BadRequestException({ message: '알 수 없는 자원', code: 'INVALID_RESOURCE' });
+    }
+    const quantity = int(body.quantity, 1, 1_000, 'quantity');
+
+    const profile = await this.prisma.$transaction(async (tx) => {
+      const current = await tx.my_room_dungeon_profile.upsert({
+        where: { account_id: accountId },
+        create: { account_id: accountId },
+        update: {},
+      });
+      const inventory = JSON.parse(current.inventory_json) as Record<string, number>;
+      inventory[resource] = Math.min(1_000_000, Number(inventory[resource] ?? 0) + quantity);
+      const discovered = new Set(JSON.parse(current.discovered_json) as string[]);
+      discovered.add(resource);
+      return tx.my_room_dungeon_profile.update({
+        where: { account_id: accountId },
+        data: {
+          inventory_json: JSON.stringify(inventory),
+          discovered_json: JSON.stringify([...discovered]),
+        },
+      });
+    });
+    return this.myRoomDungeonResponse(profile);
+  }
+
+  async completeMyRoomDungeonZone(token: string | undefined, zoneIdRaw: unknown) {
+    const accountId = await this.accounts.resolveAccountId(token);
+    if (!accountId) throw new UnauthorizedException({ message: '로그인이 필요합니다', code: 'NOT_LOGGED_IN' });
+    const zoneId = String(zoneIdRaw ?? '');
+    if (zoneId !== '1-1') throw new BadRequestException({ message: '알 수 없는 채집 구역', code: 'INVALID_ZONE' });
+    const current = await this.prisma.my_room_dungeon_profile.upsert({ where: { account_id: accountId }, create: { account_id: accountId }, update: {} });
+    const clearedZones = new Set(JSON.parse(current.cleared_zones_json) as string[]);
+    clearedZones.add(zoneId);
+    const profile = await this.prisma.my_room_dungeon_profile.update({
+      where: { account_id: accountId },
+      data: { cleared_zones_json: JSON.stringify([...clearedZones]) },
+    });
+    return this.myRoomDungeonResponse(profile);
+  }
+
+  async deployMyRoomDungeonRobot(token: string | undefined, zoneIdRaw: unknown) {
+    const accountId = await this.accounts.resolveAccountId(token);
+    if (!accountId) throw new UnauthorizedException({ message: '로그인이 필요합니다', code: 'NOT_LOGGED_IN' });
+    const zoneId = String(zoneIdRaw ?? '');
+    if (zoneId !== '1-1') throw new BadRequestException({ message: '알 수 없는 채집 구역', code: 'INVALID_ZONE' });
+    const profile = await this.prisma.$transaction(async (tx) => {
+      const current = await tx.my_room_dungeon_profile.upsert({ where: { account_id: accountId }, create: { account_id: accountId }, update: {} });
+      const clearedZones = JSON.parse(current.cleared_zones_json) as string[];
+      if (!clearedZones.includes(zoneId)) throw new BadRequestException({ message: '전체 채집을 먼저 완료해야 합니다', code: 'ZONE_NOT_CLEARED' });
+      if (current.crafted_bots < 1) throw new BadRequestException({ message: '배치할 채집봇이 없습니다', code: 'NO_ROBOT' });
+      const assignments = JSON.parse(current.robot_assignments_json) as Record<string, unknown>;
+      if (assignments[zoneId]) throw new BadRequestException({ message: '이미 채집봇이 작업 중입니다', code: 'ROBOT_ALREADY_WORKING' });
+      assignments[zoneId] = { robotId: 'paper-box', status: 'working', remainingUses: 5, startedAt: new Date().toISOString() };
+      return tx.my_room_dungeon_profile.update({
+        where: { account_id: accountId },
+        data: { crafted_bots: { decrement: 1 }, robot_assignments_json: JSON.stringify(assignments) },
+      });
+    });
+    return this.myRoomDungeonResponse(profile);
+  }
+
   // ----- 점수 공식(docs/dev/scoreboard.md 2절) -----
   private compute(game: unknown, stats: Record<string, unknown>): Computed {
     if (game === 'tower_defense') {

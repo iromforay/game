@@ -457,3 +457,15 @@ model merge_defense_silver_claim {
 
   @@index([account_id], map: "idx_merge_silver_account")
 }
+
+// 내 방이 던전 — 계정별 영구 진행 저장
+model my_room_dungeon_profile {
+  account_id       BigInt   @id @db.UnsignedBigInt
+  inventory_json   String   @default("{}") @db.Text
+  discovered_json  String   @default("[]") @db.Text
+  crafted_bots     Int      @default(0) @db.UnsignedInt
+  crafted_swords   Int      @default(1) @db.UnsignedInt
+  cleared_zones_json      String @default("[]") @db.Text
+  robot_assignments_json  String @default("{}") @db.Text
+  updated_at       DateTime @default(now()) @updatedAt @db.Timestamp(0)
+}

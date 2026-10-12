@@ -32,7 +32,19 @@ module.exports = {
       exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
-        KIRBY_PORT: 3003,
+        KIRBY_PORT: process.env.KIRBY_PORT || 3003,
+      },
+    },
+    {
+      // 내 방이 던전 전용 저장 API 프로세스
+      name: 'my-room-dungeon-be',
+      cwd: __dirname,
+      script: 'dist/my-room-dungeon-main.js',
+      instances: 1,
+      exec_mode: 'fork',
+      env: {
+        NODE_ENV: 'production',
+        MY_ROOM_DUNGEON_PORT: process.env.MY_ROOM_DUNGEON_PORT || 3004,
       },
     },
   ],

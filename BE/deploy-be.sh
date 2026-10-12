@@ -3,8 +3,8 @@
 # BE 배포 스크립트 — 운영 서버에서 git pull 이후 실행
 # DB 스키마 변경(BE/prisma/sql/*.sql)은 이 스크립트 실행 "전에" 수동으로 반영할 것.
 #
-# 사용: ./deploy-be.sh                              (기본: kirby-be be)
-#       APPS="kirby-be be turby-be" ./deploy-be.sh  (터비 출시 후)
+# 사용: ./deploy-be.sh                                                 (기본: my-room-dungeon-be kirby-be be)
+#       APPS="my-room-dungeon-be kirby-be be turby-be" ./deploy-be.sh  (터비 포함)
 #
 # 배경(2026-09-23): 운영 BE는 pm2가 dist/*.js를 실행하는데 dist는 git에 없고, 루트 build.sh는
 # hub(FE)만 배포한다. 그래서 git pull + pm2 restart만 하면 9월 18일 빌드가 그대로 떠서 로비
@@ -14,7 +14,24 @@ set -euo pipefail
 
 BE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$BE_DIR/.." && pwd)"
-APPS="${APPS:-kirby-be be}"
+APPS="${APPS:-my-room-dungeon-be kirby-be be}"
+
+# 포트 설정은 BE/.env를 단일 원본으로 사용한다. 셸 코드를 실행하지 않고 포트 변수만 읽는다.
+if [ -f "$BE_DIR/.env" ]; then
+    while IFS='=' read -r key value; do
+        key="${key%$'\r'}"
+        value="${value%$'\r'}"
+        case "$key" in
+            PORT|TURBY_PORT|KIRBY_PORT|MY_ROOM_DUNGEON_PORT)
+                export "$key=$value"
+                ;;
+        esac
+    done < "$BE_DIR/.env"
+fi
+
+: "${MY_ROOM_DUNGEON_PORT:=3004}"
+export MY_ROOM_DUNGEON_PORT
+echo "내 방이 던전 BE 포트: $MY_ROOM_DUNGEON_PORT"
 
 # 1. 로컬 HEAD가 upstream과 같은지 확인(build.sh와 동일, fetch/pull은 하지 않음)
 if [ -d "$REPO_DIR/.git" ]; then
@@ -42,9 +59,13 @@ if [ -z "$(find "$BE_DIR/dist" -name '*.js' -mmin -10 | head -1)" ]; then
     exit 1
 fi
 
-# 6. 재시작 + 목록 저장(서버 재부팅 시 복구용)
+# 6. 재시작(최초 배포 앱은 ecosystem 설정으로 생성) + 목록 저장(서버 재부팅 시 복구용)
 for app in $APPS; do
-    pm2 restart "$app" --update-env
+    if pm2 describe "$app" >/dev/null 2>&1; then
+        pm2 restart "$app" --update-env
+    else
+        pm2 start "$BE_DIR/ecosystem.config.js" --only "$app" --update-env
+    fi
 done
 pm2 save
 

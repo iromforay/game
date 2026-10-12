@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Post, Put, Query } from '@nestjs/common';
 import { ScoreboardService } from './scoreboard.service';
 
 function bearer(header: string | undefined) {
@@ -50,5 +50,30 @@ export class ScoreboardController {
   @Post('merge-defense/purchase')
   purchaseMergeDefenseUpgrade(@Headers('authorization') auth: string | undefined, @Body('upgrade') upgrade: unknown) {
     return this.scoreboard.purchaseMergeDefenseUpgrade(bearer(auth), upgrade);
+  }
+
+  @Get('my-room-dungeon/profile')
+  myRoomDungeonProfile(@Headers('authorization') auth: string | undefined) {
+    return this.scoreboard.myRoomDungeonProfile(bearer(auth));
+  }
+
+  @Put('my-room-dungeon/profile')
+  saveMyRoomDungeonProfile(@Headers('authorization') auth: string | undefined, @Body() body: Record<string, unknown>) {
+    return this.scoreboard.saveMyRoomDungeonProfile(bearer(auth), body);
+  }
+
+  @Post('my-room-dungeon/collect')
+  collectMyRoomDungeonResource(@Headers('authorization') auth: string | undefined, @Body() body: Record<string, unknown>) {
+    return this.scoreboard.collectMyRoomDungeonResource(bearer(auth), body);
+  }
+
+  @Post('my-room-dungeon/complete-zone')
+  completeMyRoomDungeonZone(@Headers('authorization') auth: string | undefined, @Body('zoneId') zoneId: unknown) {
+    return this.scoreboard.completeMyRoomDungeonZone(bearer(auth), zoneId);
+  }
+
+  @Post('my-room-dungeon/deploy-robot')
+  deployMyRoomDungeonRobot(@Headers('authorization') auth: string | undefined, @Body('zoneId') zoneId: unknown) {
+    return this.scoreboard.deployMyRoomDungeonRobot(bearer(auth), zoneId);
   }
 }

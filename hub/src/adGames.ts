@@ -47,6 +47,6 @@ export const AD_GAMES: AdGameMeta[] = [
     number: 5,
     title: '내 방이 던전',
     description: '방 안의 사물을 분해해 자원을 모으고 무기와 채집 로봇을 성장시키세요.',
-    status: 'planning',
+    status: 'available',
   },
 ];
