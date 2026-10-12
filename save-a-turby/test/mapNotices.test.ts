@@ -173,7 +173,7 @@ test('결과 확인: 결과 화면의 돌아가기 버튼이 확인 요청을 �
   for (const code of ['RESULT_NOT_SETTLED', 'NOT_PARTICIPANT', 'BATTLE_NOT_ENDED', 'INTERNAL', undefined]) assert.equal(ackFailureAllowsExit(code), false, String(code));
   assert.match(RESULT_ACK_RETRY_TEXT, /다시 시도/);
   const battle = src('scenes/BattleScene.ts');
-  const fn = battle.slice(battle.indexOf('private async confirmResultThenExit('), battle.indexOf('private renderResult()'));
+  const fn = battle.slice(battle.indexOf('private async confirmResultThenExit('), battle.indexOf('private renderResult()')).replace(/\r\n/g, '\n');
   assert.match(fn, /if \(this\.resultAcking\) return;/, '확인 요청은 한 번에 하나');
   assert.match(fn, /await battleClient\.ackResult\(this\.snap\.battleId\);/);
   assert.match(fn, /gen !== this\.generation\) return;[^\n]*\n\s*exit\(\);/, '오래된 응답이 새 화면을 덮지 않는다');
