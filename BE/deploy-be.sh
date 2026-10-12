@@ -3,8 +3,8 @@
 # BE 배포 스크립트 — 운영 서버에서 git pull 이후 실행
 # DB 스키마 변경(BE/prisma/sql/*.sql)은 이 스크립트 실행 "전에" 수동으로 반영할 것.
 #
-# 사용: ./deploy-be.sh                              (기본: kirby-be be)
-#       APPS="kirby-be be turby-be" ./deploy-be.sh  (터비 출시 후)
+# 사용: ./deploy-be.sh                    (기본: kirby-be be turby-be)
+#       APPS="kirby-be be" ./deploy-be.sh  (일부 프로세스만 배포할 때)
 #
 # 배경(2026-09-23): 운영 BE는 pm2가 dist/*.js를 실행하는데 dist는 git에 없고, 루트 build.sh는
 # hub(FE)만 배포한다. 그래서 git pull + pm2 restart만 하면 9월 18일 빌드가 그대로 떠서 로비
@@ -14,7 +14,7 @@ set -euo pipefail
 
 BE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$BE_DIR/.." && pwd)"
-APPS="${APPS:-kirby-be be}"
+APPS="${APPS:-kirby-be be turby-be}"
 
 # 1. 로컬 HEAD가 upstream과 같은지 확인(build.sh와 동일, fetch/pull은 하지 않음)
 if [ -d "$REPO_DIR/.git" ]; then
@@ -44,7 +44,11 @@ fi
 
 # 6. 재시작 + 목록 저장(서버 재부팅 시 복구용)
 for app in $APPS; do
-    pm2 restart "$app" --update-env
+    if pm2 describe "$app" >/dev/null 2>&1; then
+        pm2 restart "$app" --update-env
+    else
+        pm2 start "$BE_DIR/ecosystem.config.js" --only "$app" --update-env
+    fi
 done
 pm2 save
 
