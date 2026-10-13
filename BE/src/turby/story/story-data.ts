@@ -148,6 +148,13 @@ export const STORY_EVENTS: StoryEventDef[] = [
     to: 'CH01_COMPLETE',
   }),
   ev({ id: 'lake_unlocked', chapter: 1, allowedAt: ['CH01_FIRST_KNOT_EQUIPPED'], requires: ['forest_dansuring_found'], serverOnly: true, evidence: { kind: 'none' } }),
+
+  // ---- 2장 어항 속 호수(C2-1: 입구·정착지·물결북) ----
+  // 물빛 입구 도입 대화를 끝까지 본 뒤 클라이언트가 완료를 요청한다(대화 구간의 completesWith). 호수 탐험 세션 안에서만 허용 — 1장을 마치지 않았으면 CHAPTER_LOCKED
+  ev({ id: 'lake_entry_seen', chapter: 2, allowedAt: ['CH01_COMPLETE'], requires: ['lake_unlocked'], evidence: { kind: 'stage', stageCode: 'lake' }, to: 'CH02_STARTED' }),
+  // 정착지의 물들이·물결북 지점에 닿았을 때 서버가 기록한다(서버 전용, 좌표 증거). 체크포인트는 물결북 반응에서 CH02_SETTLEMENT_MET
+  ev({ id: 'lake_mulduri_met', chapter: 2, allowedAt: ['CH02_STARTED'], requires: ['lake_entry_seen'], serverOnly: true, evidence: { kind: 'point', stageCode: 'lake', pointId: 'lake_mulduri' } }),
+  ev({ id: 'lake_wave_drum_awakened', chapter: 2, allowedAt: ['CH02_STARTED'], requires: ['lake_mulduri_met'], serverOnly: true, evidence: { kind: 'point', stageCode: 'lake', pointId: 'lake_wave_drum' }, to: 'CH02_SETTLEMENT_MET' }),
 ];
 
 export const STORY_OBJECTIVES: StoryObjectiveDef[] = [
@@ -267,6 +274,24 @@ export const STORY_TRIGGERS: StoryTriggerDef[] = [
   },
   // 10) 단수링 지점과 1장 마무리 — 발견 기록은 한 번, 장면이 끊겼으면 장 완료 전까지 같은 지점에서 이어 볼 수 있다
   { id: 'forest_dansuring', stageCode: 'forest', evidence: { kind: 'point', stageCode: 'forest', pointId: 'forest_dansuring' }, event: 'forest_dansuring_found', unless: ['forest_primordial_knot_seen'], repeatable: true, play: { segmentId: 'ch01.primordial_knot' } },
+  // ---- 2장 호수(C2-1) ----
+  // 1) 호수 입구 — 지역에 들어서면 서버가 실행. 이벤트(lake_entry_seen)는 도입 대화를 끝까지 본 뒤 클라이언트가 완료 요청하므로 여기서는 기록하지 않는다.
+  //    1장을 마친 계정이 도입을 보기 전이면 resume = 물빛 입구 구간, 그 밖(이미 봄·1장 미완료 백필 계정)은 재생 없음
+  { id: 'lake_entry', stageCode: 'lake', evidence: { kind: 'stage', stageCode: 'lake' }, auto: true, repeatable: true, play: 'resume' },
+  // 2) 정착지의 물들이 — 닿으면 만남을 기록하고 정착지 대화(물결북 앞까지)를 재생. 물결북 반응 전까지는 끊긴 대화를 이어 볼 수 있다
+  {
+    id: 'lake_mulduri',
+    stageCode: 'lake',
+    evidence: { kind: 'point', stageCode: 'lake', pointId: 'lake_mulduri' },
+    event: 'lake_mulduri_met',
+    unless: ['lake_wave_drum_awakened'],
+    repeatable: true,
+    play: { segmentId: 'ch02.settlement', endAfter: 'ch02.settlement', untilEntry: 'ch02.settlement.008' },
+  },
+  // 3) 물결북 — 누비가 다가가면 반응한다. 반응을 확인하면 CH02_SETTLEMENT_MET
+  { id: 'lake_wave_drum', stageCode: 'lake', evidence: { kind: 'point', stageCode: 'lake', pointId: 'lake_wave_drum' }, event: 'lake_wave_drum_awakened', repeatable: false, play: { segmentId: 'ch02.settlement', fromEntry: 'ch02.settlement.009', endAfter: 'ch02.settlement' } },
+  // 4) 물풀 미로 입구 — 다음 개발 단계(C2-2) 전까지 닫혀 있다. 기록·재생 없이 안내 문구(지점 prompt)만 보여 준다
+  { id: 'lake_maze_entrance', stageCode: 'lake', evidence: { kind: 'point', stageCode: 'lake', pointId: 'lake_maze_entrance' }, activeAt: ['CH02_SETTLEMENT_MET'], requires: ['lake_wave_drum_awakened'], repeatable: true, play: 'resume' },
 ];
 export const TRIGGER_BY_ID = new Map(STORY_TRIGGERS.map((t) => [t.id, t]));
 

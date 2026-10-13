@@ -14,33 +14,33 @@ const run = (...args: string[]) => spawnSync(process.execPath, [SCRIPT, ...args]
 const real = JSON.parse(readFileSync(MANIFEST, 'utf8')) as { shards: Record<string, { files: string[]; expectedTests: number; estimatedSeconds: number }> };
 const testCount = (f: string) => (readFileSync(join(E2E_DIR, f), 'utf8').match(/^test\(/gm) ?? []).length;
 
-test('실제 manifest: shard 정확히 2개, 17개 파일이 정확히 한 shard에만(누락 0·중복 0·wildcard 0)', () => {
+test('실제 manifest: shard 정확히 2개, 모든(18개) 파일이 정확히 한 shard에만(누락 0·중복 0·wildcard 0)', () => {
   assert.deepEqual(Object.keys(real.shards).sort(), ['1', '2']);
   const all = readdirSync(E2E_DIR).filter((f) => f.endsWith('.e2e.ts')).sort();
   const listed = Object.values(real.shards).flatMap((s) => s.files);
-  assert.equal(all.length, 17);
+  assert.equal(all.length, 18); // 10-13: lake.e2e.ts 추가
   assert.equal(new Set(listed).size, listed.length, '중복 없음');
   assert.deepEqual([...listed].sort(), all, '누락 없음');
   assert.equal(listed.some((f) => /[*?]/.test(f)), false);
 });
 
-test('실제 manifest: 예상 시험 수 = 파일의 test() 선언 수, 합계 68, 예상 시간 균형(차이 10% 이내)', () => {
+test('실제 manifest: 예상 시험 수 = 파일의 test() 선언 수, 합계 70, 예상 시간 균형(차이 10% 이내)', () => {
   let total = 0;
   for (const [id, s] of Object.entries(real.shards)) {
     const n = s.files.reduce((a, f) => a + testCount(f), 0);
     assert.equal(s.expectedTests, n, `shard ${id}`);
     total += n;
   }
-  assert.equal(total, 68);
+  assert.equal(total, 70); // 기존 68 + 2장 호수 2개(10-13)
   const [a, b] = Object.values(real.shards).map((s) => s.estimatedSeconds);
   assert.ok(Math.abs(a - b) / Math.max(a, b) <= 0.1, `예상 시간 ${a}초 vs ${b}초`);
 });
 
-test('--dry-run: 파일 17개·누락 0·중복 0을 출력하고 아무것도 실행하지 않는다', () => {
+test('--dry-run: 파일 18개·누락 0·중복 0을 출력하고 아무것도 실행하지 않는다', () => {
   const r = run('--dry-run');
   assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /shard 2개 · 파일 17개\(누락 0·중복 0\) · 예상 시험 68개/);
-  assert.match(r.stdout, /shard 1: 파일 8개 · 시험 32개/);
+  assert.match(r.stdout, /shard 2개 · 파일 18개\(누락 0·중복 0\) · 예상 시험 70개/);
+  assert.match(r.stdout, /shard 1: 파일 9개 · 시험 34개/);
   assert.match(r.stdout, /shard 2: 파일 9개 · 시험 36개/);
 });
 

@@ -9,7 +9,7 @@ import { OPENING_REQUIRED_HINT } from '../story/stage-access';
 import { FACINGS, MAX_PLAYERS, ROOM_CODE_LENGTH, RoomError } from './types';
 import type { Facing, MapPlayerDto, Room, RoomMember, RoomStateDto, WildDto, WildRuntime, WildState } from './types';
 import { StoryContentService } from '../story/story-content.service';
-import { checkMove, collisionOf, inLockedZone, lockedZonesFor, reachVerdict, safePosition, solidsFor, type MoveVerdict, type Point, type ReachVerdict } from './stage-collision';
+import { checkMove, collisionOf, inBounds, inLockedZone, lockedZonesFor, reachVerdict, safePosition, solidsFor, type MoveVerdict, type Point, type ReachVerdict } from './stage-collision';
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 헷갈리는 0/O/1/I 제외
 
@@ -263,7 +263,8 @@ export class RoomsService {
   // 10-06 v1 §2: 이 플레이어에게 야생을 보여도 되는가 — 아직 열리지 않은 구역 안의 야생은 숨긴다(스토리 이벤트 기준, 플레이어마다 다르다)
   wildVisibleTo(room: Room, playerId: string, wild: { x: number; y: number }): boolean {
     const m = room.members.find((x) => x.playerId === playerId);
-    return !!m && !inLockedZone(lockedZonesFor(room.collision, m.storyEvents), wild);
+    // 지도 밖에 놓인 야생(지역 크기와 맞지 않는 옛 스폰 좌표)은 닿을 수 없으므로 보이지 않게 한다(2장 호수 3200×2400, 10-13)
+    return !!m && inBounds(room.collision, wild) && !inLockedZone(lockedZonesFor(room.collision, m.storyEvents), wild);
   }
 
   // 클라이언트에 내려 주는 야생 목록: 숨겨진 야생은 아예 싣지 않는다(visible:false로 ID·종류·좌표를 같이 보내지 않는다).

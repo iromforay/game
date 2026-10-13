@@ -150,7 +150,7 @@ function state() {
       story: map.stageView ? {
         greybox: map.stageView.greybox, objects: map.stageView.objects.map((o: Any) => o.id), locked: map.stageView.objects.filter((o: Any) => o.state === 'locked').length,
         points: map.stageView.points.map((p: Any) => p.id), gates: Object.fromEntries(map.stageView.gates.map((x: Any) => [x.id, x.open])),
-        objective: map.stageView.objectives[0] ?? null,
+        objective: map.stageView.objectives[0] ?? null, goal: map.stageView.goal?.text ?? null, goalShown: map.shownGoal ?? null,
         prompt: map.activeTarget?.target.id ?? null, promptText: map.interactLabel?.visible ? map.interactLabel.text : null, busy: map.storyBusy, interact: center(map.hud.interact), interactRect: map.hud.interact,
       } : null,
     };

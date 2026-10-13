@@ -110,6 +110,7 @@ export interface StageViewDto {
   render: { markerMode: 'fallback' | 'final'; background: { assetKey: string } | null; backgroundLocked?: string; unlockedBy?: string; backgroundUnlocked?: boolean; overlays: { id: string; assetKey: string; x: number; y: number; width: number; height: number; pivot?: [number, number]; layer: 'overlay' | 'story'; forPoints: string[] }[] };
   layout: { zones: StageRect[]; paths: number[][][]; blockers: StageRect[] } | null;
   objectives: { key: string; collected: number; required: number; active: boolean }[];
+  goal: { id: string; text: string } | null; // 이야기 목표 문구(지역 데이터 goals에서 지금 진행에 맞는 첫 항목)
 }
 
 export interface StoryTriggerResultDto {
@@ -445,7 +446,7 @@ export class StoryService {
     // 지도 크기도 서버가 정한다(10-02 v6 §2): 지역 데이터의 size, 없으면 지역 표의 크기 — 방의 geometry(collisionOf)와 같은 기준
     const chapter = data?.size ? null : await this.prisma.story_chapter.findUnique({ where: { stage_code: stageCode } });
     const size = data?.size ?? (chapter ? { width: chapter.map_width, height: chapter.map_height } : null);
-    if (!data) return { stageCode, greybox: false, size, objects: [], points: [], gates: [], render: { markerMode: 'fallback', background: null, overlays: [] }, layout: null, objectives: [] };
+    if (!data) return { stageCode, greybox: false, size, objects: [], points: [], gates: [], render: { markerMode: 'fallback', background: null, overlays: [] }, layout: null, objectives: [], goal: null };
     const snap = await this.readSnapshot(playerId);
     const at = new Map(data.points.map((p) => [p.id, p]));
     const defs = STORY_OBJECTIVES.filter((o) => o.stageCode === stageCode);
@@ -494,6 +495,10 @@ export class StoryService {
           }
         : null,
       objectives: defs.map((d) => ({ key: d.key, collected: snap.objectives.get(d.key)?.size ?? 0, required: d.objectIds.length, active: checkObjective(d, snap) === null })),
+      goal: (() => {
+        const g = (data.goals ?? []).find((x) => (x.requires ?? []).every((e) => snap.events.has(e)) && !((x.unless?.length ?? 0) > 0 && x.unless!.every((e) => snap.events.has(e))));
+        return g ? { id: g.id, text: g.text } : null;
+      })(),
     };
   }
 

@@ -90,6 +90,7 @@ export class MapScene extends Phaser.Scene {
   private roomJoined = false;
   private leaving = false;
   private lastDelivery: StoryDelivery | null = null;
+  shownGoal: string | null = null; // 상단 목표 패널에 지금 표시 중인 문구(진단 전용)
   private goalTextOverride: string | null = null; // 개발·시험용: 긴 목표 문구 표시 확인(운영 코드는 설정하지 않는다)
   private generation = 0; // 화면을 다시 만들 때마다 증가 — 응답을 기다리던 이전 create가 새 화면에 덧그리거나 리스너를 중복 등록하지 않게
   private pendingInvite: BattleSnapshot | null = null;
@@ -381,6 +382,7 @@ export class MapScene extends Phaser.Scene {
     }
     this.refreshMiniMap();
     this.setActiveTarget(null);
+    if (this.hud) this.showDelivery(this.lastDelivery); // 이야기 목표 문구는 지역 화면 데이터와 함께 바뀐다
   }
 
   // 미니맵·전체 지도에 놓이는 것을 지금 상태로 다시 그린다: 야생 터비(서버 좌표), 이야기 지점·오브젝트, 회색상자 지형
@@ -559,11 +561,15 @@ export class MapScene extends Phaser.Scene {
     this.lastDelivery = delivery;
     this.deliveryLayer.forEach((o) => o.destroy());
     this.deliveryLayer = [];
-    if (!delivery) return;
+    this.shownGoal = null;
+    // 수집 목표(서버 인벤토리 수량)가 우선, 없으면 서버가 정한 이야기 목표 문구(2장 호수 등)
+    const goalLabel = this.goalTextOverride ?? (delivery ? deliveryGoalText(delivery) : (this.stageView?.goal?.text ?? null));
+    if (!goalLabel) return;
+    this.shownGoal = goalLabel;
     const G = this.hud.goal;
     const goalFont = this.hud.font.goal;
     const cx = G.x + G.w / 2;
-    const goal = this.add.text(cx, G.y + 10, this.goalTextOverride ?? deliveryGoalText(delivery), { fontSize: `${goalFont}px`, color: '#ffe9a8', align: 'center', wordWrap: { width: G.w - 28, useAdvancedWrap: true } }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(2001);
+    const goal = this.add.text(cx, G.y + 10, goalLabel, { fontSize: `${goalFont}px`, color: '#ffe9a8', align: 'center', wordWrap: { width: G.w - 28, useAdvancedWrap: true } }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(2001);
     const panelW = Math.min(G.w, Math.max(Math.min(G.w, 440), goal.width + 28));
     const panelH = goal.height + 20;
     const panel = this.add.rectangle(cx, G.y + panelH / 2, panelW, panelH, 0x241a3d, 0.9).setStrokeStyle(2, 0xffd27f, 0.9).setScrollFactor(0).setDepth(2000);

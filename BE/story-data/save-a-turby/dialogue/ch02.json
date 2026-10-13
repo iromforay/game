@@ -1,0 +1,195 @@
+{
+  "schemaVersion": 1,
+  "chapterCode": "ch02",
+  "source": "docs/scene/2장.md",
+  "segments": [
+    {
+      "segmentId": "ch02.lake_entry",
+      "resumeFrom": "CH01_COMPLETE",
+      "replayOnResume": true,
+      "completesWith": "lake_entry_seen",
+      "entries": [
+        {
+          "kind": "title",
+          "dialogueId": "ch02.lake_entry.001",
+          "text": "물빛 입구"
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch02.lake_entry.002",
+          "text": "숲에서 이어진 푸른 실은 유리벽 너머로 흘러 들어간다. 주인공과 누비가 빛을 따라 경계를 넘자 발밑의 먼지숲이 얕은 물과 푸른 모래로 바뀐다. 높은 곳에서는 어항 밖의 거실 불빛이 물결에 굴절되어 흔들린다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch02.lake_entry.003",
+          "text": "누비가 물가에 첫발을 내딛는 순간 몸의 색이 빠르게 옅어진다.",
+          "cameraCue": "lake-nubi-color-fade",
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch02.lake_entry.004",
+          "speaker": "player",
+          "speakerLabel": "{playerName}",
+          "text": "누비, 몸이 더 하얘졌어.",
+          "portrait": "player",
+          "expression": "worried",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch02.lake_entry.005",
+          "speaker": "nubi",
+          "speakerLabel": "누비",
+          "text": "추운 건 아닌데…… 내 색이 물속으로 빠져나가는 것 같아.",
+          "portrait": "nubi",
+          "expression": "weak",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch02.lake_entry.006",
+          "text": "얕은 물 위로 검은 실 한 줄이 지나간다. 실은 누비에게 닿기 직전 물속으로 사라진다.",
+          "cameraCue": "lake-black-thread-pass",
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch02.lake_entry.007",
+          "speaker": "nubi",
+          "speakerLabel": "누비",
+          "text": "방금 저 실, 숲에서 본 것과 비슷했어.",
+          "portrait": "nubi",
+          "expression": "worried",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch02.lake_entry.008",
+          "text": "두 사람은 검은 실이 사라진 방향을 따라간다.",
+          "cameraCue": null,
+          "soundCue": null
+        }
+      ]
+    },
+    {
+      "segmentId": "ch02.settlement",
+      "resumeFrom": "CH02_STARTED",
+      "replayOnResume": false,
+      "completesWith": null,
+      "entries": [
+        {
+          "kind": "title",
+          "dialogueId": "ch02.settlement.001",
+          "text": "색을 잃은 정착지"
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch02.settlement.002",
+          "text": "호숫가 정착지의 천막과 깃발은 원래 색을 알아보기 어려울 만큼 바래 있다. 물들이 한 마리가 검은 실을 걷어 내고 있지만, 끊을 때마다 물속에서 새로운 실이 떠오른다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch02.settlement.003",
+          "speaker": "muldeuli",
+          "speakerLabel": "물들이",
+          "text": "거기서 멈춰! 물에 오래 서 있으면 색을 빼앗겨.",
+          "portrait": null,
+          "expression": "worried",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch02.settlement.004",
+          "text": "물들이는 누비의 몸을 보고 놀란다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch02.settlement.005",
+          "speaker": "muldeuli",
+          "speakerLabel": "물들이",
+          "text": "너는 벌써 너무 많이 빠졌어. 이 호수의 실은 다른 터비보다 네 색을 먼저 가져가고 있어.",
+          "portrait": null,
+          "expression": "worried",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch02.settlement.006",
+          "speaker": "player",
+          "speakerLabel": "{playerName}",
+          "text": "물빛 염색실을 찾고 있어. 누비의 몸을 고칠 수 있대.",
+          "portrait": "player",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch02.settlement.007",
+          "text": "물들이는 호수 안쪽의 염색 샘을 가리킨다. 샘은 거대한 검은 그림자에 막혀 있다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch02.settlement.008",
+          "speaker": "muldeuli",
+          "speakerLabel": "물들이",
+          "text": "예전에는 염색 샘에서 모든 색이 시작됐어. 지금은 물먹은 인형이 샘을 차지하고 색을 전부 삼키고 있지.",
+          "portrait": null,
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch02.settlement.009",
+          "text": "정착지 한쪽에 작은 푸른 북이 놓여 있다. 물들이가 북을 두드려도 아무 반응이 없지만 누비가 가까이 다가가자 북 안쪽의 실이 스스로 울린다.",
+          "cameraCue": "lake-wave-drum-react",
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch02.settlement.010",
+          "speaker": "muldeuli",
+          "speakerLabel": "물들이",
+          "text": "이상하네. 이건 염색 샘의 길을 찾는 물결북이야. 우리에겐 며칠째 반응하지 않았는데.",
+          "portrait": null,
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch02.settlement.011",
+          "speaker": "nubi",
+          "speakerLabel": "누비",
+          "text": "나도 왜 이러는지 모르겠어.",
+          "portrait": "nubi",
+          "expression": "worried",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch02.settlement.012",
+          "text": "물결북에서 나온 파문이 물풀 미로를 향해 번진다.",
+          "cameraCue": "lake-wave-drum-ripple",
+          "soundCue": null
+        }
+      ]
+    }
+  ]
+}

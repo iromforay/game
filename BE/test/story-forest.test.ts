@@ -76,7 +76,7 @@ test('오브젝트 ID: 실가루는 forest_dust_01~10 고정, 지역 데이터�
 
 test('이야기 지점: 여덟 지점이 정의돼 있고, 지도에 놓이는 지점은 좌표·표시 정보를 가진다. 완료 이벤트·전투 키·재생 범위는 실제 데이터에 있다', () => {
   assert.deepEqual(
-    STORY_TRIGGERS.map((t) => t.id),
+    STORY_TRIGGERS.filter((t) => t.stageCode === 'forest').map((t) => t.id), // 10-13: 2장 호수 지점은 story-lake.test.ts
     ['forest_entry', 'forest_cut_thread', 'forest_bopuli_ambush', 'forest_bopuli_return', 'forest_hidden_path', 'forest_giant_knot', 'forest_first_knot_awaken', 'forest_dansuring'],
   );
   const entryIds = new Map(CH01.segments.map((s) => [s.segmentId, s.entries.map((e) => e.dialogueId)]));
@@ -87,7 +87,7 @@ test('이야기 지점: 여덟 지점이 정의돼 있고, 지도에 놓이는 �
     if (r.untilEntry) assert.ok(entryIds.get(r.endAfter ?? r.segmentId)!.includes(r.untilEntry), `${id}: 끝 항목 ${r.untilEntry}`);
   };
   checkRange('forest_entry', FIRST_PATH_INTRO);
-  for (const t of STORY_TRIGGERS) {
+  for (const t of STORY_TRIGGERS.filter((x) => x.stageCode === 'forest')) {
     assert.equal(t.stageCode, 'forest');
     if (t.event) assert.ok(EVENT_BY_ID.get(t.event)?.serverOnly, `${t.id}: 완료 이벤트는 서버 전용`);
     for (const e of [...(t.requires ?? []), ...(t.unless ?? [])]) assert.ok(EVENT_BY_ID.has(e), `${t.id}: 이벤트 ${e}`);

@@ -112,3 +112,14 @@ export function seedForest(device: string, stage: keyof typeof FOREST_STAGE, col
     }
   };
 }
+
+// 10-13 C2-1: 1장을 마치고 2장 호수 입구에 서기 직전(CH01_COMPLETE) — 장 완료 이벤트와 호수 개방까지 기록된 계정. 도입·물들이·물결북은 아직 안 봄
+export function seedLake(device: string) {
+  const base = seedForest(device, 'equipped');
+  return (db: FakeDb) => {
+    base(db);
+    const player = db.rows('player', { device_uuid: `dev-device-${device}-account` })[0] as { id: bigint };
+    for (const e of ['forest_dansuring_found', 'forest_primordial_knot_seen', 'lake_unlocked']) db.seed('player_story_event', { player_id: player.id, event_id: e });
+    (db.rows('player_story_progress', { player_id: player.id })[0] as { checkpoint: string }).checkpoint = 'CH01_COMPLETE';
+  };
+}

@@ -299,11 +299,14 @@ test('위치 증거: 거부된 이동의 좌표는 쓰지 않는다 — 수집�
   assert.equal((await collect('forest_dust_10')).collected, 4);
 });
 
-test('지역 데이터가 없는 지역(호수 등)은 한가운데에서 시작하고 충돌 판정 없이 경계만 지킨다', async () => {
-  const s = setup([...COMPASS, 'lake_unlocked'], 'CH01_COMPLETE');
-  // 구 판정(기본): 1장 대표 터비를 포획한 계정은 호수에 들어갈 수 있다
+test('지역 데이터가 없는 지역(지하 등)은 한가운데에서 시작하고 충돌 판정 없이 경계만 지킨다', async () => {
+  // 10-13: 호수는 2장 기능 맵 데이터가 생겨 이 시험의 "데이터 없는 지역" 예시를 지하로 바꿨다(역할은 같다)
+  const s = setup([...COMPASS, 'lake_unlocked', 'underfloor_unlocked', 'legacy_access_underground'], 'CH01_COMPLETE');
+  s.db.seed('story_chapter', { chapter_order: 3, stage_code: 'underground', clear_character_code: 'pokshini', title: '3장 — 지하', map_width: 4000, map_height: 3000 });
+  // 구 판정(기본): 이전 장의 대표 터비(누비·물들이)를 모두 포획한 계정은 지하에 들어갈 수 있다
   s.db.seed('turby_instance', { owner_player_id: 1n, character_id: s.db.rows('turby_character', { code: 'nubi' })[0].id, acquired_via: 'wild_capture' });
-  const r = await s.enter('lake');
+  s.db.seed('turby_instance', { owner_player_id: 1n, character_id: s.db.seed('turby_character', { code: 'muldeuli', name: '물들이' }).id, acquired_via: 'wild_capture' });
+  const r = await s.enter('underground');
   assert.deepEqual([r.self.x, r.self.y], [2000, 1500]);
   assert.equal(s.walk({ x: 2100, y: 1500 }), 'ok');
   assert.equal((s.jump({ x: 2100, y: 3001 }, 60_000) as { reason: string }).reason, 'out_of_bounds');

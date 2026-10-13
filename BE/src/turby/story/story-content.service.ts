@@ -50,6 +50,8 @@ export interface StageStoryData {
   points: StagePoint[];
   objects?: { id: string; objectiveKey: string; group: string; assetKey: string; label: string; prompt: string }[];
   storyPoints?: { id: string; kind: string; assetKey: string; label: string; prompt: string }[];
+  // 10-13 C2-1: 이야기 진행에 따른 목표 문구(상단 목표 패널). 위에서부터 첫 번째로 맞는 것 — requires(모두 완료)·unless(모두 완료면 닫힘). 수집 목표(전달 delivery)가 없을 때만 쓴다
+  goals?: { id: string; text: string; requires?: string[]; unless?: string[] }[];
   // visibleAfter: 그 이벤트 전에는 지도·화면에 내려 주지 않는다(숨은 구역의 내부 정보). 통과 불가 판정은 표시 여부와 무관하게 서버가 한다
   layout?: { zones: StageZone[]; paths: StagePath[]; blockers: (StageRect & { visibleAfter?: string })[]; gates: StageGateData[] };
   // 10-06 v2(최종 에셋 연결 계약): 대형 배경과 진행 상태별 오버레이의 런타임 에셋 키. 에셋이 없으면 화면이 회색상자·임시 도형을 그대로 쓴다

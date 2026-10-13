@@ -128,3 +128,39 @@ test('오프닝 대화: 같은 검증기로 스키마·MD 대조 통과(회귀)'
   assert.ok(firstLine >= 0);
   compareWithMd(file, 'docs/scene/오프닝.md', md[firstLine].trim(), excluded);
 });
+
+// 10-13 C2-1: 2장 물빛 입구·색을 잃은 정착지 — 스키마 규칙과 docs/scene/2장.md 본문(문구·순서·화자) 대조
+test('ch02(C2-1): 스키마 규칙을 지키고, 물빛 입구·색을 잃은 정착지의 서술·대사가 장면 문서와 같은 순서·문구다', () => {
+  const file = load('ch02') as { segments: Segment[] } & Record<string, unknown>;
+  checkSchema(file);
+  const raw = readFileSync(join(DOCS, 'docs/scene/2장.md'), 'utf8').split(/\r?\n/).map((l) => l.trim());
+  const from = raw.findIndex((l) => l === '## 물빛 입구');
+  const to = raw.findIndex((l) => l === '## 물풀 미로');
+  assert.ok(from >= 0 && to > from);
+  const md: { who: string | null; text: string }[] = [];
+  let speaker: string | null = null;
+  for (const l of raw.slice(from + 1, to)) {
+    if (!l || l.startsWith('#') || l.startsWith('>') || l.startsWith('발동 조건:')) continue; // 발동 조건은 설계 메타(장면 본문 아님)
+    const label = /^\*\*(.+)\*\*$/.exec(l);
+    if (label) {
+      speaker = label[1];
+      continue;
+    }
+    if (l.startsWith('“')) {
+      md.push({ who: speaker, text: l.replace(/^“/, '').replace(/”$/, '') });
+      speaker = null;
+    } else if (l.startsWith('`')) continue;
+    else md.push({ who: null, text: l });
+  }
+  // 문서의 "## 색을 잃은 정착지" 제목 앞뒤 구간은 JSON의 title 항목으로 따로 있으므로 title은 비교에서 뺀다
+  const json = file.segments.flatMap((s) => s.entries).filter((e) => e.kind === 'line' || e.kind === 'narration');
+  assert.equal(json.length, md.length, `항목 수: JSON ${json.length} / MD ${md.length}`);
+  json.forEach((e, i) => {
+    assert.equal(e.text, md[i].text, `${e.dialogueId}: 문구`);
+    if (e.kind === 'line') assert.equal(e.speakerLabel, md[i].who, `${e.dialogueId}: 화자 표기`);
+    else assert.equal(md[i].who, null, `${e.dialogueId}: 서술`);
+  });
+  // 구간 시작 체크포인트·완료 이벤트가 서버 전이표와 맞다
+  assert.deepEqual(file.segments.map((s) => [s.segmentId, s.resumeFrom, s.completesWith]), [['ch02.lake_entry', 'CH01_COMPLETE', 'lake_entry_seen'], ['ch02.settlement', 'CH02_STARTED', null]]);
+  assert.equal(EVENT_BY_ID.get('lake_entry_seen')!.allowedAt[0], 'CH01_COMPLETE');
+});
