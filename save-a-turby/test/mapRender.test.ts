@@ -345,3 +345,60 @@ test('전달 에셋 3종이 런타임 폴더에 실제로 있고(키=파일명) 
   const used = new Set([...lake.storyPoints.map((p) => p.assetKey), ...lake.render.overlays.map((o) => o.assetKey)]);
   for (const k of ['wave-drum-idle', 'wave-drum-active', 'wave-path', 'turby-muldeuli']) assert.ok(used.has(k), k);
 });
+
+// ---------- 10-13 C2-2: 물풀문·물살 ----------
+const REED_ART = { x: 1440, y: 1190, width: 300, height: 200, pivot: [0.5, 0.9] as [number, number] };
+function mazeView(open: boolean): StageView {
+  return {
+    stageCode: 'lake',
+    greybox: true,
+    size: LAKE_SIZE,
+    objects: [],
+    points: [],
+    gates: [{ id: 'gate_reed_maze', label: '물풀문', x: 1290, y: 1150, width: 300, height: 50, open, closedAssetKey: 'reed-gate-closed', openAssetKey: 'reed-gate-open', art: REED_ART }],
+    render: { background: null, overlays: [{ id: 'overlay_current_weak_1', assetKey: 'current-flow', x: 1780, y: 1000, width: 320, height: 107, layer: 'overlay', alpha: 0.6 }] },
+    layout: { zones: [], paths: [], blockers: [], water: [{ id: 'deep', kind: 'deep', x: 2100, y: 880, width: 200, height: 270 }], anchors: [{ id: 'a', x: 1440, y: 1100, radius: 60 }] },
+    objectives: [],
+  };
+}
+const hasMaze = (k: string) => ['reed-gate-closed', 'reed-gate-open', 'current-flow'].includes(k);
+
+test('물풀문: 닫힘은 reed-gate-closed, 열림은 reed-gate-open이 같은 좌표·피벗·표시 상자에 놓이고 충돌은 서버 open 값을 따른다', () => {
+  const closed = planStageRender(mazeView(false), hasMaze, LAKE_SIZE).gates[0];
+  const open = planStageRender(mazeView(true), hasMaze, LAKE_SIZE).gates[0];
+  assert.deepEqual([closed.art?.assetKey, closed.placeholder], ['reed-gate-closed', false]);
+  assert.deepEqual([open.art?.assetKey, open.placeholder], ['reed-gate-open', false]);
+  assert.deepEqual({ ...closed.art, assetKey: '' }, { ...open.art, assetKey: '' }, '같은 상자');
+  assert.ok(solidRects(mazeView(false)).some((r) => r.id === 'gate_reed_maze'));
+  assert.ok(!solidRects(mazeView(true)).some((r) => r.id === 'gate_reed_maze'));
+});
+
+test('물살 그림(current-flow)은 바닥 오버레이로 플레이어·NPC·상호작용 지점보다 아래이고 알파가 0.48~0.68이다', () => {
+  const plan = planStageRender(mazeView(true), hasMaze, LAKE_SIZE);
+  const flow = plan.overlays.find((o) => o.assetKey === 'current-flow')!;
+  assert.equal(flow.depth, MAP_DEPTH.overlay);
+  assert.ok(flow.depth < MAP_DEPTH.story && flow.depth < MAP_DEPTH.actors);
+  assert.ok(flow.alpha >= 0.48 && flow.alpha <= 0.68);
+  assert.ok(flow.width >= 320 && flow.width <= 620);
+});
+
+test('MapScene: 물살 보정은 서버 값만 쓰고(보간·흔들림·물방울), 깊은 물 안내는 한 번만, 물 구역은 회색상자에 구분해 그린다', () => {
+  const map = src('scenes/MapScene.ts');
+  assert.match(map, /pos\.reason === 'current'/);
+  assert.match(map, /pos\.reason === 'deep_water'/);
+  assert.match(map, /this\.cameras\.main\.shake\(/);
+  assert.match(map, /this\.notices\.once\('deep-water'\)/);
+  assert.match(map, /for \(const w of L\.water \?\? \[\]\)/);
+  assert.match(src('story/mapNotices.ts'), /깊은 물은 위험해\. 물풀이 잔잔한 길로 가자\./);
+  // 화면이 방향·거리·물살 ID를 정하지 않는다: 보정 처리에 하드코딩된 거리(64·88)가 없다
+  const correction = map.slice(map.indexOf('private applyCorrection('), map.indexOf('private waterBubbles('));
+  assert.doesNotMatch(correction, /\b(64|88)\b/);
+});
+
+test('전달 에셋 3종(current-flow·reed-gate-closed·reed-gate-open)이 런타임 폴더에 있다', () => {
+  const root = fileURLToPath(new URL('../src/assets/world/lake/', import.meta.url));
+  for (const f of ['fx/current-flow.png', 'maze/reed-gate-closed.png', 'maze/reed-gate-open.png']) {
+    assert.ok(existsSync(root + f), f);
+    assert.deepEqual([...readFileSync(root + f).subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
+  }
+});

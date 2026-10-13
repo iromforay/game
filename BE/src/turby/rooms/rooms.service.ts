@@ -9,12 +9,17 @@ import { OPENING_REQUIRED_HINT } from '../story/stage-access';
 import { FACINGS, MAX_PLAYERS, ROOM_CODE_LENGTH, RoomError } from './types';
 import type { Facing, MapPlayerDto, Room, RoomMember, RoomStateDto, WildDto, WildRuntime, WildState } from './types';
 import { StoryContentService } from '../story/story-content.service';
+import { newWaterState, resolveWater, returnTarget, inDeepWater } from './stage-water';
 import { checkMove, collisionOf, inBounds, inLockedZone, lockedZonesFor, reachVerdict, safePosition, solidsFor, type MoveVerdict, type Point, type ReachVerdict } from './stage-collision';
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 헷갈리는 0/O/1/I 제외
 
 // corrected: 이동을 승인하지 않았다 — x·y는 마지막으로 승인한 서버 위치. reason = 속도 초과 또는 충돌 판정
-export type MoveResult = { kind: 'ok'; x: number; y: number; dir: Facing } | { kind: 'dropped' } | { kind: 'corrected'; x: number; y: number; reason: 'speed' | Exclude<MoveVerdict, 'ok'> };
+export type MoveResult =
+  | { kind: 'ok'; x: number; y: number; dir: Facing }
+  // 10-13 C2-2: 서버가 승인한 위치를 물 규칙으로 옮겼다 — current = 물살에 밀림(currentFieldId), deep_water = 깊은 물에서 마지막 안전 앵커로 복귀(currentFieldId null)
+  | { kind: 'adjusted'; x: number; y: number; dir: Facing; reason: 'current' | 'deep_water'; currentFieldId: string | null }
+  | { kind: 'dropped' } | { kind: 'corrected'; x: number; y: number; reason: 'speed' | Exclude<MoveVerdict, 'ok'> };
 
 // 4-A: 방 생성·입장·퇴장·호스트 승계·재접속 유예·맵 위치 동기화(docs/save_a_turby_coop_spec.md 2, 3절).
 // 방과 위치는 영구 저장이 필요 없어 메모리로만 관리하고, 변경은 events로 알려 게이트웨이가 브로드캐스트한다.
@@ -118,6 +123,7 @@ export class RoomsService {
     if (!player) throw new RoomError('PLAYER_NOT_FOUND', '등록되지 않은 플레이어입니다.');
     if (this.roomOf(playerId)) throw new RoomError('ALREADY_IN_ROOM', '이미 방에 참여 중입니다.'); // await 사이에 같은 플레이어의 다른 요청이 방을 만든 경우
 
+    const collision = collisionOf(this.content.stage(stage.stage_code), stage.map_width, stage.map_height, stage.stage_code);
     const room: Room = {
       code: this.newCode(),
       name: '혼자 탐험',
@@ -129,7 +135,8 @@ export class RoomsService {
       phase: 'lobby',
       members: [],
       wilds: await this.loadWilds(stage.stage_code),
-      collision: collisionOf(this.content.stage(stage.stage_code), stage.map_width, stage.map_height, stage.stage_code),
+      collision,
+      water: this.waterOf(stage.stage_code),
     };
     room.members.push(this.newMember(playerId, player.nickname));
     this.rooms.set(room.code, room);
@@ -177,10 +184,20 @@ export class RoomsService {
       member.y = c.spawn.y;
       member.placed = true;
     } else {
-      const safe = safePosition(c, solidsFor(c, events), lockedZonesFor(c, events), { x: member.x, y: member.y });
+      const solids = solidsFor(c, events);
+      const stored = { x: member.x, y: member.y };
+      const safe = safePosition(c, solids, lockedZonesFor(c, events), stored);
       member.x = safe.x;
       member.y = safe.y;
       corrected = safe.corrected;
+      // 10-13 C2-2: 저장 위치가 깊은 물이거나 벽·닫힌 문 안이면 이 플레이어의 마지막 안전 앵커(없으면 가장 가까운 유효 앵커)로 복원한다
+      if (room.water && (corrected || inDeepWater(room.water, stored))) {
+        const back = returnTarget(room.water, c, solids, member.water, stored);
+        member.x = back.x;
+        member.y = back.y;
+        corrected = true;
+      }
+      member.water.consecutive = 0; // 재접속 직후 연속 적용 횟수는 새로 센다(안전 앵커는 유지)
     }
     member.inMap = true;
     member.dir = FACINGS.includes(dirRaw as Facing) ? (dirRaw as Facing) : member.dir;
@@ -246,6 +263,19 @@ export class RoomsService {
     member.x = x;
     member.y = y;
     member.dir = dir;
+    // 10-13 C2-2: 물 규칙(깊은 물 복귀·물살 밀림). 방향·거리·목적지는 지역 데이터에서만 온다 — 요청의 값은 좌표뿐이다
+    const water = resolveWater(room.water, c, solidsFor(c, member.storyEvents), lockedZonesFor(c, member.storyEvents), member.storyEvents, member.water, { x, y }, now);
+    if (water.kind === 'pushed') {
+      member.x = water.x;
+      member.y = water.y;
+      return { room, result: { kind: 'adjusted', x: water.x, y: water.y, dir, reason: 'current', currentFieldId: water.currentFieldId } };
+    }
+    if (water.kind === 'returned') {
+      member.x = water.x;
+      member.y = water.y;
+      member.water.anchorId = water.anchorId ?? member.water.anchorId;
+      return { room, result: { kind: 'adjusted', x: water.x, y: water.y, dir, reason: 'deep_water', currentFieldId: null } };
+    }
     return { room, result: { kind: 'ok', x, y, dir } };
   }
 
@@ -363,7 +393,7 @@ export class RoomsService {
   }
 
   private newMember(playerId: string, nickname: string): RoomMember {
-    return { playerId, nickname, socketId: this.socketOfPlayer.get(playerId) ?? null, connected: true, inMap: false, x: 0, y: 0, dir: 'down', lastMoveAt: 0, graceTimer: null, placed: false, storyEvents: new Set() };
+    return { playerId, nickname, socketId: this.socketOfPlayer.get(playerId) ?? null, connected: true, inMap: false, x: 0, y: 0, dir: 'down', lastMoveAt: 0, graceTimer: null, placed: false, storyEvents: new Set(), water: newWaterState() };
   }
 
   private newCode(): string {
@@ -373,6 +403,11 @@ export class RoomsService {
       if (!this.rooms.has(code)) return code;
     }
     throw new RoomError('SERVER_BUSY', '방 코드를 만들 수 없습니다. 잠시 후 다시 시도하세요.');
+  }
+
+  // 지역 데이터의 물 규칙(없으면 null). 검증은 StoryContentService가 시작 단계에서 이미 했다
+  private waterOf(stageCode: string) {
+    return this.content.water(stageCode);
   }
 
   private async requireStage(stageCode: unknown) {

@@ -154,7 +154,9 @@ export const STORY_EVENTS: StoryEventDef[] = [
   ev({ id: 'lake_entry_seen', chapter: 2, allowedAt: ['CH01_COMPLETE'], requires: ['lake_unlocked'], evidence: { kind: 'stage', stageCode: 'lake' }, to: 'CH02_STARTED' }),
   // 정착지의 물들이·물결북 지점에 닿았을 때 서버가 기록한다(서버 전용, 좌표 증거). 체크포인트는 물결북 반응에서 CH02_SETTLEMENT_MET
   ev({ id: 'lake_mulduri_met', chapter: 2, allowedAt: ['CH02_STARTED'], requires: ['lake_entry_seen'], serverOnly: true, evidence: { kind: 'point', stageCode: 'lake', pointId: 'lake_mulduri' } }),
-  ev({ id: 'lake_wave_drum_awakened', chapter: 2, allowedAt: ['CH02_STARTED'], requires: ['lake_mulduri_met'], serverOnly: true, evidence: { kind: 'point', stageCode: 'lake', pointId: 'lake_wave_drum' }, to: 'CH02_SETTLEMENT_MET' }),
+  ev({ id: 'lake_wave_drum_awakened', chapter: 2, allowedAt: ['CH02_STARTED'], requires: ['lake_mulduri_met'], serverOnly: true, evidence: { kind: 'point', stageCode: 'lake', pointId: 'lake_wave_drum' }, to: 'CH02_SETTLEMENT_MET', alsoComplete: ['lake_safe_route_opened'] }),
+  // 10-13 C2-2: 물결북 반응과 같은 트랜잭션에서 한 번 기록되는 미로 개방 사건(물풀문 gate_reed_maze의 openEvent). 직접 요청은 서버 전용이라 거부된다. 새 체크포인트·장 완료는 만들지 않는다
+  ev({ id: 'lake_safe_route_opened', chapter: 2, allowedAt: ['CH02_SETTLEMENT_MET'], requires: ['lake_wave_drum_awakened'], serverOnly: true, evidence: { kind: 'none' } }),
 ];
 
 export const STORY_OBJECTIVES: StoryObjectiveDef[] = [
@@ -290,8 +292,6 @@ export const STORY_TRIGGERS: StoryTriggerDef[] = [
   },
   // 3) 물결북 — 누비가 다가가면 반응한다. 반응을 확인하면 CH02_SETTLEMENT_MET
   { id: 'lake_wave_drum', stageCode: 'lake', evidence: { kind: 'point', stageCode: 'lake', pointId: 'lake_wave_drum' }, event: 'lake_wave_drum_awakened', repeatable: false, play: { segmentId: 'ch02.settlement', fromEntry: 'ch02.settlement.009', endAfter: 'ch02.settlement' } },
-  // 4) 물풀 미로 입구 — 다음 개발 단계(C2-2) 전까지 닫혀 있다. 기록·재생 없이 안내 문구(지점 prompt)만 보여 준다
-  { id: 'lake_maze_entrance', stageCode: 'lake', evidence: { kind: 'point', stageCode: 'lake', pointId: 'lake_maze_entrance' }, activeAt: ['CH02_SETTLEMENT_MET'], requires: ['lake_wave_drum_awakened'], repeatable: true, play: 'resume' },
 ];
 export const TRIGGER_BY_ID = new Map(STORY_TRIGGERS.map((t) => [t.id, t]));
 

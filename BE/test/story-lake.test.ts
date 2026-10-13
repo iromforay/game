@@ -66,8 +66,8 @@ async function codeOf(p: Promise<unknown>): Promise<string> {
 test('호수 지역 데이터: 3200×2400, 시작 지점·이야기 지점 좌표가 서버·클라이언트 같은 계약(지역 JSON 한 곳)에 있고 표시 정보가 있다', () => {
   assert.deepEqual(LAKE.size, { width: 3200, height: 2400 });
   assert.deepEqual(LAKE.spawnPoint, { x: 380, y: 2040 });
-  assert.deepEqual(LAKE.points.map((p) => p.id).sort(), ['lake_maze_entrance', 'lake_mulduri', 'lake_wave_drum']);
-  for (const id of ['lake_mulduri', 'lake_wave_drum', 'lake_maze_entrance']) {
+  assert.deepEqual(LAKE.points.map((p) => p.id).sort(), ['lake_mulduri', 'lake_wave_drum']);
+  for (const id of ['lake_mulduri', 'lake_wave_drum']) {
     const look = LAKE.storyPoints!.find((s) => s.id === id)!;
     assert.ok(look.label && look.prompt && look.assetKey, `${id} 표시 정보`);
   }
@@ -85,12 +85,16 @@ test('이벤트·지점 정의: 이름·체크포인트 전이·서버 전용 �
   assert.deepEqual([e('lake_entry_seen').allowedAt, e('lake_entry_seen').to, e('lake_entry_seen').serverOnly ?? false], [['CH01_COMPLETE'], 'CH02_STARTED', false]);
   assert.deepEqual([e('lake_mulduri_met').allowedAt, e('lake_mulduri_met').to ?? null, e('lake_mulduri_met').serverOnly], [['CH02_STARTED'], null, true]);
   assert.deepEqual([e('lake_wave_drum_awakened').allowedAt, e('lake_wave_drum_awakened').to, e('lake_wave_drum_awakened').serverOnly], [['CH02_STARTED'], 'CH02_SETTLEMENT_MET', true]);
-  for (const id of ['lake_entry_seen', 'lake_mulduri_met', 'lake_wave_drum_awakened']) {
+  for (const id of ['lake_entry_seen', 'lake_mulduri_met', 'lake_wave_drum_awakened', 'lake_safe_route_opened']) {
     const d = e(id);
     assert.equal(d.chapter, 2);
-    assert.deepEqual([d.grant, d.consume, d.equipRelic, d.grantStoryNubi, d.alsoComplete], [undefined, undefined, undefined, undefined, undefined], `${id}: 아이템·통화·성장·부가 이벤트 없음`);
+    assert.deepEqual([d.grant, d.consume, d.equipRelic, d.grantStoryNubi], [undefined, undefined, undefined, undefined], `${id}: 아이템·통화·성장 없음`);
   }
-  assert.deepEqual(STORY_TRIGGERS.filter((t) => t.stageCode === 'lake').map((t) => t.id), ['lake_entry', 'lake_mulduri', 'lake_wave_drum', 'lake_maze_entrance']);
+  // 10-13 C2-2: 미로 개방 사건은 물결북 반응과 같은 트랜잭션에서만 기록된다(서버 전용, 새 체크포인트 없음)
+  assert.deepEqual(e('lake_wave_drum_awakened').alsoComplete, ['lake_safe_route_opened']);
+  assert.deepEqual([e('lake_safe_route_opened').allowedAt, e('lake_safe_route_opened').requires, e('lake_safe_route_opened').serverOnly, e('lake_safe_route_opened').to ?? null], [['CH02_SETTLEMENT_MET'], ['lake_wave_drum_awakened'], true, null]);
+  assert.equal(EVENT_BY_ID.has('lake_maze_cleared'), false, 'CH02_MAZE_CLEARED·통과 완료 사건은 C2-3');
+  assert.deepEqual(STORY_TRIGGERS.filter((t) => t.stageCode === 'lake').map((t) => t.id), ['lake_entry', 'lake_mulduri', 'lake_wave_drum']);
   assert.ok((CHECKPOINTS as readonly string[]).indexOf('CH02_STARTED') < (CHECKPOINTS as readonly string[]).indexOf('CH02_SETTLEMENT_MET'));
 });
 
@@ -228,7 +232,21 @@ test('동시 물결북 요청: 이벤트 한 번, 재생은 먼저 기록한 요
   const rs = await Promise.all([1, 2, 3, 4].map(() => s.connect().trigger(P1, 'lake_wave_drum')));
   assert.equal(rs.filter((x) => x.play !== null).length, 1);
   assert.equal(s.events().filter((e) => e === 'lake_wave_drum_awakened').length, 1);
+  assert.equal(s.events().filter((e) => e === 'lake_safe_route_opened').length, 1, '미로 개방 사건도 한 번');
   assert.equal(s.checkpoint(), 'CH02_SETTLEMENT_MET');
+});
+
+test('lake_safe_route_opened: 직접 요청은 선행 사건 전·후 모두 거부(서버 전용)되고, 물결북 반응 전에는 기록되지 않으며 체크포인트를 바꾸지 않는다', async () => {
+  const s = setup('CH02_STARTED', [...CH01_DONE, 'lake_entry_seen', 'lake_mulduri_met']);
+  s.goLake();
+  assert.equal(await codeOf(s.service.completeEvent(P1, 'lake_safe_route_opened')), 'STORY_EVENT_SERVER_ONLY', '물결북 전');
+  assert.equal(s.events().includes('lake_safe_route_opened'), false);
+  s.standAt('lake_wave_drum');
+  await s.service.trigger(P1, 'lake_wave_drum');
+  assert.equal(s.events().filter((e) => e === 'lake_safe_route_opened').length, 1, '물결북과 같은 트랜잭션');
+  assert.equal(await codeOf(s.service.completeEvent(P1, 'lake_safe_route_opened')), 'STORY_EVENT_SERVER_ONLY', '물결북 뒤에도 직접 요청 거부');
+  assert.equal(s.events().filter((e) => e === 'lake_safe_route_opened').length, 1);
+  assert.equal(s.checkpoint(), 'CH02_SETTLEMENT_MET', '새 체크포인트·장 완료 없음');
 });
 
 // ---------- 지역 화면(지점·목표)·재접속 ----------
@@ -250,16 +268,13 @@ test('지역 화면: 단계마다 보이는 지점·목표 문구가 정해진 �
   s.standAt('lake_wave_drum');
   await s.service.trigger(P1, 'lake_wave_drum');
   v = await view(s.connect());
-  assert.deepEqual(v.points.map((p) => p.id), ['lake_maze_entrance'], '물결북 반응 뒤: 물풀숲 지점만');
-  assert.equal(v.goal!.text, '물결북의 파문을 따라 물풀 미로로 가자');
-  assert.equal(v.points[0].prompt, '물결북의 파문이 향한 물풀숲을 살펴보자.');
+  assert.deepEqual(v.points.map((p) => p.id), [], '물결북 반응 뒤: 상호작용 지점 없음(임시 미로 표식 제거)');
+  assert.equal(v.goal!.text, '물결북의 파문을 따라 물풀 미로를 지나가자.');
   const gate = v.gates.find((g) => g.id === 'gate_reed_maze')!;
-  assert.equal(gate.open, false, '미로 입구는 다음 단계 전까지 닫힘');
-  // 물풀숲 지점: 닿아도 기록·재생 없음
-  s.standAt('lake_maze_entrance');
-  const w = await s.service.trigger(P1, 'lake_maze_entrance');
-  assert.deepEqual([w.play, w.story.checkpoint], [null, 'CH02_SETTLEMENT_MET']);
-  assert.equal(s.events().some((e) => e.startsWith('lake_') && !['lake_unlocked', 'lake_entry_seen', 'lake_mulduri_met', 'lake_wave_drum_awakened'].includes(e)), false, '다른 호수 이벤트는 기록되지 않음');
+  assert.equal(gate.open, true, '물결북 반응과 함께 물풀문이 열린다(lake_safe_route_opened)');
+  assert.deepEqual([gate.closedAssetKey, gate.openAssetKey], ['reed-gate-closed', 'reed-gate-open']);
+  assert.equal(s.events().includes('lake_safe_route_opened'), true);
+  assert.equal(s.events().some((e) => e.startsWith('lake_') && !['lake_unlocked', 'lake_entry_seen', 'lake_mulduri_met', 'lake_wave_drum_awakened', 'lake_safe_route_opened'].includes(e)), false, '다른 호수 이벤트는 기록되지 않음');
 });
 
 test('체크포인트별 재접속: CH02_STARTED·CH02_SETTLEMENT_MET에서는 도입·정착지 구간을 자동 재생하지 않는다', async () => {
@@ -294,7 +309,7 @@ test('물결북 반응 전: 이야기 지점 그림은 wave-drum-idle(88~112px)�
   assert.equal(drum.assetKey, 'wave-drum-idle');
   assert.ok(drum.art && drum.art.width >= 88 && drum.art.width <= 112 && drum.art.height >= 88 && drum.art.height <= 112, '표시 크기 88~112px(서버 데이터가 단일 출처)');
   assert.deepEqual(drum.art!.pivot, [0.5, 0.78]);
-  assert.deepEqual(v.render.overlays, [], '반응 전에는 active·파문이 없다');
+  assert.deepEqual(v.render.overlays.filter((o) => o.assetKey !== 'current-flow'), [], '반응 전에는 active·파문이 없다(물살 그림은 별개)');
   const fresh = setup('CH02_STARTED', [...CH01_DONE, 'lake_entry_seen']);
   const early = await fresh.service.stageData(P1, 'lake');
   assert.equal(early.points.find((p) => p.id === 'lake_mulduri')!.assetKey, 'turby-muldeuli');
@@ -306,7 +321,7 @@ test('물결북 반응 뒤: idle 지점 그림이 남지 않고 active·wave-pat
   const v = await s.service.stageData(P1, 'lake');
   assert.equal(v.points.some((p) => p.id === 'lake_wave_drum'), false, 'idle 그림이 있던 지점은 사라진다');
   assert.equal(v.points.some((p) => p.assetKey === 'wave-drum-idle'), false);
-  const byKey = new Map(v.render.overlays.map((o) => [o.assetKey, o]));
+  const byKey = new Map(v.render.overlays.filter((o) => o.assetKey !== 'current-flow').map((o) => [o.assetKey, o]));
   assert.deepEqual([...byKey.keys()].sort(), ['wave-drum-active', 'wave-path']);
   const active = byKey.get('wave-drum-active')!;
   const idle = LAKE.storyPoints!.find((p) => p.id === 'lake_wave_drum')!.art!;
@@ -324,7 +339,8 @@ test('wave-path: 물결북에서 미로 입구 방향, 420~560×140~190px, 맵 �
   assert.ok(path.alpha! > 0 && path.alpha! <= 0.72);
   assert.equal(path.layer, 'overlay');
   const drum = pointOf('lake_wave_drum');
-  const maze = pointOf('lake_maze_entrance');
+  const gateRect = LAKE.layout!.gates[0];
+  const maze = { x: gateRect.x - 25, y: gateRect.y + 200, radius: 100 }; // 미로 입구(문 왼쪽 통로 중심)
   // 방향: 파문 축(회전각)이 물결북→미로 입구 방위각과 5° 이내
   const want = (Math.atan2(maze.y - drum.y, maze.x - drum.x) * 180) / Math.PI;
   assert.ok(Math.abs((path.rotation ?? 0) - want) <= 5, `회전 ${path.rotation}° / 방위 ${want.toFixed(1)}°`);
@@ -362,6 +378,9 @@ test('세 전달 에셋 키가 클라이언트 런타임 폴더에 실제로 있
   const used = new Set<string>([...(LAKE.storyPoints ?? []).map((p) => p.assetKey), ...(LAKE.render?.overlays ?? []).map((o) => o.assetKey)]);
   for (const k of WAVE_ASSETS) assert.ok(used.has(k), `${k}를 지역 데이터가 사용`);
   const characters = ['nubi', 'bopuli', 'muldeuli', 'pokshini', 'geumbiti', 'ganeuri', 'mujigae'].map((c) => `turby-${c}`);
-  const known = (k: string) => k === 'placeholder-point' || characters.includes(k) || WAVE_ASSETS.includes(k);
+  const gateKeys = LAKE.layout!.gates.flatMap((g) => [g.closedAssetKey, g.openAssetKey]).filter(Boolean) as string[];
+  for (const k of ['current-flow', 'reed-gate-closed', 'reed-gate-open']) assert.ok([...used, ...gateKeys].includes(k), `${k}를 지역 데이터가 사용`);
+  for (const f of [join(root, 'world', 'lake', 'fx', 'current-flow.png'), join(root, 'world', 'lake', 'maze', 'reed-gate-closed.png'), join(root, 'world', 'lake', 'maze', 'reed-gate-open.png')]) assert.ok(existsSync(f), f);
+  const known = (k: string) => k === 'placeholder-point' || characters.includes(k) || WAVE_ASSETS.includes(k) || k === 'current-flow';
   for (const k of used) assert.ok(known(k), `알 수 없는 월드 키: ${k}`);
 });

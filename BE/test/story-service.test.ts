@@ -43,6 +43,7 @@ function setup(opts: { nickname?: string; starters?: number; flags?: Record<stri
   const settings = { numberOr: (_k: string, d: number) => d, flag: (k: string, d: boolean) => flags[k] ?? d };
   const content = {
     stage: (code: string) => (code === 'forest' ? FOREST : null),
+    water: () => null,
     dialogue: () => null,
     bannedNameWords: () => [],
   };

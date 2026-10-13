@@ -14,6 +14,9 @@ export const WILD_NOTICE_REPEAT_MS = 3000; // 같은 야생·같은 사유의 �
 // 재입장 위치가 유효하지 않아 서버가 시작 지점으로 보정했을 때(한 번만)
 export const POSITION_CORRECTED_TEXT = '안전한 위치에서 다시 시작했어요.';
 
+// 깊은 물에 들어가 마지막 안전 지점으로 돌아왔을 때(한 탐험 세션에서 처음 한 번만, 10-13 C2-2)
+export const DEEP_WATER_TEXT = '깊은 물은 위험해. 물풀이 잔잔한 길로 가자.';
+
 // 모르는 사유는 가장 흔한 경우(길이 막힘)로 안내한다 — 사유 코드를 그대로 보여 주지 않는다
 export function wildUnreachableText(reason: string | null | undefined): string {
   return WILD_UNREACHABLE_TEXT[reason ?? ''] ?? WILD_UNREACHABLE_TEXT.blocked;

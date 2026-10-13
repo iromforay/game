@@ -27,8 +27,7 @@ const pointOf = (id: string) => LAKE.points.find((p) => p.id === id)!;
 const SMALL = { width: 640, height: 360 };
 const MAP_READY = 's.map && s.map.ready && s.map.inRoom && s.map.positioned && s.map.story';
 const GOAL_FOLLOW_THREAD = '검은 실이 사라진 방향을 따라가자';
-const GOAL_FOLLOW_RIPPLE = '물결북의 파문을 따라 물풀 미로로 가자';
-const WAIT_PROMPT = '물결북의 파문이 향한 물풀숲을 살펴보자.';
+const GOAL_FOLLOW_RIPPLE = '물결북의 파문을 따라 물풀 미로를 지나가자.';
 
 type StoryState = { points: string[]; gates: Record<string, boolean>; prompt: string | null; promptText: string | null; busy: boolean; interact: { x: number; y: number }; interactRect: { x: number; y: number; w: number; h: number }; goal: string | null; goalShown: string | null };
 const story = async (g: Game) => (await g.state()).map.story as StoryState;
@@ -85,12 +84,12 @@ async function assertDrumIdle(g: Game) {
   assert.equal(drum.assetKey, 'wave-drum-idle', '반응 전 물결북 그림');
   assert.ok(drum.art && drum.art.width >= 88 && drum.art.width <= 112);
   assert.equal(r.pointArts.find((p) => p.id === 'lake_mulduri')?.assetKey ?? 'turby-muldeuli', 'turby-muldeuli');
-  assert.deepEqual(r.overlays, []);
+  assert.deepEqual(r.overlays.filter((k) => k !== 'current-flow'), []); // 물살 그림(current-flow)은 상태와 무관하게 있다
 }
 async function assertDrumActive(g: Game) {
   const r = await render(g);
   assert.equal(r.pointArts.some((p) => p.assetKey === 'wave-drum-idle'), false, 'idle 그림이 남음');
-  assert.deepEqual([...r.overlays].sort(), ['wave-drum-active', 'wave-path']);
+  assert.deepEqual(r.overlays.filter((k) => k !== 'current-flow').sort(), ['wave-drum-active', 'wave-path']);
   const path = r.overlayPlans.find((o) => o.assetKey === 'wave-path')!;
   const active = r.overlayPlans.find((o) => o.assetKey === 'wave-drum-active')!;
   assert.ok(path.depth < 0 && active.depth < 0, '플레이어·NPC(깊이 0)보다 아래');
@@ -148,8 +147,8 @@ test('2장 C2-1 ①: 호수 입장 → 도입 → 새로고침(반복 없음) �
     assert.deepEqual([db.growth, db.items], [before.growth, before.items], '정착지 단계에도 보상 없음');
     s = await story(g);
     assert.equal(s.goalShown, GOAL_FOLLOW_RIPPLE);
-    assert.deepEqual(s.points, ['lake_maze_entrance'], '미로 입구 지점만 남음');
-    assert.equal(s.gates.gate_reed_maze, false, '물풀 미로 입구는 닫혀 있다');
+    assert.deepEqual(s.points, [], '상호작용 지점 없음(임시 미로 표식 제거)');
+    assert.equal(s.gates.gate_reed_maze, true, '물결북 반응과 함께 물풀문이 열린다');
     // 회색상자 지도 자체의 표준 안내(기능 맵 단계)는 제외하고, 이번 단계의 대기 상태에 개발 진행 문구를 쓰지 않는다
     assert.equal((await texts(g)).some((t) => /다음 개발|개발 단계|TODO/.test(t)), false, '개발 진행 문구가 화면에 없다');
     await g.capture('lake_04_settlement_met');
@@ -160,20 +159,17 @@ test('2장 C2-1 ①: 호수 입장 → 도입 → 새로고침(반복 없음) �
     s = await story(g);
     assert.equal(dbOf(device).checkpoint, 'CH02_SETTLEMENT_MET');
     assert.equal(s.goalShown, GOAL_FOLLOW_RIPPLE);
-    assert.deepEqual(s.points, ['lake_maze_entrance']);
+    assert.deepEqual(s.points, []);
+    assert.equal(s.gates.gate_reed_maze, true, '새로고침 뒤에도 열린 문');
 
-    // 6) 미로 입구 지점: 닿으면 안내 문구만(기록·대화 없음) — 문은 계속 닫혀 있다
-    await g.walkDirect('Map', pointOf('lake_maze_entrance'), 'keys', "s.map.story.prompt === 'lake_maze_entrance'");
-    await g.until('미로 입구 안내', "s.map.story.prompt === 'lake_maze_entrance' && !!s.map.story.promptText");
-    s = await story(g);
-    assert.equal(s.promptText, WAIT_PROMPT);
+    // 6) 개방 사건은 한 번만 기록되고 새 체크포인트는 없다
     assert.equal(dbOf(device).checkpoint, 'CH02_SETTLEMENT_MET');
-    assert.deepEqual(dbOf(device).events.filter((e) => e.startsWith('lake_')).sort(), ['lake_entry_seen', 'lake_mulduri_met', 'lake_unlocked', 'lake_wave_drum_awakened']);
+    assert.deepEqual(dbOf(device).events.filter((e) => e.startsWith('lake_')).sort(), ['lake_entry_seen', 'lake_mulduri_met', 'lake_safe_route_opened', 'lake_unlocked', 'lake_wave_drum_awakened']);
   }, backend, device);
   await g.close();
 });
 
-test('2장 C2-1 ②: 640×360 — 도입·물들이·물결북이 같은 흐름으로 동작하고, 안내 버튼은 조이스틱 영역 위, 목표 패널과 겹치지 않으며, 닫힌 미로 입구는 지나갈 수 없다', async () => {
+test('2장 C2-1 ②: 640×360 — 도입·물들이·물결북이 같은 흐름으로 동작하고, 안내 버튼은 조이스틱 영역 위, 목표 패널과 겹치지 않는다', async () => {
   const device = 'e2e-lake-640';
   await backend.start(seedLake(device), { 'story.stageAccessV2': true }); // 신 판정(이벤트 기반 개방) — 구 판정(대표 터비 포획)에서는 1장 완료 계정도 호수 카드가 잠긴다
   const g = await Game.open(browser, `${vite.url}/?device=${device}`, device, SMALL);
@@ -204,18 +200,7 @@ test('2장 C2-1 ②: 640×360 — 도입·물들이·물결북이 같은 흐름�
     await assertDrumActive(g);
     await g.capture('wave_drum_active_path');
 
-    // 닫힌 물풀 미로 입구: 문 쪽으로 계속 밀어도 문 너머로 가지 못한다
-    const gate = LAKE.layout.gates.find((x) => x.id === 'gate_reed_maze')!;
-    await g.walkDirect('Map', { x: gate.x - 60, y: 1250 }, 'joystick');
-    await g.page.keyboard.down('ArrowRight');
-    try {
-      await g.until('문에 닿음', `s.map.avatar.x >= ${gate.x - 30}`);
-      const crossed = await g.page.waitForFunction((x) => (window as any).__game.scene.getScene('Map').avatar.x > x, gate.x + gate.width, { timeout: 1500, polling: 50 }).then(() => true, () => false); // eslint-disable-line @typescript-eslint/no-explicit-any
-      assert.equal(crossed, false, '닫힌 미로 입구를 지나갔다');
-    } finally {
-      await g.page.keyboard.up('ArrowRight');
-    }
-    assert.ok(((await g.state()).map.avatar as { x: number }).x < gate.x);
+    assert.equal((await story(g)).gates.gate_reed_maze, true, '물풀문이 열려 있다');
   }, backend, device);
   await g.close();
 });

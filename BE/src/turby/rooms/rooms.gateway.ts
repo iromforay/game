@@ -144,6 +144,10 @@ export class RoomsGateway implements OnGatewayDisconnect, OnModuleInit {
       const { room, result } = this.rooms.move(playerId, body?.x, body?.y, body?.dir);
       if (result.kind === 'ok') {
         client.to(this.rooms.mapChannel(room)).emit('map:moved', { playerId, x: result.x, y: result.y, dir: result.dir });
+      } else if (result.kind === 'adjusted') {
+        // 서버가 위치를 옮겼다(물살·깊은 물 복귀): 본인에게 권위 위치와 적용한 물살 ID(깊은 물이면 null)를, 같은 맵의 다른 사람에게는 새 위치를 알린다
+        client.emit('map:correct', { x: result.x, y: result.y, reason: result.reason, currentFieldId: result.currentFieldId });
+        client.to(this.rooms.mapChannel(room)).emit('map:moved', { playerId, x: result.x, y: result.y, dir: result.dir });
       } else if (result.kind === 'corrected') {
         client.emit('map:correct', { x: result.x, y: result.y, reason: result.reason });
       }

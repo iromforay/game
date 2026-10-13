@@ -1,7 +1,7 @@
 {
   "stageCode": "lake",
   "greybox": true,
-  "note": "2장 호수 기능 맵(10-13 C2-1): 좌표는 기능 검증용이며 최종 미술 좌표가 아니다(design/save-a-turby/chapter02-lake/asset-contract-v1.md 구역 배치 범위 안). 입구→정착지→물풀 미로(다음 단계에서 열림)→염색 샘 순서. 이벤트·지점 ID는 바뀌지 않는다. 10-13 v1c: 물결북 idle/active·파문(wave-path)은 전달 에셋(delivery-v1), 표시 크기는 storyPoints[].art·render.overlays가 단일 출처.",
+  "note": "2장 호수 기능 맵(10-13 C2-1): 좌표는 기능 검증용이며 최종 미술 좌표가 아니다(design/save-a-turby/chapter02-lake/asset-contract-v1.md 구역 배치 범위 안). 입구→정착지→물풀문→물풀 미로(얕은 물·깊은 물·물살·마른 발판)→염색 샘 순서(10-13 C2-2). 이벤트·지점 ID는 바뀌지 않는다. 10-13 v1c: 물결북 idle/active·파문(wave-path)은 전달 에셋(delivery-v1), 표시 크기는 storyPoints[].art·render.overlays가 단일 출처.",
   "size": {
     "width": 3200,
     "height": 2400
@@ -19,12 +19,6 @@
       "x": 700,
       "y": 1330,
       "radius": 64
-    },
-    {
-      "id": "lake_maze_entrance",
-      "x": 1180,
-      "y": 1250,
-      "radius": 72
     }
   ],
   "objects": [],
@@ -58,13 +52,6 @@
           0.78
         ]
       }
-    },
-    {
-      "id": "lake_maze_entrance",
-      "kind": "inspect",
-      "assetKey": "placeholder-point",
-      "label": "물풀숲",
-      "prompt": "물결북의 파문이 향한 물풀숲을 살펴보자."
     }
   ],
   "goals": [
@@ -80,7 +67,7 @@
     },
     {
       "id": "follow_ripple",
-      "text": "물결북의 파문을 따라 물풀 미로로 가자",
+      "text": "물결북의 파문을 따라 물풀 미로를 지나가자.",
       "requires": [
         "lake_wave_drum_awakened"
       ]
@@ -109,8 +96,8 @@
         "label": "물풀 미로",
         "x": 1290,
         "y": 650,
-        "width": 1060,
-        "height": 1450
+        "width": 1230,
+        "height": 900
       }
     ],
     "paths": [
@@ -134,11 +121,31 @@
           ],
           [
             900,
-            1250
+            1300
           ],
           [
-            1180,
-            1250
+            1265,
+            1350
+          ],
+          [
+            1440,
+            1350
+          ],
+          [
+            1440,
+            1100
+          ],
+          [
+            2020,
+            1000
+          ],
+          [
+            2040,
+            800
+          ],
+          [
+            2450,
+            790
           ]
         ]
       }
@@ -150,26 +157,78 @@
         "x": 1240,
         "y": 0,
         "width": 50,
-        "height": 1100
+        "height": 1200
       },
       {
         "id": "wall_maze_bottom",
         "label": "물풀 벽",
         "x": 1240,
-        "y": 1400,
+        "y": 1500,
         "width": 50,
-        "height": 1000
+        "height": 900
+      },
+      {
+        "id": "wall_vestibule_south",
+        "label": "물풀 벽",
+        "x": 1290,
+        "y": 1500,
+        "width": 350,
+        "height": 50
+      },
+      {
+        "id": "wall_vestibule_east",
+        "label": "물풀 벽",
+        "x": 1590,
+        "y": 1200,
+        "width": 50,
+        "height": 350
+      },
+      {
+        "id": "wall_hall_south",
+        "label": "물풀 벽",
+        "x": 1590,
+        "y": 1150,
+        "width": 980,
+        "height": 50
+      },
+      {
+        "id": "wall_hall_north",
+        "label": "물풀 벽",
+        "x": 1240,
+        "y": 650,
+        "width": 1330,
+        "height": 50
+      },
+      {
+        "id": "wall_hall_east",
+        "label": "물풀 벽",
+        "x": 2520,
+        "y": 650,
+        "width": 50,
+        "height": 550
       }
     ],
     "gates": [
       {
         "id": "gate_reed_maze",
-        "label": "물풀 미로 입구",
-        "x": 1240,
-        "y": 1100,
-        "width": 50,
-        "height": 300,
-        "openEvent": "lake_safe_route_opened"
+        "label": "물풀문",
+        "x": 1290,
+        "y": 1150,
+        "width": 300,
+        "height": 50,
+        "openEvent": "lake_safe_route_opened",
+        "closedAssetKey": "reed-gate-closed",
+        "openAssetKey": "reed-gate-open",
+        "art": {
+          "x": 1440,
+          "y": 1190,
+          "width": 300,
+          "height": 200,
+          "pivot": [
+            0.5,
+            0.9
+          ]
+        }
       }
     ]
   },
@@ -192,7 +251,7 @@
           0.5
         ],
         "layer": "overlay",
-        "rotation": -9.5,
+        "rotation": 2,
         "alpha": 0.7,
         "visibleAfter": "lake_wave_drum_awakened"
       },
@@ -212,7 +271,115 @@
           "lake_wave_drum"
         ],
         "visibleAfter": "lake_wave_drum_awakened"
+      },
+      {
+        "id": "overlay_current_weak_1",
+        "assetKey": "current-flow",
+        "x": 1780,
+        "y": 1000,
+        "width": 320,
+        "height": 107,
+        "pivot": [
+          0.5,
+          0.5
+        ],
+        "layer": "overlay",
+        "alpha": 0.6
+      },
+      {
+        "id": "overlay_current_strong_1",
+        "assetKey": "current-flow",
+        "x": 2220,
+        "y": 790,
+        "width": 460,
+        "height": 153,
+        "pivot": [
+          0.5,
+          0.5
+        ],
+        "layer": "overlay",
+        "alpha": 0.6
       }
     ]
-  }
+  },
+  "waterAreas": [
+    {
+      "id": "water_hall",
+      "kind": "shallow",
+      "x": 1290,
+      "y": 700,
+      "width": 1230,
+      "height": 450
+    },
+    {
+      "id": "deep_pool_north",
+      "kind": "deep",
+      "x": 1700,
+      "y": 700,
+      "width": 200,
+      "height": 140
+    },
+    {
+      "id": "deep_pool_south",
+      "kind": "deep",
+      "x": 2100,
+      "y": 880,
+      "width": 200,
+      "height": 270
+    }
+  ],
+  "currentFields": [
+    {
+      "id": "current_weak_1",
+      "x": 1620,
+      "y": 935,
+      "width": 320,
+      "height": 130,
+      "direction": {
+        "x": 1,
+        "y": 0
+      },
+      "pushDistancePx": 64,
+      "cooldownMs": 1200,
+      "requires": [
+        "lake_safe_route_opened"
+      ]
+    },
+    {
+      "id": "current_strong_1",
+      "x": 2020,
+      "y": 725,
+      "width": 400,
+      "height": 130,
+      "direction": {
+        "x": 1,
+        "y": 0
+      },
+      "pushDistancePx": 88,
+      "cooldownMs": 1200,
+      "requires": [
+        "lake_safe_route_opened"
+      ]
+    }
+  ],
+  "safeAnchors": [
+    {
+      "id": "anchor_maze_entry",
+      "x": 1440,
+      "y": 1100,
+      "radius": 60
+    },
+    {
+      "id": "anchor_dry_1",
+      "x": 2020,
+      "y": 1000,
+      "radius": 70
+    },
+    {
+      "id": "anchor_dry_2",
+      "x": 2450,
+      "y": 790,
+      "radius": 60
+    }
+  ]
 }

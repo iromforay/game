@@ -3,6 +3,7 @@ import { existsSync, readdirSync, readFileSync } from 'fs';
 import { join, resolve } from 'path';
 import type { BattleDefinition } from '../battle/battle-types';
 import { parseStageGeometry } from 'turby-stage-geometry';
+import { parseStageWater, type StageWater } from '../rooms/stage-water';
 
 // 스토리 런타임 데이터(대화 JSON, 지역 트리거 좌표, 이름 금칙어)는 프런트 번들에 넣지 않고 BE에만 둔다(개발 계획 3.4).
 // ts-node(src/turby/story)와 빌드(dist/turby/story) 모두 BE/story-data/save-a-turby를 가리킨다.
@@ -53,6 +54,10 @@ export interface StageStoryData {
   // 10-13 C2-1: 이야기 진행에 따른 목표 문구(상단 목표 패널). 위에서부터 첫 번째로 맞는 것 — requires(모두 완료)·unless(모두 완료면 닫힘). 수집 목표(전달 delivery)가 없을 때만 쓴다
   goals?: { id: string; text: string; requires?: string[]; unless?: string[] }[];
   // visibleAfter: 그 이벤트 전에는 지도·화면에 내려 주지 않는다(숨은 구역의 내부 정보). 통과 불가 판정은 표시 여부와 무관하게 서버가 한다
+  // 10-13 C2-2: 물 규칙(rooms/stage-water.ts가 해석·검증한다). 구역은 축에 나란한 사각형
+  waterAreas?: unknown[];
+  currentFields?: unknown[];
+  safeAnchors?: unknown[];
   layout?: { zones: StageZone[]; paths: StagePath[]; blockers: (StageRect & { visibleAfter?: string })[]; gates: StageGateData[] };
   // 10-06 v2(최종 에셋 연결 계약): 대형 배경과 진행 상태별 오버레이의 런타임 에셋 키. 에셋이 없으면 화면이 회색상자·임시 도형을 그대로 쓴다
   render?: { markerMode?: 'fallback' | 'final'; background?: { assetKey: string }; backgroundLocked?: string; unlockedBy?: string; overlays?: StageOverlayData[] }; // backgroundLocked+unlockedBy: 이벤트 전에 쓰는 잠금 배경(둘 다 있어야 한다)
@@ -143,6 +148,7 @@ export function validateRender(data: StageStoryData, stageCode: string): void {
 @Injectable()
 export class StoryContentService implements OnModuleInit {
   private cache = new Map<string, unknown>();
+  private waterCache = new Map<string, StageWater | null>(); // 검증을 마친 물 규칙(지역 데이터가 처음 읽힐 때 한 번)
   dir = STORY_DATA_DIR; // 테스트가 다른 폴더를 가리킬 수 있게 공개
 
   // 없으면 null — 파일이 준비되지 않은 장·지역은 호출 쪽이 오류로 바꾼다
@@ -172,14 +178,22 @@ export class StoryContentService implements OnModuleInit {
     const data = this.load(rel) as StageStoryData | null;
     if (fresh && data) {
       try {
-        parseStageGeometry(data, { width: Number.MAX_SAFE_INTEGER, height: Number.MAX_SAFE_INTEGER }, stageCode);
+        const geo = parseStageGeometry(data, { width: Number.MAX_SAFE_INTEGER, height: Number.MAX_SAFE_INTEGER }, stageCode);
         validateRender(data, stageCode);
+        this.waterCache.set(stageCode, parseStageWater(data, geo, stageCode));
       } catch (err) {
-        this.cache.delete(rel); // 다음 호출도 같은 오류를 낸다(잘못된 데이터를 조용히 쓰지 않는다)
+        this.cache.delete(rel);
+        this.waterCache.delete(stageCode); // 다음 호출도 같은 오류를 낸다(잘못된 데이터를 조용히 쓰지 않는다)
         throw err;
       }
     }
     return data;
+  }
+
+  // 10-13 C2-2: 지역의 물 규칙(없으면 null). 읽을 때 검증된 값
+  water(stageCode: string): StageWater | null {
+    this.stage(stageCode);
+    return this.waterCache.get(stageCode) ?? null;
   }
 
   // 스토리 전투 정의(M4-B). battles/<key>.json

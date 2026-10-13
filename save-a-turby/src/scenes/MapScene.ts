@@ -30,7 +30,7 @@ import { MAP_DEPTH, planStageRender, type StageRenderPlan } from '../story/mapRe
 import { recoverUnackedResult } from '../state/unackedResult';
 import { deferredRestore } from '../state/restoreAttempt';
 import { resumeBattle } from './VillageScene';
-import { NoticeGate, POSITION_CORRECTED_TEXT, WILD_HINT_ENGAGED, WILD_HINT_NEAR, WILD_NOTICE_REPEAT_MS, wildNoticeKey, wildUnreachableText } from '../story/mapNotices';
+import { DEEP_WATER_TEXT, NoticeGate, POSITION_CORRECTED_TEXT, WILD_HINT_ENGAGED, WILD_HINT_NEAR, WILD_NOTICE_REPEAT_MS, wildNoticeKey, wildUnreachableText } from '../story/mapNotices';
 
 // 배치된 자리 바로 옆(조우 반경 안)의 야생은 반경의 이 배수 밖으로 벗어난 뒤에야 다시 조우한다. 서버 반경이 크게 바뀌어도 같은 비율로 동작한다
 const THICKET_KEY = 'hidden-area-thicket-locked'; // 개방 전 숨은 구역을 가리는 수풀 오버레이(미니맵 썸네일에도 같이 그린다)
@@ -103,6 +103,8 @@ export class MapScene extends Phaser.Scene {
   private positioned = false;
   private corrections = 0; // 서버 보정 횟수(진단용)
   private lastCorrectionReason: string | null = null;
+  private pushRemain: { x: number; y: number } | null = null; // 물살에 밀린 거리 중 아직 화면에 반영하지 않은 만큼(10-13 C2-2: 짧은 보간 — 입력은 그대로 이어진다)
+  private waterEvents = { currentPushes: 0, deepReturns: 0, lastCurrentFieldId: null as string | null };
   private unreachableWilds = 0; // 서버가 가로막힘으로 거부한 조우 요청 수(진단용)
   private notices = new NoticeGate(); // 안내 반복 억제(같은 야생·같은 사유 3초, 위치 보정 안내는 한 번)
   private noticeLog: string[] = []; // 띄운 안내(진단용)
@@ -321,13 +323,27 @@ export class MapScene extends Phaser.Scene {
       g.fillStyle(0x566058, 0.55).fillRect(z.x, z.y, z.width, z.height).lineStyle(2, 0x8a968c, 0.9).strokeRect(z.x, z.y, z.width, z.height);
       this.add.text(z.x + 8, z.y + 6, z.label, { fontSize: '16px', color: '#cfd8d0' }).setDepth(DEPTH_GROUND + 1);
     }
+    // 물 구역(10-13 C2-2): 얕은 물은 밝은 청록, 깊은 물은 어두운 남색 — 50% 축소에서도 구분된다. 마른 발판은 모래색 원
+    for (const w of L.water ?? []) {
+      if (w.kind === 'shallow') g.fillStyle(0x5aa6b8, 0.5).fillRect(w.x, w.y, w.width, w.height);
+    }
+    for (const w of L.water ?? []) {
+      if (w.kind !== 'deep') continue;
+      g.fillStyle(0x0d2347, 0.96).fillRect(w.x, w.y, w.width, w.height).lineStyle(3, 0x050f24, 1).strokeRect(w.x, w.y, w.width, w.height);
+      this.add.text(w.x + w.width / 2, w.y + w.height / 2, '깊은 물', { fontSize: '15px', color: '#8fb4e8' }).setOrigin(0.5).setDepth(DEPTH_GROUND + 1);
+    }
+    for (const a of L.anchors ?? []) {
+      g.fillStyle(0xd9c58f, 0.92).fillCircle(a.x, a.y, a.radius).lineStyle(3, 0x8a7440, 1).strokeCircle(a.x, a.y, a.radius);
+    }
     g.lineStyle(10, 0x9aa59c, 0.45);
     for (const path of L.paths) for (let i = 1; i < path.length; i++) g.lineBetween(path[i - 1][0], path[i - 1][1], path[i][0], path[i][1]);
     for (const b of L.blockers) {
       g.fillStyle(0x1f2420, 1).fillRect(b.x, b.y, b.width, b.height).lineStyle(2, 0x0f120f, 1).strokeRect(b.x, b.y, b.width, b.height);
       if (b.label) this.add.text(b.x + b.width / 2, b.y + b.height / 2, b.label, { fontSize: '13px', color: '#9aa59c' }).setOrigin(0.5).setDepth(DEPTH_GROUND + 1);
     }
-    this.add.text(width / 2, height / 2 + 70, '회색상자(임시 배치) — 기능·동선 확인용', { fontSize: '15px', color: '#e8c96a', backgroundColor: '#00000066', padding: { x: 8, y: 4 } }).setOrigin(0.5).setDepth(DEPTH_GROUND + 1);
+    // 물 구역이 있는 지도(호수)에서는 가운데 동선을 가리지 않게 아래쪽 가장자리에 둔다
+    const noteY = L.water && L.water.length > 0 ? height - 36 : height / 2 + 70;
+    this.add.text(width / 2, noteY, '회색상자(임시 배치) — 기능·동선 확인용', { fontSize: '15px', color: '#e8c96a', backgroundColor: '#00000066', padding: { x: 8, y: 4 } }).setOrigin(0.5).setDepth(DEPTH_GROUND + 1);
   }
 
   // 서버가 내려 준 화면 상태로 맞춘다: 문·오브젝트·지점 표식, 막힌 곳, 지도 마커, 안내 버튼
@@ -682,6 +698,7 @@ export class MapScene extends Phaser.Scene {
   get debugPosition() {
     return {
       positioned: this.positioned, corrections: this.corrections, lastCorrection: this.lastCorrectionReason, unreachableWilds: this.unreachableWilds,
+      ...this.waterEvents, pushing: this.pushRemain !== null,
       notices: [...this.noticeLog], size: { width: this.stageWidth, height: this.stageHeight }, captured: this.capturedCount(),
       // 화면에 놓인 야생 마커(서버 마커 ID·화면 좌표·상태)
       wilds: this.markers.map((m) => ({ index: m.index, characterCode: m.info.characterCode, x: m.gfx.x, y: m.gfx.y, state: m.state, visible: m.gfx.visible })),
@@ -701,10 +718,29 @@ export class MapScene extends Phaser.Scene {
 
   // 서버가 이동을 승인하지 않았다: 마지막 승인 위치로 되돌린다. 입력은 막지 않고, 같은 보정을 여러 번 받아도 한 번만 움직인다.
   // 벽·문 때문이면 화면의 문 상태가 서버와 다를 수 있으므로 지역 화면을 다시 받는다(1초에 한 번까지)
-  private applyCorrection(pos: { x: number; y: number; reason?: string }) {
+  private applyCorrection(pos: { x: number; y: number; reason?: string; currentFieldId?: string | null }) {
     this.lastSent = { x: pos.x, y: pos.y }; // 서버 위치와 다른 값을 다시 보내지 않는다(다시 움직이면 그때 보낸다)
     this.lastSentAt = 0;
     if (Math.abs(this.avatar.x - pos.x) < 0.5 && Math.abs(this.avatar.y - pos.y) < 0.5) return;
+    // 10-13 C2-2: 서버가 옮긴 위치(물살·깊은 물 복귀). 서버가 정한 값만 쓴다 — 방향·거리를 화면이 계산하지 않는다
+    if (pos.reason === 'current') {
+      this.waterEvents.currentPushes++;
+      this.waterEvents.lastCurrentFieldId = pos.currentFieldId ?? null;
+      this.lastCorrectionReason = 'current';
+      this.pushRemain = { x: pos.x - this.avatar.x, y: pos.y - this.avatar.y };
+      this.cameras.main.shake(140, 0.002); // 1회 흔들림
+      this.waterBubbles(this.avatar.x, this.avatar.y);
+      return;
+    }
+    if (pos.reason === 'deep_water') {
+      this.waterEvents.deepReturns++;
+      this.lastCorrectionReason = 'deep_water';
+      this.pushRemain = null;
+      this.waterBubbles(this.avatar.x, this.avatar.y);
+      this.avatar.setPosition(pos.x, pos.y);
+      this.deepWaterHint();
+      return;
+    }
     this.avatar.setPosition(pos.x, pos.y);
     this.corrections++;
     this.lastCorrectionReason = pos.reason ?? null;
@@ -718,6 +754,19 @@ export class MapScene extends Phaser.Scene {
   private makeRing(color: number) {
     if (this.textures.exists('avatar-ring')) return this.add.image(0, 0, 'avatar-ring').setDisplaySize(86, 44).setTint(color);
     return this.add.ellipse(0, 0, 86, 44).setStrokeStyle(4, color, 1);
+  }
+
+  // 물방울 몇 개가 떠올랐다 사라진다(물살 적용·깊은 물 복귀 표시). 판정과 무관한 연출
+  private waterBubbles(x: number, y: number) {
+    for (let i = 0; i < 4; i++) {
+      const b = this.add.circle(x + (i - 1.5) * 12, y + 10, 4 + (i % 2) * 2, 0xdff6ff, 0.8).setDepth(DEPTH_STORY + 2);
+      this.tweens.add({ targets: b, y: y - 22 - i * 4, alpha: 0, duration: 420, delay: i * 40, onComplete: () => b.destroy() });
+    }
+  }
+
+  // 깊은 물에서 돌아왔을 때의 안내 — 한 탐험 세션(이 화면)에서 처음 한 번만
+  private deepWaterHint() {
+    if (this.notices.once('deep-water')) this.notice(DEEP_WATER_TEXT);
   }
 
   private slotColor(slot: number) {
@@ -939,6 +988,14 @@ export class MapScene extends Phaser.Scene {
       this.avatar.setPosition(next.x, next.y);
       this.moveAngle = Math.atan2(y, x);
       this.facing = Math.abs(x) > Math.abs(y) ? (x < 0 ? 'left' : 'right') : y < 0 ? 'up' : 'down';
+    }
+    // 물살에 밀린 거리를 짧게(약 0.2초) 나눠 반영한다. 입력 이동은 위에서 그대로 적용되어 조작이 끊기지 않는다
+    if (this.pushRemain) {
+      const f = Math.min(1, delta / 200);
+      const step = { x: this.pushRemain.x * f, y: this.pushRemain.y * f };
+      this.pushRemain = { x: this.pushRemain.x - step.x, y: this.pushRemain.y - step.y };
+      if (Math.hypot(this.pushRemain.x, this.pushRemain.y) < 0.5) this.pushRemain = null;
+      this.avatar.setPosition(Phaser.Math.Clamp(this.avatar.x + step.x, 0, this.stageWidth), Phaser.Math.Clamp(this.avatar.y + step.y, 0, this.stageHeight));
     }
     this.syncRoom(delta);
     this.miniMap.update(this.avatar.x, this.avatar.y, this.moveAngle);
