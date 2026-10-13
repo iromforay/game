@@ -108,12 +108,17 @@ export function MyRoomDungeonGame({ onExit }: MyRoomDungeonGameProps) {
   const [discovered, setDiscovered] = useState<Set<ResourceId>>(() => new Set(savedGame.discovered));
   const [discovery, setDiscovery] = useState<ResourceId | null>(null);
   const [pickupText, setPickupText] = useState<string | null>(null);
-  const [view, setView] = useState<'chapter' | 'stage'>('chapter');
+  const [view, setView] = useState<'world' | 'chapter' | 'stage' | 'chapter2'>('chapter');
   const [chapterPosition, setChapterPosition] = useState(CHAPTER_START_POSITION);
   const [chapterFacing, setChapterFacing] = useState<'left' | 'right'>('right');
   const [chapterMoving, setChapterMoving] = useState(false);
   const [chapterNotice, setChapterNotice] = useState('방 안을 걸어 원하는 장소로 이동하세요.');
   const chapterTravelTimerRef = useRef<number | null>(null);
+  const [worldPosition, setWorldPosition] = useState<Position>({ x: 50, y: 88 });
+  const [worldFacing, setWorldFacing] = useState<'left' | 'right'>('right');
+  const [worldMoving, setWorldMoving] = useState(false);
+  const [worldNotice, setWorldNotice] = useState('집 안을 걸어 다음 장소로 이동하세요.');
+  const worldTravelTimerRef = useRef<number | null>(null);
   const zoneCompletionSentRef = useRef(new Set(savedGame.clearedZones ?? []));
   const [workbenchOpen, setWorkbenchOpen] = useState(false);
   const [workbenchTab, setWorkbenchTab] = useState<'robot' | 'weapon' | 'bag'>('robot');
@@ -330,6 +335,28 @@ export function MyRoomDungeonGame({ onExit }: MyRoomDungeonGameProps) {
     });
   };
 
+  const moveInWorld = (next: Position, onArrival?: () => void) => {
+    if (worldTravelTimerRef.current !== null) window.clearTimeout(worldTravelTimerRef.current);
+    setWorldFacing(next.x < worldPosition.x ? 'left' : 'right');
+    setWorldPosition(next); setWorldMoving(true); setWorldNotice('이동 중…');
+    worldTravelTimerRef.current = window.setTimeout(() => {
+      setWorldMoving(false); setWorldNotice('집 안을 걸어 다음 장소로 이동하세요.'); onArrival?.();
+    }, 850);
+  };
+
+  const moveWorldToPointer = (event: PointerEvent<HTMLDivElement>) => {
+    const map = event.currentTarget.getBoundingClientRect();
+    moveInWorld({
+      x: Math.min(92, Math.max(8, ((event.clientX - map.left) / map.width) * 100)),
+      y: Math.min(90, Math.max(12, ((event.clientY - map.top) / map.height) * 100)),
+    });
+  };
+
+  const visitLockedWorldArea = (name: string) => {
+    setWorldNotice(`${name}은 챕터 1 전체 클리어 후 들어갈 수 있습니다.`);
+    window.setTimeout(() => setWorldNotice('집 안을 걸어 다음 장소로 이동하세요.'), 2200);
+  };
+
   const visitLockedArea = (name: string) => {
     setChapterNotice(`${name}은 아직 잠겨 있습니다.`);
     window.setTimeout(() => setChapterNotice('방 안을 걸어 원하는 장소로 이동하세요.'), 1800);
@@ -365,8 +392,27 @@ export function MyRoomDungeonGame({ onExit }: MyRoomDungeonGameProps) {
     <small>CHAPTER 1 COMPLETE</small><h2>내 방 정복 완료!</h2>
     <div className="chapter-complete-core"><i className="resource-icon resource-room-core"/><b>방의 코어 ×1</b></div>
     <p>책상 아래부터 침대 밑까지<br/>모든 채집 구역을 정리했습니다.</p>
-    <button type="button" onClick={() => { setChapterCompleteOpen(false); setView('chapter'); }}>내 방으로 돌아가기</button>
+    <button type="button" onClick={() => { setChapterCompleteOpen(false); setView('world'); }}>전체 맵으로 나가기</button>
   </section></div>;
+
+  if (view === 'world') return <main className="room-dungeon-shell"><section className="room-dungeon-game world-home">
+    <header className="room-dungeon-hud"><button type="button" className="room-exit-button" onClick={onExit}>‹</button><div className="room-title-group"><span>HOUSE WORLD · CHAPTER MAP</span><strong>우리 집</strong></div><div className="room-resource-preview"><span>✹</span> {inventory['room-core'] ?? 0}</div></header>
+    <div className="house-world-map" onPointerDown={moveWorldToPointer}>
+      <div className="house-world-title"><small>OPEN WORLD</small><b>집 전체 맵</b></div>
+      <button type="button" className="world-location world-bedroom is-cleared" onPointerDown={(event) => { event.stopPropagation(); moveInWorld({x:25,y:68}, () => setView('chapter')); }}><b>CHAPTER 1</b><strong>내 방</strong><span>다시 들어가기</span></button>
+      <button type="button" className={`world-location world-kitchen ${clearedZones.has('1-5') ? 'is-open' : 'is-locked'}`} onPointerDown={(event) => { event.stopPropagation(); moveInWorld({x:74,y:20}, () => clearedZones.has('1-5') ? setView('chapter2') : visitLockedWorldArea('챕터 2 주방')); }}><b>CHAPTER 2</b><strong>주방</strong><span>{clearedZones.has('1-5') ? '새로운 채집 구역' : '1-5 클리어 필요'}</span></button>
+      <div className={`world-player facing-${worldFacing} ${worldMoving ? 'is-moving' : ''}`} style={{left:`${worldPosition.x}%`,top:`${worldPosition.y}%`}}><span/><img src={playerImage} alt="집 안을 이동하는 탐험가" draggable={false}/></div>
+      <div className="world-move-guide">{worldNotice}</div>
+    </div>
+    <footer className="room-dungeon-footer"><button type="button" className="footer-slot is-selected"><span>⌂</span>전체 맵</button><button type="button" className="footer-slot" onClick={() => setInventoryOpen(true)}><span>▦</span>가방</button><button type="button" className="footer-slot" onClick={() => { setView('chapter'); setWorkbenchOpen(true); }}><span>⚒</span>작업대</button><button type="button" className={`footer-slot ${robotAssignments['1-1'] ? 'is-selected' : ''}`} disabled={!clearedZones.has('1-1')} onClick={() => { setView('chapter'); setRobotDeployOpen(true); }}><span>♙</span>{robotAssignments['1-1'] ? '수집 중' : '자동 채집'}</button></footer>
+    {inventoryOpen && <InventoryPanel entries={inventoryEntries} onClose={() => setInventoryOpen(false)} />}
+    {autoCollectPopup}
+  </section></main>;
+
+  if (view === 'chapter2') return <main className="room-dungeon-shell"><section className="room-dungeon-game chapter-two-preview">
+    <header className="room-dungeon-hud"><button type="button" className="room-exit-button" onClick={() => setView('world')}>‹</button><div className="room-title-group"><span>CHAPTER 2 · NEW AREA</span><strong>주방</strong></div><div className="room-resource-preview"><span>✹</span> {inventory['room-core'] ?? 0}</div></header>
+    <div className="chapter-two-entry"><div className="chapter-two-sign"><small>CHAPTER 2</small><h2>주방에 도착했다!</h2><p>전체 맵을 통해 챕터 2에 정상적으로 진입했습니다.<br/>2-1 채집 구역은 다음 개발에서 연결됩니다.</p><button type="button" onClick={() => setView('world')}>전체 맵으로 돌아가기</button></div></div>
+  </section></main>;
 
   if (view === 'chapter') return <main className="room-dungeon-shell"><section className="room-dungeon-game chapter-home">
     <header className="room-dungeon-hud"><button type="button" className="room-exit-button" onClick={onExit}>‹</button><div className="room-title-group"><span>CHAPTER 1 · {saveStatus === 'saved' ? '서버 저장됨' : saveStatus === 'loading' ? '저장 중' : saveStatus === 'offline' ? '로컬 백업' : '게스트 저장'}</span><strong>내 방</strong></div><div className="room-resource-preview"><span>●</span> 0</div></header>
@@ -378,11 +424,12 @@ export function MyRoomDungeonGame({ onExit }: MyRoomDungeonGameProps) {
       <button type="button" className={`chapter-location location-closet ${clearedZones.has('1-2') ? 'is-open' : 'is-locked'}`} onPointerDown={(event) => { event.stopPropagation(); moveInChapter({x:82,y:48}, () => clearedZones.has('1-2') ? enterStage('1-3') : visitLockedArea('옷장')); }}><b>1-3</b><span>옷장</span><em>{clearedZones.has('1-2') ? clearedZones.has('1-3') ? '다시 채집' : '채집 가능' : '1-2 클리어 필요'}</em></button>
       <button type="button" className={`chapter-location location-computer ${clearedZones.has('1-3') ? 'is-open' : 'is-locked'}`} onPointerDown={(event) => { event.stopPropagation(); moveInChapter({x:66,y:67}, () => clearedZones.has('1-3') ? enterStage('1-4') : visitLockedArea('컴퓨터 책상')); }}><b>1-4</b><span>컴퓨터 책상</span><em>{clearedZones.has('1-3') ? clearedZones.has('1-4') ? '다시 채집' : '채집 가능' : '1-3 클리어 필요'}</em></button>
       <button type="button" className={`chapter-location location-bed ${clearedZones.has('1-4') ? 'is-open' : 'is-locked'}`} onPointerDown={(event) => { event.stopPropagation(); moveInChapter({x:80,y:84}, () => clearedZones.has('1-4') ? enterStage('1-5') : visitLockedArea('침대 밑')); }}><b>1-5</b><span>침대 밑</span><em>{clearedZones.has('1-4') ? clearedZones.has('1-5') ? '다시 채집' : '채집 가능' : '1-4 클리어 필요'}</em></button>
+      <button type="button" className="chapter-location location-door is-open" onPointerDown={(event) => { event.stopPropagation(); moveInChapter({x:50,y:12}, () => setView('world')); }}><b>↥</b><span>나가기</span><em>전체 맵으로 이동</em></button>
       {clearedZones.has('1-1') && <button type="button" className={`auto-collect-pad ${robotAssignments['1-1'] ? 'is-working' : ''}`} onPointerDown={(event) => { event.stopPropagation(); moveInChapter({x:38,y:35}, () => setRobotDeployOpen(true)); }}><i className="mini-craft craft-robot"/><span>{robotAssignments['1-1'] ? '자동 수집 중' : '채집봇 배치'}</span><em>{robotAssignments['1-1'] ? `남은 작업 ${robotAssignments['1-1'].remainingUses}회` : `보유 ${craftedBots}대`}</em></button>}
       <div className={`chapter-player facing-${chapterFacing} ${chapterMoving ? 'is-moving' : ''}`} style={{left:`${chapterPosition.x}%`,top:`${chapterPosition.y}%`}}><span/><img src={playerImage} alt="내 방의 탐험가" draggable={false}/></div>
       <div className="chapter-move-guide">{chapterNotice}</div>
     </div>
-    <footer className="room-dungeon-footer"><button type="button" className="footer-slot is-selected"><span>⌂</span>내 방</button><button type="button" className="footer-slot" onClick={() => setInventoryOpen(true)}><span>▦</span>가방</button><button type="button" className="footer-slot" onClick={() => setWorkbenchOpen(true)}><span>⚒</span>작업대</button><button type="button" className="footer-slot" disabled><span>♙</span>자동 채집</button></footer>
+    <footer className="room-dungeon-footer"><button type="button" className="footer-slot is-selected"><span>⌂</span>내 방</button><button type="button" className="footer-slot" onClick={() => setInventoryOpen(true)}><span>▦</span>가방</button><button type="button" className="footer-slot" onClick={() => setWorkbenchOpen(true)}><span>⚒</span>작업대</button><button type="button" className={`footer-slot ${robotAssignments['1-1'] ? 'is-selected' : ''}`} disabled={!clearedZones.has('1-1')} onClick={() => setRobotDeployOpen(true)}><span>♙</span>{robotAssignments['1-1'] ? '수집 중' : '자동 채집'}</button></footer>
     {workbenchOpen && <div className="panel-backdrop" onPointerDown={() => setWorkbenchOpen(false)}><section className="workbench-panel" onPointerDown={(event) => event.stopPropagation()}>
       <header><div><small>MY WORKBENCH</small><h2>나의 작업대</h2></div><button type="button" onClick={() => setWorkbenchOpen(false)}>×</button></header>
       <nav><button className={workbenchTab === 'robot' ? 'active' : ''} onClick={() => setWorkbenchTab('robot')}>채집봇</button><button className={workbenchTab === 'weapon' ? 'active' : ''} onClick={() => setWorkbenchTab('weapon')}>무기</button><button className={workbenchTab === 'bag' ? 'active' : ''} onClick={() => setWorkbenchTab('bag')}>가방</button></nav>
