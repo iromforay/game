@@ -463,6 +463,16 @@ button { font: inherit; }
 .discovery-card p { margin: 5px 0 18px; font-size: 14px; }
 .discovery-card button { width: 100%; padding: 12px; border: 2px solid #fff0b5; border-radius: 13px; color: #4e351e; background: #f1cc6d; font-weight: 900; }
 
+.chapter-complete-backdrop { position: absolute; z-index: 50; inset: 0; display: grid; place-items: center; padding: 22px; background: radial-gradient(circle, #f9d65c2e, #101a18e8 70%); backdrop-filter: blur(4px); }
+.chapter-complete-panel { width: min(84%, 340px); padding: 27px 23px 22px; border: 3px solid #f5da77; border-radius: 26px; color: #fff8dd; text-align: center; background: radial-gradient(circle at 50% 16%, #776b3d, #294b3d 52%, #172e29); box-shadow: 0 0 0 6px #315544, 0 18px 45px #000b, 0 0 35px #f5d86b55; }
+.chapter-complete-panel small { color: #ffe67f; font-weight: 950; letter-spacing: .14em; }
+.chapter-complete-panel h2 { margin: 7px 0 15px; font-size: 28px; }
+.chapter-complete-core { display: flex; align-items: center; justify-content: center; gap: 11px; margin: 0 auto 14px; padding: 11px; border: 1px solid #f7dc7e88; border-radius: 16px; background: #17282088; }
+.chapter-complete-core .resource-icon { width: 58px; height: 58px; }
+.chapter-complete-core b { color: #fff2a5; font-size: 18px; }
+.chapter-complete-panel p { margin: 0 0 18px; color: #e5ecd9; font-size: 14px; line-height: 1.55; }
+.chapter-complete-panel button { width: 100%; padding: 12px; border: 2px solid #fff0ad; border-radius: 13px; color: #41301c; background: linear-gradient(#ffe282, #d9ad43); font-weight: 950; }
+
 .resource-icon {
   position: relative;
   display: inline-block;
@@ -477,13 +487,27 @@ button { font: inherit; }
 .resource-tape { background-image: url('./assets/resource-tape.png'); }
 .resource-screw { background-image: url('./assets/resource-screw.png'); }
 .resource-battery { background-image: url('./assets/resource-battery.png'); }
-.resource-plastic, .resource-clockwork, .resource-motor { display: inline-grid; place-items: center; border: 2px solid #fff8d0; border-radius: 12px; box-sizing: border-box; filter: drop-shadow(0 3px 3px #4a2d1c55); }
+.resource-plastic, .resource-clockwork, .resource-motor, .resource-cloth, .resource-metal, .resource-wire, .resource-circuit, .resource-dust, .resource-mystery, .resource-room-core { display: inline-grid; place-items: center; border: 2px solid #fff8d0; border-radius: 12px; box-sizing: border-box; filter: drop-shadow(0 3px 3px #4a2d1c55); }
 .resource-plastic { background: linear-gradient(145deg, #68d4df, #3876b8); }
 .resource-clockwork { background: radial-gradient(circle, #f5dc7b 0 22%, #a86c2c 24% 43%, #6d421f 45% 58%, transparent 60%), #cf9b4f; }
 .resource-motor { background: linear-gradient(90deg, #40566b 0 22%, #a9bdc9 23% 72%, #314457 73%); }
+.resource-cloth { background: linear-gradient(135deg, #d9786e 0 45%, #a94e55 46% 55%, #efaa8e 56%); }
+.resource-metal { background: linear-gradient(145deg, #e7eef1, #7b8993 52%, #c5d0d5); }
+.resource-wire { background: linear-gradient(135deg, #3aa068, #184d47); }
+.resource-circuit { background: repeating-linear-gradient(90deg, #397b55 0 7px, #286344 7px 12px); }
+.resource-dust { background: radial-gradient(circle at 35% 30%, #f4e8ff, #a57bc5 32%, #5b3b78 70%); }
+.resource-mystery { background: linear-gradient(145deg, #5969ac, #272c63); }
+.resource-room-core { border-color: #fff0a0; background: radial-gradient(circle, #fff7a1 0 18%, #ffb52d 20% 45%, #bd3c28 47% 68%, #54243a 70%); box-shadow: 0 0 12px #ffd85daa; }
 .resource-plastic::after { content: '◆'; color: #eaffff; font-size: .58em; text-shadow: 0 2px 2px #17496a; }
 .resource-clockwork::after { content: '⚙'; color: #fff1a4; font-size: .68em; text-shadow: 0 2px 2px #573113; }
 .resource-motor::after { content: '◉'; color: #d9f4ff; font-size: .65em; text-shadow: 0 2px 2px #1b2d3a; }
+.resource-cloth::after { content: '▧'; color: #ffe8d8; font-size: .62em; }
+.resource-metal::after { content: '◇'; color: #fff; font-size: .65em; text-shadow: 0 2px 2px #45535c; }
+.resource-wire::after { content: '⌁'; color: #c8ffd6; font-size: .72em; }
+.resource-circuit::after { content: '▦'; color: #d4ffb2; font-size: .64em; }
+.resource-dust::after { content: '✧'; color: #fff4ff; font-size: .72em; }
+.resource-mystery::after { content: '?'; color: #fff5b8; font-size: .68em; font-weight: 950; }
+.resource-room-core::after { content: '✹'; color: #fffbc1; font-size: .72em; text-shadow: 0 0 5px #fff; }
 .resource-drop .resource-icon { width: 38px; height: 38px; }
 .inventory-slot .resource-icon { width: 46px; height: 46px; }
 .discovery-icon .resource-icon { width: 68px; height: 68px; }

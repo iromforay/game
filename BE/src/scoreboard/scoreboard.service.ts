@@ -203,7 +203,7 @@ export class ScoreboardService {
   async saveMyRoomDungeonProfile(token: string | undefined, body: Record<string, unknown>) {
     const accountId = await this.accounts.resolveAccountId(token);
     if (!accountId) throw new UnauthorizedException({ message: '로그인이 필요합니다', code: 'NOT_LOGGED_IN' });
-    const resourceIds = ['paper', 'tape', 'screw', 'battery', 'plastic', 'clockwork', 'motor'] as const;
+    const resourceIds = ['paper', 'tape', 'screw', 'battery', 'plastic', 'clockwork', 'motor', 'cloth', 'metal', 'wire', 'circuit', 'dust', 'mystery', 'room-core'] as const;
     const inventoryRaw = body.inventory && typeof body.inventory === 'object' ? body.inventory as Record<string, unknown> : {};
     const inventory: Record<string, number> = {};
     for (const resourceId of resourceIds) {
@@ -228,7 +228,7 @@ export class ScoreboardService {
   async collectMyRoomDungeonResource(token: string | undefined, body: Record<string, unknown>) {
     const accountId = await this.accounts.resolveAccountId(token);
     if (!accountId) throw new UnauthorizedException({ message: '로그인이 필요합니다', code: 'NOT_LOGGED_IN' });
-    const resourceIds = ['paper', 'tape', 'screw', 'battery', 'plastic', 'clockwork', 'motor'] as const;
+    const resourceIds = ['paper', 'tape', 'screw', 'battery', 'plastic', 'clockwork', 'motor', 'cloth', 'metal', 'wire', 'circuit', 'dust', 'mystery', 'room-core'] as const;
     const resource = typeof body.resource === 'string' ? body.resource : '';
     if (!resourceIds.includes(resource as typeof resourceIds[number])) {
       throw new BadRequestException({ message: '알 수 없는 자원', code: 'INVALID_RESOURCE' });
@@ -260,11 +260,14 @@ export class ScoreboardService {
     const accountId = await this.accounts.resolveAccountId(token);
     if (!accountId) throw new UnauthorizedException({ message: '로그인이 필요합니다', code: 'NOT_LOGGED_IN' });
     const zoneId = String(zoneIdRaw ?? '');
-    if (zoneId !== '1-1' && zoneId !== '1-2') throw new BadRequestException({ message: '알 수 없는 채집 구역', code: 'INVALID_ZONE' });
+    const zoneOrder = ['1-1', '1-2', '1-3', '1-4', '1-5'];
+    if (!zoneOrder.includes(zoneId)) throw new BadRequestException({ message: '알 수 없는 채집 구역', code: 'INVALID_ZONE' });
     const current = await this.prisma.my_room_dungeon_profile.upsert({ where: { account_id: accountId }, create: { account_id: accountId }, update: {} });
     const clearedZones = new Set(JSON.parse(current.cleared_zones_json) as string[]);
-    if (zoneId === '1-2' && !clearedZones.has('1-1')) {
-      throw new BadRequestException({ message: '1-1을 먼저 클리어해야 합니다', code: 'PREVIOUS_ZONE_NOT_CLEARED' });
+    const zoneIndex = zoneOrder.indexOf(zoneId);
+    const previousZone = zoneIndex > 0 ? zoneOrder[zoneIndex - 1] : null;
+    if (previousZone && !clearedZones.has(previousZone)) {
+      throw new BadRequestException({ message: `${previousZone}을 먼저 클리어해야 합니다`, code: 'PREVIOUS_ZONE_NOT_CLEARED' });
     }
     clearedZones.add(zoneId);
     const profile = await this.prisma.my_room_dungeon_profile.update({

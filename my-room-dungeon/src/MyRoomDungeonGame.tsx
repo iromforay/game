@@ -5,8 +5,9 @@ import './styles.css';
 
 interface MyRoomDungeonGameProps { onExit?: () => void; }
 interface Position { x: number; y: number; }
-type ResourceId = 'paper' | 'tape' | 'screw' | 'battery' | 'plastic' | 'clockwork' | 'motor';
-type StageId = '1-1' | '1-2';
+type ResourceId = 'paper' | 'tape' | 'screw' | 'battery' | 'plastic' | 'clockwork' | 'motor' |
+  'cloth' | 'metal' | 'wire' | 'circuit' | 'dust' | 'mystery' | 'room-core';
+type StageId = '1-1' | '1-2' | '1-3' | '1-4' | '1-5';
 interface HarvestObject { id: string; name: string; sprite: number; position: Position; hp: number; maxHp: number; resource: ResourceId; quantity: number; destroyed: boolean; }
 interface Drop { id: string; resource: ResourceId; quantity: number; position: Position; }
 
@@ -19,6 +20,9 @@ const RESOURCE_INFO: Record<ResourceId, { name: string; icon: string }> = {
   paper: { name: '종이', icon: '▱' }, tape: { name: '테이프', icon: '◉' },
   screw: { name: '작은 나사', icon: '✦' }, battery: { name: '건전지', icon: '▮' },
   plastic: { name: '플라스틱', icon: '◆' }, clockwork: { name: '태엽 부품', icon: '⚙' }, motor: { name: '소형 모터', icon: '◍' },
+  cloth: { name: '천', icon: '▧' }, metal: { name: '금속 조각', icon: '◇' }, wire: { name: '전선', icon: '⌁' },
+  circuit: { name: '회로', icon: '▦' }, dust: { name: '먼지 결정', icon: '✧' }, mystery: { name: '수수께끼 부품', icon: '?' },
+  'room-core': { name: '방의 코어', icon: '✹' },
 };
 const STAGES: Record<StageId, { name: string; objects: HarvestObject[] }> = {
   '1-1': { name: '책상 아래', objects: [
@@ -34,6 +38,27 @@ const STAGES: Record<StageId, { name: string; objects: HarvestObject[] }> = {
     { id: 'spring-toy-1', name: '태엽 장난감', sprite: 2, position: { x: 35, y: 72 }, hp: 84, maxHp: 84, resource: 'clockwork', quantity: 3, destroyed: false },
     { id: 'mini-motor-1', name: '모터 장난감', sprite: 1, position: { x: 63, y: 55 }, hp: 96, maxHp: 96, resource: 'motor', quantity: 1, destroyed: false },
     { id: 'giant-toy-1', name: '대형 태엽 장난감', sprite: 4, position: { x: 29, y: 51 }, hp: 132, maxHp: 132, resource: 'clockwork', quantity: 6, destroyed: false },
+  ]},
+  '1-3': { name: '옷장', objects: [
+    { id: 'old-shirt-1', name: '낡은 셔츠 더미', sprite: 0, position: { x: 41, y: 58 }, hp: 72, maxHp: 72, resource: 'cloth', quantity: 12, destroyed: false },
+    { id: 'hanger-1', name: '부러진 옷걸이', sprite: 2, position: { x: 57, y: 63 }, hp: 84, maxHp: 84, resource: 'plastic', quantity: 7, destroyed: false },
+    { id: 'sewing-box-1', name: '오래된 반짇고리', sprite: 3, position: { x: 34, y: 72 }, hp: 96, maxHp: 96, resource: 'metal', quantity: 4, destroyed: false },
+    { id: 'taped-box-1', name: '봉인된 수납함', sprite: 1, position: { x: 64, y: 72 }, hp: 108, maxHp: 108, resource: 'tape', quantity: 6, destroyed: false },
+    { id: 'clothes-pile-1', name: '커다란 옷더미', sprite: 4, position: { x: 29, y: 51 }, hp: 156, maxHp: 156, resource: 'cloth', quantity: 24, destroyed: false },
+  ]},
+  '1-4': { name: '컴퓨터 책상', objects: [
+    { id: 'cable-bundle-1', name: '엉킨 케이블 뭉치', sprite: 0, position: { x: 42, y: 57 }, hp: 96, maxHp: 96, resource: 'wire', quantity: 10, destroyed: false },
+    { id: 'keyboard-1', name: '고장 난 키보드', sprite: 1, position: { x: 58, y: 68 }, hp: 120, maxHp: 120, resource: 'plastic', quantity: 9, destroyed: false },
+    { id: 'speaker-1', name: '낡은 스피커', sprite: 2, position: { x: 35, y: 72 }, hp: 132, maxHp: 132, resource: 'motor', quantity: 2, destroyed: false },
+    { id: 'power-box-1', name: '전원 장치', sprite: 3, position: { x: 64, y: 55 }, hp: 144, maxHp: 144, resource: 'circuit', quantity: 3, destroyed: false },
+    { id: 'old-computer-1', name: '오래된 컴퓨터 본체', sprite: 4, position: { x: 29, y: 51 }, hp: 216, maxHp: 216, resource: 'metal', quantity: 14, destroyed: false },
+  ]},
+  '1-5': { name: '침대 밑', objects: [
+    { id: 'dust-clump-1', name: '꿈틀대는 먼지 뭉치', sprite: 0, position: { x: 43, y: 58 }, hp: 120, maxHp: 120, resource: 'dust', quantity: 8, destroyed: false },
+    { id: 'lost-box-1', name: '잊힌 비밀 상자', sprite: 1, position: { x: 57, y: 69 }, hp: 156, maxHp: 156, resource: 'mystery', quantity: 2, destroyed: false },
+    { id: 'metal-case-1', name: '녹슨 금속 케이스', sprite: 2, position: { x: 35, y: 73 }, hp: 168, maxHp: 168, resource: 'metal', quantity: 10, destroyed: false },
+    { id: 'hidden-device-1', name: '정체불명 장치', sprite: 3, position: { x: 64, y: 56 }, hp: 204, maxHp: 204, resource: 'circuit', quantity: 5, destroyed: false },
+    { id: 'room-core-1', name: '방의 심장', sprite: 4, position: { x: 29, y: 50 }, hp: 300, maxHp: 300, resource: 'room-core', quantity: 1, destroyed: false },
   ]},
 };
 
@@ -99,6 +124,7 @@ export function MyRoomDungeonGame({ onExit }: MyRoomDungeonGameProps) {
   const [robotDeployOpen, setRobotDeployOpen] = useState(false);
   const [workbenchNotice, setWorkbenchNotice] = useState<string | null>(null);
   const [autoCollectResult, setAutoCollectResult] = useState<(DungeonRobotSettlement & { initial: boolean }) | null>(null);
+  const [chapterCompleteOpen, setChapterCompleteOpen] = useState(false);
   const robotSettlementBusyRef = useRef(false);
   const [serverReady, setServerReady] = useState(!hasDungeonAccount());
   const [saveStatus, setSaveStatus] = useState<'local' | 'loading' | 'saved' | 'offline'>(hasDungeonAccount() ? 'loading' : 'local');
@@ -249,8 +275,10 @@ export function MyRoomDungeonGame({ onExit }: MyRoomDungeonGameProps) {
     if (zoneCompletionSentRef.current.has(activeStage) || drops.length > 0 || !objects.every((object) => object.destroyed)) return;
     zoneCompletionSentRef.current.add(activeStage);
     setClearedZones((current) => new Set(current).add(activeStage));
-    setPickupText(activeStage === '1-1' ? '1-1 전체 채집 완료 · 1-2와 자동 수집 구역 해금!' : '1-2 장난감 상자 전체 채집 완료!');
+    const nextStage = ({ '1-1': '1-2', '1-2': '1-3', '1-3': '1-4', '1-4': '1-5' } as Partial<Record<StageId, StageId>>)[activeStage];
+    setPickupText(nextStage ? `${activeStage} 전체 채집 완료 · ${nextStage} 해금!` : '챕터 1 전체 채집 완료!');
     window.setTimeout(() => setPickupText(null), 2600);
+    if (activeStage === '1-5') window.setTimeout(() => setChapterCompleteOpen(true), 700);
     if (hasDungeonAccount()) {
       completeDungeonZone(activeStage).catch(() => setSaveStatus('offline'));
     }
@@ -333,6 +361,13 @@ export function MyRoomDungeonGame({ onExit }: MyRoomDungeonGameProps) {
     <button type="button" onClick={() => setAutoCollectResult(null)}>확인</button>
   </section></div>;
 
+  const chapterCompletePopup = chapterCompleteOpen && <div className="chapter-complete-backdrop"><section className="chapter-complete-panel" role="dialog" aria-modal="true" aria-label="챕터 1 완료">
+    <small>CHAPTER 1 COMPLETE</small><h2>내 방 정복 완료!</h2>
+    <div className="chapter-complete-core"><i className="resource-icon resource-room-core"/><b>방의 코어 ×1</b></div>
+    <p>책상 아래부터 침대 밑까지<br/>모든 채집 구역을 정리했습니다.</p>
+    <button type="button" onClick={() => { setChapterCompleteOpen(false); setView('chapter'); }}>내 방으로 돌아가기</button>
+  </section></div>;
+
   if (view === 'chapter') return <main className="room-dungeon-shell"><section className="room-dungeon-game chapter-home">
     <header className="room-dungeon-hud"><button type="button" className="room-exit-button" onClick={onExit}>‹</button><div className="room-title-group"><span>CHAPTER 1 · {saveStatus === 'saved' ? '서버 저장됨' : saveStatus === 'loading' ? '저장 중' : saveStatus === 'offline' ? '로컬 백업' : '게스트 저장'}</span><strong>내 방</strong></div><div className="room-resource-preview"><span>●</span> 0</div></header>
     <div className="chapter-home-map" onPointerDown={moveChapterToPointer}>
@@ -340,9 +375,9 @@ export function MyRoomDungeonGame({ onExit }: MyRoomDungeonGameProps) {
       <button type="button" className="chapter-location location-desk is-open" onPointerDown={(event) => { event.stopPropagation(); moveInChapter({x:24,y:27}, () => enterStage('1-1')); }}><b>1-1</b><span>책상 아래</span><em>{clearedZones.has('1-1') ? '다시 채집' : '채집 가능'}</em></button>
       <button type="button" className="chapter-location location-bench is-open" onPointerDown={(event) => { event.stopPropagation(); moveInChapter({x:24,y:73}, () => setWorkbenchOpen(true)); }}><b>⚙</b><span>나의 작업대</span><em>제작·강화</em></button>
       <button type="button" className={`chapter-location location-toys ${clearedZones.has('1-1') ? 'is-open' : 'is-locked'}`} onPointerDown={(event) => { event.stopPropagation(); moveInChapter({x:72,y:28}, () => clearedZones.has('1-1') ? enterStage('1-2') : visitLockedArea('장난감 상자')); }}><b>1-2</b><span>장난감 상자</span><em>{clearedZones.has('1-1') ? clearedZones.has('1-2') ? '다시 채집' : '채집 가능' : '1-1 클리어 필요'}</em></button>
-      <button type="button" className="chapter-location location-closet is-locked" onPointerDown={(event) => { event.stopPropagation(); moveInChapter({x:82,y:48}, () => visitLockedArea('옷장')); }}><b>1-3</b><span>옷장</span><em>잠김</em></button>
-      <button type="button" className="chapter-location location-computer is-locked" onPointerDown={(event) => { event.stopPropagation(); moveInChapter({x:66,y:67}, () => visitLockedArea('컴퓨터 책상')); }}><b>1-4</b><span>컴퓨터 책상</span><em>잠김</em></button>
-      <button type="button" className="chapter-location location-bed is-locked" onPointerDown={(event) => { event.stopPropagation(); moveInChapter({x:80,y:84}, () => visitLockedArea('침대 밑')); }}><b>1-5</b><span>침대 밑</span><em>잠김</em></button>
+      <button type="button" className={`chapter-location location-closet ${clearedZones.has('1-2') ? 'is-open' : 'is-locked'}`} onPointerDown={(event) => { event.stopPropagation(); moveInChapter({x:82,y:48}, () => clearedZones.has('1-2') ? enterStage('1-3') : visitLockedArea('옷장')); }}><b>1-3</b><span>옷장</span><em>{clearedZones.has('1-2') ? clearedZones.has('1-3') ? '다시 채집' : '채집 가능' : '1-2 클리어 필요'}</em></button>
+      <button type="button" className={`chapter-location location-computer ${clearedZones.has('1-3') ? 'is-open' : 'is-locked'}`} onPointerDown={(event) => { event.stopPropagation(); moveInChapter({x:66,y:67}, () => clearedZones.has('1-3') ? enterStage('1-4') : visitLockedArea('컴퓨터 책상')); }}><b>1-4</b><span>컴퓨터 책상</span><em>{clearedZones.has('1-3') ? clearedZones.has('1-4') ? '다시 채집' : '채집 가능' : '1-3 클리어 필요'}</em></button>
+      <button type="button" className={`chapter-location location-bed ${clearedZones.has('1-4') ? 'is-open' : 'is-locked'}`} onPointerDown={(event) => { event.stopPropagation(); moveInChapter({x:80,y:84}, () => clearedZones.has('1-4') ? enterStage('1-5') : visitLockedArea('침대 밑')); }}><b>1-5</b><span>침대 밑</span><em>{clearedZones.has('1-4') ? clearedZones.has('1-5') ? '다시 채집' : '채집 가능' : '1-4 클리어 필요'}</em></button>
       {clearedZones.has('1-1') && <button type="button" className={`auto-collect-pad ${robotAssignments['1-1'] ? 'is-working' : ''}`} onPointerDown={(event) => { event.stopPropagation(); moveInChapter({x:38,y:35}, () => setRobotDeployOpen(true)); }}><i className="mini-craft craft-robot"/><span>{robotAssignments['1-1'] ? '자동 수집 중' : '채집봇 배치'}</span><em>{robotAssignments['1-1'] ? `남은 작업 ${robotAssignments['1-1'].remainingUses}회` : `보유 ${craftedBots}대`}</em></button>}
       <div className={`chapter-player facing-${chapterFacing} ${chapterMoving ? 'is-moving' : ''}`} style={{left:`${chapterPosition.x}%`,top:`${chapterPosition.y}%`}}><span/><img src={playerImage} alt="내 방의 탐험가" draggable={false}/></div>
       <div className="chapter-move-guide">{chapterNotice}</div>
@@ -359,6 +394,7 @@ export function MyRoomDungeonGame({ onExit }: MyRoomDungeonGameProps) {
     {inventoryOpen && <InventoryPanel entries={inventoryEntries} onClose={() => setInventoryOpen(false)} />}
     {robotDeployOpen && <div className="panel-backdrop" onPointerDown={() => setRobotDeployOpen(false)}><section className="robot-deploy-panel" onPointerDown={(event) => event.stopPropagation()}><header><div><small>AUTO COLLECT</small><h2>1-1 채집봇 배치</h2></div><button type="button" onClick={() => setRobotDeployOpen(false)}>×</button></header>{robotAssignments['1-1'] ? <div className="robot-working-card"><i className="mini-craft craft-robot"/><strong>종이상자 채집봇 작업 중</strong><span>남은 작업 {robotAssignments['1-1'].remainingUses}회</span></div> : <div className="robot-choice-card"><i className="mini-craft craft-robot"/><div><strong>종이상자 채집봇</strong><span>보유 {craftedBots}대 · 사용 5회</span></div><button type="button" disabled={craftedBots < 1} onClick={deployRobotToDesk}>{craftedBots > 0 ? '1-1에 배치' : '보유 봇 없음'}</button></div>}</section></div>}
     {autoCollectPopup}
+    {chapterCompletePopup}
   </section></main>;
 
   return <main className="room-dungeon-shell"><section className="room-dungeon-game" aria-label="내 방이 던전">
@@ -406,6 +442,7 @@ export function MyRoomDungeonGame({ onExit }: MyRoomDungeonGameProps) {
       <p>{hasBatchim(RESOURCE_INFO[discovery].name) ? '을' : '를'} 발견하고 얻었다.</p><button type="button" onClick={() => setDiscovery(null)}>확인</button>
     </section></div>}
     {autoCollectPopup}
+    {chapterCompletePopup}
   </section></main>;
 }
 

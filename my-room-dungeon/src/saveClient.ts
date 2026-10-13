@@ -1,4 +1,5 @@
-export type DungeonResourceId = 'paper' | 'tape' | 'screw' | 'battery' | 'plastic' | 'clockwork' | 'motor';
+export type DungeonResourceId = 'paper' | 'tape' | 'screw' | 'battery' | 'plastic' | 'clockwork' | 'motor' |
+  'cloth' | 'metal' | 'wire' | 'circuit' | 'dust' | 'mystery' | 'room-core';
 
 export interface DungeonSaveData {
   inventory: Partial<Record<DungeonResourceId, number>>;

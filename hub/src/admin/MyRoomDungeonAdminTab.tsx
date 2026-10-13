@@ -8,7 +8,11 @@ import {
 } from './adminClient';
 import type { AdminMyRoomDungeonProfile, AdminMyRoomDungeonUpdate } from './adminClient';
 
-const RESOURCE_LABELS: Record<string, string> = { paper: '종이', tape: '테이프', screw: '작은 나사', battery: '건전지', plastic: '플라스틱', clockwork: '태엽 부품', motor: '소형 모터' };
+const RESOURCE_LABELS: Record<string, string> = {
+  paper: '종이', tape: '테이프', screw: '작은 나사', battery: '건전지', plastic: '플라스틱',
+  clockwork: '태엽 부품', motor: '소형 모터', cloth: '천', metal: '금속 조각', wire: '전선',
+  circuit: '회로', dust: '먼지 결정', mystery: '수수께끼 부품', 'room-core': '방의 코어',
+};
 
 function errorText(error: unknown) {
   return error instanceof Error ? error.message : '요청에 실패했습니다';
