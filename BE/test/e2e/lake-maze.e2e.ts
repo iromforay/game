@@ -24,7 +24,7 @@ after(async () => {
 const SMALL = { width: 640, height: 360 };
 const MAP_READY = 's.map && s.map.ready && s.map.inRoom && s.map.positioned && s.map.story';
 const DEEP_TEXT = '깊은 물은 위험해. 물풀이 잔잔한 길로 가자.';
-const GOAL_MAZE = '물결북의 파문을 따라 물풀 미로를 지나가자.';
+const GOAL_MAZE = '붙잡힌 물들이를 구하자. 0/3';
 // 정착지 → 물풀문 → 물풀 미로 안 길(굽은 길이라 지름길은 없다: 벽을 피해 경유)
 const TO_GATE = [{ x: 900, y: 1500 }, { x: 1265, y: 1350 }, { x: 1440, y: 1350 }];
 const THROUGH_GATE = [{ x: 1440, y: 1100 }, { x: 1560, y: 1000 }];

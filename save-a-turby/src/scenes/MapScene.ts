@@ -12,6 +12,7 @@ import { playStory } from '../story/playStory';
 import { MiniMap } from '../ui/MiniMap';
 import type { MapMarker, MapView } from '../ui/MiniMap';
 import { loadWorldImages } from '../assets/loader';
+import { SPRITESHEET_FRAMES } from '../assets/registry';
 import { ensureUiPlaceholders } from '../assets/placeholders';
 import { ensureMapMarkerTextures } from '../assets/mapMarkers';
 import { loadChapterStatuses, getCurrentChapter } from '../config/story';
@@ -38,6 +39,7 @@ const QUIET_EXIT_FACTOR = 1.1;
 const WILD_RECHECK_MS = 1500; // 서버가 "닿지 않는다"고 한 야생을 다시 물어보기까지의 간격
 const AVATAR_HALF = CLIENT_BODY_HALF; // 막힌 곳 판정에 쓰는 아바타 몸 반지름(px) — 서버와 같은 geometry 계약의 값
 const DEPTH_GROUND = MAP_DEPTH.greybox;
+const TRAP_SLOW_MS = 1200; // 서버 덫 지속 시간(lake.json blackThreadTraps.slowMs)과 같은 값 — 연출 길이용이며 판정은 서버
 const DEPTH_STORY = MAP_DEPTH.story; // 이야기 지점·오브젝트 표식·문(아바타·야생 터비보다 아래)
 
 interface WildMarker {
@@ -103,8 +105,9 @@ export class MapScene extends Phaser.Scene {
   private positioned = false;
   private corrections = 0; // 서버 보정 횟수(진단용)
   private lastCorrectionReason: string | null = null;
+  private trapSlowUntil = 0; // 검은 실 덫에 묶인 시각까지 이동 속도 50%(서버가 알려 준 시간 — 서버도 같은 상한을 건다)
   private pushRemain: { x: number; y: number } | null = null; // 물살에 밀린 거리 중 아직 화면에 반영하지 않은 만큼(10-13 C2-2: 짧은 보간 — 입력은 그대로 이어진다)
-  private waterEvents = { currentPushes: 0, deepReturns: 0, lastCurrentFieldId: null as string | null };
+  private waterEvents = { currentPushes: 0, deepReturns: 0, trapSnares: 0, lastCurrentFieldId: null as string | null };
   private unreachableWilds = 0; // 서버가 가로막힘으로 거부한 조우 요청 수(진단용)
   private notices = new NoticeGate(); // 안내 반복 억제(같은 야생·같은 사유 3초, 위치 보정 안내는 한 번)
   private noticeLog: string[] = []; // 띄운 안내(진단용)
@@ -361,7 +364,17 @@ export class MapScene extends Phaser.Scene {
     this.lastPlan = plan;
     // 잠금 배경 ↔ 기존 배경 전환: 같은 이미지 객체의 텍스처만 바꾼다(플레이어·카메라·충돌·소품은 그대로)
     if (plan.background.mode === 'final' && this.bgImage && this.bgImage.texture.key !== plan.background.assetKey) this.bgImage.setTexture(plan.background.assetKey).setDisplaySize(plan.background.width, plan.background.height);
-    for (const o of plan.overlays) keep(this.add.image(o.x, o.y, o.assetKey).setOrigin(o.pivot[0], o.pivot[1]).setDisplaySize(o.width, o.height).setAngle(o.rotation).setAlpha(o.alpha).setDepth(o.depth));
+    for (const o of plan.overlays) {
+      const sheet = SPRITESHEET_FRAMES[o.assetKey];
+      if (sheet) {
+        // 4프레임 idle 시트(호수 일반 적): 첫 프레임부터 반복 재생. 알파는 충돌·상호작용 판정에 쓰지 않는다
+        const animKey = `${o.assetKey}-idle`;
+        if (!this.anims.exists(animKey)) this.anims.create({ key: animKey, frames: this.anims.generateFrameNumbers(o.assetKey, { start: 0, end: sheet.frames - 1 }), frameRate: sheet.fps, repeat: -1 });
+        keep(this.add.sprite(o.x, o.y, o.assetKey).setOrigin(o.pivot[0], o.pivot[1]).setDisplaySize(o.width, o.height).setAngle(o.rotation).setAlpha(o.alpha).setDepth(o.depth).play(animKey));
+        continue;
+      }
+      keep(this.add.image(o.x, o.y, o.assetKey).setOrigin(o.pivot[0], o.pivot[1]).setDisplaySize(o.width, o.height).setAngle(o.rotation).setAlpha(o.alpha).setDepth(o.depth));
+    }
     for (const g of plan.gates) {
       const gate = view!.gates.find((x) => x.id === g.id)!;
       if (g.art) keep(this.add.image(g.art.x, g.art.y, g.art.assetKey).setOrigin(g.art.pivot[0], g.art.pivot[1]).setDisplaySize(g.art.width, g.art.height).setDepth(DEPTH_STORY));
@@ -719,12 +732,20 @@ export class MapScene extends Phaser.Scene {
   // 서버가 이동을 승인하지 않았다: 마지막 승인 위치로 되돌린다. 입력은 막지 않고, 같은 보정을 여러 번 받아도 한 번만 움직인다.
   // 벽·문 때문이면 화면의 문 상태가 서버와 다를 수 있으므로 지역 화면을 다시 받는다(1초에 한 번까지)
   private applyCorrection(pos: { x: number; y: number; reason?: string; currentFieldId?: string | null }) {
+    // 검은 실 덫: 위치는 그대로, 서버가 정한 시간 동안만 느려진다(짧은 실 고리 연출). 시간·배율을 화면이 정하지 않는다
+    if (pos.reason === 'trap') {
+      this.waterEvents.trapSnares++;
+      this.trapSlowUntil = this.time.now + TRAP_SLOW_MS;
+      this.threadLoop(this.avatar.x, this.avatar.y);
+      return;
+    }
     this.lastSent = { x: pos.x, y: pos.y }; // 서버 위치와 다른 값을 다시 보내지 않는다(다시 움직이면 그때 보낸다)
     this.lastSentAt = 0;
     if (Math.abs(this.avatar.x - pos.x) < 0.5 && Math.abs(this.avatar.y - pos.y) < 0.5) return;
     // 10-13 C2-2: 서버가 옮긴 위치(물살·깊은 물 복귀). 서버가 정한 값만 쓴다 — 방향·거리를 화면이 계산하지 않는다
     if (pos.reason === 'current') {
       this.waterEvents.currentPushes++;
+      this.trapSlowUntil = 0; // 덫에 묶인 채 맞은 밀림이면 서버가 속박을 함께 풀었다
       this.waterEvents.lastCurrentFieldId = pos.currentFieldId ?? null;
       this.lastCorrectionReason = 'current';
       this.pushRemain = { x: pos.x - this.avatar.x, y: pos.y - this.avatar.y };
@@ -762,6 +783,12 @@ export class MapScene extends Phaser.Scene {
       const b = this.add.circle(x + (i - 1.5) * 12, y + 10, 4 + (i % 2) * 2, 0xdff6ff, 0.8).setDepth(DEPTH_STORY + 2);
       this.tweens.add({ targets: b, y: y - 22 - i * 4, alpha: 0, duration: 420, delay: i * 40, onComplete: () => b.destroy() });
     }
+  }
+
+  // 덫에 걸린 순간의 짧은 실 고리 연출(판정과 무관)
+  private threadLoop(x: number, y: number) {
+    const ring = this.add.ellipse(x, y + 16, 70, 36).setStrokeStyle(4, 0x1d2a44, 0.9).setDepth(DEPTH_STORY + 2);
+    this.tweens.add({ targets: ring, scaleX: 0.5, scaleY: 0.5, alpha: 0, duration: TRAP_SLOW_MS, onComplete: () => ring.destroy() });
   }
 
   // 깊은 물에서 돌아왔을 때의 안내 — 한 탐험 세션(이 화면)에서 처음 한 번만
@@ -983,7 +1010,8 @@ export class MapScene extends Phaser.Scene {
     }
     if (len > 0.05) {
       const dt = delta / 1000;
-      const to = { x: Phaser.Math.Clamp(this.avatar.x + x * AVATAR_SPEED * dt, 0, this.stageWidth), y: Phaser.Math.Clamp(this.avatar.y + y * AVATAR_SPEED * dt, 0, this.stageHeight) };
+      const speed = AVATAR_SPEED * (this.time.now < this.trapSlowUntil ? 0.5 : 1);
+      const to = { x: Phaser.Math.Clamp(this.avatar.x + x * speed * dt, 0, this.stageWidth), y: Phaser.Math.Clamp(this.avatar.y + y * speed * dt, 0, this.stageHeight) };
       const next = stepWithSolids(this.solids, { x: this.avatar.x, y: this.avatar.y }, to, AVATAR_HALF);
       this.avatar.setPosition(next.x, next.y);
       this.moveAngle = Math.atan2(y, x);

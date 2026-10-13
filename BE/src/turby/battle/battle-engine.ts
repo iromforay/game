@@ -282,7 +282,9 @@ const cornerEscapeOn = (state: BattleState) => (state.definition ? (state.defini
 // 이동 가능 AP: 속박 감소량을 빼되 0 미만으로 내려가지 않는다
 function moveAllowance(unit: BattleUnit) {
   const penalty = (unit.statuses ?? []).reduce((sum, s) => sum + (s.kind === 'bind' ? s.movePenalty : 0), 0);
-  return Math.max(0, unit.ap - penalty);
+  const base = Math.max(0, unit.ap - penalty);
+  // 젖은 속박: 이번 이동의 가능 거리 1칸 감소, 최소 1칸은 보장(AP가 1이면 줄지 않는다)
+  return (unit.statuses ?? []).some((s) => s.kind === 'wet_bind') && base >= 1 ? Math.max(1, base - 1) : base;
 }
 
 // 이동 비용: 막힌 칸이 없으면 기존 규칙(맨해튼 거리). 있으면 막힌 칸을 피해 가는 최단 경로(유닛은 기존처럼 경로를 막지 않는다).
@@ -397,6 +399,11 @@ function move(state: BattleState, unit: BattleUnit, colRaw: unknown, rowRaw: unk
   unit.row = row;
   unit.ap -= cost;
   emit(state, ctx, { type: 'move', unitId: unit.unitId, fromCol, fromRow, toCol: col, toRow: row, apLeft: unit.ap });
+  // 젖은 속박은 이동 행동 한 번에 소비된다(공격·턴 종료는 막지도 소비하지도 않는다)
+  if (unit.statuses?.some((s) => s.kind === 'wet_bind')) {
+    unit.statuses = unit.statuses.filter((s) => s.kind !== 'wet_bind');
+    emit(state, ctx, { type: 'status', unitId: unit.unitId, statuses: unit.statuses.map((s) => ({ ...s })) });
+  }
   if (cornerEscapeOn(state) && atCorner(state, unit)) resolve(state, ctx, 'draw');
 }
 
@@ -431,6 +438,12 @@ function strike(state: BattleState, attacker: BattleUnit, defender: BattleUnit, 
 function applyStatus(state: BattleState, target: BattleUnit, def: StatusEffectDef, sourceUnitId: string, ctx: Ctx) {
   const list = (target.statuses ??= []);
   const existing = list.find((s) => s.kind === def.kind);
+  if (def.kind === 'wet_bind') {
+    if (existing) return; // 중첩하지 않고 지속 시간도 갱신하지 않는다
+    list.push({ kind: 'wet_bind', turnsLeft: 1, movePenalty: 1, sourceUnitId, appliedRound: state.round });
+    emit(state, ctx, { type: 'status', unitId: target.unitId, statuses: list.map((s) => ({ ...s })) });
+    return;
+  }
   if (existing) {
     existing.turnsLeft = Math.max(existing.turnsLeft, def.turns);
     existing.movePenalty = Math.max(existing.movePenalty, def.movePenalty);
@@ -575,7 +588,7 @@ function tickStatuses(state: BattleState, endedRound: number, ctx: Ctx) {
     if (!unit.statuses || unit.statuses.length === 0) continue;
     let changed = false;
     for (const s of unit.statuses) {
-      if (s.appliedRound < endedRound) {
+      if (s.kind !== 'wet_bind' && s.appliedRound < endedRound) { // 젖은 속박은 시간으로 풀리지 않는다(다음 이동 한 번에 소비)
         s.turnsLeft -= 1;
         changed = true;
       }

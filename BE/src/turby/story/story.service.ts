@@ -12,6 +12,7 @@ import type { StageStatusDto } from './stage-access';
 import {
   DEFAULT_NICKNAME,
   ENCOUNTER_BY_KEY,
+  EVENT_AGGREGATES,
   EVENT_BY_ID,
   RELIC_EQUIP_EVENT,
   OBJECTIVE_BY_KEY,
@@ -212,6 +213,7 @@ export class StoryService {
     if (!evidenceChecked) this.checkPositionEvidence(playerId, def.evidence);
     const grants: Grant[] = [];
     const consumed: ItemGrant[] = [];
+    const aggregated: string[] = [];
     let already = false;
     try {
       await this.prisma.$transaction(async (tx) => {
@@ -226,6 +228,14 @@ export class StoryService {
 
         await tx.player_story_event.create({ data: { player_id: playerId, event_id: def.id } });
         for (const extra of def.alsoComplete ?? []) await tx.player_story_event.create({ data: { player_id: playerId, event_id: extra } });
+        // 부분 사건이 모두 모이면 집계 사건을 같은 트랜잭션에서 한 번 기록한다(예: 붙잡힌 물들이 세 명 구조)
+        for (const agg of EVENT_AGGREGATES) {
+          if (!agg.parts.includes(def.id) || snap.events.has(agg.id)) continue;
+          if (agg.parts.every((p) => p === def.id || snap.events.has(p))) {
+            await tx.player_story_event.create({ data: { player_id: playerId, event_id: agg.id } });
+            aggregated.push(agg.id);
+          }
+        }
 
         for (const c of def.consume ?? []) {
           await this.consumeItem(tx, playerId, c);
@@ -255,7 +265,7 @@ export class StoryService {
       else throw err;
     }
     // 문 개방 같은 이동 판정에 바로 반영(탐험 세션 안에 있을 때)
-    this.rooms.noteStoryEvents(playerId.toString(), [def.id, ...(def.alsoComplete ?? [])]);
+    this.rooms.noteStoryEvents(playerId.toString(), [def.id, ...(def.alsoComplete ?? []), ...aggregated]);
     return { eventId: def.id, alreadyCompleted: already, grants: already ? [] : grants, consumed: already ? [] : consumed, story: await this.getState(playerId), play: already ? null : playOf(SEGMENT_AFTER_EVENT[def.id]) };
   }
 
@@ -498,7 +508,12 @@ export class StoryService {
         : null,
       objectives: defs.map((d) => ({ key: d.key, collected: snap.objectives.get(d.key)?.size ?? 0, required: d.objectIds.length, active: checkObjective(d, snap) === null })),
       goal: (() => {
-        const g = (data.goals ?? []).find((x) => (x.requires ?? []).every((e) => snap.events.has(e)) && !((x.unless?.length ?? 0) > 0 && x.unless!.every((e) => snap.events.has(e))));
+        const g = (data.goals ?? []).find(
+          (x) =>
+            (x.requires ?? []).every((e) => snap.events.has(e)) &&
+            !((x.unless?.length ?? 0) > 0 && x.unless!.every((e) => snap.events.has(e))) &&
+            (!x.count || x.count.of.filter((e) => snap.events.has(e)).length === x.count.is),
+        );
         return g ? { id: g.id, text: g.text } : null;
       })(),
     };

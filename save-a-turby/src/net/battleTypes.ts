@@ -30,7 +30,7 @@ export interface BattleUnit {
 }
 
 export interface StatusEffect {
-  kind: 'bind';
+  kind: 'bind' | 'wet_bind'; // wet_bind = 젖은 속박(다음 이동 한 번의 이동 거리 1칸 감소, 최소 1칸, 한 번 쓰면 해제)
   turnsLeft: number;
   movePenalty: number;
   sourceUnitId: string | null;

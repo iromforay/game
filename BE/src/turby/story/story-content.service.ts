@@ -52,7 +52,8 @@ export interface StageStoryData {
   objects?: { id: string; objectiveKey: string; group: string; assetKey: string; label: string; prompt: string }[];
   storyPoints?: { id: string; kind: string; assetKey: string; label: string; prompt: string; art?: StagePointArt }[]; // art: 그림 표시 크기·피벗(서버 데이터가 단일 출처 — 원본 PNG 크기를 쓰지 않는다)
   // 10-13 C2-1: 이야기 진행에 따른 목표 문구(상단 목표 패널). 위에서부터 첫 번째로 맞는 것 — requires(모두 완료)·unless(모두 완료면 닫힘). 수집 목표(전달 delivery)가 없을 때만 쓴다
-  goals?: { id: string; text: string; requires?: string[]; unless?: string[] }[];
+  goals?: { id: string; text: string; requires?: string[]; unless?: string[]; count?: { of: string[]; is: number } }[]; // count: of 중 완료된 사건이 정확히 is개일 때만(구조 0/3~2/3 같은 진행도 문구)
+  blackThreadTraps?: unknown[]; // 검은 실 덫(rooms/stage-water.ts가 해석·검증)
   // visibleAfter: 그 이벤트 전에는 지도·화면에 내려 주지 않는다(숨은 구역의 내부 정보). 통과 불가 판정은 표시 여부와 무관하게 서버가 한다
   // 10-13 C2-2: 물 규칙(rooms/stage-water.ts가 해석·검증한다). 구역은 축에 나란한 사각형
   waterAreas?: unknown[];

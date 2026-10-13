@@ -1,0 +1,49 @@
+{
+  "key": "lake_guard_c",
+  "_note": "임시 전투 정의(기능 검증용 수치, 밸런스 정본 아님 — C2-3 v3). 젖은 실밥이가 붙잡힌 물들이를 지킨다. 지정 공격이 적중하면 젖은 속박(다음 이동 1칸 감소·최소 1칸·한 번 소비·비중첩). 포획·보상 없음 — 승리하면 구조 사건만 기록된다.",
+  "cornerEscape": false,
+  "objectives": {
+    "win": [
+      {
+        "kind": "defeat_all"
+      }
+    ]
+  },
+  "units": [
+    {
+      "unitId": "wet_stitchling_c1",
+      "side": "wild",
+      "characterCode": "wet_stitchling",
+      "name": "젖은 실밥이",
+      "col": 8,
+      "row": 3,
+      "attack": 4,
+      "defense": 1,
+      "actionPower": 2,
+      "maxHp": 10,
+      "onHit": {
+        "kind": "wet_bind",
+        "turns": 1,
+        "movePenalty": 1
+      }
+    },
+    {
+      "unitId": "wet_stitchling_c2",
+      "side": "wild",
+      "characterCode": "wet_stitchling",
+      "name": "젖은 실밥이",
+      "col": 8,
+      "row": 5,
+      "attack": 4,
+      "defense": 1,
+      "actionPower": 2,
+      "maxHp": 9,
+      "onHit": {
+        "kind": "wet_bind",
+        "turns": 1,
+        "movePenalty": 1
+      },
+      "exitOnDefeat": "flee"
+    }
+  ]
+}

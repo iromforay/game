@@ -29,10 +29,23 @@ export interface SafeAnchor {
   y: number;
   radius: number;
 }
+// 검은 실 덫(10-13 C2-3): 구조 전까지 그 자리에 있다. 밟으면(반경 안으로 들어서면) slowMs 동안 이동 속도가 slowFactor배로 제한되고,
+// 그 상태에서 물살을 맞으면 그 1회 밀림만 extraPushPx 늘어난 뒤 속박·추가 밀림이 함께 풀린다. 구조 사건(rescueEvent)이 기록되면 사라져 다시 발동하지 않는다
+export interface BlackThreadTrap {
+  id: string;
+  x: number;
+  y: number;
+  radius: number;
+  rescueEvent: string;
+  slowMs: number;
+  slowFactor: number;
+  extraPushPx: number;
+}
 export interface StageWater {
   areas: WaterArea[];
   currents: CurrentField[];
   anchors: SafeAnchor[];
+  traps: BlackThreadTrap[];
 }
 
 // 지역 JSON 원본(StageStoryData의 같은 이름 필드)
@@ -40,6 +53,7 @@ export interface RawWater {
   waterAreas?: unknown;
   currentFields?: unknown;
   safeAnchors?: unknown;
+  blackThreadTraps?: unknown;
 }
 
 type Raw = Record<string, unknown>;
@@ -51,7 +65,7 @@ const deepOf = (w: StageWater) => w.areas.filter((a) => a.kind === 'deep');
 
 // 지역 데이터 → 계약. 없으면 null(물 규칙이 없는 지역). 잘못되면 Error — 서버는 시작 단계에서 멈춘다(geometry 계약과 같은 원칙)
 export function parseStageWater(raw: RawWater, geo: StageGeometry, stageCode: string): StageWater | null {
-  if (raw.waterAreas === undefined && raw.currentFields === undefined && raw.safeAnchors === undefined) return null;
+  if (raw.waterAreas === undefined && raw.currentFields === undefined && raw.safeAnchors === undefined && raw.blackThreadTraps === undefined) return null;
   const bad: string[] = [];
   const ids = new Set<string>();
   const idOf = (r: Raw, at: string) => {
@@ -127,8 +141,26 @@ export function parseStageWater(raw: RawWater, geo: StageGeometry, stageCode: st
     if (areas.some((w) => w.kind === 'deep' && insideRect(w, a, SERVER_BODY_HALF + DEEP_MARGIN_PX))) bad.push(`safeAnchors(${a.id}): 깊은 물과 겹친다`);
   }
   if (areas.some((w) => w.kind === 'deep') && anchors.length === 0) bad.push('깊은 물이 있는데 safeAnchors가 없다');
+  const traps: BlackThreadTrap[] = [];
+  list(raw.blackThreadTraps, 'blackThreadTraps').forEach((r, i) => {
+    const at = `blackThreadTraps[${i}]`;
+    const id = idOf(r, at);
+    if (!num(r.x) || !num(r.y) || !num(r.radius) || r.radius <= 0 || r.radius > 200) return void bad.push(`${at}(${id}): x·y·radius는 숫자(radius 0 초과 200 이하)`);
+    if (typeof r.rescueEvent !== 'string' || r.rescueEvent.length === 0) return void bad.push(`${at}(${id}): rescueEvent가 없다`);
+    const slowMs = r.slowMs ?? 1200;
+    const slowFactor = r.slowFactor ?? 0.5;
+    const extraPushPx = r.extraPushPx ?? 32;
+    if (!num(slowMs) || slowMs < 100 || slowMs > 5000) return void bad.push(`${at}(${id}): slowMs는 100~5000`);
+    if (!num(slowFactor) || slowFactor <= 0 || slowFactor > 1) return void bad.push(`${at}(${id}): slowFactor는 0 초과 1 이하`);
+    if (!num(extraPushPx) || extraPushPx < 0 || extraPushPx > 100) return void bad.push(`${at}(${id}): extraPushPx는 0~100`);
+    const p = { x: r.x, y: r.y };
+    if (!inBounds(geo, p)) return void bad.push(`${at}(${id}): 지도 밖`);
+    if (bodyBlocked(fixed, p, SERVER_BODY_HALF)) bad.push(`${at}(${id}): 막힌 곳·문과 겹친다`);
+    if (areas.some((w) => w.kind === 'deep' && insideRect(w, p, SERVER_BODY_HALF + DEEP_MARGIN_PX))) bad.push(`${at}(${id}): 깊은 물과 겹친다`);
+    traps.push({ id, x: r.x, y: r.y, radius: r.radius, rescueEvent: r.rescueEvent, slowMs, slowFactor, extraPushPx });
+  });
   if (bad.length > 0) throw new Error(`지역 데이터(${stageCode}) 물 규칙 검증 실패: ${bad.join(' / ')}`);
-  return { areas, currents, anchors };
+  return { areas, currents, anchors, traps };
 }
 
 // ---------- 플레이어별 상태 ----------
@@ -138,12 +170,20 @@ export interface WaterMemberState {
   consecutive: number; // 연속 적용 횟수(물살 밖으로 나가면 0)
   appliedAt: Record<string, number>; // 물살 ID → 마지막 적용 시각(ms)
   protectUntil: number; // 이 시각 전에는 물살을 적용하지 않는다
+  trapUntil: number; // 이 시각 전까지 덫에 발이 묶여 이동 속도가 제한된다(전투의 wet_bind와는 별개 상태 — 저장·공유하지 않는다)
+  trapSlowFactor: number; // trapUntil 동안의 속도 배율
+  trapExtraPush: number; // 이 상태에서 물살을 맞을 때 1회 더해지는 밀림(px)
+  insideTraps: Record<string, boolean>; // 덫 반경 안에 있는가 — 들어서는 순간 한 번만 발동한다
 }
-export const newWaterState = (): WaterMemberState => ({ anchorId: null, consecutive: 0, appliedAt: {}, protectUntil: 0 });
+export const newWaterState = (): WaterMemberState => ({ anchorId: null, consecutive: 0, appliedAt: {}, protectUntil: 0, trapUntil: 0, trapSlowFactor: 1, trapExtraPush: 0, insideTraps: {} });
+
+// 지금 이 플레이어의 이동 속도 배율(덫에 묶인 동안만 1 미만)
+export const speedFactor = (state: WaterMemberState, now: number): number => (now < state.trapUntil ? state.trapSlowFactor : 1);
 
 export type WaterOutcome =
   | { kind: 'none' }
-  | { kind: 'pushed'; x: number; y: number; currentFieldId: string }
+  | { kind: 'pushed'; x: number; y: number; currentFieldId: string; trapBonus: number }
+  | { kind: 'trapped'; x: number; y: number; trapId: string; until: number } // 덫에 걸렸다 — 위치는 그대로, 속도만 제한
   | { kind: 'returned'; x: number; y: number; anchorId: string | null };
 
 const eligible = (f: CurrentField, events: ReadonlySet<string>) => f.requires.every((e) => events.has(e)) && !(f.unless.length > 0 && f.unless.every((e) => events.has(e)));
@@ -190,6 +230,19 @@ function pushDestination(water: StageWater, geo: StageGeometry, solids: Rect[], 
 // 승인된 위치 `to`에 대한 물 규칙. state는 호출 쪽(방 멤버)이 가진 이 플레이어의 상태이며 여기서 갱신한다
 export function resolveWater(water: StageWater | null, geo: StageGeometry, solids: Rect[], locked: Rect[], events: ReadonlySet<string>, state: WaterMemberState, to: Point, now: number): WaterOutcome {
   if (!water) return { kind: 'none' };
+  // 덫: 반경 안으로 들어서는 순간 한 번 발동(이미 묶여 있으면 중첩하지 않는다). 구조한 지점의 덫은 없다
+  let trapped: { trapId: string; until: number } | null = null;
+  for (const t of water.traps) {
+    const inside = !events.has(t.rescueEvent) && Math.hypot(to.x - t.x, to.y - t.y) <= t.radius;
+    const was = state.insideTraps[t.id] === true;
+    state.insideTraps[t.id] = inside;
+    if (inside && !was && now >= state.trapUntil) {
+      state.trapUntil = now + t.slowMs;
+      state.trapSlowFactor = t.slowFactor;
+      state.trapExtraPush = t.extraPushPx;
+      trapped = { trapId: t.id, until: state.trapUntil };
+    }
+  }
   if (inDeepWater(water, to)) {
     const back = returnTarget(water, geo, solids, state, to);
     state.consecutive = 0;
@@ -202,17 +255,24 @@ export function resolveWater(water: StageWater | null, geo: StageGeometry, solid
   };
   touch(to);
   const field = water.currents.find((f) => insideRect(f, to, 0) && eligible(f, events));
+  const trapResult: WaterOutcome = trapped ? { kind: 'trapped', x: to.x, y: to.y, ...trapped } : { kind: 'none' };
   if (!field) {
     state.consecutive = 0;
-    return { kind: 'none' };
+    return trapResult;
   }
-  if (now < state.protectUntil) return { kind: 'none' };
-  if (state.consecutive >= MAX_CONSECUTIVE_PUSHES) return { kind: 'none' };
-  if (now - (state.appliedAt[field.id] ?? -Infinity) < field.cooldownMs) return { kind: 'none' };
-  const dest = pushDestination(water, geo, solids, locked, to, field);
-  if (dest.x === to.x && dest.y === to.y) return { kind: 'none' }; // 밀 수 있는 자리가 없다 — 적용 횟수를 쓰지 않는다
+  if (now < state.protectUntil) return trapResult;
+  if (state.consecutive >= MAX_CONSECUTIVE_PUSHES) return trapResult;
+  if (now - (state.appliedAt[field.id] ?? -Infinity) < field.cooldownMs) return trapResult;
+  // 덫에 묶인 채 맞는 1회 밀림만 더 멀리 — 적용 뒤 속박과 추가 밀림은 함께 풀린다(중첩·재적용 없음)
+  const bonus = now < state.trapUntil ? state.trapExtraPush : 0;
+  const dest = pushDestination(water, geo, solids, locked, to, bonus > 0 ? { ...field, pushDistancePx: field.pushDistancePx + bonus } : field);
+  if (dest.x === to.x && dest.y === to.y) return trapResult; // 밀 자리가 없다 — 적용 횟수를 쓰지 않는다
   state.appliedAt[field.id] = now;
   state.consecutive += 1;
+  if (bonus > 0) {
+    state.trapUntil = 0;
+    state.trapExtraPush = 0;
+  }
   touch(dest);
-  return { kind: 'pushed', x: dest.x, y: dest.y, currentFieldId: field.id };
+  return { kind: 'pushed', x: dest.x, y: dest.y, currentFieldId: field.id, trapBonus: bonus };
 }

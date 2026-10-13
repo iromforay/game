@@ -402,3 +402,12 @@ test('전달 에셋 3종(current-flow·reed-gate-closed·reed-gate-open)이 런�
     assert.deepEqual([...readFileSync(root + f).subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
   }
 });
+
+// ---------- 10-13 C2-3: 덫·수호 적·구조 ----------
+test('MapScene: 덫 보정은 서버가 정한 시간만 적용(50%)·구조 지점은 서버 지점 표식, 적은 4프레임 시트 애니메이션', () => {
+  const map = src('scenes/MapScene.ts');
+  assert.match(map, /pos\.reason === 'trap'/);
+  assert.match(map, /this\.time\.now < this\.trapSlowUntil \? 0\.5 : 1/);
+  assert.match(map, /SPRITESHEET_FRAMES\[o\.assetKey\]/);
+  assert.match(map, /this\.trapSlowUntil = 0; \/\/ 덫에 묶인 채 맞은 밀림이면/);
+});

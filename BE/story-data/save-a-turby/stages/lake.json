@@ -1,7 +1,7 @@
 {
   "stageCode": "lake",
   "greybox": true,
-  "note": "2장 호수 기능 맵(10-13 C2-1): 좌표는 기능 검증용이며 최종 미술 좌표가 아니다(design/save-a-turby/chapter02-lake/asset-contract-v1.md 구역 배치 범위 안). 입구→정착지→물풀문→물풀 미로(얕은 물·깊은 물·물살·마른 발판)→염색 샘 순서(10-13 C2-2). 이벤트·지점 ID는 바뀌지 않는다. 10-13 v1c: 물결북 idle/active·파문(wave-path)은 전달 에셋(delivery-v1), 표시 크기는 storyPoints[].art·render.overlays가 단일 출처.",
+  "note": "2장 호수 기능 맵(10-13 C2-1): 좌표는 기능 검증용이며 최종 미술 좌표가 아니다(design/save-a-turby/chapter02-lake/asset-contract-v1.md 구역 배치 범위 안). 입구→정착지→물풀문→물풀 미로(얕은 물·깊은 물·물살·마른 발판)→염색 샘 순서(10-13 C2-2). 이벤트·지점 ID는 바뀌지 않는다. 10-13 v1c: 물결북 idle/active·파문(wave-path)은 전달 에셋(delivery-v1), 표시 크기는 storyPoints[].art·render.overlays가 단일 출처. C2-3: 구조 지점 3곳·안전 물길 지점·내부 안전 물길 문·검은 실 덫 3곳(기능 좌표).",
   "size": {
     "width": 3200,
     "height": 2400
@@ -19,6 +19,30 @@
       "x": 700,
       "y": 1330,
       "radius": 64
+    },
+    {
+      "id": "lake_rescue_a",
+      "x": 1990,
+      "y": 1070,
+      "radius": 90
+    },
+    {
+      "id": "lake_rescue_b",
+      "x": 1600,
+      "y": 775,
+      "radius": 90
+    },
+    {
+      "id": "lake_rescue_c",
+      "x": 2440,
+      "y": 930,
+      "radius": 90
+    },
+    {
+      "id": "lake_safe_route",
+      "x": 2465,
+      "y": 760,
+      "radius": 70
     }
   ],
   "objects": [],
@@ -52,6 +76,58 @@
           0.78
         ]
       }
+    },
+    {
+      "id": "lake_rescue_a",
+      "kind": "rescue",
+      "assetKey": "turby-muldeuli",
+      "label": "붙잡힌 물들이",
+      "prompt": "붙잡힌 물들이 구하기",
+      "art": {
+        "width": 88,
+        "height": 88,
+        "pivot": [
+          0.5,
+          0.7
+        ]
+      }
+    },
+    {
+      "id": "lake_rescue_b",
+      "kind": "rescue",
+      "assetKey": "turby-muldeuli",
+      "label": "붙잡힌 물들이",
+      "prompt": "붙잡힌 물들이 구하기",
+      "art": {
+        "width": 88,
+        "height": 88,
+        "pivot": [
+          0.5,
+          0.7
+        ]
+      }
+    },
+    {
+      "id": "lake_rescue_c",
+      "kind": "rescue",
+      "assetKey": "turby-muldeuli",
+      "label": "붙잡힌 물들이",
+      "prompt": "붙잡힌 물들이 구하기",
+      "art": {
+        "width": 88,
+        "height": 88,
+        "pivot": [
+          0.5,
+          0.7
+        ]
+      }
+    },
+    {
+      "id": "lake_safe_route",
+      "kind": "inspect",
+      "assetKey": "placeholder-point",
+      "label": "바늘구멍 물풀 벽",
+      "prompt": "바늘구멍 물풀 벽 살펴보기"
     }
   ],
   "goals": [
@@ -66,10 +142,65 @@
       ]
     },
     {
-      "id": "follow_ripple",
-      "text": "물결북의 파문을 따라 물풀 미로를 지나가자.",
+      "id": "rescue_0",
+      "text": "붙잡힌 물들이를 구하자. 0/3",
       "requires": [
         "lake_wave_drum_awakened"
+      ],
+      "count": {
+        "of": [
+          "lake_trapped_mulduri_a_rescued",
+          "lake_trapped_mulduri_b_rescued",
+          "lake_trapped_mulduri_c_rescued"
+        ],
+        "is": 0
+      }
+    },
+    {
+      "id": "rescue_1",
+      "text": "붙잡힌 물들이를 구하자. 1/3",
+      "requires": [
+        "lake_wave_drum_awakened"
+      ],
+      "count": {
+        "of": [
+          "lake_trapped_mulduri_a_rescued",
+          "lake_trapped_mulduri_b_rescued",
+          "lake_trapped_mulduri_c_rescued"
+        ],
+        "is": 1
+      }
+    },
+    {
+      "id": "rescue_2",
+      "text": "붙잡힌 물들이를 구하자. 2/3",
+      "requires": [
+        "lake_wave_drum_awakened"
+      ],
+      "count": {
+        "of": [
+          "lake_trapped_mulduri_a_rescued",
+          "lake_trapped_mulduri_b_rescued",
+          "lake_trapped_mulduri_c_rescued"
+        ],
+        "is": 2
+      }
+    },
+    {
+      "id": "hear_safe_route",
+      "text": "열린 물길의 기계음을 확인하자.",
+      "requires": [
+        "lake_trapped_turbies_rescued"
+      ],
+      "unless": [
+        "lake_safe_route_opened"
+      ]
+    },
+    {
+      "id": "to_dye_spring",
+      "text": "누비의 상태를 살피며 염색 샘으로 가자.",
+      "requires": [
+        "lake_safe_route_opened"
       ]
     }
   ],
@@ -98,6 +229,14 @@
         "y": 650,
         "width": 1230,
         "height": 900
+      },
+      {
+        "id": "zone_dye_spring_approach",
+        "label": "염색 샘 가는 길(다음 단계)",
+        "x": 2220,
+        "y": 350,
+        "width": 300,
+        "height": 300
       }
     ],
     "paths": [
@@ -148,6 +287,22 @@
             790
           ]
         ]
+      },
+      {
+        "points": [
+          [
+            2450,
+            790
+          ],
+          [
+            2370,
+            700
+          ],
+          [
+            2370,
+            520
+          ]
+        ]
       }
     ],
     "blockers": [
@@ -196,7 +351,7 @@
         "label": "물풀 벽",
         "x": 1240,
         "y": 650,
-        "width": 1330,
+        "width": 980,
         "height": 50
       },
       {
@@ -206,6 +361,30 @@
         "y": 650,
         "width": 50,
         "height": 550
+      },
+      {
+        "id": "wall_exit_left",
+        "label": "물풀 벽",
+        "x": 2170,
+        "y": 350,
+        "width": 50,
+        "height": 300
+      },
+      {
+        "id": "wall_exit_right",
+        "label": "물풀 벽",
+        "x": 2520,
+        "y": 350,
+        "width": 50,
+        "height": 300
+      },
+      {
+        "id": "wall_exit_top",
+        "label": "물풀 벽",
+        "x": 2170,
+        "y": 300,
+        "width": 400,
+        "height": 50
       }
     ],
     "gates": [
@@ -222,6 +401,27 @@
         "art": {
           "x": 1440,
           "y": 1190,
+          "width": 300,
+          "height": 200,
+          "pivot": [
+            0.5,
+            0.9
+          ]
+        }
+      },
+      {
+        "id": "gate_lake_safe_route",
+        "label": "안전 물길",
+        "x": 2220,
+        "y": 650,
+        "width": 300,
+        "height": 50,
+        "openEvent": "lake_safe_route_opened",
+        "closedAssetKey": "reed-gate-closed",
+        "openAssetKey": "reed-gate-open",
+        "art": {
+          "x": 2370,
+          "y": 690,
           "width": 300,
           "height": 200,
           "pivot": [
@@ -299,6 +499,104 @@
         ],
         "layer": "overlay",
         "alpha": 0.6
+      },
+      {
+        "id": "overlay_trap_a",
+        "assetKey": "black-thread-trap",
+        "x": 1990,
+        "y": 1085,
+        "width": 110,
+        "height": 74,
+        "pivot": [
+          0.5,
+          0.5
+        ],
+        "layer": "overlay",
+        "hiddenAfter": "lake_trapped_mulduri_a_rescued"
+      },
+      {
+        "id": "overlay_trap_b",
+        "assetKey": "black-thread-trap",
+        "x": 1600,
+        "y": 790,
+        "width": 110,
+        "height": 74,
+        "pivot": [
+          0.5,
+          0.5
+        ],
+        "layer": "overlay",
+        "hiddenAfter": "lake_trapped_mulduri_b_rescued"
+      },
+      {
+        "id": "overlay_trap_c",
+        "assetKey": "black-thread-trap",
+        "x": 2440,
+        "y": 945,
+        "width": 110,
+        "height": 74,
+        "pivot": [
+          0.5,
+          0.5
+        ],
+        "layer": "overlay",
+        "hiddenAfter": "lake_trapped_mulduri_c_rescued"
+      },
+      {
+        "id": "overlay_guard_a1",
+        "assetKey": "wet-stitchling-idle",
+        "x": 1875,
+        "y": 1100,
+        "width": 104,
+        "height": 104,
+        "pivot": [
+          0.5,
+          0.8
+        ],
+        "layer": "story",
+        "hiddenAfter": "lake_trapped_mulduri_a_rescued"
+      },
+      {
+        "id": "overlay_guard_b1",
+        "assetKey": "wet-stitchling-idle",
+        "x": 1490,
+        "y": 835,
+        "width": 104,
+        "height": 104,
+        "pivot": [
+          0.5,
+          0.8
+        ],
+        "layer": "story",
+        "hiddenAfter": "lake_trapped_mulduri_b_rescued"
+      },
+      {
+        "id": "overlay_guard_c1",
+        "assetKey": "wet-stitchling-idle",
+        "x": 2350,
+        "y": 1005,
+        "width": 104,
+        "height": 104,
+        "pivot": [
+          0.5,
+          0.8
+        ],
+        "layer": "story",
+        "hiddenAfter": "lake_trapped_mulduri_c_rescued"
+      },
+      {
+        "id": "overlay_guard_c2",
+        "assetKey": "wet-stitchling-idle",
+        "x": 2440,
+        "y": 1050,
+        "width": 104,
+        "height": 104,
+        "pivot": [
+          0.5,
+          0.8
+        ],
+        "layer": "story",
+        "hiddenAfter": "lake_trapped_mulduri_c_rescued"
       }
     ]
   },
@@ -380,6 +678,44 @@
       "x": 2450,
       "y": 790,
       "radius": 60
+    },
+    {
+      "id": "anchor_maze_exit",
+      "x": 2370,
+      "y": 520,
+      "radius": 70
+    }
+  ],
+  "blackThreadTraps": [
+    {
+      "id": "trap_a",
+      "x": 1990,
+      "y": 1085,
+      "radius": 48,
+      "rescueEvent": "lake_trapped_mulduri_a_rescued",
+      "slowMs": 1200,
+      "slowFactor": 0.5,
+      "extraPushPx": 32
+    },
+    {
+      "id": "trap_b",
+      "x": 1600,
+      "y": 790,
+      "radius": 48,
+      "rescueEvent": "lake_trapped_mulduri_b_rescued",
+      "slowMs": 1200,
+      "slowFactor": 0.5,
+      "extraPushPx": 32
+    },
+    {
+      "id": "trap_c",
+      "x": 2440,
+      "y": 945,
+      "radius": 48,
+      "rescueEvent": "lake_trapped_mulduri_c_rescued",
+      "slowMs": 1200,
+      "slowFactor": 0.5,
+      "extraPushPx": 32
     }
   ]
 }

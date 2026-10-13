@@ -9,7 +9,7 @@ import { OPENING_REQUIRED_HINT } from '../story/stage-access';
 import { FACINGS, MAX_PLAYERS, ROOM_CODE_LENGTH, RoomError } from './types';
 import type { Facing, MapPlayerDto, Room, RoomMember, RoomStateDto, WildDto, WildRuntime, WildState } from './types';
 import { StoryContentService } from '../story/story-content.service';
-import { newWaterState, resolveWater, returnTarget, inDeepWater } from './stage-water';
+import { newWaterState, resolveWater, returnTarget, inDeepWater, speedFactor } from './stage-water';
 import { checkMove, collisionOf, inBounds, inLockedZone, lockedZonesFor, reachVerdict, safePosition, solidsFor, type MoveVerdict, type Point, type ReachVerdict } from './stage-collision';
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 헷갈리는 0/O/1/I 제외
@@ -18,7 +18,7 @@ const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 헷갈리는 0/O/1/
 export type MoveResult =
   | { kind: 'ok'; x: number; y: number; dir: Facing }
   // 10-13 C2-2: 서버가 승인한 위치를 물 규칙으로 옮겼다 — current = 물살에 밀림(currentFieldId), deep_water = 깊은 물에서 마지막 안전 앵커로 복귀(currentFieldId null)
-  | { kind: 'adjusted'; x: number; y: number; dir: Facing; reason: 'current' | 'deep_water'; currentFieldId: string | null }
+  | { kind: 'adjusted'; x: number; y: number; dir: Facing; reason: 'current' | 'deep_water' | 'trap'; currentFieldId: string | null }
   | { kind: 'dropped' } | { kind: 'corrected'; x: number; y: number; reason: 'speed' | Exclude<MoveVerdict, 'ok'> };
 
 // 4-A: 방 생성·입장·퇴장·호스트 승계·재접속 유예·맵 위치 동기화(docs/save_a_turby_coop_spec.md 2, 3절).
@@ -249,7 +249,9 @@ export class RoomsService {
     if (dt < this.settings.number('move.minIntervalMs')) return { room, result: { kind: 'dropped' } }; // 전송 빈도 제한
 
     // 경과 시간 × 최대 속도 + 여유 안에서만 이동을 인정(순간이동으로 야생 터비를 가로채는 것 방지)
-    const allowed = (this.settings.number('move.maxSpeedPxPerSec') * dt) / 1000 + this.settings.number('move.slackPx');
+    // 검은 실 덫에 묶인 동안은 서버가 속도 상한을 배율만큼 낮춘다(여유 거리도 같은 배율). 클라이언트도 같은 시간 동안 스스로 느려진다
+    const slow = speedFactor(member.water, now);
+    const allowed = ((this.settings.number('move.maxSpeedPxPerSec') * dt) / 1000 + this.settings.number('move.slackPx')) * slow;
     const dist = Math.hypot(x - member.x, y - member.y);
     member.lastMoveAt = now;
     if (dist > allowed) return { room, result: { kind: 'corrected', x: member.x, y: member.y, reason: 'speed' } };
@@ -270,6 +272,7 @@ export class RoomsService {
       member.y = water.y;
       return { room, result: { kind: 'adjusted', x: water.x, y: water.y, dir, reason: 'current', currentFieldId: water.currentFieldId } };
     }
+    if (water.kind === 'trapped') return { room, result: { kind: 'adjusted', x, y, dir, reason: 'trap', currentFieldId: null } };
     if (water.kind === 'returned') {
       member.x = water.x;
       member.y = water.y;

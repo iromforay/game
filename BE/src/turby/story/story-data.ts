@@ -155,8 +155,21 @@ export const STORY_EVENTS: StoryEventDef[] = [
   // 정착지의 물들이·물결북 지점에 닿았을 때 서버가 기록한다(서버 전용, 좌표 증거). 체크포인트는 물결북 반응에서 CH02_SETTLEMENT_MET
   ev({ id: 'lake_mulduri_met', chapter: 2, allowedAt: ['CH02_STARTED'], requires: ['lake_entry_seen'], serverOnly: true, evidence: { kind: 'point', stageCode: 'lake', pointId: 'lake_mulduri' } }),
   ev({ id: 'lake_wave_drum_awakened', chapter: 2, allowedAt: ['CH02_STARTED'], requires: ['lake_mulduri_met'], serverOnly: true, evidence: { kind: 'point', stageCode: 'lake', pointId: 'lake_wave_drum' }, to: 'CH02_SETTLEMENT_MET' }),
-  // 정본(story_checkpoint_spec 7.2): 붙잡힌 물들이 구조 뒤 열리는 미로 내부 안전 물길의 영구 개방. C2-3에서 기록한다 — C2-2의 입구 문·물살은 이 사건을 쓰지 않는다(입구 문은 lake_wave_drum_awakened에서 파생). 직접 요청은 서버 전용이라 거부된다
-  ev({ id: 'lake_safe_route_opened', chapter: 2, allowedAt: ['CH02_SETTLEMENT_MET'], requires: ['lake_wave_drum_awakened'], serverOnly: true, evidence: { kind: 'none' } }),
+  // 10-13 C2-3: 붙잡힌 물들이 구조. 지점마다 서버 스토리 전투(lake_guard_*)를 이기면 서버가 한 번 기록한다(서버 전용 — 전투 시작 때 반경 증거를 이미 확인했다).
+  // 개별 구조는 아이템·통화·성장을 주지 않고 체크포인트도 바꾸지 않는다. 덫 제거와 구조는 같은 기록이다
+  ev({ id: 'lake_trapped_mulduri_a_rescued', chapter: 2, allowedAt: ['CH02_SETTLEMENT_MET'], requires: ['lake_wave_drum_awakened'], serverOnly: true, evidence: { kind: 'none' } }),
+  ev({ id: 'lake_trapped_mulduri_b_rescued', chapter: 2, allowedAt: ['CH02_SETTLEMENT_MET'], requires: ['lake_wave_drum_awakened'], serverOnly: true, evidence: { kind: 'none' } }),
+  ev({ id: 'lake_trapped_mulduri_c_rescued', chapter: 2, allowedAt: ['CH02_SETTLEMENT_MET'], requires: ['lake_wave_drum_awakened'], serverOnly: true, evidence: { kind: 'none' } }),
+  // 세 개별 구조가 모두 기록되면 같은 트랜잭션에서 서버가 한 번 기록하는 집계 사건(EVENT_AGGREGATES). 직접 요청 불가
+  ev({ id: 'lake_trapped_turbies_rescued', chapter: 2, allowedAt: ['CH02_SETTLEMENT_MET'], requires: ['lake_trapped_mulduri_a_rescued', 'lake_trapped_mulduri_b_rescued', 'lake_trapped_mulduri_c_rescued'], serverOnly: true, evidence: { kind: 'none' } }),
+  // 안전 물길 개방: 세 구조 뒤 안전 물길 지점(lake_safe_route)에서 '물풀 미로' 정본 장면을 끝까지 본 뒤 클라이언트가 완료를 요청한다(대화 구간 completesWith).
+  // 서버는 집계 사건과 지점 반경 증거를 요구하고, 이 사건과 CH02_MAZE_CLEARED 이동을 한 트랜잭션으로 기록한다. 내부 안전 물길 문(gate_lake_safe_route)의 openEvent
+  ev({ id: 'lake_safe_route_opened', chapter: 2, allowedAt: ['CH02_SETTLEMENT_MET'], requires: ['lake_trapped_turbies_rescued'], evidence: { kind: 'point', stageCode: 'lake', pointId: 'lake_safe_route' }, to: 'CH02_MAZE_CLEARED' }),
+];
+
+// 부분 사건이 모두 기록되면 같은 트랜잭션에서 함께 기록하는 집계 사건(C2-3). 이미 기록돼 있으면 다시 만들지 않는다
+export const EVENT_AGGREGATES: { id: string; parts: string[] }[] = [
+  { id: 'lake_trapped_turbies_rescued', parts: ['lake_trapped_mulduri_a_rescued', 'lake_trapped_mulduri_b_rescued', 'lake_trapped_mulduri_c_rescued'] },
 ];
 
 export const STORY_OBJECTIVES: StoryObjectiveDef[] = [
@@ -292,6 +305,21 @@ export const STORY_TRIGGERS: StoryTriggerDef[] = [
   },
   // 3) 물결북 — 누비가 다가가면 반응한다. 반응을 확인하면 CH02_SETTLEMENT_MET
   { id: 'lake_wave_drum', stageCode: 'lake', evidence: { kind: 'point', stageCode: 'lake', pointId: 'lake_wave_drum' }, event: 'lake_wave_drum_awakened', repeatable: false, play: { segmentId: 'ch02.settlement', fromEntry: 'ch02.settlement.009', endAfter: 'ch02.settlement' } },
+  // 4) 물풀 미로의 붙잡힌 물들이(C2-3) — 지점에 닿아 누르면 수호 젖은 실밥이 전투가 열린다(대화 구간 안의 storyBattle). 이기면 구조 사건 기록·덫 제거.
+  //    지고 나가면 같은 지점에서 다시 도전한다. 구조한 지점은 닫힌다(재생성 없음)
+  ...(['a', 'b', 'c'] as const).map((k): StoryTriggerDef => ({
+    id: `lake_rescue_${k}`,
+    stageCode: 'lake',
+    evidence: { kind: 'point', stageCode: 'lake', pointId: `lake_rescue_${k}` },
+    activeAt: ['CH02_SETTLEMENT_MET'],
+    requires: ['lake_wave_drum_awakened'],
+    unless: [`lake_trapped_mulduri_${k}_rescued`],
+    encounterKey: `lake_guard_${k}`,
+    repeatable: true,
+    play: { segmentId: `ch02.rescue_${k}`, endAfter: `ch02.rescue_${k}` },
+  })),
+  // 5) 안전 물길 지점 — 세 구조가 끝나야 열린다. 정본 '물풀 미로' 장면을 끝까지 보면 lake_safe_route_opened + CH02_MAZE_CLEARED(대화 구간 completesWith)
+  { id: 'lake_safe_route', stageCode: 'lake', evidence: { kind: 'point', stageCode: 'lake', pointId: 'lake_safe_route' }, activeAt: ['CH02_SETTLEMENT_MET'], requires: ['lake_trapped_turbies_rescued'], unless: ['lake_safe_route_opened'], repeatable: true, play: { segmentId: 'ch02.maze', endAfter: 'ch02.maze' } },
 ];
 export const TRIGGER_BY_ID = new Map(STORY_TRIGGERS.map((t) => [t.id, t]));
 
@@ -328,6 +356,8 @@ export interface StoryEncounterDef {
 
 export const STORY_ENCOUNTERS: StoryEncounterDef[] = [
   { key: 'forest_stitchling_ambush', chapter: 1, stageCode: 'forest', allowedAt: ['CH01_STARTED'], requires: ['forest_first_path_started', 'forest_cut_thread_inspected'], onWinEvents: ['forest_stitchling_battle_won'] },
+  // 2장 물풀 미로(C2-3): 구조 지점마다 젖은 실밥이 수호 전투. 승리하면 그 지점의 구조 사건만 기록한다(다른 지점의 승리는 증거가 아니다)
+  ...(['a', 'b', 'c'] as const).map((k) => ({ key: `lake_guard_${k}`, chapter: 2, stageCode: 'lake', allowedAt: ['CH02_SETTLEMENT_MET'] as Checkpoint[], requires: ['lake_wave_drum_awakened'], onWinEvents: [`lake_trapped_mulduri_${k}_rescued`] })),
   { key: 'forest_giant_knot', chapter: 1, stageCode: 'forest', allowedAt: ['CH01_COMPASS_ACQUIRED'], requires: ['forest_compass_granted', 'forest_hidden_path_opened'], onWinEvents: ['forest_giant_knot_defeated'] },
 ];
 

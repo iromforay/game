@@ -151,3 +151,33 @@ test('라벨 배치: 같은 줄에 붙은 유닛은 아래·위로 엇갈리고,
   const left = a.units.find((u) => u.col === bop.col - 1 && u.row === bop.row);
   if (left) assert.notEqual(labelPlacement(a, bop), labelPlacement(a, left), '보풀이와 바로 옆 실밥이 라벨은 반대편');
 });
+
+// ---------- 10-13 C2-3: 젖은 속박(wet_bind) 화면 판정 — 서버 엔진과 같은 규칙 ----------
+const unitOf = (over: Partial<BattleUnit>): BattleUnit => ({ unitId: 'p1-0', side: 'party', ownerPlayerId: 'a', participantSlot: 1, characterCode: 'nubi', name: '누비', col: 1, row: 4, hp: 10, maxHp: 10, ap: 4, maxAp: 4, stunned: false, inactive: false, ...over });
+const wet = { kind: 'wet_bind' as const, turnsLeft: 1, movePenalty: 1, sourceUnitId: 'e', appliedRound: 1 };
+
+test('젖은 속박: 이동 가능 거리 1칸 감소·최소 1칸, 태그 표시', () => {
+  assert.equal(moveAllowance(unitOf({ ap: 4, statuses: [wet] })), 3);
+  assert.equal(moveAllowance(unitOf({ ap: 1, statuses: [wet] })), 1, 'AP 1이면 줄지 않는다');
+  assert.equal(moveAllowance(unitOf({ ap: 0, statuses: [wet] })), 0);
+  // 기존 bind와 함께: bind -1, wet_bind -1
+  assert.equal(moveAllowance(unitOf({ ap: 5, statuses: [wet, { kind: 'bind', turnsLeft: 2, movePenalty: 1, sourceUnitId: 'e', appliedRound: 1 }] })), 3);
+  assert.deepEqual(unitTags(unitOf({ statuses: [wet] })), ['젖은 속박']);
+});
+
+test('호수 일반 적 시트 계약: 젖은 실밥이 512×128(4×128), 젖은 박음이 640×160(4×160), 키↔캐릭터 코드 연결', () => {
+  const root = fileURLToPath(new URL('../src/assets/sprites/enemies/', import.meta.url));
+  const dims = (f: string) => {
+    const b = readFileSync(root + f);
+    assert.deepEqual([...b.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
+    return [b.readUInt32BE(16), b.readUInt32BE(20)];
+  };
+  assert.deepEqual(dims('wet-stitchling-idle.png'), [512, 128]);
+  assert.deepEqual(dims('wet-sewn-doll-idle.png'), [640, 160]);
+  const reg = readFileSync(fileURLToPath(new URL('../src/assets/registry.ts', import.meta.url)), 'utf8');
+  assert.match(reg, /'wet-stitchling-idle': \{ size: 128, frames: 4, fps: 6 \}/);
+  assert.match(reg, /'wet-sewn-doll-idle': \{ size: 160, frames: 4, fps: 5 \}/);
+  assert.match(reg, /wet_stitchling: 'wet-stitchling-idle'/);
+  const trap = readFileSync(fileURLToPath(new URL('../src/assets/world/lake/props/black-thread-trap.png', import.meta.url)));
+  assert.deepEqual([trap.readUInt32BE(16), trap.readUInt32BE(20)], [1536, 1024]);
+});

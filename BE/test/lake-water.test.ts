@@ -148,7 +148,9 @@ test('물결북 완료 뒤에도 lake_safe_route_opened는 기록되지 않는�
   const gate = C.gates.find((g) => g.id === 'gate_reed_maze')!;
   assert.equal(gate.openEvent, 'lake_wave_drum_awakened');
   assert.equal(OPEN.includes('lake_safe_route_opened'), false);
-  assert.equal(JSON.stringify(LAKE).includes('lake_safe_route_opened'), false, '지역 데이터가 이 사건을 요구·표시 조건으로 쓰지 않는다');
+  // 입구 문·물살은 이 사건을 쓰지 않는다 — 이 사건은 내부 안전 물길 문(gate_lake_safe_route)과 안전 물길 후 목표 문구만 쓴다
+  assert.deepEqual(LAKE.layout!.gates.filter((g) => g.openEvent === 'lake_safe_route_opened').map((g) => g.id), ['gate_lake_safe_route']);
+  assert.equal(WATER.currents.some((f) => f.requires.includes('lake_safe_route_opened')), false);
 });
 
 test('물살 밖의 이동은 일반 이동과 같다(위치 그대로 승인, 밀림 없음)', async () => {

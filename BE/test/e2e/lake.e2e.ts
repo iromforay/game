@@ -27,7 +27,7 @@ const pointOf = (id: string) => LAKE.points.find((p) => p.id === id)!;
 const SMALL = { width: 640, height: 360 };
 const MAP_READY = 's.map && s.map.ready && s.map.inRoom && s.map.positioned && s.map.story';
 const GOAL_FOLLOW_THREAD = '검은 실이 사라진 방향을 따라가자';
-const GOAL_FOLLOW_RIPPLE = '물결북의 파문을 따라 물풀 미로를 지나가자.';
+const GOAL_FOLLOW_RIPPLE = '붙잡힌 물들이를 구하자. 0/3';
 
 type StoryState = { points: string[]; gates: Record<string, boolean>; prompt: string | null; promptText: string | null; busy: boolean; interact: { x: number; y: number }; interactRect: { x: number; y: number; w: number; h: number }; goal: string | null; goalShown: string | null };
 const story = async (g: Game) => (await g.state()).map.story as StoryState;
@@ -84,12 +84,12 @@ async function assertDrumIdle(g: Game) {
   assert.equal(drum.assetKey, 'wave-drum-idle', '반응 전 물결북 그림');
   assert.ok(drum.art && drum.art.width >= 88 && drum.art.width <= 112);
   assert.equal(r.pointArts.find((p) => p.id === 'lake_mulduri')?.assetKey ?? 'turby-muldeuli', 'turby-muldeuli');
-  assert.deepEqual(r.overlays.filter((k) => k !== 'current-flow'), []); // 물살 그림(current-flow)은 상태와 무관하게 있다
+  assert.deepEqual(r.overlays.filter((k) => !['current-flow', 'black-thread-trap', 'wet-stitchling-idle'].includes(k)), []); // 물살 그림(current-flow)은 상태와 무관하게 있다
 }
 async function assertDrumActive(g: Game) {
   const r = await render(g);
   assert.equal(r.pointArts.some((p) => p.assetKey === 'wave-drum-idle'), false, 'idle 그림이 남음');
-  assert.deepEqual(r.overlays.filter((k) => k !== 'current-flow').sort(), ['wave-drum-active', 'wave-path']);
+  assert.deepEqual(r.overlays.filter((k) => !['current-flow', 'black-thread-trap', 'wet-stitchling-idle'].includes(k)).sort(), ['wave-drum-active', 'wave-path']);
   const path = r.overlayPlans.find((o) => o.assetKey === 'wave-path')!;
   const active = r.overlayPlans.find((o) => o.assetKey === 'wave-drum-active')!;
   assert.ok(path.depth < 0 && active.depth < 0, '플레이어·NPC(깊이 0)보다 아래');
@@ -147,7 +147,7 @@ test('2장 C2-1 ①: 호수 입장 → 도입 → 새로고침(반복 없음) �
     assert.deepEqual([db.growth, db.items], [before.growth, before.items], '정착지 단계에도 보상 없음');
     s = await story(g);
     assert.equal(s.goalShown, GOAL_FOLLOW_RIPPLE);
-    assert.deepEqual(s.points, [], '상호작용 지점 없음(임시 미로 표식 제거)');
+    assert.deepEqual([...s.points].sort(), ['lake_rescue_a', 'lake_rescue_b', 'lake_rescue_c'], '구조 지점 3곳(임시 미로 표식은 없다)');
     assert.equal(s.gates.gate_reed_maze, true, '물결북 반응과 함께 물풀문이 열린다');
     // 회색상자 지도 자체의 표준 안내(기능 맵 단계)는 제외하고, 이번 단계의 대기 상태에 개발 진행 문구를 쓰지 않는다
     assert.equal((await texts(g)).some((t) => /다음 개발|개발 단계|TODO/.test(t)), false, '개발 진행 문구가 화면에 없다');
@@ -159,7 +159,7 @@ test('2장 C2-1 ①: 호수 입장 → 도입 → 새로고침(반복 없음) �
     s = await story(g);
     assert.equal(dbOf(device).checkpoint, 'CH02_SETTLEMENT_MET');
     assert.equal(s.goalShown, GOAL_FOLLOW_RIPPLE);
-    assert.deepEqual(s.points, []);
+    assert.deepEqual([...s.points].sort(), ['lake_rescue_a', 'lake_rescue_b', 'lake_rescue_c']);
     assert.equal(s.gates.gate_reed_maze, true, '새로고침 뒤에도 열린 문');
 
     // 6) 미로 안쪽 안전 물길 사건(lake_safe_route_opened)은 기록되지 않는다(C2-3 구조 뒤)

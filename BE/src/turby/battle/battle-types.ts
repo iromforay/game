@@ -55,15 +55,17 @@ export interface BattleUnit {
   fled?: boolean; // 연출 표시 상태
 }
 
-// 지속 턴 상태 이상(M4-A). 현재 종류는 속박(이동력 감소)뿐 — 수치는 전투 정의 데이터에서 온다
+// 지속 턴 상태 이상(M4-A). bind = 지속 턴 동안 이동력 감소. wet_bind(10-13 C2-3 젖은 속박) = 다음 이동 행동 한 번의 이동 가능 거리만 1칸 줄고(최소 1칸) 즉시 해제 —
+// 중첩·지속 시간 갱신 없음. 수치는 전투 정의 데이터에서 온다(wet_bind는 turns·movePenalty를 쓰지 않는다)
+export type StatusKind = 'bind' | 'wet_bind';
 export interface StatusEffectDef {
-  kind: 'bind';
+  kind: StatusKind;
   turns: number; // 걸린 뒤 라운드가 몇 번 시작될 때까지 유지
   movePenalty: number; // 이동에 쓸 수 있는 AP 감소량(0 미만으로 내려가지 않음)
 }
 
 export interface StatusEffect {
-  kind: 'bind';
+  kind: StatusKind;
   turnsLeft: number;
   movePenalty: number;
   sourceUnitId: string | null;

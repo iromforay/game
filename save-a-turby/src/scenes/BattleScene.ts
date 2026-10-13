@@ -8,6 +8,7 @@ import { battleClient } from '../net/battleClient';
 import type { ActionBody, BattleEnded, BattleEvent, BattleResponse, BattleSnapshot, BattleUnit, BattleUpdate } from '../net/battleTypes';
 import { showToast, feltPanel, pillButton, TEXT } from '../ui/kit';
 import { loadWorldImages } from '../assets/loader';
+import { ENEMY_SHEET_OF, SPRITESHEET_FRAMES } from '../assets/registry';
 import coopSlots from '../data/coop-slots.json';
 import { actionHint, battleHudLayout, clampLabel, goalSummary, resultLayout, unitLabel, type BattleHudLayout } from '../battle/battleView';
 import { watchLayout } from '../ui/relayout';
@@ -310,8 +311,17 @@ export class BattleScene extends Phaser.Scene {
     const { x, y } = this.tileToWorld(u.col, u.row);
     const container = this.add.container(x, y);
     const hasImage = this.textures.exists(`turby-${u.characterCode}`);
+    const sheetKey = ENEMY_SHEET_OF[u.characterCode];
     const fill = u.side === 'party' ? 0xffd27f : u.side === 'neutral' ? 0x9fe58a : 0x7fc8ff;
-    const body = hasImage ? this.add.image(0, 0, `turby-${u.characterCode}`).setDisplaySize(52, 52) : this.add.circle(0, 0, u.partOf ? 16 : 24, fill);
+    let body: Phaser.GameObjects.Image | Phaser.GameObjects.Arc | Phaser.GameObjects.Sprite;
+    if (sheetKey && this.textures.exists(sheetKey)) {
+      // 호수 일반 적: 4프레임 idle 시트(알파는 판정에 쓰지 않는다 — 클릭 영역은 아래 setInteractive가 정한 표시 상자)
+      const animKey = `${sheetKey}-battle`;
+      if (!this.anims.exists(animKey)) this.anims.create({ key: animKey, frames: this.anims.generateFrameNumbers(sheetKey, { start: 0, end: SPRITESHEET_FRAMES[sheetKey].frames - 1 }), frameRate: SPRITESHEET_FRAMES[sheetKey].fps, repeat: -1 });
+      body = this.add.sprite(0, 0, sheetKey).setDisplaySize(64, 64).play(animKey);
+    } else {
+      body = hasImage ? this.add.image(0, 0, `turby-${u.characterCode}`).setDisplaySize(52, 52) : this.add.circle(0, 0, u.partOf ? 16 : 24, fill);
+    }
     const selectRing = this.add.circle(0, 0, 29).setStrokeStyle(3, 0x9fe58a, 0);
     const ring = this.add.circle(0, 0, 26).setStrokeStyle(3, u.side === 'party' ? slotNum(u.participantSlot) : u.side === 'neutral' ? 0x4a9a4a : 0x2d6fa3);
     container.add([selectRing, ring, body]);

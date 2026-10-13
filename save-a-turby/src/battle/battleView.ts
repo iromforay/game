@@ -23,7 +23,9 @@ export function isBlocked(snap: BattleSnapshot, col: number, row: number) {
 // 이동에 쓸 수 있는 AP(속박 감소량 반영, 0 미만 없음)
 export function moveAllowance(u: BattleUnit) {
   const penalty = (u.statuses ?? []).reduce((sum, s) => sum + (s.kind === 'bind' ? s.movePenalty : 0), 0);
-  return Math.max(0, u.ap - penalty);
+  const base = Math.max(0, u.ap - penalty);
+  // 젖은 속박(서버 엔진과 같은 규칙): 이번 이동만 1칸 감소, 최소 1칸 보장
+  return (u.statuses ?? []).some((s) => s.kind === 'wet_bind') && base >= 1 ? Math.max(1, base - 1) : base;
 }
 
 // 갈 수 있는 칸과 비용. 막힌 칸이 없으면 맨해튼 거리, 있으면 막힌 칸을 피한 최단 경로(유닛은 경로를 막지 않고 도착 칸만 비어 있어야 함)
@@ -104,7 +106,10 @@ export function unitTags(u: BattleUnit): string[] {
   if (u.inactive) tags.push('이탈');
   if (u.side === 'neutral') tags.push('보호 대상');
   if (u.invulnerable) tags.push('부위 먼저');
-  for (const s of u.statuses ?? []) if (s.kind === 'bind') tags.push(`속박 ${s.turnsLeft}`);
+  for (const s of u.statuses ?? []) {
+    if (s.kind === 'bind') tags.push(`속박 ${s.turnsLeft}`);
+    else if (s.kind === 'wet_bind') tags.push('젖은 속박');
+  }
   return tags;
 }
 

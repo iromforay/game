@@ -190,6 +190,128 @@
           "soundCue": null
         }
       ]
+    },
+    {
+      "segmentId": "ch02.rescue_a",
+      "resumeFrom": "CH02_SETTLEMENT_MET",
+      "replayOnResume": false,
+      "completesWith": null,
+      "entries": [
+        {
+          "kind": "storyBattle",
+          "dialogueId": "ch02.rescue_a.001",
+          "encounterKey": "lake_guard_a"
+        }
+      ]
+    },
+    {
+      "segmentId": "ch02.rescue_b",
+      "resumeFrom": "CH02_SETTLEMENT_MET",
+      "replayOnResume": false,
+      "completesWith": null,
+      "entries": [
+        {
+          "kind": "storyBattle",
+          "dialogueId": "ch02.rescue_b.001",
+          "encounterKey": "lake_guard_b"
+        }
+      ]
+    },
+    {
+      "segmentId": "ch02.rescue_c",
+      "resumeFrom": "CH02_SETTLEMENT_MET",
+      "replayOnResume": false,
+      "completesWith": null,
+      "entries": [
+        {
+          "kind": "storyBattle",
+          "dialogueId": "ch02.rescue_c.001",
+          "encounterKey": "lake_guard_c"
+        }
+      ]
+    },
+    {
+      "segmentId": "ch02.maze",
+      "resumeFrom": "CH02_SETTLEMENT_MET",
+      "replayOnResume": true,
+      "completesWith": "lake_safe_route_opened",
+      "entries": [
+        {
+          "kind": "narration",
+          "dialogueId": "ch02.maze.001",
+          "text": "주인공과 누비, 물들이는 물결북의 파문을 따라 물풀 미로로 들어간다. 일정한 간격으로 밀려오는 물살이 이동 방향을 바꾸고, 검은 실 덫이 발목을 붙잡는다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch02.maze.002",
+          "text": "미로 곳곳에는 물들이들이 검은 재봉실로 물풀에 박혀 있다. 검은 실을 끊어 구하면 안전한 물길을 알려 준다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch02.maze.003",
+          "text": "한 물풀 벽에는 동일한 간격의 바늘구멍이 길게 이어져 있다. 구멍 끝에서 기계음이 물속을 타고 들려온다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch02.maze.004",
+          "text": "타닥, 타닥, 타닥……",
+          "cameraCue": null,
+          "soundCue": "lake-machine-tap"
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch02.maze.005",
+          "speaker": "muldeuli",
+          "speakerLabel": "물들이",
+          "text": "저 소리가 들린 뒤부터 검은 실이 나타났어. 호수 바닥 어딘가에서 계속 무언가를 꿰매는 것 같아.",
+          "portrait": null,
+          "expression": "worried",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch02.maze.006",
+          "text": "기계음이 멈추는 순간, 멀리 매달려 있던 푸른 실 한 가닥이 반듯하게 끊어져 물속으로 떨어진다. 무엇이 잘랐는지는 보이지 않는다.",
+          "cameraCue": "lake-blue-thread-cut",
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch02.maze.007",
+          "speaker": "player",
+          "speakerLabel": "{playerName}",
+          "text": "숲에서 봤던 잘린 실과 똑같아.",
+          "portrait": "player",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch02.maze.008",
+          "speaker": "nubi",
+          "speakerLabel": "누비",
+          "text": "우리를 따라온 걸까…… 아니면 처음부터 여기에도 있었던 걸까?",
+          "portrait": "nubi",
+          "expression": "worried",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch02.maze.009",
+          "text": "두 사람은 답을 찾지 못한 채 염색 샘으로 향한다.",
+          "cameraCue": null,
+          "soundCue": null
+        }
+      ]
     }
   ]
 }

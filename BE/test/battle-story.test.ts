@@ -142,3 +142,50 @@ test('정의 없는 기존 야생 전투: 새 필드 없이 기존 결과와 같
   act(s, { type: 'move', unitId: 'p1-0', targetCol: 0, targetRow: 7 });
   assert.deepEqual([s.phase, s.outcome], ['resolved', 'draw']);
 });
+
+// ---------- 10-13 C2-3: 젖은 속박(wet_bind) ----------
+
+const WET = { kind: 'wet_bind' as const, turns: 1, movePenalty: 1 };
+const wetEnemy = (s: Partial<BattleUnitDefinition> = {}) => enemy({ unitId: 'e1', characterCode: 'wet_stitchling', name: '젖은 실밥이', col: 2, row: 4, attack: 1, maxHp: 100, onHit: WET, ...s });
+
+test('젖은 속박: 적의 지정 공격이 적중하면 대상에게 1회 걸리고, 다음 이동 한 번의 가능 거리만 1칸 줄고 즉시 해제된다', () => {
+  const s = start({ key: 'k', units: [wetEnemy()] }, [hero({ actionPower: 4 })]);
+  const evts = act(s, { type: 'end' }); // 적 차례: 인접한 누비를 공격
+  assert.ok(types(evts).includes('status'));
+  assert.deepEqual(u(s, 'p1-0').statuses?.map((x) => x.kind), ['wet_bind']);
+  // AP 4 → 이동 가능 3칸. 4칸은 불가, 3칸은 가능하고 이동하면 해제
+  assert.equal(code(() => act(s, { type: 'move', unitId: 'p1-0', targetCol: 0, targetRow: 7 })), 'OUT_OF_RANGE', '(1,4)→(0,7)=4칸 > 3');
+  act(s, { type: 'move', unitId: 'p1-0', targetCol: 1, targetRow: 7 }); // 3칸
+  assert.deepEqual(u(s, 'p1-0').statuses ?? [], [], '이동 한 번에 해제');
+  assert.equal(u(s, 'p1-0').ap, 1);
+});
+
+test('젖은 속박: 최소 1칸 보장(AP 1이면 줄지 않음), 공격·턴 종료는 막지도 소비하지도 않으며, 중첩·지속 갱신이 없다', () => {
+  const s = start({ key: 'k', units: [wetEnemy({ maxHp: 500 })] }, [hero({ actionPower: 1 })]);
+  act(s, { type: 'end' }); // 적이 공격 → wet_bind (적 AP 1)
+  assert.deepEqual(u(s, 'p1-0').statuses?.map((x) => x.kind), ['wet_bind']);
+  // 공격은 막지 않고 속박을 소비하지 않는다
+  act(s, { type: 'attack', unitId: 'p1-0', targetUnitId: 'e1' });
+  assert.equal(u(s, 'p1-0').statuses?.length, 1, '공격은 소비하지 않는다');
+  // 라운드가 지나도(시간으로) 풀리지 않고, 적이 또 맞혀도 중첩·갱신 없음
+  act(s, { type: 'end' });
+  act(s, { type: 'end' });
+  const w = u(s, 'p1-0').statuses!;
+  assert.equal(w.length, 1);
+  assert.equal(w[0].kind, 'wet_bind');
+  // AP 1: 이동 가능 거리 1칸(0칸이 되지 않는다)
+  assert.equal(u(s, 'p1-0').ap, 1);
+  act(s, { type: 'move', unitId: 'p1-0', targetCol: 1, targetRow: 5 });
+  assert.deepEqual(u(s, 'p1-0').statuses ?? [], []);
+});
+
+test('젖은 속박과 기존 bind는 별개이며 함께 걸릴 수 있다(bind는 지속 턴, wet_bind는 이동 1회)', () => {
+  const s = start({ key: 'k', units: [wetEnemy({ onHit: WET }), enemy({ unitId: 'e2', col: 1, row: 5, attack: 1, maxHp: 100, onHit: { kind: 'bind', turns: 2, movePenalty: 1 } })] }, [hero({ actionPower: 5 })]);
+  act(s, { type: 'end' });
+  const kinds = u(s, 'p1-0').statuses!.map((x) => x.kind).sort();
+  assert.deepEqual(kinds, ['bind', 'wet_bind']);
+  // AP 5 → bind -1 = 4, wet_bind -1 = 3칸
+  assert.equal(code(() => act(s, { type: 'move', unitId: 'p1-0', targetCol: 0, targetRow: 7 })), 'OUT_OF_RANGE', '4칸 불가');
+  act(s, { type: 'move', unitId: 'p1-0', targetCol: 1, targetRow: 7 });
+  assert.deepEqual(u(s, 'p1-0').statuses!.map((x) => x.kind), ['bind'], 'wet_bind만 해제');
+});

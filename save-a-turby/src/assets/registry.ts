@@ -68,3 +68,12 @@ export const PORTRAIT_IMAGES: Record<string, string> = Object.fromEntries(
 // 스프라이트시트(96x96 프레임) 키 — 나머지는 일반 이미지로 로드
 export const SPRITESHEET_KEYS = ['child-walk', 'child-idle', 'villager-a-walk', 'villager-b-walk', 'merchant-idle', 'nubi-field'];
 
+// 10-13 C2-3: 프레임 크기가 96이 아닌 시트(호수 일반 적). 가로 4프레임 idle. fps는 권장 재생 속도(젖은 실밥이 5~7, 젖은 박음이 4~6)
+export const SPRITESHEET_FRAMES: Record<string, { size: number; frames: number; fps: number }> = {
+  'wet-stitchling-idle': { size: 128, frames: 4, fps: 6 },
+  'wet-sewn-doll-idle': { size: 160, frames: 4, fps: 5 },
+};
+
+// 전투 정의의 characterCode → 전투·지도에서 쓰는 적 시트 키(없으면 기존 터비 그림/임시 도형)
+export const ENEMY_SHEET_OF: Record<string, string> = { wet_stitchling: 'wet-stitchling-idle', wet_sewn_doll: 'wet-sewn-doll-idle' };
+
