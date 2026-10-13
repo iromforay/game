@@ -1,12 +1,12 @@
 // 10-13 C2-1: 2장 호수 입구·정착지·물결북 — 체크포인트 전이, 서버 권위, 멱등, 재접속, 대화·맵 데이터 정합
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { HttpException } from '@nestjs/common';
 import { FakeDb } from './helpers/fake-prisma';
 import { StoryService } from '../src/turby/story/story.service';
-import { StoryContentService, type StageStoryData } from '../src/turby/story/story-content.service';
+import { StoryContentService, validateRender, type StageStoryData } from '../src/turby/story/story-content.service';
 import { StageAccessService } from '../src/turby/story/stage-access.service';
 import { collisionOf, lockedZonesFor, reachVerdict, solidsFor } from '../src/turby/rooms/stage-collision';
 import { resumeOf } from '../src/turby/story/story-rules';
@@ -279,4 +279,89 @@ test('대화 API: 1장을 마친 계정만 ch02 대화를 받는다', async () =
   assert.ok(await done.service.dialogue(P1, 'ch02'));
   const early = setup('OPENING_COMPLETE', ['opening_fall_completed', 'opening_name_saved', 'story_nubi_granted'], 0);
   assert.equal(await codeOf(early.service.dialogue(P1, 'ch02')), 'CHAPTER_LOCKED');
+});
+
+// ---------- 10-13 v1c: 물결북 에셋 연결(상태별 표시) ----------
+
+const MET = [...CH01_DONE, 'lake_entry_seen', 'lake_mulduri_met'];
+const AWAKENED = [...MET, 'lake_wave_drum_awakened'];
+const WAVE_ASSETS = ['wave-drum-idle', 'wave-drum-active', 'wave-path'];
+
+test('물결북 반응 전: 이야기 지점 그림은 wave-drum-idle(88~112px)이고 오버레이(active·파문)는 내려오지 않으며, 물들이는 turby-muldeuli다', async () => {
+  const s = setup('CH02_STARTED', MET);
+  const v = await s.service.stageData(P1, 'lake');
+  const drum = v.points.find((p) => p.id === 'lake_wave_drum')!;
+  assert.equal(drum.assetKey, 'wave-drum-idle');
+  assert.ok(drum.art && drum.art.width >= 88 && drum.art.width <= 112 && drum.art.height >= 88 && drum.art.height <= 112, '표시 크기 88~112px(서버 데이터가 단일 출처)');
+  assert.deepEqual(drum.art!.pivot, [0.5, 0.78]);
+  assert.deepEqual(v.render.overlays, [], '반응 전에는 active·파문이 없다');
+  const fresh = setup('CH02_STARTED', [...CH01_DONE, 'lake_entry_seen']);
+  const early = await fresh.service.stageData(P1, 'lake');
+  assert.equal(early.points.find((p) => p.id === 'lake_mulduri')!.assetKey, 'turby-muldeuli');
+  assert.ok(early.points.find((p) => p.id === 'lake_mulduri')!.art, '물들이도 표시 크기를 서버가 정한다(원본 512px 그대로 그리지 않는다)');
+});
+
+test('물결북 반응 뒤: idle 지점 그림이 남지 않고 active·wave-path 오버레이가 내려오며, 같은 중심·피벗·크기다', async () => {
+  const s = setup('CH02_SETTLEMENT_MET', AWAKENED);
+  const v = await s.service.stageData(P1, 'lake');
+  assert.equal(v.points.some((p) => p.id === 'lake_wave_drum'), false, 'idle 그림이 있던 지점은 사라진다');
+  assert.equal(v.points.some((p) => p.assetKey === 'wave-drum-idle'), false);
+  const byKey = new Map(v.render.overlays.map((o) => [o.assetKey, o]));
+  assert.deepEqual([...byKey.keys()].sort(), ['wave-drum-active', 'wave-path']);
+  const active = byKey.get('wave-drum-active')!;
+  const idle = LAKE.storyPoints!.find((p) => p.id === 'lake_wave_drum')!.art!;
+  const drumPoint = pointOf('lake_wave_drum');
+  assert.deepEqual([active.x, active.y, active.width, active.height, active.pivot], [drumPoint.x, drumPoint.y, idle.width, idle.height, idle.pivot], 'idle과 같은 좌표·크기·피벗');
+  assert.equal(active.layer, 'story');
+  assert.ok(active.width >= 88 && active.width <= 112);
+});
+
+test('wave-path: 물결북에서 미로 입구 방향, 420~560×140~190px, 맵 안, 알파 0.72 이하, 바닥(overlay) 층 — 충돌·판정에 쓰이지 않는다', async () => {
+  const s = setup('CH02_SETTLEMENT_MET', AWAKENED);
+  const v = await s.service.stageData(P1, 'lake');
+  const path = v.render.overlays.find((o) => o.assetKey === 'wave-path')!;
+  assert.ok(path.width >= 420 && path.width <= 560 && path.height >= 140 && path.height <= 190, `${path.width}×${path.height}`);
+  assert.ok(path.alpha! > 0 && path.alpha! <= 0.72);
+  assert.equal(path.layer, 'overlay');
+  const drum = pointOf('lake_wave_drum');
+  const maze = pointOf('lake_maze_entrance');
+  // 방향: 파문 축(회전각)이 물결북→미로 입구 방위각과 5° 이내
+  const want = (Math.atan2(maze.y - drum.y, maze.x - drum.x) * 180) / Math.PI;
+  assert.ok(Math.abs((path.rotation ?? 0) - want) <= 5, `회전 ${path.rotation}° / 방위 ${want.toFixed(1)}°`);
+  assert.ok(maze.x > drum.x, '미로 입구는 물결북의 오른쪽(파문이 시작해 향하는 쪽)');
+  // 범위: 시작점(피벗)에서 회전축을 따라 끝점까지가 맵 안, 물결북과 미로 입구 근처에 닿는다
+  const px = path.pivot![0], r = (path.rotation! * Math.PI) / 180;
+  const len = path.width * (1 - px);
+  const end = { x: path.x + Math.cos(r) * len, y: path.y + Math.sin(r) * len };
+  const half = (path.height / 2) * Math.abs(Math.cos(r)) + (path.width * px * Math.abs(Math.sin(r)));
+  assert.ok(path.x - path.width * px >= 0 && end.x <= 3200 && end.y - half >= 0 && end.y + half <= 2400, `맵 안 ${JSON.stringify(end)}`);
+  assert.ok(Math.hypot(end.x - maze.x, end.y - maze.y) <= maze.radius + 60, '끝이 미로 입구 근처');
+  // 오버레이는 충돌 체로 내려오지 않는다: 반응 뒤에도 layout 막힌 곳 수는 그대로
+  const before = await setup('CH02_STARTED', MET).service.stageData(P1, 'lake');
+  assert.deepEqual(v.layout!.blockers, before.layout!.blockers);
+});
+
+test('서버 지역 데이터 검증: art·rotation·alpha가 잘못되면 서버가 뜨지 않는다', () => {
+  const bad = (patch: (d: StageStoryData) => void) => {
+    const d = JSON.parse(JSON.stringify(LAKE)) as StageStoryData;
+    patch(d);
+    assert.throws(() => validateRender(d, 'lake'), /render 검증 실패/);
+  };
+  bad((d) => (d.storyPoints![1].art!.width = 0));
+  bad((d) => (d.storyPoints![1].art!.pivot = [2, 0] as never));
+  bad((d) => (d.render!.overlays![0].alpha = 1.5));
+  bad((d) => (d.render!.overlays![0].rotation = 900));
+  assert.doesNotThrow(() => validateRender(LAKE, 'lake'));
+});
+
+test('세 전달 에셋 키가 클라이언트 런타임 폴더에 실제로 있고(키=파일명), 지역 데이터가 쓰는 월드 키는 전부 존재한다', () => {
+  const root = join(__dirname, '..', '..', 'save-a-turby', 'src', 'assets');
+  const world = join(root, 'world', 'lake');
+  const files = [join(world, 'props', 'wave-drum-idle.png'), join(world, 'props', 'wave-drum-active.png'), join(world, 'fx', 'wave-path.png')];
+  for (const f of files) assert.ok(existsSync(f), f);
+  const used = new Set<string>([...(LAKE.storyPoints ?? []).map((p) => p.assetKey), ...(LAKE.render?.overlays ?? []).map((o) => o.assetKey)]);
+  for (const k of WAVE_ASSETS) assert.ok(used.has(k), `${k}를 지역 데이터가 사용`);
+  const characters = ['nubi', 'bopuli', 'muldeuli', 'pokshini', 'geumbiti', 'ganeuri', 'mujigae'].map((c) => `turby-${c}`);
+  const known = (k: string) => k === 'placeholder-point' || characters.includes(k) || WAVE_ASSETS.includes(k);
+  for (const k of used) assert.ok(known(k), `알 수 없는 월드 키: ${k}`);
 });

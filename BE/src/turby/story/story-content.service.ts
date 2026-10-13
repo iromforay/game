@@ -49,7 +49,7 @@ export interface StageStoryData {
   regions: StageRegion[];
   points: StagePoint[];
   objects?: { id: string; objectiveKey: string; group: string; assetKey: string; label: string; prompt: string }[];
-  storyPoints?: { id: string; kind: string; assetKey: string; label: string; prompt: string }[];
+  storyPoints?: { id: string; kind: string; assetKey: string; label: string; prompt: string; art?: StagePointArt }[]; // art: 그림 표시 크기·피벗(서버 데이터가 단일 출처 — 원본 PNG 크기를 쓰지 않는다)
   // 10-13 C2-1: 이야기 진행에 따른 목표 문구(상단 목표 패널). 위에서부터 첫 번째로 맞는 것 — requires(모두 완료)·unless(모두 완료면 닫힘). 수집 목표(전달 delivery)가 없을 때만 쓴다
   goals?: { id: string; text: string; requires?: string[]; unless?: string[] }[];
   // visibleAfter: 그 이벤트 전에는 지도·화면에 내려 주지 않는다(숨은 구역의 내부 정보). 통과 불가 판정은 표시 여부와 무관하게 서버가 한다
@@ -67,6 +67,11 @@ export interface StageGateData extends StageRect {
   openAssetKey?: string | null;
   art?: { x: number; y: number; width: number; height: number; pivot?: [number, number] }; // x·y = 피벗이 놓이는 월드 좌표(피벗 생략 시 중심)
 }
+export interface StagePointArt {
+  width: number;
+  height: number;
+  pivot?: [number, number]; // 이미지 안의 기준점(0~1), 지점 좌표에 놓인다. 생략 시 (0.5, 0.7)
+}
 export interface StageOverlayData {
   id: string;
   assetKey: string;
@@ -79,6 +84,8 @@ export interface StageOverlayData {
   forPoints?: string[]; // 이 그림이 대신 보여 주는 이야기 지점 ID — 최종 표식 모드에서 그 지점의 임시 고리를 없앨 근거
   visibleAfter?: string; // 이 이벤트 뒤에만
   hiddenAfter?: string; // 이 이벤트 뒤에는 사라진다
+  rotation?: number; // 도(°), 시계 방향(화면 좌표). 안내 파문처럼 방향이 있는 그림(10-13 v1c)
+  alpha?: number; // 0 초과 1 이하(기본 1)
 }
 
 // 지역 데이터의 render·문 그림 블록 검증 — 잘못되면 서버가 뜨지 않는다(geometry 계약과 같은 원칙)
@@ -110,8 +117,18 @@ export function validateRender(data: StageStoryData, stageCode: string): void {
       pivot(o.pivot, `${at}.pivot`);
       if (o.layer !== undefined && o.layer !== 'overlay' && o.layer !== 'story') bad.push(`${at}.layer: overlay 또는 story`);
       if (o.forPoints !== undefined && !(Array.isArray(o.forPoints) && o.forPoints.every((x) => typeof x === 'string'))) bad.push(`${at}.forPoints: 지점 ID 배열`);
+      if (o.rotation !== undefined && !(num(o.rotation) && Math.abs(o.rotation) <= 360)) bad.push(`${at}.rotation: -360~360 숫자(도)`);
+      if (o.alpha !== undefined && !(num(o.alpha) && o.alpha > 0 && o.alpha <= 1)) bad.push(`${at}.alpha: 0 초과 1 이하`);
       for (const f of ['visibleAfter', 'hiddenAfter'] as const) if (o[f] !== undefined && typeof o[f] !== 'string') bad.push(`${at}.${f}: 이벤트 이름이 아니다`);
     });
+  }
+  for (const p of data.storyPoints ?? []) {
+    key(p.assetKey, `storyPoints(${p.id}).assetKey`);
+    if (p.art !== undefined) {
+      const w = p.art.width, h = p.art.height;
+      if (!num(w) || !num(h) || w <= 0 || h <= 0) bad.push(`storyPoints(${p.id}).art: width·height는 0보다 큰 숫자`);
+      pivot(p.art.pivot, `storyPoints(${p.id}).art.pivot`);
+    }
   }
   for (const g of data.layout?.gates ?? []) {
     const at = `layout.gates(${g.id})`;

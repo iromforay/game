@@ -33,6 +33,7 @@ export interface StagePointView {
   assetKey: string;
   label: string;
   prompt: string;
+  art?: { width: number; height: number; pivot?: [number, number] }; // 그림 표시 크기·피벗(서버 데이터가 단일 출처). 없으면 원본 크기
 }
 export interface StageView {
   stageCode: string;
@@ -41,7 +42,7 @@ export interface StageView {
   objects: StageObject[];
   points: StagePointView[];
   gates: (StageRect & { open: boolean; closedAssetKey?: string | null; openAssetKey?: string | null; art?: { x: number; y: number; width: number; height: number; pivot?: [number, number] } | null })[];
-  render?: { markerMode?: 'fallback' | 'final'; background: { assetKey: string } | null; backgroundLocked?: string; unlockedBy?: string; backgroundUnlocked?: boolean; overlays: { id: string; assetKey: string; x: number; y: number; width: number; height: number; pivot?: [number, number]; layer?: 'overlay' | 'story'; forPoints?: string[] }[] }; // 구버전 서버 응답에는 없다
+  render?: { markerMode?: 'fallback' | 'final'; background: { assetKey: string } | null; backgroundLocked?: string; unlockedBy?: string; backgroundUnlocked?: boolean; overlays: { id: string; assetKey: string; x: number; y: number; width: number; height: number; pivot?: [number, number]; layer?: 'overlay' | 'story'; forPoints?: string[]; rotation?: number; alpha?: number }[] }; // 구버전 서버 응답에는 없다
   layout: { zones: StageRect[]; paths: number[][][]; blockers: StageRect[] } | null;
   objectives: { key: string; collected: number; required: number; active: boolean }[];
   goal?: { id: string; text: string } | null; // 이야기 목표 문구(서버가 진행에 맞춰 정한다 — 수집 목표가 없을 때 상단 목표 패널에 표시)

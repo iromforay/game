@@ -345,7 +345,7 @@ export class MapScene extends Phaser.Scene {
     this.lastPlan = plan;
     // 잠금 배경 ↔ 기존 배경 전환: 같은 이미지 객체의 텍스처만 바꾼다(플레이어·카메라·충돌·소품은 그대로)
     if (plan.background.mode === 'final' && this.bgImage && this.bgImage.texture.key !== plan.background.assetKey) this.bgImage.setTexture(plan.background.assetKey).setDisplaySize(plan.background.width, plan.background.height);
-    for (const o of plan.overlays) keep(this.add.image(o.x, o.y, o.assetKey).setOrigin(o.pivot[0], o.pivot[1]).setDisplaySize(o.width, o.height).setDepth(o.depth));
+    for (const o of plan.overlays) keep(this.add.image(o.x, o.y, o.assetKey).setOrigin(o.pivot[0], o.pivot[1]).setDisplaySize(o.width, o.height).setAngle(o.rotation).setAlpha(o.alpha).setDepth(o.depth));
     for (const g of plan.gates) {
       const gate = view!.gates.find((x) => x.id === g.id)!;
       if (g.art) keep(this.add.image(g.art.x, g.art.y, g.art.assetKey).setOrigin(g.art.pivot[0], g.art.pivot[1]).setDisplaySize(g.art.width, g.art.height).setDepth(DEPTH_STORY));
@@ -373,7 +373,11 @@ export class MapScene extends Phaser.Scene {
       const c = keep(this.add.container(pt.x, pt.y).setDepth(DEPTH_STORY));
       const ap = plan.points.find((x) => x.id === pt.id);
       const art = ap?.assetKey;
-      if (art) c.add(this.add.image(0, 0, art).setScale(1).setOrigin(0.5, 0.7));
+      if (art) {
+        const sized = ap!.art; // 서버 지역 데이터의 표시 크기 — 원본 PNG 크기(예: 1254px)를 그대로 쓰지 않는다
+        const img = this.add.image(0, 0, art).setOrigin(sized?.pivot[0] ?? 0.5, sized?.pivot[1] ?? 0.7);
+        c.add(sized ? img.setDisplaySize(sized.width, sized.height) : img.setScale(1));
+      }
       // 임시 표식(고리·글자): 지금(fallback)은 그림이 있어도 눈에 띄는 고리를 함께 둔다 — 목표를 놓치지 않게. 최종 모드(final)에서는 그림이 있는 대상에서 없앤다
       if (ap?.marker ?? true) {
         c.add([this.add.circle(0, 0, pt.radius).setStrokeStyle(2, 0xb9a6ee, 0.5), this.add.circle(0, 0, 20).setStrokeStyle(4, 0xb9a6ee, 1), this.add.circle(0, 0, 8, 0xb9a6ee)]);
@@ -646,6 +650,8 @@ export class MapScene extends Phaser.Scene {
     return {
       background: this.renderMode,
       overlays: plan.overlays.map((o) => o.assetKey),
+      overlayPlans: plan.overlays.map((o) => ({ id: o.id, assetKey: o.assetKey, x: o.x, y: o.y, width: o.width, height: o.height, rotation: o.rotation, alpha: o.alpha, depth: o.depth })), // 월드 그림의 실제 표시 값(캡처·시험용)
+      pointArts: plan.points.map((p) => ({ id: p.id, assetKey: p.assetKey, art: p.art })),
       gates: plan.gates.map((g) => ({ id: g.id, open: g.open, art: g.art?.assetKey ?? null, placeholder: g.placeholder })),
       tileSprites: this.children.list.filter((c) => c.type === 'TileSprite').length,
       imageObjects: this.storyLayer.filter((o) => o.type === 'Image').length,

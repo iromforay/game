@@ -103,11 +103,11 @@ export interface StageViewDto {
   // 아직 수집하지 않은 오브젝트만. locked = 아직 모을 수 없음(보풀이 구조 전)
   objects: { id: string; objectiveKey: string; x: number; y: number; radius: number; assetKey: string; label: string; prompt: string; state: 'locked' | 'available' }[];
   // 지금 활성화된 이야기 지점만(비활성·완료 지점은 내려 주지 않는다)
-  points: { id: string; kind: string; x: number; y: number; radius: number; assetKey: string; label: string; prompt: string }[];
+  points: { id: string; kind: string; x: number; y: number; radius: number; assetKey: string; label: string; prompt: string; art?: { width: number; height: number; pivot?: [number, number] } }[];
   // 문: open은 서버가 openEvent로 한 번만 정한 값 — 화면의 그림(닫힘/열림 키)과 클라이언트 충돌 예측이 모두 이 값을 쓴다
   gates: { id: string; label: string; x: number; y: number; width: number; height: number; open: boolean; closedAssetKey: string | null; openAssetKey: string | null; art: { x: number; y: number; width: number; height: number; pivot?: [number, number] } | null }[];
   // 최종 에셋 연결: 대형 배경 키와 지금 보이는 오버레이·월드 오브젝트(진행 상태별). 없으면 회색상자·임시 도형 유지. markerMode final = 에셋이 연결된 대상의 임시 표식(고리·마름모·라벨)을 없앤다
-  render: { markerMode: 'fallback' | 'final'; background: { assetKey: string } | null; backgroundLocked?: string; unlockedBy?: string; backgroundUnlocked?: boolean; overlays: { id: string; assetKey: string; x: number; y: number; width: number; height: number; pivot?: [number, number]; layer: 'overlay' | 'story'; forPoints: string[] }[] };
+  render: { markerMode: 'fallback' | 'final'; background: { assetKey: string } | null; backgroundLocked?: string; unlockedBy?: string; backgroundUnlocked?: boolean; overlays: { id: string; assetKey: string; x: number; y: number; width: number; height: number; pivot?: [number, number]; layer: 'overlay' | 'story'; forPoints: string[]; rotation?: number; alpha?: number }[] };
   layout: { zones: StageRect[]; paths: number[][][]; blockers: StageRect[] } | null;
   objectives: { key: string; collected: number; required: number; active: boolean }[];
   goal: { id: string; text: string } | null; // 이야기 목표 문구(지역 데이터 goals에서 지금 진행에 맞는 첫 항목)
@@ -467,7 +467,7 @@ export class StoryService {
       const p = at.get(t.id);
       const look = data.storyPoints?.find((s) => s.id === t.id);
       if (!p || !look) continue;
-      points.push({ id: t.id, kind: look.kind, x: p.x, y: p.y, radius: p.radius, assetKey: look.assetKey, label: look.label, prompt: look.prompt });
+      points.push({ id: t.id, kind: look.kind, x: p.x, y: p.y, radius: p.radius, assetKey: look.assetKey, label: look.label, prompt: look.prompt, ...(look.art ? { art: look.art } : {}) });
     }
 
     const layout = data.layout;
@@ -485,7 +485,7 @@ export class StoryService {
         // 잠금 배경 전환(10-08 v2): 두 필드가 모두 있을 때만 내려 주고, 해제 여부는 같은 스냅샷의 이벤트로 한 번만 정한다
         ...(data.render?.backgroundLocked && data.render?.unlockedBy ? { backgroundLocked: data.render.backgroundLocked, unlockedBy: data.render.unlockedBy, backgroundUnlocked: snap.events.has(data.render.unlockedBy) } : {}),
         // 오버레이도 같은 스냅샷의 이벤트로 판정한다 — 숨은 길의 그림·문·충돌이 한 번에 바뀐다
-        overlays: (data.render?.overlays ?? []).filter((o) => (!o.visibleAfter || snap.events.has(o.visibleAfter)) && !(o.hiddenAfter && snap.events.has(o.hiddenAfter))).map((o) => ({ id: o.id, assetKey: o.assetKey, x: o.x, y: o.y, width: o.width, height: o.height, ...(o.pivot ? { pivot: o.pivot } : {}), layer: o.layer ?? 'overlay', forPoints: o.forPoints ?? [] })),
+        overlays: (data.render?.overlays ?? []).filter((o) => (!o.visibleAfter || snap.events.has(o.visibleAfter)) && !(o.hiddenAfter && snap.events.has(o.hiddenAfter))).map((o) => ({ id: o.id, assetKey: o.assetKey, x: o.x, y: o.y, width: o.width, height: o.height, ...(o.pivot ? { pivot: o.pivot } : {}), layer: o.layer ?? 'overlay', forPoints: o.forPoints ?? [], ...(o.rotation !== undefined ? { rotation: o.rotation } : {}), ...(o.alpha !== undefined ? { alpha: o.alpha } : {}) })),
       },
       layout: layout
         ? {

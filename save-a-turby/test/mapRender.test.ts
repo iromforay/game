@@ -2,7 +2,7 @@
 // 순수 계획(src/story/mapRender.ts)과 그것을 쓰는 화면(MapScene)의 연결을 검증한다. 최종 PNG 없이도 돌아간다(텍스처 유무는 주입).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { MAP_DEPTH, planStageRender } from '../src/story/mapRender.ts';
 import { solidRects, type StageView } from '../src/story/storyStage.ts';
@@ -92,13 +92,13 @@ test('숨은 길과 문 상태가 서버 이벤트에 따라 그림·오버레�
 test('실제 에셋이 없어도 상호작용 대상(지점·수집물·닫힌 문)은 임시 도형으로 보이고, 있으면 그림으로 바뀐다. 누락 오버레이는 건너뛴다', () => {
   const v = view({ hiddenOpen: true });
   const bare = planStageRender(v, none, SIZE);
-  assert.deepEqual(bare.objects, [{ id: 'forest_dust_01', assetKey: null, marker: true }]);
-  assert.deepEqual(bare.points, [{ id: 'forest_cut_thread', assetKey: null, marker: true }]);
+  assert.deepEqual(bare.objects, [{ id: 'forest_dust_01', assetKey: null, art: null, marker: true }]);
+  assert.deepEqual(bare.points, [{ id: 'forest_cut_thread', assetKey: null, art: null, marker: true }]);
   assert.deepEqual(bare.gates.map((g) => [g.id, g.open, g.placeholder]), [['gate_hidden_path', true, false], ['gate_root', false, true]], '닫힌 문은 그림이 없으면 임시 사각형');
   assert.deepEqual(bare.overlays, [], '누락된 오버레이는 만들지 않는다(씬 전체가 실패하지 않는다)');
   const only = planStageRender(v, (k) => k === 'hidden-path-reveal' || k === 'glowing-yarn-dust', SIZE);
   assert.deepEqual(only.overlays.map((o) => o.assetKey), ['hidden-path-reveal'], '있는 것만');
-  assert.deepEqual(only.objects, [{ id: 'forest_dust_01', assetKey: 'glowing-yarn-dust', marker: true }], 'fallback 모드에서는 그림이 있어도 임시 표식을 유지');
+  assert.deepEqual(only.objects, [{ id: 'forest_dust_01', assetKey: 'glowing-yarn-dust', art: null, marker: true }], 'fallback 모드에서는 그림이 있어도 임시 표식을 유지');
   // 임시 도형을 쓰는 코드가 화면에 남아 있다(최종 에셋 전에 대상이 사라지지 않는다)
   const map = src('scenes/MapScene.ts');
   assert.match(map, /fillPoints\(\[\{ x: 0, y: -16 \}/, '수집물 임시 도형');
@@ -271,4 +271,77 @@ test('수풀 v3 불투명 픽셀: 플레이어 위치 32×32와 겹치는 면적
   assert.ok(covered <= 1024 * 0.1, `플레이어 자리와 겹치는 불투명 픽셀 ${covered}px² (≤ 102)`);
   // 원본의 네 모서리는 거의 투명(검수기와 같은 허용 알파 ≤ 8 — 검은 배경·불투명 사각형이 아니다)
   for (const [x, y] of [[0, 0], [img.width - 1, 0], [0, img.height - 1], [img.width - 1, img.height - 1]]) assert.ok(img.alphaAt(x, y) <= 8, `모서리 (${x},${y}) α=${img.alphaAt(x, y)}`);
+});
+
+// ---------- 10-13 v1c: 호수 물결북 — 상태별 그림·표시 크기·파문 ----------
+const LAKE_SIZE = { width: 3200, height: 2400 };
+const ART = { width: 104, height: 104, pivot: [0.5, 0.78] as [number, number] };
+function lakeView(awakened: boolean): StageView {
+  return {
+    stageCode: 'lake',
+    greybox: true,
+    size: LAKE_SIZE,
+    objects: [],
+    points: [
+      { id: 'lake_mulduri', kind: 'npc', x: 900, y: 1180, radius: 72, assetKey: 'turby-muldeuli', label: '물들이', prompt: '다가가기', art: { width: 96, height: 96, pivot: [0.5, 0.7] } },
+      ...(awakened ? [] : [{ id: 'lake_wave_drum', kind: 'inspect', x: 700, y: 1330, radius: 64, assetKey: 'wave-drum-idle', label: '물결북', prompt: '다가가기', art: ART }]),
+    ],
+    gates: [],
+    render: {
+      background: null,
+      overlays: awakened
+        ? [
+            { id: 'overlay_wave_path', assetKey: 'wave-path', x: 700, y: 1330, width: 480, height: 160, pivot: [0.08, 0.5], layer: 'overlay', rotation: -9.5, alpha: 0.7 },
+            { id: 'overlay_wave_drum_active', assetKey: 'wave-drum-active', x: 700, y: 1330, ...ART, layer: 'story', forPoints: ['lake_wave_drum'] },
+          ]
+        : [],
+    },
+    layout: { zones: [], paths: [], blockers: [] },
+    objectives: [],
+  };
+}
+const LAKE_KEYS = new Set(['wave-drum-idle', 'wave-drum-active', 'wave-path', 'turby-muldeuli']);
+const hasLake = (k: string) => LAKE_KEYS.has(k);
+
+test('물결북 반응 전: idle 그림 + 서버가 정한 표시 크기(88~112px), 물들이는 turby-muldeuli, 오버레이 없음', () => {
+  const plan = planStageRender(lakeView(false), hasLake, LAKE_SIZE);
+  assert.deepEqual(plan.overlays, []);
+  const drum = plan.points.find((p) => p.id === 'lake_wave_drum')!;
+  assert.equal(drum.assetKey, 'wave-drum-idle');
+  assert.deepEqual(drum.art, { width: 104, height: 104, pivot: [0.5, 0.78] });
+  assert.ok(drum.art!.width >= 88 && drum.art!.width <= 112);
+  assert.equal(plan.points.find((p) => p.id === 'lake_mulduri')!.assetKey, 'turby-muldeuli');
+});
+
+test('물결북 반응 뒤: idle 그림은 없고 active·wave-path 오버레이가 플레이어·NPC보다 낮은 깊이로 계획된다', () => {
+  const plan = planStageRender(lakeView(true), hasLake, LAKE_SIZE);
+  assert.equal(plan.points.some((p) => p.assetKey === 'wave-drum-idle'), false);
+  const path = plan.overlays.find((o) => o.assetKey === 'wave-path')!;
+  const active = plan.overlays.find((o) => o.assetKey === 'wave-drum-active')!;
+  assert.deepEqual([path.depth, path.rotation, path.alpha], [MAP_DEPTH.overlay, -9.5, 0.7]);
+  assert.ok(active.depth < MAP_DEPTH.actors && path.depth < MAP_DEPTH.actors, '플레이어·NPC·야생(깊이 0)보다 아래');
+  assert.deepEqual([active.x, active.y, active.width, active.height, active.pivot], [700, 1330, 104, 104, [0.5, 0.78]]);
+  assert.ok(path.width >= 420 && path.width <= 560 && path.height >= 140 && path.height <= 190);
+  // 안내 효과는 충돌이 아니다
+  assert.deepEqual(solidRects(lakeView(true)), []);
+});
+
+test('MapScene이 점 그림 크기·오버레이 회전·알파를 서버 데이터 그대로 쓴다 — 원본 PNG 크기를 쓰지 않는다', () => {
+  const map = src('scenes/MapScene.ts');
+  assert.match(map, /setDisplaySize\(o\.width, o\.height\)\.setAngle\(o\.rotation\)\.setAlpha\(o\.alpha\)/);
+  assert.match(map, /sized \? img\.setDisplaySize\(sized\.width, sized\.height\) : img\.setScale\(1\)/);
+});
+
+test('전달 에셋 3종이 런타임 폴더에 실제로 있고(키=파일명) 디자인 원본과 바이트가 같다', () => {
+  const root = fileURLToPath(new URL('../src/assets/world/lake/', import.meta.url));
+  for (const [rel, key] of [['props/wave-drum-idle.png', 'wave-drum-idle'], ['props/wave-drum-active.png', 'wave-drum-active'], ['fx/wave-path.png', 'wave-path']]) {
+    assert.ok(existsSync(root + rel), rel);
+    assert.equal(rel.split('/').pop()!.replace(/\.png$/, ''), key);
+    const bytes = readFileSync(root + rel);
+    assert.deepEqual([...bytes.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10], 'PNG');
+  }
+  // 호수 지역 데이터(서버)가 이 키를 쓴다
+  const lake = JSON.parse(readFileSync(fileURLToPath(new URL('../../BE/story-data/save-a-turby/stages/lake.json', import.meta.url)), 'utf8')) as { storyPoints: { assetKey: string }[]; render: { overlays: { assetKey: string }[] } };
+  const used = new Set([...lake.storyPoints.map((p) => p.assetKey), ...lake.render.overlays.map((o) => o.assetKey)]);
+  for (const k of ['wave-drum-idle', 'wave-drum-active', 'wave-path', 'turby-muldeuli']) assert.ok(used.has(k), k);
 });

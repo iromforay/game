@@ -66,13 +66,35 @@ async function reachMap(g: Game, expectIntro: boolean) {
     assert.equal((await g.state()).scenes.includes('StoryDialogue'), false, '이미 본 도입이 반복됨');
   }
 }
-async function interact(g: Game, id: string, how: 'keys' | 'joystick') {
+async function interact(g: Game, id: string, how: 'keys' | 'joystick', beforeClick?: () => Promise<void>) {
   await g.walkDirect('Map', pointOf(id), how, `s.map && s.map.story && s.map.story.prompt === '${id}'`);
   await g.until(`${id} 안내 버튼`, `s.map && s.map.story && s.map.story.prompt === '${id}' && !!s.map.story.promptText`);
+  await beforeClick?.();
   const at = (await story(g)).interact;
   await g.clickAt(at.x, at.y, "s.scenes.includes('StoryDialogue')");
   await g.advanceDialogue("s.scenes.includes('Map') && !s.scenes.includes('StoryDialogue')");
   await g.until('지도 준비', MAP_READY);
+}
+
+type RenderState = { overlays: string[]; overlayPlans: { id: string; assetKey: string; x: number; y: number; width: number; height: number; rotation: number; alpha: number; depth: number }[]; pointArts: { id: string; assetKey: string | null; art: { width: number; height: number; pivot: number[] } | null }[] };
+const render = async (g: Game) => (await g.state()).map.render as RenderState;
+// 물결북 상태별 표시(10-13 v1c): 반응 전 = idle 그림(88~112px)·오버레이 없음, 반응 뒤 = active·파문 오버레이(바닥층·플레이어보다 아래)
+async function assertDrumIdle(g: Game) {
+  const r = await render(g);
+  const drum = r.pointArts.find((p) => p.id === 'lake_wave_drum')!;
+  assert.equal(drum.assetKey, 'wave-drum-idle', '반응 전 물결북 그림');
+  assert.ok(drum.art && drum.art.width >= 88 && drum.art.width <= 112);
+  assert.equal(r.pointArts.find((p) => p.id === 'lake_mulduri')?.assetKey ?? 'turby-muldeuli', 'turby-muldeuli');
+  assert.deepEqual(r.overlays, []);
+}
+async function assertDrumActive(g: Game) {
+  const r = await render(g);
+  assert.equal(r.pointArts.some((p) => p.assetKey === 'wave-drum-idle'), false, 'idle 그림이 남음');
+  assert.deepEqual([...r.overlays].sort(), ['wave-drum-active', 'wave-path']);
+  const path = r.overlayPlans.find((o) => o.assetKey === 'wave-path')!;
+  const active = r.overlayPlans.find((o) => o.assetKey === 'wave-drum-active')!;
+  assert.ok(path.depth < 0 && active.depth < 0, '플레이어·NPC(깊이 0)보다 아래');
+  assert.ok(path.alpha <= 0.72 && path.width >= 420 && path.width <= 560 && active.width >= 88 && active.width <= 112);
 }
 
 test('2장 C2-1 ①: 호수 입장 → 도입 → 새로고침(반복 없음) → 물들이 → 물결북 → 목표 갱신 → 새로고침(CH02_SETTLEMENT_MET 복원)', async () => {
@@ -114,7 +136,12 @@ test('2장 C2-1 ①: 호수 입장 → 도입 → 새로고침(반복 없음) �
     await g.capture('lake_03_after_mulduri');
 
     // 4) 물결북 반응 → CH02_SETTLEMENT_MET, 목표 갱신
-    await interact(g, 'lake_wave_drum', 'keys');
+    await interact(g, 'lake_wave_drum', 'keys', async () => {
+      await assertDrumIdle(g);
+      await g.capture('wave_drum_idle');
+    });
+    await assertDrumActive(g);
+    await g.capture('wave_drum_active_path');
     db = dbOf(device);
     assert.equal(db.checkpoint, 'CH02_SETTLEMENT_MET');
     assert.equal(once(db.events, 'lake_wave_drum_awakened'), 1);
@@ -167,13 +194,15 @@ test('2장 C2-1 ②: 640×360 — 도입·물들이·물결북이 같은 흐름�
     assert.ok(s.interactRect.y + s.interactRect.h <= m.joystickZone.y, '안내 버튼은 조이스틱 영역 위');
     assert.ok(s.interactRect.h * 0.5 >= 40 && s.interactRect.w * 0.5 >= 200, '실제 화면에서 누를 수 있는 크기');
     assert.equal(s.goalShown, GOAL_FOLLOW_THREAD);
-    await g.capture('lake_s02_drum_prompt');
+    await assertDrumIdle(g);
+    await g.capture('wave_drum_idle_prompt');
     await g.clickAt(s.interact.x, s.interact.y, "s.scenes.includes('StoryDialogue')");
     await g.advanceDialogue("s.scenes.includes('Map') && !s.scenes.includes('StoryDialogue')");
     await g.until('지도 준비', MAP_READY);
     assert.equal(dbOf(device).checkpoint, 'CH02_SETTLEMENT_MET');
     assert.equal((await story(g)).goalShown, GOAL_FOLLOW_RIPPLE);
-    await g.capture('lake_s03_settlement_met');
+    await assertDrumActive(g);
+    await g.capture('wave_drum_active_path');
 
     // 닫힌 물풀 미로 입구: 문 쪽으로 계속 밀어도 문 너머로 가지 못한다
     const gate = LAKE.layout.gates.find((x) => x.id === 'gate_reed_maze')!;

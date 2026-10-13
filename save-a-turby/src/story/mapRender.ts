@@ -29,6 +29,8 @@ export interface OverlayPlan {
   pivot: [number, number];
   depth: number;
   forPoints: string[];
+  rotation: number; // 도(°)
+  alpha: number;
 }
 export interface GatePlan {
   id: string;
@@ -39,6 +41,7 @@ export interface GatePlan {
 export interface ActorPlan {
   id: string;
   assetKey: string | null; // 이 키의 텍스처가 있으면 그 그림, 없으면 null(임시 도형)
+  art: { width: number; height: number; pivot: [number, number] } | null; // 서버가 정한 표시 크기(없으면 원본 크기)
   marker: boolean; // 임시 표식(고리·동심원·라벨)을 그린다 — 'final' 모드에서 그림(또는 대신하는 월드 그림)이 있으면 false
 }
 
@@ -70,7 +73,7 @@ export function planStageRender(view: StageView | null, has: HasTexture, fallbac
   // 월드 그림(길 오버레이·NPC·보스 표식 등): 텍스처가 있는 것만. 층이 story면 이야기 대상 위(고리·마름모 위), 같은 층에서는 데이터 순서대로 위로 쌓인다
   const overlays: OverlayPlan[] = (view?.render?.overlays ?? [])
     .filter((o) => has(o.assetKey))
-    .map((o, i) => ({ id: o.id, assetKey: o.assetKey, x: o.x, y: o.y, width: o.width, height: o.height, pivot: o.pivot ?? [0.5, 0.5], depth: (o.layer ?? 'overlay') === 'story' ? MAP_DEPTH.story + 1 + i * 0.01 : MAP_DEPTH.overlay, forPoints: o.forPoints ?? [] }));
+    .map((o, i) => ({ id: o.id, assetKey: o.assetKey, x: o.x, y: o.y, width: o.width, height: o.height, pivot: o.pivot ?? [0.5, 0.5], depth: (o.layer ?? 'overlay') === 'story' ? MAP_DEPTH.story + 1 + i * 0.01 : MAP_DEPTH.overlay, forPoints: o.forPoints ?? [], rotation: o.rotation ?? 0, alpha: o.alpha ?? 1 }));
 
   const gates: GatePlan[] = (view?.gates ?? []).map((g) => {
     const key = g.open ? g.openAssetKey : g.closedAssetKey;
@@ -83,7 +86,8 @@ export function planStageRender(view: StageView | null, has: HasTexture, fallbac
   const covered = new Set(overlays.flatMap((o) => o.forPoints));
   const actor = (o: StageObject | StagePointView): ActorPlan => {
     const art = has(o.assetKey) ? o.assetKey : null;
-    return { id: o.id, assetKey: art, marker: !(markerMode === 'final' && (art || covered.has(o.id))) };
+    const pa = 'art' in o ? o.art : undefined;
+    return { id: o.id, assetKey: art, art: pa ? { width: pa.width, height: pa.height, pivot: pa.pivot ?? [0.5, 0.7] } : null, marker: !(markerMode === 'final' && (art || covered.has(o.id))) };
   };
   return { markerMode, background, overlays, gates, objects: (view?.objects ?? []).map(actor), points: (view?.points ?? []).map(actor), bounds };
 }
