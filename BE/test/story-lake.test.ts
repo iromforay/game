@@ -77,7 +77,7 @@ test('호수 지역 데이터: 3200×2400, 시작 지점·이야기 지점 좌�
   assert.ok(inside(pointOf('lake_mulduri'), { x: 400, y: 760, w: 850, h: 890 }), '물들이는 정착지 범위');
   assert.ok(inside(pointOf('lake_wave_drum'), { x: 400, y: 760, w: 850, h: 890 }), '물결북은 정착지 범위');
   assert.equal(LAKE.greybox, true, '기능 맵 단계(최종 미술 좌표 아님)');
-  assert.equal((LAKE.layout!.gates[0].openEvent), 'lake_safe_route_opened', '물풀 미로 입구는 다음 단계 이벤트 전까지 닫힘');
+  assert.equal((LAKE.layout!.gates[0].openEvent), 'lake_wave_drum_awakened', '물풀 미로 입구 문은 물결북 반응 사건에서 파생');
 });
 
 test('이벤트·지점 정의: 이름·체크포인트 전이·서버 전용 여부가 계약대로이고 보상이 없다', () => {
@@ -90,8 +90,8 @@ test('이벤트·지점 정의: 이름·체크포인트 전이·서버 전용 �
     assert.equal(d.chapter, 2);
     assert.deepEqual([d.grant, d.consume, d.equipRelic, d.grantStoryNubi], [undefined, undefined, undefined, undefined], `${id}: 아이템·통화·성장 없음`);
   }
-  // 10-13 C2-2: 미로 개방 사건은 물결북 반응과 같은 트랜잭션에서만 기록된다(서버 전용, 새 체크포인트 없음)
-  assert.deepEqual(e('lake_wave_drum_awakened').alsoComplete, ['lake_safe_route_opened']);
+  // 정본: lake_safe_route_opened는 C2-3 구조 뒤 안전 물길 사건 — 물결북 반응이 함께 기록하지 않는다
+  assert.equal(e('lake_wave_drum_awakened').alsoComplete, undefined);
   assert.deepEqual([e('lake_safe_route_opened').allowedAt, e('lake_safe_route_opened').requires, e('lake_safe_route_opened').serverOnly, e('lake_safe_route_opened').to ?? null], [['CH02_SETTLEMENT_MET'], ['lake_wave_drum_awakened'], true, null]);
   assert.equal(EVENT_BY_ID.has('lake_maze_cleared'), false, 'CH02_MAZE_CLEARED·통과 완료 사건은 C2-3');
   assert.deepEqual(STORY_TRIGGERS.filter((t) => t.stageCode === 'lake').map((t) => t.id), ['lake_entry', 'lake_mulduri', 'lake_wave_drum']);
@@ -232,20 +232,20 @@ test('동시 물결북 요청: 이벤트 한 번, 재생은 먼저 기록한 요
   const rs = await Promise.all([1, 2, 3, 4].map(() => s.connect().trigger(P1, 'lake_wave_drum')));
   assert.equal(rs.filter((x) => x.play !== null).length, 1);
   assert.equal(s.events().filter((e) => e === 'lake_wave_drum_awakened').length, 1);
-  assert.equal(s.events().filter((e) => e === 'lake_safe_route_opened').length, 1, '미로 개방 사건도 한 번');
+  assert.equal(s.events().includes('lake_safe_route_opened'), false, '물결북 뒤에도 안전 물길 사건은 기록되지 않음');
   assert.equal(s.checkpoint(), 'CH02_SETTLEMENT_MET');
 });
 
-test('lake_safe_route_opened: 직접 요청은 선행 사건 전·후 모두 거부(서버 전용)되고, 물결북 반응 전에는 기록되지 않으며 체크포인트를 바꾸지 않는다', async () => {
+test('lake_safe_route_opened: 직접 요청은 물결북 전·후 모두 거부(서버 전용)되고, 물결북 반응이 기록하지도 않으며 체크포인트를 바꾸지 않는다', async () => {
   const s = setup('CH02_STARTED', [...CH01_DONE, 'lake_entry_seen', 'lake_mulduri_met']);
   s.goLake();
   assert.equal(await codeOf(s.service.completeEvent(P1, 'lake_safe_route_opened')), 'STORY_EVENT_SERVER_ONLY', '물결북 전');
   assert.equal(s.events().includes('lake_safe_route_opened'), false);
   s.standAt('lake_wave_drum');
   await s.service.trigger(P1, 'lake_wave_drum');
-  assert.equal(s.events().filter((e) => e === 'lake_safe_route_opened').length, 1, '물결북과 같은 트랜잭션');
+  assert.equal(s.events().includes('lake_safe_route_opened'), false, '물결북과 함께 기록되지 않음');
   assert.equal(await codeOf(s.service.completeEvent(P1, 'lake_safe_route_opened')), 'STORY_EVENT_SERVER_ONLY', '물결북 뒤에도 직접 요청 거부');
-  assert.equal(s.events().filter((e) => e === 'lake_safe_route_opened').length, 1);
+  assert.equal(s.events().includes('lake_safe_route_opened'), false);
   assert.equal(s.checkpoint(), 'CH02_SETTLEMENT_MET', '새 체크포인트·장 완료 없음');
 });
 
@@ -271,10 +271,10 @@ test('지역 화면: 단계마다 보이는 지점·목표 문구가 정해진 �
   assert.deepEqual(v.points.map((p) => p.id), [], '물결북 반응 뒤: 상호작용 지점 없음(임시 미로 표식 제거)');
   assert.equal(v.goal!.text, '물결북의 파문을 따라 물풀 미로를 지나가자.');
   const gate = v.gates.find((g) => g.id === 'gate_reed_maze')!;
-  assert.equal(gate.open, true, '물결북 반응과 함께 물풀문이 열린다(lake_safe_route_opened)');
+  assert.equal(gate.open, true, '물결북 반응과 함께 입구 문이 열린다(lake_wave_drum_awakened에서 파생)');
   assert.deepEqual([gate.closedAssetKey, gate.openAssetKey], ['reed-gate-closed', 'reed-gate-open']);
-  assert.equal(s.events().includes('lake_safe_route_opened'), true);
-  assert.equal(s.events().some((e) => e.startsWith('lake_') && !['lake_unlocked', 'lake_entry_seen', 'lake_mulduri_met', 'lake_wave_drum_awakened', 'lake_safe_route_opened'].includes(e)), false, '다른 호수 이벤트는 기록되지 않음');
+  assert.equal(s.events().includes('lake_safe_route_opened'), false);
+  assert.equal(s.events().some((e) => e.startsWith('lake_') && !['lake_unlocked', 'lake_entry_seen', 'lake_mulduri_met', 'lake_wave_drum_awakened'].includes(e)), false, '다른 호수 이벤트는 기록되지 않음');
 });
 
 test('체크포인트별 재접속: CH02_STARTED·CH02_SETTLEMENT_MET에서는 도입·정착지 구간을 자동 재생하지 않는다', async () => {

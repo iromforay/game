@@ -216,7 +216,7 @@
         "y": 1150,
         "width": 300,
         "height": 50,
-        "openEvent": "lake_safe_route_opened",
+        "openEvent": "lake_wave_drum_awakened",
         "closedAssetKey": "reed-gate-closed",
         "openAssetKey": "reed-gate-open",
         "art": {
@@ -342,7 +342,7 @@
       "pushDistancePx": 64,
       "cooldownMs": 1200,
       "requires": [
-        "lake_safe_route_opened"
+        "lake_wave_drum_awakened"
       ]
     },
     {
@@ -358,7 +358,7 @@
       "pushDistancePx": 88,
       "cooldownMs": 1200,
       "requires": [
-        "lake_safe_route_opened"
+        "lake_wave_drum_awakened"
       ]
     }
   ],

@@ -154,8 +154,8 @@ export const STORY_EVENTS: StoryEventDef[] = [
   ev({ id: 'lake_entry_seen', chapter: 2, allowedAt: ['CH01_COMPLETE'], requires: ['lake_unlocked'], evidence: { kind: 'stage', stageCode: 'lake' }, to: 'CH02_STARTED' }),
   // 정착지의 물들이·물결북 지점에 닿았을 때 서버가 기록한다(서버 전용, 좌표 증거). 체크포인트는 물결북 반응에서 CH02_SETTLEMENT_MET
   ev({ id: 'lake_mulduri_met', chapter: 2, allowedAt: ['CH02_STARTED'], requires: ['lake_entry_seen'], serverOnly: true, evidence: { kind: 'point', stageCode: 'lake', pointId: 'lake_mulduri' } }),
-  ev({ id: 'lake_wave_drum_awakened', chapter: 2, allowedAt: ['CH02_STARTED'], requires: ['lake_mulduri_met'], serverOnly: true, evidence: { kind: 'point', stageCode: 'lake', pointId: 'lake_wave_drum' }, to: 'CH02_SETTLEMENT_MET', alsoComplete: ['lake_safe_route_opened'] }),
-  // 10-13 C2-2: 물결북 반응과 같은 트랜잭션에서 한 번 기록되는 미로 개방 사건(물풀문 gate_reed_maze의 openEvent). 직접 요청은 서버 전용이라 거부된다. 새 체크포인트·장 완료는 만들지 않는다
+  ev({ id: 'lake_wave_drum_awakened', chapter: 2, allowedAt: ['CH02_STARTED'], requires: ['lake_mulduri_met'], serverOnly: true, evidence: { kind: 'point', stageCode: 'lake', pointId: 'lake_wave_drum' }, to: 'CH02_SETTLEMENT_MET' }),
+  // 정본(story_checkpoint_spec 7.2): 붙잡힌 물들이 구조 뒤 열리는 미로 내부 안전 물길의 영구 개방. C2-3에서 기록한다 — C2-2의 입구 문·물살은 이 사건을 쓰지 않는다(입구 문은 lake_wave_drum_awakened에서 파생). 직접 요청은 서버 전용이라 거부된다
   ev({ id: 'lake_safe_route_opened', chapter: 2, allowedAt: ['CH02_SETTLEMENT_MET'], requires: ['lake_wave_drum_awakened'], serverOnly: true, evidence: { kind: 'none' } }),
 ];
 

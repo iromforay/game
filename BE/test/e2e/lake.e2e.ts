@@ -162,9 +162,9 @@ test('2장 C2-1 ①: 호수 입장 → 도입 → 새로고침(반복 없음) �
     assert.deepEqual(s.points, []);
     assert.equal(s.gates.gate_reed_maze, true, '새로고침 뒤에도 열린 문');
 
-    // 6) 개방 사건은 한 번만 기록되고 새 체크포인트는 없다
+    // 6) 미로 안쪽 안전 물길 사건(lake_safe_route_opened)은 기록되지 않는다(C2-3 구조 뒤)
     assert.equal(dbOf(device).checkpoint, 'CH02_SETTLEMENT_MET');
-    assert.deepEqual(dbOf(device).events.filter((e) => e.startsWith('lake_')).sort(), ['lake_entry_seen', 'lake_mulduri_met', 'lake_safe_route_opened', 'lake_unlocked', 'lake_wave_drum_awakened']);
+    assert.deepEqual(dbOf(device).events.filter((e) => e.startsWith('lake_')).sort(), ['lake_entry_seen', 'lake_mulduri_met', 'lake_unlocked', 'lake_wave_drum_awakened']);
   }, backend, device);
   await g.close();
 });

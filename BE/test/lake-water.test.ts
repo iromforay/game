@@ -23,7 +23,8 @@ const area = (id: string) => WATER.areas.find((a) => a.id === id)!;
 
 const CH01 = ['opening_fall_completed', 'opening_name_saved', 'story_nubi_granted', 'forest_first_path_started', 'forest_cut_thread_inspected', 'forest_stitchling_battle_won', 'forest_bopul_rescued', 'forest_dansuring_clue_learned', 'forest_compass_granted', 'forest_hidden_path_opened', 'forest_giant_knot_defeated', 'forest_first_knot_awakened', 'forest_first_knot_equipped', 'forest_dansuring_found', 'forest_primordial_knot_seen', 'lake_unlocked'];
 const SETTLED = [...CH01, 'lake_entry_seen', 'lake_mulduri_met', 'lake_wave_drum_awakened'];
-const OPEN = [...SETTLED, 'lake_safe_route_opened'];
+const BEFORE_DRUM = [...CH01, 'lake_entry_seen', 'lake_mulduri_met']; // 물결북 반응 전
+const OPEN = SETTLED; // 입구 문·물살은 lake_wave_drum_awakened에서 파생(lake_safe_route_opened는 C2-3 구조 뒤)
 const NUMBERS: Record<string, number> = { 'room.reconnectGraceMs': 1000, 'move.maxSpeedPxPerSec': 400, 'move.minIntervalMs': 50, 'move.slackPx': 64, 'battle.encounterRadiusPx': 120 };
 
 type P = '1' | '2';
@@ -108,18 +109,19 @@ test('검증: 영벡터·중복 ID·지도 밖·깊은 물 위 앵커·앵커 �
 
 // ---------- 물풀문 ----------
 
-test('물풀문: 물결북 사건(lake_safe_route_opened) 전에는 통과할 수 없고, 기록된 뒤에는 그 플레이어만 통과한다', async () => {
-  const s = setup(SETTLED); // 문 개방 사건이 아직 없다
+test('물풀문: 물결북 사건(lake_wave_drum_awakened) 전에는 통과할 수 없고, 기록된 뒤에는 그 플레이어만 통과한다', async () => {
+  const s = setup(BEFORE_DRUM); // 물결북 사건이 아직 없다
   await s.join('1');
   const gate = C.gates.find((g) => g.id === 'gate_reed_maze')!;
   const front = { x: gate.x + gate.width / 2, y: gate.y + gate.height + 40 }; // 문 아래(안뜰)
   const beyond = { x: front.x, y: gate.y - 40 };
-  assert.equal(checkMove(C, solidsFor(C, new Set(SETTLED)), lockedZonesFor(C, new Set(SETTLED)), front, beyond), 'tunnel');
+  const before = new Set(BEFORE_DRUM);
+  assert.equal(checkMove(C, solidsFor(C, before), lockedZonesFor(C, before), front, beyond), 'tunnel');
   s.place('1', front.x, front.y);
   const r = s.move('1', beyond.x, beyond.y);
   assert.equal(r.kind, 'corrected');
   assert.deepEqual(s.at('1'), { x: front.x, y: front.y }, '거절되면 마지막 승인 위치');
-  s.rooms.noteStoryEvents('1', ['lake_safe_route_opened']);
+  s.rooms.noteStoryEvents('1', ['lake_wave_drum_awakened']);
   s.place('1', front.x, front.y);
   assert.equal(s.move('1', front.x, front.y - 24).kind, 'ok');
   assert.equal(s.move('1', front.x, front.y - 48).kind, 'ok');
@@ -128,6 +130,26 @@ test('물풀문: 물결북 사건(lake_safe_route_opened) 전에는 통과할 �
 });
 
 // ---------- 물살 ----------
+
+test('물살은 lake_wave_drum_awakened가 있는 플레이어에게만 적용된다(없으면 같은 자리에서도 밀리지 않는다)', async () => {
+  assert.deepEqual(WATER.currents.map((f) => f.requires), [['lake_wave_drum_awakened'], ['lake_wave_drum_awakened']]);
+  const s = setup(BEFORE_DRUM);
+  await s.join('1');
+  s.place('1', 1600, 1000);
+  assert.equal(s.move('1', 1630, 1000).kind, 'ok');
+  assert.deepEqual(s.at('1'), { x: 1630, y: 1000 });
+  s.rooms.noteStoryEvents('1', ['lake_wave_drum_awakened']);
+  s.place('1', 1600, 1000);
+  s.tick(2000);
+  assert.equal(s.move('1', 1630, 1000).kind, 'adjusted');
+});
+
+test('물결북 완료 뒤에도 lake_safe_route_opened는 기록되지 않는다(C2-3 구조 뒤 안전 물길의 사건) — 문은 물결북 사건에서 파생', () => {
+  const gate = C.gates.find((g) => g.id === 'gate_reed_maze')!;
+  assert.equal(gate.openEvent, 'lake_wave_drum_awakened');
+  assert.equal(OPEN.includes('lake_safe_route_opened'), false);
+  assert.equal(JSON.stringify(LAKE).includes('lake_safe_route_opened'), false, '지역 데이터가 이 사건을 요구·표시 조건으로 쓰지 않는다');
+});
 
 test('물살 밖의 이동은 일반 이동과 같다(위치 그대로 승인, 밀림 없음)', async () => {
   const s = setup();
@@ -267,7 +289,7 @@ test('저장된 위치가 깊은 물·벽 안·닫힌 문 안이면 재접속 �
   const e3 = await s.rooms.enterMap('1', 'down');
   assert.deepEqual([e3.self.x, e3.self.y, e3.corrected], [1700, 1000, false]);
   // 닫힌 문 안(문 개방 전 계정): 가장 가까운 유효 앵커
-  const t = setup(SETTLED);
+  const t = setup(BEFORE_DRUM);
   await t.join('1');
   const gate = C.gates.find((g) => g.id === 'gate_reed_maze')!;
   t.place('1', gate.x + 150, gate.y + 25);
