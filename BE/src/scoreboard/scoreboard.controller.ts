@@ -76,4 +76,9 @@ export class ScoreboardController {
   deployMyRoomDungeonRobot(@Headers('authorization') auth: string | undefined, @Body('zoneId') zoneId: unknown) {
     return this.scoreboard.deployMyRoomDungeonRobot(bearer(auth), zoneId);
   }
+
+  @Post('my-room-dungeon/settle-robots')
+  settleMyRoomDungeonRobots(@Headers('authorization') auth: string | undefined) {
+    return this.scoreboard.settleMyRoomDungeonRobots(bearer(auth));
+  }
 }

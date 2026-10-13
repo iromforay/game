@@ -1,4 +1,4 @@
-export type DungeonResourceId = 'paper' | 'tape' | 'screw' | 'battery';
+export type DungeonResourceId = 'paper' | 'tape' | 'screw' | 'battery' | 'plastic' | 'clockwork' | 'motor';
 
 export interface DungeonSaveData {
   inventory: Partial<Record<DungeonResourceId, number>>;
@@ -15,6 +15,19 @@ export interface DungeonRobotAssignment {
   status: 'working';
   remainingUses: number;
   startedAt: string;
+  lastSettledAt?: string;
+  nextCollectAt?: string;
+}
+
+export interface DungeonRobotSettlement {
+  cycles: number;
+  rewards: { paper: number; tape: number };
+  robotExpired: boolean;
+  serverNow: string;
+}
+
+export interface DungeonSettlementResponse extends DungeonSaveData {
+  settlement: DungeonRobotSettlement;
 }
 
 const SERVER_URL: string = import.meta.env.VITE_MY_ROOM_DUNGEON_SERVER_URL
@@ -68,4 +81,8 @@ export function deployDungeonRobot(zoneId: string) {
     method: 'POST',
     body: JSON.stringify({ zoneId }),
   });
+}
+
+export function settleDungeonRobots() {
+  return request<DungeonSettlementResponse>('/settle-robots', { method: 'POST' });
 }

@@ -1,11 +1,26 @@
 /* 관리자 백오피스(2026-09-29) — 랭킹 화면(Scoreboard.css)과 같은 톤 */
 .admin {
+  --admin-surface: #fff;
+  --admin-text: #24202a;
+  --admin-muted: #6b6375;
   width: 100%;
   max-width: 900px;
   margin: 0 auto;
   padding: 16px;
   box-sizing: border-box;
   text-align: left;
+  background: var(--admin-surface);
+  color: var(--admin-text);
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  .admin {
+    --admin-surface: #16171d;
+    --admin-text: #f3f4f6;
+    --admin-muted: #b3bac7;
+    color-scheme: dark;
+  }
 }
 
 .admin-header {
@@ -109,6 +124,7 @@
   width: 100%;
   border-collapse: collapse;
   font-size: 14px;
+  color: var(--admin-text);
 }
 
 .admin-table th,
@@ -120,7 +136,7 @@
 
 .admin-table th {
   font-weight: 600;
-  opacity: 0.7;
+  color: var(--admin-muted);
   white-space: nowrap;
 }
 
@@ -200,7 +216,7 @@
 
 .admin-muted {
   margin: 6px 0;
-  opacity: 0.7;
+  color: var(--admin-muted);
   font-size: 13px;
 }
 
@@ -342,6 +358,27 @@
 
 .admin-status-scheduled {
   color: #d98a00;
+}
+
+.admin-dungeon-form { display: grid; gap: 16px; margin-top: 18px; }
+.admin-dungeon-form fieldset { border: 1px solid var(--border, #ddd); border-radius: 10px; padding: 14px; }
+.admin-dungeon-form legend { padding: 0 8px; font-weight: 800; }
+.admin-dungeon-form label { display: grid; gap: 6px; color: var(--admin-text); }
+.admin-dungeon-form input,
+.admin-dungeon-form textarea { box-sizing: border-box; width: 100%; border: 1px solid var(--border, #ddd); border-radius: 7px; background: var(--admin-surface); color: var(--admin-text); padding: 9px 10px; font: inherit; }
+.admin-dungeon-form textarea { resize: vertical; font-family: Consolas, monospace; font-size: 13px; }
+.admin-dungeon-counts { display: grid; grid-template-columns: repeat(2, minmax(150px, 260px)); gap: 12px; }
+.admin-resource-grid { display: grid; gap: 8px; }
+.admin-resource-row { display: grid; grid-template-columns: minmax(180px, 1fr) auto; align-items: end; gap: 8px; }
+.admin-resource-row label { grid-template-columns: minmax(120px, 1fr) minmax(100px, 180px); align-items: center; }
+.admin-resource-row small { display: block; color: var(--admin-muted); font-weight: 400; }
+.admin-inline-add { display: flex; gap: 8px; margin-top: 12px; }
+.admin-inline-add button { white-space: nowrap; }
+.admin-profile-delete { margin-top: 22px; }
+
+@media (max-width: 650px) {
+  .admin-dungeon-counts { grid-template-columns: 1fr; }
+  .admin-resource-row label { grid-template-columns: 1fr; }
 }
 
 .admin-savebar {

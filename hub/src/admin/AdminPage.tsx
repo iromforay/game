@@ -5,9 +5,10 @@ import { addKirbies, adjustGold, getPlayer, listCharacters, listLogs, removeKirb
 import type { AdminCharacter, AdminLog, AdminPlayerDetail, AdminPlayerRow } from './adminClient';
 import { SpawnTab } from './SpawnTab';
 import { MergeDefenseAdminTab } from './MergeDefenseAdminTab';
+import { MyRoomDungeonAdminTab } from './MyRoomDungeonAdminTab';
 import './Admin.css';
 
-type Tab = 'players' | 'spawn' | 'merge-defense' | 'logs';
+type Tab = 'players' | 'spawn' | 'merge-defense' | 'my-room-dungeon' | 'logs';
 
 const ACTION_LABELS: Record<string, string> = {
   'kirby.instance.add': '커비 추가',
@@ -16,6 +17,9 @@ const ACTION_LABELS: Record<string, string> = {
   'kirby.gold.add': '골드 가감',
   'kirby.spawn.update': '스폿 설정',
   'merge_defense.profile.update': '머지 디펜스 프로필 설정',
+  'my_room_dungeon.profile.create': '내방이 던전 진행 생성',
+  'my_room_dungeon.profile.update': '내방이 던전 진행 수정',
+  'my_room_dungeon.profile.delete': '내방이 던전 진행 삭제',
 };
 
 function errorText(err: unknown) {
@@ -59,6 +63,9 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
             <button type="button" role="tab" aria-selected={tab === 'merge-defense'} className={tab === 'merge-defense' ? 'active' : ''} onClick={() => setTab('merge-defense')}>
               광고게임 &gt; 머지 디펜스
             </button>
+            <button type="button" role="tab" aria-selected={tab === 'my-room-dungeon'} className={tab === 'my-room-dungeon' ? 'active' : ''} onClick={() => setTab('my-room-dungeon')}>
+              광고게임 &gt; 내방이 던전
+            </button>
             <button type="button" role="tab" aria-selected={tab === 'logs'} className={tab === 'logs' ? 'active' : ''} onClick={() => setTab('logs')}>
               조작 로그
             </button>
@@ -66,6 +73,7 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
           {tab === 'players' && <PlayersTab />}
           {tab === 'spawn' && <SpawnTab />}
           {tab === 'merge-defense' && <MergeDefenseAdminTab />}
+          {tab === 'my-room-dungeon' && <MyRoomDungeonAdminTab />}
           {tab === 'logs' && <LogsTab />}
         </>
       )}
