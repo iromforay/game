@@ -173,7 +173,7 @@ test('2장 C2-3 ②(1280×720): 세 구조 → 정본 장면(끊기면 처음부
     assert.equal(eventsOf(device).filter((e) => e === 'lake_safe_route_opened').length, 1);
     m = await map(g);
     assert.equal(m.story.goalShown, '누비의 상태를 살피며 염색 샘으로 가자.');
-    assert.deepEqual(m.story.points, []);
+    assert.deepEqual(m.story.points, ['lake_nubi_crisis'], '다음 지점: 누비 위기 지점(C2-4)');
     await g.capture('safe_route_open');
 
     // 재접속: 열린 안전 물길·구조 상태 유지, 다음 목표
@@ -181,7 +181,7 @@ test('2장 C2-3 ②(1280×720): 세 구조 → 정본 장면(끊기면 처음부
     await g.until('호수 지도', MAP_READY, 30_000);
     m = await map(g);
     assert.equal(m.story.gates.gate_lake_safe_route, true);
-    assert.deepEqual(m.story.points, []);
+    assert.deepEqual(m.story.points, ['lake_nubi_crisis']);
     assert.equal(m.story.goalShown, '누비의 상태를 살피며 염색 샘으로 가자.');
     assert.equal((await g.state()).scenes.includes('StoryDialogue'), false, '완료한 장면은 반복되지 않는다');
   }, backend, device);
@@ -242,7 +242,7 @@ test('2장 C2-3 ④: 두 플레이어의 전투와 구조 진행이 독립이고
     assert.ok(eventsOf(a).includes(rescued('a')));
     assert.ok(!eventsOf(a).includes('lake_trapped_turbies_rescued') && !eventsOf(a).includes('lake_safe_route_opened'));
     assert.deepEqual([...(await map(ga)).story.points].sort(), ['lake_rescue_b', 'lake_rescue_c']);
-    assert.deepEqual((await map(gb)).story.points, []);
+    assert.deepEqual((await map(gb)).story.points, ['lake_nubi_crisis']);
   } finally {
     await ga.close();
     await gb.close();

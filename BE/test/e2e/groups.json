@@ -7,7 +7,7 @@
     },
     "story": {
       "purpose": "1장 흐름·복원",
-      "files": ["ch01.e2e.ts", "chapter1-full.e2e.ts", "forest.e2e.ts", "restore.e2e.ts", "lake.e2e.ts", "lake-maze.e2e.ts", "lake-rescue.e2e.ts"]
+      "files": ["ch01.e2e.ts", "chapter1-full.e2e.ts", "forest.e2e.ts", "restore.e2e.ts", "lake.e2e.ts", "lake-maze.e2e.ts", "lake-rescue.e2e.ts", "lake-crisis.e2e.ts"]
     },
     "map": {
       "purpose": "입력·위치·지도·월드 렌더",

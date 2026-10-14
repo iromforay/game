@@ -106,7 +106,7 @@ function state() {
   if (scenes.includes('PartySelect') && party.layout) out.party = { selected: [...party.selected], page: party.page, pages: party.layout.pages, story: !!party.snap?.story, cardW: party.layout.cards[0]?.w };
   for (const key of ['Opening', 'StoryDialogue']) {
     const d = g.scene.getScene(key) as unknown as Any;
-    if (scenes.includes(key) && d) out.dialogue = { key, waiting: !!d.advanceResolver, typing: !!d.typing, line: String(d.fullText ?? '').slice(0, 40), nameInput: !!document.querySelector('input[aria-label="이름"]') };
+    if (scenes.includes(key) && d) out.dialogue = { key, waiting: !!d.advanceResolver, typing: !!d.typing, line: String(d.fullText ?? '').slice(0, 40), fx: d.fxState ?? null, nameInput: !!document.querySelector('input[aria-label="이름"]') };
   }
   const sel = g.scene.getScene('StageSelect') as unknown as Any;
   if (scenes.includes('StageSelect') && sel.L) {

@@ -165,6 +165,9 @@ export const STORY_EVENTS: StoryEventDef[] = [
   // 안전 물길 개방: 세 구조 뒤 안전 물길 지점(lake_safe_route)에서 '물풀 미로' 정본 장면을 끝까지 본 뒤 클라이언트가 완료를 요청한다(대화 구간 completesWith).
   // 서버는 집계 사건과 지점 반경 증거를 요구하고, 이 사건과 CH02_MAZE_CLEARED 이동을 한 트랜잭션으로 기록한다. 내부 안전 물길 문(gate_lake_safe_route)의 openEvent
   ev({ id: 'lake_safe_route_opened', chapter: 2, allowedAt: ['CH02_SETTLEMENT_MET'], requires: ['lake_trapped_turbies_rescued'], evidence: { kind: 'point', stageCode: 'lake', pointId: 'lake_safe_route' }, to: 'CH02_MAZE_CLEARED' }),
+  // 10-13 C2-4: 안전 물길 너머 위기 지점에서 '잊어버린 이름' 장면을 끝까지 본 뒤 클라이언트가 완료를 요청한다(대화 구간 completesWith). 사건과 CH02_NUBI_CRISIS_SEEN을 한 트랜잭션으로 기록.
+  //   서버는 CH02_MAZE_CLEARED·lake_safe_route_opened와 지점 반경 증거를 요구한다. 위기는 실패가 아니다 — 아이템·통화·성장·능력치 변화 없음
+  ev({ id: 'lake_nubi_crisis_seen', chapter: 2, allowedAt: ['CH02_MAZE_CLEARED'], requires: ['lake_safe_route_opened'], evidence: { kind: 'point', stageCode: 'lake', pointId: 'lake_nubi_crisis' }, to: 'CH02_NUBI_CRISIS_SEEN' }),
 ];
 
 // 부분 사건이 모두 기록되면 같은 트랜잭션에서 함께 기록하는 집계 사건(C2-3). 이미 기록돼 있으면 다시 만들지 않는다
@@ -320,6 +323,8 @@ export const STORY_TRIGGERS: StoryTriggerDef[] = [
   })),
   // 5) 안전 물길 지점 — 세 구조가 끝나야 열린다. 정본 '물풀 미로' 장면을 끝까지 보면 lake_safe_route_opened + CH02_MAZE_CLEARED(대화 구간 completesWith)
   { id: 'lake_safe_route', stageCode: 'lake', evidence: { kind: 'point', stageCode: 'lake', pointId: 'lake_safe_route' }, activeAt: ['CH02_SETTLEMENT_MET'], requires: ['lake_trapped_turbies_rescued'], unless: ['lake_safe_route_opened'], repeatable: true, play: { segmentId: 'ch02.maze', endAfter: 'ch02.maze' } },
+  // 6) 누비 이름 망각 위기(C2-4) — 안전 물길 너머. 장면을 끝까지 보면 lake_nubi_crisis_seen + CH02_NUBI_CRISIS_SEEN(대화 구간 completesWith). 중간에 끊기면 같은 지점에서 처음부터
+  { id: 'lake_nubi_crisis', stageCode: 'lake', evidence: { kind: 'point', stageCode: 'lake', pointId: 'lake_nubi_crisis' }, activeAt: ['CH02_MAZE_CLEARED'], requires: ['lake_safe_route_opened'], unless: ['lake_nubi_crisis_seen'], repeatable: true, play: { segmentId: 'ch02.nubi_crisis', endAfter: 'ch02.nubi_crisis' } },
 ];
 export const TRIGGER_BY_ID = new Map(STORY_TRIGGERS.map((t) => [t.id, t]));
 

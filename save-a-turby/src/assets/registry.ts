@@ -53,6 +53,8 @@ export const WORLD_IMAGES: Record<string, string> = {
   ...buildKeyMap(import.meta.glob('./sprites/**/*.png', { eager: true, query: '?url', import: 'default' }) as Record<string, string>),
   ...buildKeyMap(import.meta.glob('./ui/**/*.png', { eager: true, query: '?url', import: 'default' }) as Record<string, string>),
   // 아이템 그림(예: items/story/glowing-yarn-dust.png → glowing-yarn-dust). 지도의 수집 오브젝트가 쓴다
+  // 이야기 연출 오버레이(예: fx/story/nubi-color-drain.png → nubi-color-drain)
+  ...buildKeyMap(import.meta.glob('./fx/**/*.png', { eager: true, query: '?url', import: 'default' }) as Record<string, string>),
   ...buildKeyMap(import.meta.glob('./items/**/*.png', { eager: true, query: '?url', import: 'default' }) as Record<string, string>),
 };
 
@@ -72,6 +74,7 @@ export const SPRITESHEET_KEYS = ['child-walk', 'child-idle', 'villager-a-walk', 
 export const SPRITESHEET_FRAMES: Record<string, { size: number; frames: number; fps: number }> = {
   'wet-stitchling-idle': { size: 128, frames: 4, fps: 6 },
   'wet-sewn-doll-idle': { size: 160, frames: 4, fps: 5 },
+  'nubi-color-drain': { size: 192, frames: 6, fps: 9 }, // 10-13 C2-4 누비 색 빠짐 오버레이(1회 재생, 8~10fps). nubi-color-restore는 C2-6 전까지 등록하지 않는다
 };
 
 // 전투 정의의 characterCode → 전투·지도에서 쓰는 적 시트 키(없으면 기존 터비 그림/임시 도형)

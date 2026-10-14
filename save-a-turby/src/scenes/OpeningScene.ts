@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../config/constants';
-import { AVATAR_IMAGE, BACKGROUND_TILES, CHARACTER_IMAGES, PORTRAIT_IMAGES } from '../assets/registry';
+import { AVATAR_IMAGE, BACKGROUND_TILES, CHARACTER_IMAGES, PORTRAIT_IMAGES, SPRITESHEET_FRAMES } from '../assets/registry';
 import { loadWorldImages } from '../assets/loader';
 import { PAL, TEXT, feltPanel, pillButton } from '../ui/kit';
 import { displayScaleOf, fontPx, MIN_BODY_PX, MIN_BUTTON_PX } from '../ui/responsive';
@@ -21,6 +21,8 @@ export interface OpeningSceneData {
 const BOX = { x: 40, y: 488, w: 1200, h: 200 };
 const PORTRAIT = { x: 56, y: 276, size: 200 };
 const TYPE_MS = 22;
+const WORLD_SATURATION_DRAINED = 0.35; // 색 빠짐: 월드 채도(1 = 원래)
+const WORLD_SATURATION_STEADY = 0.65; // 이름을 기억한 뒤 일부만 안정화(완전한 회복 아님)
 
 // 대사 표시·입력은 1장 대화 화면(StoryDialogueScene)도 그대로 쓴다(상속) — 재생 범위와 전투 연결만 다르다
 export class OpeningScene extends Phaser.Scene {
@@ -42,6 +44,9 @@ export class OpeningScene extends Phaser.Scene {
     this.opts = data;
     this.advanceResolver = null;
     this.typing = null;
+    this.fxState = { drainPlayed: 0, saturation: 1, bounds: null }; // 같은 장면 객체를 다시 쓸 때 연출 상태를 비운다
+    this.fxNubi = undefined;
+    this.satTween = undefined;
     try {
       this.seen = new Set(JSON.parse(localStorage.getItem(data.seenKey) ?? '[]') as string[]);
     } catch {
@@ -219,6 +224,60 @@ export class OpeningScene extends Phaser.Scene {
   private playCue(entry: DialogueEntry) {
     const sound = 'soundCue' in entry ? entry.soundCue : null;
     if (sound && this.cache.audio.exists(sound)) this.sound.play(sound);
+    const cam = 'cameraCue' in entry ? entry.cameraCue : null;
+    if (cam === 'nubi-color-drain') this.playNubiColorDrain();
+    else if (cam === 'world-saturation-steady') this.setWorldSaturation(WORLD_SATURATION_STEADY);
+  }
+
+  // ---------- 누비 색 빠짐 연출(10-13 C2-4) ----------
+  // 누비 그림 위에 같은 중심으로 투명 오버레이를 1회 재생하고(캐릭터를 대체하지 않는다), 배경 채도를 부드럽게 낮춘다.
+  // 대화창·이름표·버튼(this.layer)은 별도 레이어라 탈색되지 않는다. 붉은 화면·섬광·흔들림·시간 제한은 쓰지 않는다.
+  fxState: { drainPlayed: number; saturation: number; bounds: { x: number; y: number; w: number; h: number } | null } = { drainPlayed: 0, saturation: 1, bounds: null };
+  private fxNubi?: Phaser.GameObjects.Image;
+  private satTween?: Phaser.Tweens.Tween;
+
+  private playNubiColorDrain() {
+    this.fxState.drainPlayed++;
+    const cx = CANVAS_WIDTH / 2;
+    const cy = 300;
+    this.fxState.bounds = { x: cx - 120, y: cy - 120, w: 240, h: 240 }; // 오버레이가 차지하는 캔버스 영역(대화창·이름표·버튼과 겹치지 않아야 한다)
+    if (this.textures.exists('turby-nubi') && !this.fxNubi) this.fxNubi = this.add.image(cx, cy, 'turby-nubi').setDisplaySize(200, 200).setDepth(5);
+    const sheet = SPRITESHEET_FRAMES['nubi-color-drain'];
+    if (this.textures.exists('nubi-color-drain') && sheet) {
+      if (!this.anims.exists('nubi-color-drain-once')) this.anims.create({ key: 'nubi-color-drain-once', frames: this.anims.generateFrameNumbers('nubi-color-drain', { start: 0, end: sheet.frames - 1 }), frameRate: sheet.fps, repeat: 0 });
+      const fx = this.add.sprite(cx, cy, 'nubi-color-drain').setOrigin(0.5, 0.5).setDisplaySize(240, 240).setDepth(6);
+      fx.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => this.tweens.add({ targets: fx, alpha: 0, duration: 500, onComplete: () => fx.destroy() }));
+      fx.play('nubi-color-drain-once');
+    }
+    this.setWorldSaturation(WORLD_SATURATION_DRAINED);
+  }
+
+  // 월드(배경·누비 그림)의 채도를 부드럽게 바꾼다. WebGL이 아니면 같은 방향의 회청색 틴트로 대신한다
+  private setWorldSaturation(target: number) {
+    const targets = [this.bg, this.fxNubi].filter((o): o is Phaser.GameObjects.TileSprite | Phaser.GameObjects.Image => !!o);
+    if (targets.length === 0) return;
+    const from = this.fxState.saturation;
+    this.satTween?.remove();
+    const cms = targets.map((o) => (this.game.renderer.type === Phaser.WEBGL && o.postFX ? o.postFX.addColorMatrix() : null));
+    const holder = { v: from };
+    this.satTween = this.tweens.add({
+      targets: holder,
+      v: target,
+      duration: 900,
+      onUpdate: () => {
+        this.fxState.saturation = holder.v;
+        targets.forEach((o, i) => {
+          const cm = cms[i];
+          if (cm) {
+            cm.reset();
+            cm.saturate(holder.v - 1); // 1 = 원래 채도
+          } else {
+            const g = Math.round(255 - (1 - holder.v) * 70);
+            o.setTint(Phaser.Display.Color.GetColor(g, g, 255 - Math.round((1 - holder.v) * 40)));
+          }
+        });
+      },
+    });
   }
 
   // ---------- 이름 입력 ----------

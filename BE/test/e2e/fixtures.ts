@@ -116,7 +116,7 @@ export function seedForest(device: string, stage: keyof typeof FOREST_STAGE, col
 // 10-13 C2-1: 1장을 마치고 2장 호수 입구에 서기 직전(CH01_COMPLETE) — 장 완료 이벤트와 호수 개방까지 기록된 계정. 도입·물들이·물결북은 아직 안 봄
 // stage = 'entry'(기본, 호수 입구 직전) | 'maze'(10-13 C2-2: 물결북 반응 뒤 — CH02_SETTLEMENT_MET, 입구 문은 lake_wave_drum_awakened에서 파생)
 // rescued: 이미 구한 붙잡힌 물들이 지점('a'|'b'|'c') — maze 단계에서만. 셋 다면 집계 사건까지 기록한다
-export function seedLake(device: string, stage: 'entry' | 'maze' = 'entry', rescued: ('a' | 'b' | 'c')[] = []) {
+export function seedLake(device: string, stage: 'entry' | 'maze' | 'cleared' = 'entry', rescued: ('a' | 'b' | 'c')[] = []) {
   const base = seedForest(device, 'equipped');
   return (db: FakeDb) => {
     base(db);
@@ -124,6 +124,11 @@ export function seedLake(device: string, stage: 'entry' | 'maze' = 'entry', resc
     for (const e of ['forest_dansuring_found', 'forest_primordial_knot_seen', 'lake_unlocked']) db.seed('player_story_event', { player_id: player.id, event_id: e });
     const progress = db.rows('player_story_progress', { player_id: player.id })[0] as { checkpoint: string };
     progress.checkpoint = 'CH01_COMPLETE';
+    if (stage === 'cleared') {
+      // 10-13 C2-4: 세 구조·안전 물길 장면까지 끝난 CH02_MAZE_CLEARED(누비 위기 장면 직전)
+      for (const e of ['lake_entry_seen', 'lake_mulduri_met', 'lake_wave_drum_awakened', 'lake_trapped_mulduri_a_rescued', 'lake_trapped_mulduri_b_rescued', 'lake_trapped_mulduri_c_rescued', 'lake_trapped_turbies_rescued', 'lake_safe_route_opened']) db.seed('player_story_event', { player_id: player.id, event_id: e });
+      progress.checkpoint = 'CH02_MAZE_CLEARED';
+    }
     if (stage === 'maze') {
       for (const e of ['lake_entry_seen', 'lake_mulduri_met', 'lake_wave_drum_awakened']) db.seed('player_story_event', { player_id: player.id, event_id: e });
       progress.checkpoint = 'CH02_SETTLEMENT_MET';

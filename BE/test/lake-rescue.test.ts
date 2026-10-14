@@ -354,7 +354,7 @@ test('안전 물길: 세 구조 전 장면 요청 거부, 구조 뒤 장면은 �
   // 재접속: 내부 문 열림·구조 지점 없음·다음 목표
   const view = await s.story.stageData(P, 'lake');
   assert.equal(view.gates.find((g) => g.id === 'gate_lake_safe_route')!.open, true);
-  assert.deepEqual(view.points, []);
+  assert.deepEqual(view.points.map((p) => p.id), ['lake_nubi_crisis'], '다음 지점: 누비 위기 지점(C2-4)');
   assert.equal(view.goal?.text, '누비의 상태를 살피며 염색 샘으로 가자.');
   assert.equal(view.render.overlays.some((o) => ['black-thread-trap', 'wet-stitchling-idle'].includes(o.assetKey)), false, '덫·적이 남지 않는다');
 });

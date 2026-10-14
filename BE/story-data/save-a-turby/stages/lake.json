@@ -1,7 +1,7 @@
 {
   "stageCode": "lake",
   "greybox": true,
-  "note": "2장 호수 기능 맵(10-13 C2-1): 좌표는 기능 검증용이며 최종 미술 좌표가 아니다(design/save-a-turby/chapter02-lake/asset-contract-v1.md 구역 배치 범위 안). 입구→정착지→물풀문→물풀 미로(얕은 물·깊은 물·물살·마른 발판)→염색 샘 순서(10-13 C2-2). 이벤트·지점 ID는 바뀌지 않는다. 10-13 v1c: 물결북 idle/active·파문(wave-path)은 전달 에셋(delivery-v1), 표시 크기는 storyPoints[].art·render.overlays가 단일 출처. C2-3: 구조 지점 3곳·안전 물길 지점·내부 안전 물길 문·검은 실 덫 3곳(기능 좌표).",
+  "note": "2장 호수 기능 맵(10-13 C2-1): 좌표는 기능 검증용이며 최종 미술 좌표가 아니다(design/save-a-turby/chapter02-lake/asset-contract-v1.md 구역 배치 범위 안). 입구→정착지→물풀문→물풀 미로(얕은 물·깊은 물·물살·마른 발판)→염색 샘 순서(10-13 C2-2). 이벤트·지점 ID는 바뀌지 않는다. 10-13 v1c: 물결북 idle/active·파문(wave-path)은 전달 에셋(delivery-v1), 표시 크기는 storyPoints[].art·render.overlays가 단일 출처. C2-3: 구조 지점 3곳·안전 물길 지점·내부 안전 물길 문·검은 실 덫 3곳(기능 좌표). C2-4: 누비 이름 망각 위기 지점(lake_nubi_crisis, 내부 안전 물길 너머).",
   "size": {
     "width": 3200,
     "height": 2400
@@ -43,6 +43,12 @@
       "x": 2465,
       "y": 760,
       "radius": 70
+    },
+    {
+      "id": "lake_nubi_crisis",
+      "x": 2370,
+      "y": 480,
+      "radius": 90
     }
   ],
   "objects": [],
@@ -128,6 +134,13 @@
       "assetKey": "placeholder-point",
       "label": "바늘구멍 물풀 벽",
       "prompt": "바늘구멍 물풀 벽 살펴보기"
+    },
+    {
+      "id": "lake_nubi_crisis",
+      "kind": "inspect",
+      "assetKey": "placeholder-point",
+      "label": "누비",
+      "prompt": "누비의 상태 살피기"
     }
   ],
   "goals": [
@@ -201,6 +214,16 @@
       "text": "누비의 상태를 살피며 염색 샘으로 가자.",
       "requires": [
         "lake_safe_route_opened"
+      ],
+      "unless": [
+        "lake_nubi_crisis_seen"
+      ]
+    },
+    {
+      "id": "protect_nubi",
+      "text": "누비를 지키기 위해 염색 샘으로 가자.",
+      "requires": [
+        "lake_nubi_crisis_seen"
       ]
     }
   ],

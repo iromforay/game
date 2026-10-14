@@ -136,7 +136,7 @@ test('ch02(C2-1): 스키마 규칙을 지키고, 물빛 입구·색을 잃은 �
   const raw = readFileSync(join(DOCS, 'docs/scene/2장.md'), 'utf8').split(/\r?\n/).map((l) => l.trim());
   const from = raw.findIndex((l) => l === '## 물빛 입구');
   const maze = raw.findIndex((l) => l === '## 물풀 미로');
-  const to = raw.findIndex((l) => l === '## 잊어버린 이름'); // C2-3: 물풀 미로 구간까지 대조
+  const to = raw.findIndex((l) => l === '## 물먹은 박음이'); // C2-3·C2-4: 물풀 미로·잊어버린 이름 구간까지 대조
   assert.ok(from >= 0 && maze > from && to > maze);
   const md: { who: string | null; text: string }[] = [];
   let speaker: string | null = null;
@@ -164,11 +164,23 @@ test('ch02(C2-1): 스키마 규칙을 지키고, 물빛 입구·색을 잃은 �
     else assert.equal(md[i].who, null, `${e.dialogueId}: 서술`);
   });
   // 구간 시작 체크포인트·완료 이벤트가 서버 전이표와 맞다
-  assert.deepEqual(file.segments.map((s) => [s.segmentId, s.resumeFrom, s.completesWith]), [['ch02.lake_entry', 'CH01_COMPLETE', 'lake_entry_seen'], ['ch02.settlement', 'CH02_STARTED', null], ['ch02.rescue_a', 'CH02_SETTLEMENT_MET', null], ['ch02.rescue_b', 'CH02_SETTLEMENT_MET', null], ['ch02.rescue_c', 'CH02_SETTLEMENT_MET', null], ['ch02.maze', 'CH02_SETTLEMENT_MET', 'lake_safe_route_opened']]);
+  assert.deepEqual(file.segments.map((s) => [s.segmentId, s.resumeFrom, s.completesWith]), [['ch02.lake_entry', 'CH01_COMPLETE', 'lake_entry_seen'], ['ch02.settlement', 'CH02_STARTED', null], ['ch02.rescue_a', 'CH02_SETTLEMENT_MET', null], ['ch02.rescue_b', 'CH02_SETTLEMENT_MET', null], ['ch02.rescue_c', 'CH02_SETTLEMENT_MET', null], ['ch02.maze', 'CH02_SETTLEMENT_MET', 'lake_safe_route_opened'], ['ch02.nubi_crisis', 'CH02_MAZE_CLEARED', 'lake_nubi_crisis_seen']]);
   // 구조 구간은 전투 항목 하나뿐(문구 없음) — 전투 키가 서버 스토리 전투 정의·트리거와 같다
   for (const k of ['a', 'b', 'c']) {
     const seg = file.segments.find((s) => s.segmentId === `ch02.rescue_${k}`)!;
     assert.deepEqual(seg.entries.map((e) => [e.kind, e.encounterKey]), [['storyBattle', `lake_guard_${k}`]]);
   }
   assert.equal(EVENT_BY_ID.get('lake_entry_seen')!.allowedAt[0], 'CH01_COMPLETE');
+  // C2-4 위기 장면: 정본 순서의 핵심 대사와 {playerName} 토큰(저장된 이름으로 치환은 클라이언트가 한다 — 이름 재입력 항목 없음)
+  const crisis = file.segments.find((x) => x.segmentId === 'ch02.nubi_crisis')!;
+  assert.equal(crisis.entries.some((e) => e.kind === 'nameInput'), false);
+  const lines = crisis.entries.filter((e) => e.kind === 'line').map((e) => [e.speakerLabel, e.text]);
+  assert.deepEqual(lines[0], ['누비', '저기…….']);
+  assert.deepEqual(lines[1], ['{playerName}', '왜 그래?']);
+  assert.equal(lines[2][1], '네 이름이…… 생각나지 않아.');
+  assert.match(String(lines[3][1]), /내 이름은 {playerName}이야/);
+  assert.match(String(lines[4][1]), /^{playerName}\. 기억났어/);
+  assert.match(String(lines[lines.length - 1][1]), /물빛 염색실을 되찾을 거야/);
+  assert.equal(crisis.entries[0].cameraCue, 'nubi-color-drain');
+  assert.equal(crisis.entries.filter((e) => e.cameraCue).length, 2, '색 빠짐·채도 안정화 두 cue뿐(섬광·흔들림 없음)');
 });
