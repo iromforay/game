@@ -3,17 +3,19 @@
   "private": true,
   "version": "0.0.0",
   "scripts": {
-    "build:shared": "npm run build -w turby-stage-geometry",
+    "build:shared": "npm run build -w turby-stage-geometry && npm run build -w sweet-shop-contracts",
     "postinstall": "npm run build:shared"
   },
   "workspaces": [
     "shared/turby-stage-geometry",
+    "shared/sweet-shop-contracts",
     "hub",
     "tower-defense",
     "offense-tower",
     "strategy-marbles",
     "number-hero-tower",
     "my-room-dungeon",
+    "sweet-shop",
     "save-a-turby",
     "steal_a_kirby",
     "BE"

@@ -1,5 +1,6 @@
 import { NumberHeroTowerGame } from 'number-hero-tower';
 import { MyRoomDungeonGame } from 'my-room-dungeon';
+import { SweetShopGame } from 'sweet-shop';
 import { NumberGateRunnerScreen } from './NumberGateRunnerScreen';
 import type { AdGameId } from './adGames';
 import { GameResultCard } from './scoreboard/GameResultCard';
@@ -13,6 +14,14 @@ interface AdGameScreenProps {
 }
 
 export function AdGameScreen({ gameId, onExit, onOpenRanking }: AdGameScreenProps) {
+  if (gameId === 'sweet-shop') {
+    return (
+      <div className="ad-game-react-screen">
+        <SweetShopGame onExit={onExit} />
+      </div>
+    );
+  }
+
   if (gameId === 'my-room-dungeon') {
     return (
       <div className="ad-game-react-screen">

@@ -6,11 +6,12 @@
     "node": "22.23.1"
   },
   "scripts": {
-    "prebuild": "npm run build -w turby-stage-geometry --prefix ..",
-    "pretest": "npm run build -w turby-stage-geometry --prefix ..",
-    "pretest:e2e": "npm run build -w turby-stage-geometry --prefix ..",
-    "predev": "npm run build -w turby-stage-geometry --prefix ..",
+    "prebuild": "npm run build:shared --prefix ..",
+    "pretest": "npm run build:shared --prefix ..",
+    "pretest:e2e": "npm run build:shared --prefix ..",
+    "predev": "npm run build:shared --prefix ..",
     "predev:turby": "npm run build -w turby-stage-geometry --prefix ..",
+    "predev:kirby": "npm run build:shared --prefix ..",
     "dev": "ts-node --transpile-only src/main.ts",
     "dev:turby": "ts-node --transpile-only src/turby-main.ts",
     "dev:kirby": "ts-node --transpile-only src/kirby-main.ts",
@@ -43,6 +44,7 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "socket.io": "^4.8.1",
+    "sweet-shop-contracts": "*",
     "turby-stage-geometry": "*"
   },
   "devDependencies": {

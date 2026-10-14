@@ -40,7 +40,7 @@ export const AD_GAMES: AdGameMeta[] = [
     number: 4,
     title: '달콤상점',
     description: '디저트를 만들어 가격을 정하고 다른 플레이어와 사고파는 온라인 카페를 운영하세요.',
-    status: 'planning',
+    status: 'available',
   },
   {
     id: 'my-room-dungeon',
