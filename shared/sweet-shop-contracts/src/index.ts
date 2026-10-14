@@ -4,6 +4,7 @@ export const SWEET_SHOP_EVENTS = {
   receiveDelivery: 'sweet_shop:delivery:receive',
   startCooking: 'sweet_shop:cooking:start',
   receiveCooking: 'sweet_shop:cooking:receive',
+  completeFirstCookingTutorial: 'sweet_shop:tutorial:first-cooking:complete',
   createListing: 'sweet_shop:listing:create',
   updateListing: 'sweet_shop:listing:update',
   removeListing: 'sweet_shop:listing:remove',
@@ -18,6 +19,7 @@ export type IngredientId = 'flour' | 'sugar' | 'egg' | 'milk' | 'butter' | 'stra
 export type RecipeId = 'butter-cookie' | 'strawberry-macaron' | 'milk-pudding';
 export type DessertQuality = 'normal' | 'good' | 'excellent' | 'premium';
 export type DeliveryStatus = 'ORDERED' | 'ARRIVED' | 'WAITING_FOR_SPACE' | 'RECEIVED';
+export type CookingStatus = 'COOKING' | 'COMPLETED' | 'WAITING_FOR_SPACE' | 'RECEIVED';
 
 export interface IngredientDefinition {
   id: IngredientId;
@@ -59,9 +61,50 @@ export interface SweetShopCafeState {
     ingredientSlotLimit: number;
     dessertSlotLimit: number;
   };
+  tutorial: {
+    firstCookingCompleted: boolean;
+  };
   ingredients: Partial<Record<IngredientId, number>>;
   unlockedRecipes: RecipeId[];
+  deliveries: SweetShopDelivery[];
+  cookingJobs: SweetShopCookingJob[];
+  desserts: SweetShopDessert[];
+  recipeProgress: Partial<Record<RecipeId, SweetShopRecipeProgress>>;
   updatedAt: string;
+}
+
+export interface SweetShopDelivery {
+  id: string;
+  ingredientId: IngredientId;
+  quantity: number;
+  totalPrice: number;
+  orderedAt: string;
+  arrivesAt: string;
+  status: DeliveryStatus;
+}
+
+export interface SweetShopCookingJob {
+  id: string;
+  recipeId: RecipeId;
+  quantity: number;
+  startedAt: string;
+  completesAt: string;
+  status: CookingStatus;
+}
+
+export interface SweetShopDessert {
+  id: string;
+  recipeId: RecipeId;
+  name: string;
+  quantity: number;
+  quality: DessertQuality;
+  createdAt: string;
+}
+
+export interface SweetShopRecipeProgress {
+  masteryExperience: number;
+  craftCount: number;
+  bestQuality: DessertQuality | null;
 }
 
 export interface OrderIngredientsRequest {
@@ -73,6 +116,7 @@ export interface OrderIngredientsRequest {
 export interface ReceiveDeliveryRequest { requestId: string; deliveryId: string; }
 export interface StartCookingRequest { requestId: string; recipeId: RecipeId; quantity: number; }
 export interface ReceiveCookingRequest { requestId: string; cookingId: string; }
+export interface CompleteFirstCookingTutorialRequest { requestId: string; }
 export interface CreateListingRequest { requestId: string; dessertId: string; quantity: number; unitPrice: number; }
 export interface UpdateListingRequest { requestId: string; listingId: string; quantity: number; unitPrice: number; }
 export interface RemoveListingRequest { requestId: string; listingId: string; }
@@ -94,6 +138,7 @@ export interface SweetShopGateway {
   receiveDelivery(request: ReceiveDeliveryRequest): Promise<SweetShopResult<SweetShopCafeState>>;
   startCooking(request: StartCookingRequest): Promise<SweetShopResult<{ cookingId: string; completesAt: string }>>;
   receiveCooking(request: ReceiveCookingRequest): Promise<SweetShopResult<{ dessertId: string }>>;
+  completeFirstCookingTutorial(request: CompleteFirstCookingTutorialRequest): Promise<SweetShopResult<SweetShopCafeState>>;
   createListing(request: CreateListingRequest): Promise<SweetShopResult<{ listingId: string }>>;
   updateListing(request: UpdateListingRequest): Promise<SweetShopResult<{ listingId: string }>>;
   removeListing(request: RemoveListingRequest): Promise<SweetShopResult<{ listingId: string }>>;

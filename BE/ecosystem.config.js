@@ -47,5 +47,18 @@ module.exports = {
         MY_ROOM_DUNGEON_PORT: process.env.MY_ROOM_DUNGEON_PORT || 3004,
       },
     },
+    {
+      // 달콤상점 전용 API·Socket.IO 프로세스
+      name: 'sweet-shop-be',
+      cwd: __dirname,
+      script: 'dist/sweet-shop-main.js',
+      instances: 1,
+      exec_mode: 'fork',
+      env: {
+        NODE_ENV: 'production',
+        SWEET_SHOP_PORT: process.env.SWEET_SHOP_PORT || 3005,
+        SWEET_SHOP_MULTIPLAYER_ENABLED: process.env.SWEET_SHOP_MULTIPLAYER_ENABLED || 'true',
+      },
+    },
   ],
 };

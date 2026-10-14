@@ -6,6 +6,7 @@ import {
   TILE_SIZE, tileCenter, type CafeFacility, type TilePoint, worldToTile,
 } from './cafeMap';
 import { LocalSweetShopGateway } from './shopGateway';
+import { ShopFacilityPanel } from './ShopFacilityPanel';
 import './styles.css';
 
 export interface SweetShopGameProps { onExit?: () => void; }
@@ -49,6 +50,14 @@ export function SweetShopGame({ onExit }: SweetShopGameProps) {
   const [pendingFacility, setPendingFacility] = useState<CafeFacility | null>(null);
   const [openFacility, setOpenFacility] = useState<CafeFacility | null>(null);
   const [tutorialSeen, setTutorialSeen] = useState(initialScene.tutorialSeen);
+  const [now, setNow] = useState(Date.now());
+  const [message, setMessage] = useState<{ text: string; good: boolean } | null>(null);
+
+  const refreshCafe = useCallback(async () => { setCafe(await gateway.loadCafe()); }, [gateway]);
+  const showMessage = useCallback((text: string, good = false) => {
+    setMessage({ text, good });
+    window.setTimeout(() => setMessage((current) => current?.text === text ? null : current), 2600);
+  }, []);
 
   const clampCamera = useCallback((next: CameraState): CameraState => {
     const viewport = viewportRef.current;
@@ -79,7 +88,15 @@ export function SweetShopGame({ onExit }: SweetShopGameProps) {
     });
   }, [character, setCamera]);
 
-  useEffect(() => { void gateway.loadCafe().then(setCafe); }, [gateway]);
+  useEffect(() => { void refreshCafe(); }, [refreshCafe]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNow(Date.now());
+      if (openFacility?.id === 'order-board' || openFacility?.id === 'cooking-counter') void refreshCafe();
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [openFacility?.id, refreshCafe]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -130,6 +147,11 @@ export function SweetShopGame({ onExit }: SweetShopGameProps) {
     setPendingFacility(facility);
     setPath(nextPath);
   }, [character]);
+
+  const goToFacility = useCallback((facilityId: string) => {
+    const facility = CAFE_FACILITIES.find((item) => item.id === facilityId);
+    if (facility) moveTo(facility.access, facility);
+  }, [moveTo]);
 
   const handleTap = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
@@ -208,11 +230,24 @@ export function SweetShopGame({ onExit }: SweetShopGameProps) {
   };
 
   const characterWorld = tileCenter(character);
+  const activeDeliveries = cafe?.deliveries.filter((item) => item.status !== 'RECEIVED') ?? [];
+  const activeCooking = cafe?.cookingJobs.find((item) => item.status !== 'RECEIVED');
+  const firstCookingTutorialCompleted = cafe?.tutorial.firstCookingCompleted === true;
+  const cookieReady = !!cafe && (cafe.ingredients.flour ?? 0) >= 2 && (cafe.ingredients.sugar ?? 0) >= 1 && (cafe.ingredients.butter ?? 0) >= 1;
+  const guide = cafe?.desserts.length
+    ? { icon: '🎉', title: '첫 디저트 완성!', text: '디저트 상자에서 완성품을 확인하세요.', facilityId: 'dessert-box', action: '상자 열기' }
+    : activeCooking
+      ? { icon: '🩷', title: '디저트가 조리 중이에요', text: '조리대에서 마카롱 진행률을 확인하세요.', facilityId: 'cooking-counter', action: '조리 확인' }
+      : cookieReady
+        ? { icon: '🥣', title: '재료가 준비됐어요!', text: '조리대로 가서 버터 쿠키를 만들어보세요.', facilityId: 'cooking-counter', action: '조리하러 가기' }
+        : activeDeliveries.length
+          ? { icon: '🧺', title: '재료가 배송 중이에요', text: '도착한 재료는 배송 바구니에서 직접 받아주세요.', facilityId: 'order-board', action: '배송 확인' }
+          : { icon: '📋', title: '첫 주문부터 시작해요', text: '버터 쿠키 재료 묶음을 주문하면 바로 시작할 수 있어요.', facilityId: 'order-board', action: '재료 주문하기' };
   return (
     <main className="sweet-shop-game">
       <header className="sweet-shop-header">
         <button type="button" onClick={onExit}>← 허브</button>
-        <div><small>GAME 04 · CAFE</small><h1>{cafe?.profile.cafeName ?? '달콤상점'}</h1></div>
+        <div><small>GAME 04 · CAFE {cafe && !firstCookingTutorialCompleted && <em className="tutorial-label">첫 조리 안내 중</em>}</small><h1>{cafe?.profile.cafeName ?? '달콤상점'}</h1></div>
         <strong>🪙 {cafe?.profile.gold ?? 0}</strong>
       </header>
 
@@ -223,6 +258,8 @@ export function SweetShopGame({ onExit }: SweetShopGameProps) {
           {CAFE_FACILITIES.map((facility) => (
             <div key={facility.id} data-facility-id={facility.id} className={`cafe-facility cafe-facility-${facility.id}`} style={{ left: facility.x * TILE_SIZE, top: facility.y * TILE_SIZE, width: facility.width * TILE_SIZE, height: facility.height * TILE_SIZE }}>
               <span aria-hidden="true">{facility.icon}</span><b>{facility.name}</b>
+              {facility.id === 'order-board' && <em>재료 주문</em>}
+              {facility.id === 'cooking-counter' && <em>{activeCooking ? '조리 확인' : cookieReady ? '만들기 가능!' : '조리하기'}</em>}
             </div>
           ))}
           {CAFE_FACILITIES.map((facility) => {
@@ -237,12 +274,16 @@ export function SweetShopGame({ onExit }: SweetShopGameProps) {
           <output>{Math.round(camera.zoom * 100)}%</output>
         </div>
 
+        {tutorialSeen && !firstCookingTutorialCompleted && !openFacility && <aside className="first-quest" onPointerDown={(event) => event.stopPropagation()}><span>{guide.icon}</span><div><strong>첫 조리 · {guide.title}</strong><small>{guide.text}</small></div><button type="button" onClick={() => goToFacility(guide.facilityId)}>{guide.action} →</button></aside>}
+
         {!tutorialSeen && <aside className="cafe-tutorial"><strong>공방 조작법</strong><p>바닥이나 시설을 짧게 터치하세요.<br />드래그하면 화면 이동, 두 손가락으로 확대·축소합니다.</p><button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => setTutorialSeen(true)}>알겠어요</button></aside>}
 
-        {openFacility && <section className="facility-panel" role="dialog" aria-modal="true" aria-label={openFacility.name} onPointerDown={(event) => event.stopPropagation()}>
+        {message && <div className={`shop-toast ${message.good ? 'good' : ''}`}>{message.good ? '✨' : '💭'} {message.text}</div>}
+
+        {openFacility && cafe && <section className={`facility-panel facility-panel-${openFacility.id}`} role="dialog" aria-modal="true" aria-label={openFacility.name} onPointerDown={(event) => event.stopPropagation()}>
           <button className="facility-close" type="button" onClick={() => setOpenFacility(null)}>×</button>
-          <span>{openFacility.icon}</span><h2>{openFacility.name}</h2><p>{openFacility.description}</p>
-          <button type="button" onClick={() => setOpenFacility(null)}>확인</button>
+          <header className="facility-panel-title"><span>{openFacility.icon}</span><div><small>SWEET WORKSHOP</small><h2>{openFacility.name}</h2></div></header>
+          <ShopFacilityPanel facilityId={openFacility.id} cafe={cafe} gateway={gateway} now={now} onRefresh={refreshCafe} onMessage={showMessage} onNavigate={goToFacility} />
         </section>}
       </div>
       <footer>싱글 개발 모드 · 소켓 전송 없음</footer>

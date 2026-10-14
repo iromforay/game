@@ -4,7 +4,7 @@
 # DB 스키마 변경(BE/prisma/sql/*.sql)은 이 스크립트 실행 "전에" 수동으로 반영할 것.
 #
 # 사용: ./deploy-be.sh                                   (기본: 전체 BE 프로세스)
-#       APPS="my-room-dungeon-be kirby-be" ./deploy-be.sh  (일부 프로세스만 배포할 때)
+#       APPS="sweet-shop-be my-room-dungeon-be" ./deploy-be.sh  (일부 프로세스만 배포할 때)
 #
 # 배경(2026-09-23): 운영 BE는 pm2가 dist/*.js를 실행하는데 dist는 git에 없고, 루트 build.sh는
 # hub(FE)만 배포한다. 그래서 git pull + pm2 restart만 하면 9월 18일 빌드가 그대로 떠서 로비
@@ -14,7 +14,7 @@ set -euo pipefail
 
 BE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$BE_DIR/.." && pwd)"
-APPS="${APPS:-my-room-dungeon-be kirby-be be turby-be}"
+APPS="${APPS:-sweet-shop-be my-room-dungeon-be kirby-be be turby-be}"
 
 # 포트 설정은 BE/.env를 단일 원본으로 사용한다. 셸 코드를 실행하지 않고 포트 변수만 읽는다.
 if [ -f "$BE_DIR/.env" ]; then
@@ -22,7 +22,7 @@ if [ -f "$BE_DIR/.env" ]; then
         key="${key%$'\r'}"
         value="${value%$'\r'}"
         case "$key" in
-            PORT|TURBY_PORT|KIRBY_PORT|MY_ROOM_DUNGEON_PORT)
+            PORT|TURBY_PORT|KIRBY_PORT|MY_ROOM_DUNGEON_PORT|SWEET_SHOP_PORT|SWEET_SHOP_MULTIPLAYER_ENABLED)
                 export "$key=$value"
                 ;;
         esac
@@ -32,6 +32,12 @@ fi
 : "${MY_ROOM_DUNGEON_PORT:=3004}"
 export MY_ROOM_DUNGEON_PORT
 echo "내 방이 던전 BE 포트: $MY_ROOM_DUNGEON_PORT"
+
+: "${SWEET_SHOP_PORT:=3005}"
+: "${SWEET_SHOP_MULTIPLAYER_ENABLED:=true}"
+export SWEET_SHOP_PORT SWEET_SHOP_MULTIPLAYER_ENABLED
+echo "달콤상점 BE 포트: $SWEET_SHOP_PORT"
+echo "달콤상점 멀티플레이: $SWEET_SHOP_MULTIPLAYER_ENABLED"
 
 # 1. 로컬 HEAD가 upstream과 같은지 확인(build.sh와 동일, fetch/pull은 하지 않음)
 if [ -d "$REPO_DIR/.git" ]; then

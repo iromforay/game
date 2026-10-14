@@ -1,9 +1,17 @@
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
+import { fileURLToPath } from 'node:url'
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    // 브라우저에서는 CommonJS dist가 아닌 ESM TypeScript 원본을 변환한다.
+    // NestJS BE는 기존 CommonJS dist를 계속 사용한다.
+    alias: {
+      'sweet-shop-contracts': fileURLToPath(new URL('../shared/sweet-shop-contracts/src/index.ts', import.meta.url)),
+    },
+  },
   server: {
     port: 5174,
     fs: {

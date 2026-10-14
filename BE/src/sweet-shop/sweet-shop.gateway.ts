@@ -20,6 +20,11 @@ export class SweetShopGateway {
   @SubscribeMessage(SWEET_SHOP_EVENTS.receiveDelivery) receiveDelivery() { return disabled(); }
   @SubscribeMessage(SWEET_SHOP_EVENTS.startCooking) startCooking() { return disabled(); }
   @SubscribeMessage(SWEET_SHOP_EVENTS.receiveCooking) receiveCooking() { return disabled(); }
+  @SubscribeMessage(SWEET_SHOP_EVENTS.completeFirstCookingTutorial)
+  async completeFirstCookingTutorial(@MessageBody() body: { token?: unknown }) {
+    if (!this.enabled()) return disabled();
+    return { ok: true, data: await this.sweetShop.completeFirstCookingTutorial(body?.token) };
+  }
   @SubscribeMessage(SWEET_SHOP_EVENTS.createListing) createListing() { return disabled(); }
   @SubscribeMessage(SWEET_SHOP_EVENTS.updateListing) updateListing() { return disabled(); }
   @SubscribeMessage(SWEET_SHOP_EVENTS.removeListing) removeListing() { return disabled(); }

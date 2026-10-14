@@ -18,14 +18,14 @@ export interface CafeFacility {
 }
 
 export const CAFE_FACILITIES: readonly CafeFacility[] = [
-  { id: 'order-board', name: '재료 주문 게시판', icon: '📋', description: '재료 주문은 2단계에서 사용할 수 있습니다.', x: 2, y: 2, width: 3, height: 2, access: { x: 3, y: 4 } },
-  { id: 'ingredient-storage', name: '재료 보관함', icon: '🧊', description: '재료 상자가 비어 있습니다.', x: 7, y: 2, width: 3, height: 2, access: { x: 8, y: 4 } },
+  { id: 'order-board', name: '재료 주문 게시판', icon: '📋', description: '필요한 재료를 골드로 주문합니다.', x: 2, y: 2, width: 3, height: 2, access: { x: 3, y: 4 } },
+  { id: 'ingredient-storage', name: '재료 보관함', icon: '🧊', description: '보유 중인 재료와 보관 슬롯을 확인합니다.', x: 7, y: 2, width: 3, height: 2, access: { x: 8, y: 4 } },
   { id: 'recipe-book', name: '레시피북', icon: '📖', description: '버터 쿠키 레시피를 보유하고 있습니다.', x: 13, y: 2, width: 2, height: 2, access: { x: 13, y: 4 } },
-  { id: 'cooking-counter', name: '조리대', icon: '🥣', description: '조리 기능은 3단계에서 사용할 수 있습니다.', x: 2, y: 9, width: 4, height: 3, access: { x: 4, y: 12 } },
+  { id: 'cooking-counter', name: '조리대', icon: '🥣', description: '레시피를 골라 달콤한 디저트를 만듭니다.', x: 2, y: 9, width: 4, height: 3, access: { x: 4, y: 12 } },
   { id: 'dessert-box', name: '디저트 상자', icon: '🧁', description: '아직 완성된 디저트가 없습니다.', x: 13, y: 9, width: 3, height: 3, access: { x: 14, y: 12 } },
   { id: 'display-stand', name: '판매대', icon: '🍰', description: '판매대 3칸이 비어 있습니다.', x: 6, y: 16, width: 6, height: 2, access: { x: 9, y: 15 } },
-  { id: 'notice-board', name: '알림노트 광고판', icon: '💌', description: '알림노트 광고는 멀티플레이 단계에서 사용할 수 있습니다.', x: 2, y: 20, width: 3, height: 2, access: { x: 4, y: 19 } },
-  { id: 'cafe-door', name: '카페 출입문', icon: '🚪', description: '카페 거리는 6단계에서 열립니다.', x: 8, y: 21, width: 3, height: 2, access: { x: 9, y: 20 } },
+  { id: 'notice-board', name: '알림노트 광고판', icon: '💌', description: '판매할 디저트가 생기면 손님에게 카페를 알릴 수 있습니다.', x: 2, y: 20, width: 3, height: 2, access: { x: 4, y: 19 } },
+  { id: 'cafe-door', name: '카페 출입문', icon: '🚪', description: '영업 준비를 마치면 카페 거리로 나갈 수 있습니다.', x: 8, y: 21, width: 3, height: 2, access: { x: 9, y: 20 } },
 ] as const;
 
 const key = ({ x, y }: TilePoint) => `${x},${y}`;
