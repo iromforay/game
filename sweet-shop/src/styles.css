@@ -1,8 +1,6 @@
-:root { font-family: Inter, Pretendard, system-ui, sans-serif; color: #5b3545; background: #fff7f2; }
-* { box-sizing: border-box; }
-html, body, #root { min-height: 100%; margin: 0; overflow: hidden; }
-button { font: inherit; }
-.sweet-shop-game { height: 100dvh; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; background: #f8ddd2; }
+.sweet-shop-game { height: 100dvh; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; color: #5b3545; background: #f8ddd2; font-family: Inter, Pretendard, system-ui, sans-serif; }
+.sweet-shop-game, .sweet-shop-game * { box-sizing: border-box; }
+.sweet-shop-game button { font: inherit; }
 .sweet-shop-header { z-index: 20; display: grid; grid-template-columns: 72px 1fr auto; gap: 12px; align-items: center; padding: max(10px, env(safe-area-inset-top)) 14px 10px; background: #fffaf7f2; border-bottom: 1px solid #efc7bd; box-shadow: 0 4px 18px #6e344519; }
 .sweet-shop-header button { border: 0; border-radius: 14px; padding: 10px; color: #784457; background: #f7d5cf; cursor: pointer; }
 .sweet-shop-header small { color: #ad7180; font-weight: 800; }.sweet-shop-header h1 { margin: 2px 0 0; font-size: 1.15rem; }

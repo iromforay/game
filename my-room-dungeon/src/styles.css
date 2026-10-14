@@ -1,13 +1,11 @@
-:root {
+.room-dungeon-shell {
   font-family: "Pretendard", "Noto Sans KR", system-ui, sans-serif;
   color: #3d342d;
-  background: #171514;
   font-synthesis: none;
 }
 
-* { box-sizing: border-box; }
-html, body, #root { min-height: 100%; margin: 0; }
-button { font: inherit; }
+.room-dungeon-shell, .room-dungeon-shell * { box-sizing: border-box; }
+.room-dungeon-shell button { font: inherit; }
 
 .room-dungeon-shell {
   min-height: 100vh;
