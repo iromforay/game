@@ -12,11 +12,12 @@ export const SWEET_SHOP_EVENTS = {
   buyDessert: 'sweet_shop:dessert:buy',
   eatDessert: 'sweet_shop:dessert:eat',
   createGuestbook: 'sweet_shop:guestbook:create',
+  listCafeStreet: 'sweet_shop:cafe-street:list',
 } as const;
 
 export type SweetShopEvent = (typeof SWEET_SHOP_EVENTS)[keyof typeof SWEET_SHOP_EVENTS];
 export type IngredientId = 'flour' | 'sugar' | 'egg' | 'milk' | 'butter' | 'strawberry';
-export type RecipeId = 'butter-cookie' | 'strawberry-macaron' | 'milk-pudding';
+export type RecipeId = 'butter-cookie' | 'strawberry-macaron' | 'milk-pudding' | 'choco-cupcake' | 'honey-cake';
 export type DessertQuality = 'normal' | 'good' | 'excellent' | 'premium';
 export type DeliveryStatus = 'ORDERED' | 'ARRIVED' | 'WAITING_FOR_SPACE' | 'RECEIVED';
 export type CookingStatus = 'COOKING' | 'COMPLETED' | 'WAITING_FOR_SPACE' | 'RECEIVED';
@@ -33,6 +34,8 @@ export interface RecipeDefinition {
   name: string;
   cookSeconds: number;
   ingredients: Partial<Record<IngredientId, number>>;
+  level: number;
+  basePrice: number;
 }
 
 export const INGREDIENTS: readonly IngredientDefinition[] = [
@@ -45,9 +48,11 @@ export const INGREDIENTS: readonly IngredientDefinition[] = [
 ] as const;
 
 export const RECIPES: readonly RecipeDefinition[] = [
-  { id: 'butter-cookie', name: '버터 쿠키', cookSeconds: 20, ingredients: { flour: 2, sugar: 1, butter: 1 } },
-  { id: 'strawberry-macaron', name: '딸기 마카롱', cookSeconds: 30, ingredients: { flour: 1, sugar: 2, egg: 1, strawberry: 2 } },
-  { id: 'milk-pudding', name: '우유 푸딩', cookSeconds: 25, ingredients: { sugar: 1, egg: 1, milk: 2 } },
+  { id: 'butter-cookie', name: '버터 쿠키', cookSeconds: 20, ingredients: { flour: 2, sugar: 1, butter: 1 }, level: 1, basePrice: 24 },
+  { id: 'milk-pudding', name: '우유 푸딩', cookSeconds: 25, ingredients: { sugar: 1, egg: 1, milk: 2 }, level: 2, basePrice: 34 },
+  { id: 'strawberry-macaron', name: '딸기 마카롱', cookSeconds: 30, ingredients: { flour: 1, sugar: 2, egg: 1, strawberry: 2 }, level: 3, basePrice: 48 },
+  { id: 'choco-cupcake', name: '초코 컵케이크', cookSeconds: 35, ingredients: { flour: 2, sugar: 2, egg: 1, milk: 1, butter: 1 }, level: 4, basePrice: 60 },
+  { id: 'honey-cake', name: '허니 케이크', cookSeconds: 40, ingredients: { flour: 3, sugar: 2, egg: 2, milk: 1, butter: 2 }, level: 5, basePrice: 78 },
 ] as const;
 
 export interface SweetShopCafeState {
@@ -70,6 +75,9 @@ export interface SweetShopCafeState {
   cookingJobs: SweetShopCookingJob[];
   desserts: SweetShopDessert[];
   recipeProgress: Partial<Record<RecipeId, SweetShopRecipeProgress>>;
+  listings: SweetShopListing[];
+  sales: SweetShopSale[];
+  buff: SweetShopCookingBuff | null;
   updatedAt: string;
 }
 
@@ -99,6 +107,61 @@ export interface SweetShopDessert {
   quantity: number;
   quality: DessertQuality;
   createdAt: string;
+  level: number;
+  makerName: string;
+  source: 'crafted' | 'npc-cafe';
+}
+
+export interface SweetShopListing {
+  id: string;
+  dessertId: string;
+  recipeId: RecipeId;
+  name: string;
+  quality: DessertQuality;
+  quantity: number;
+  unitPrice: number;
+  listedAt: string;
+  nextNpcPurchaseAt: string;
+}
+
+export interface SweetShopSale {
+  id: string;
+  listingId: string;
+  dessertName: string;
+  quantity: number;
+  totalPrice: number;
+  buyerName: string;
+  soldAt: string;
+}
+
+export interface SweetShopCookingBuff {
+  sourceDessertName: string;
+  qualityBonus: 1 | 2;
+  eligibleRecipeLevel: number;
+  endsAt: string;
+}
+
+export interface SweetShopCafeSummary {
+  accountId: string;
+  cafeName: string;
+  ownerName: string;
+  icon: string;
+  level: number;
+  representativeDessert: string;
+  listingCount: number;
+}
+
+export interface SweetShopVisitedCafe extends SweetShopCafeSummary {
+  greeting: string;
+  listings: Array<{
+    id: string;
+    recipeId: RecipeId;
+    name: string;
+    quality: DessertQuality;
+    level: number;
+    quantity: number;
+    unitPrice: number;
+  }>;
 }
 
 export interface SweetShopRecipeProgress {
@@ -142,7 +205,8 @@ export interface SweetShopGateway {
   createListing(request: CreateListingRequest): Promise<SweetShopResult<{ listingId: string }>>;
   updateListing(request: UpdateListingRequest): Promise<SweetShopResult<{ listingId: string }>>;
   removeListing(request: RemoveListingRequest): Promise<SweetShopResult<{ listingId: string }>>;
-  visitCafe(request: VisitCafeRequest): Promise<SweetShopResult<SweetShopCafeState>>;
+  listCafeStreet(): Promise<SweetShopResult<SweetShopCafeSummary[]>>;
+  visitCafe(request: VisitCafeRequest): Promise<SweetShopResult<SweetShopVisitedCafe>>;
   buyDessert(request: BuyDessertRequest): Promise<SweetShopResult<{ dessertId: string }>>;
   eatDessert(request: EatDessertRequest): Promise<SweetShopResult<{ buffEndsAt: string }>>;
   createGuestbook(request: CreateGuestbookRequest): Promise<SweetShopResult<{ guestbookId: string }>>;

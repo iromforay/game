@@ -7,6 +7,17 @@ import {
 } from './cafeMap';
 import { LocalSweetShopGateway } from './shopGateway';
 import { ShopFacilityPanel } from './ShopFacilityPanel';
+import cafeBackground from './assets/cafe-workshop-background.png';
+import cafeDoorImage from './assets/facility-cafe-door.png';
+import cookingCounterImage from './assets/facility-cooking-counter.png';
+import dessertBoxImage from './assets/facility-dessert-box.png';
+import displayStandImage from './assets/facility-display-stand.png';
+import ingredientStorageImage from './assets/facility-ingredient-storage.png';
+import noticeBoardImage from './assets/facility-notice-board.png';
+import orderBoardImage from './assets/facility-order-board.png';
+import recipeBookImage from './assets/facility-recipe-book.png';
+import playerChefImage from './assets/player-pastry-chef.png';
+import { appearanceForBuyer } from './customerNpcs';
 import './styles.css';
 
 export interface SweetShopGameProps { onExit?: () => void; }
@@ -20,6 +31,16 @@ const DEFAULT_CHARACTER = { x: 9, y: 14 };
 const DEFAULT_CAMERA = { x: 260, y: 700, zoom: 1 };
 const MIN_ZOOM = 0.8;
 const MAX_ZOOM = 1.5;
+const FACILITY_IMAGES: Record<string, string> = {
+  'order-board': orderBoardImage,
+  'ingredient-storage': ingredientStorageImage,
+  'recipe-book': recipeBookImage,
+  'cooking-counter': cookingCounterImage,
+  'dessert-box': dessertBoxImage,
+  'display-stand': displayStandImage,
+  'notice-board': noticeBoardImage,
+  'cafe-door': cafeDoorImage,
+};
 
 function loadScene(): SceneSave {
   try {
@@ -52,6 +73,8 @@ export function SweetShopGame({ onExit }: SweetShopGameProps) {
   const [tutorialSeen, setTutorialSeen] = useState(initialScene.tutorialSeen);
   const [now, setNow] = useState(Date.now());
   const [message, setMessage] = useState<{ text: string; good: boolean } | null>(null);
+  const [npcVisit, setNpcVisit] = useState<{ saleId: string; buyerName: string; dessertName: string; totalPrice: number } | null>(null);
+  const knownSaleId = useRef<string | null | undefined>(undefined);
 
   const refreshCafe = useCallback(async () => { setCafe(await gateway.loadCafe()); }, [gateway]);
   const showMessage = useCallback((text: string, good = false) => {
@@ -93,10 +116,28 @@ export function SweetShopGame({ onExit }: SweetShopGameProps) {
   useEffect(() => {
     const timer = window.setInterval(() => {
       setNow(Date.now());
-      if (openFacility?.id === 'order-board' || openFacility?.id === 'cooking-counter') void refreshCafe();
+      void refreshCafe();
     }, 1000);
     return () => window.clearInterval(timer);
   }, [openFacility?.id, refreshCafe]);
+
+  useEffect(() => {
+    const latestSale = cafe?.sales[0];
+    if (knownSaleId.current === undefined) {
+      knownSaleId.current = latestSale?.id ?? null;
+      return;
+    }
+    if (!latestSale || latestSale.id === knownSaleId.current) return;
+    knownSaleId.current = latestSale.id;
+    setNpcVisit({ saleId: latestSale.id, buyerName: latestSale.buyerName, dessertName: latestSale.dessertName, totalPrice: latestSale.totalPrice });
+    showMessage(`${latestSale.buyerName}님이 ${latestSale.dessertName}을 구매했습니다! +${latestSale.totalPrice}G`, true);
+  }, [cafe?.sales, showMessage]);
+
+  useEffect(() => {
+    if (!npcVisit) return;
+    const timer = window.setTimeout(() => setNpcVisit((current) => current?.saleId === npcVisit.saleId ? null : current), 2600);
+    return () => window.clearTimeout(timer);
+  }, [npcVisit]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -234,7 +275,7 @@ export function SweetShopGame({ onExit }: SweetShopGameProps) {
   const activeCooking = cafe?.cookingJobs.find((item) => item.status !== 'RECEIVED');
   const firstCookingTutorialCompleted = cafe?.tutorial.firstCookingCompleted === true;
   const cookieReady = !!cafe && (cafe.ingredients.flour ?? 0) >= 2 && (cafe.ingredients.sugar ?? 0) >= 1 && (cafe.ingredients.butter ?? 0) >= 1;
-  const guide = cafe?.desserts.length
+  const guide = cafe?.desserts.some((item) => item.source === 'crafted')
     ? { icon: '🎉', title: '첫 디저트 완성!', text: '디저트 상자에서 완성품을 확인하세요.', facilityId: 'dessert-box', action: '상자 열기' }
     : activeCooking
       ? { icon: '🩷', title: '디저트가 조리 중이에요', text: '조리대에서 마카롱 진행률을 확인하세요.', facilityId: 'cooking-counter', action: '조리 확인' }
@@ -247,26 +288,39 @@ export function SweetShopGame({ onExit }: SweetShopGameProps) {
     <main className="sweet-shop-game">
       <header className="sweet-shop-header">
         <button type="button" onClick={onExit}>← 허브</button>
-        <div><small>GAME 04 · CAFE {cafe && !firstCookingTutorialCompleted && <em className="tutorial-label">첫 조리 안내 중</em>}</small><h1>{cafe?.profile.cafeName ?? '달콤상점'}</h1></div>
+        <div><small>GAME 04 · CAFE {cafe && !firstCookingTutorialCompleted && <em className="tutorial-label">첫 조리 안내 중</em>}</small><h1>{cafe?.profile.cafeName ?? '달콤상점'} {cafe?.buff && <em className="header-buff">✨ +{cafe.buff.qualityBonus}</em>}</h1></div>
         <strong>🪙 {cafe?.profile.gold ?? 0}</strong>
       </header>
 
       <div ref={viewportRef} className="cafe-viewport" onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp}>
-        <div className="cafe-world" style={{ width: MAP_WIDTH, height: MAP_HEIGHT, transform: `translate(${-camera.x * camera.zoom}px, ${-camera.y * camera.zoom}px) scale(${camera.zoom})` }}>
-          <div className="cafe-wall cafe-wall-left" /><div className="cafe-wall cafe-wall-right" />
+        <div className="cafe-world" style={{ width: MAP_WIDTH, height: MAP_HEIGHT, backgroundImage: `url(${cafeBackground})`, transform: `translate(${-camera.x * camera.zoom}px, ${-camera.y * camera.zoom}px) scale(${camera.zoom})` }}>
           <div className="cafe-title-rug">SWEET WORKSHOP</div>
           {CAFE_FACILITIES.map((facility) => (
             <div key={facility.id} data-facility-id={facility.id} className={`cafe-facility cafe-facility-${facility.id}`} style={{ left: facility.x * TILE_SIZE, top: facility.y * TILE_SIZE, width: facility.width * TILE_SIZE, height: facility.height * TILE_SIZE }}>
-              <span aria-hidden="true">{facility.icon}</span><b>{facility.name}</b>
+              <img src={FACILITY_IMAGES[facility.id]} alt="" aria-hidden="true" draggable={false}/><b>{facility.name}</b>
               {facility.id === 'order-board' && <em>재료 주문</em>}
               {facility.id === 'cooking-counter' && <em>{activeCooking ? '조리 확인' : cookieReady ? '만들기 가능!' : '조리하기'}</em>}
+              {facility.id === 'display-stand' && cafe && <em>{cafe.listings.length}/3 진열</em>}
+              {facility.id === 'notice-board' && cafe && cafe.sales.length > 0 && <em>판매 {cafe.sales.length}건</em>}
+              {facility.id === 'cafe-door' && <em>카페 거리</em>}
             </div>
           ))}
           {CAFE_FACILITIES.map((facility) => {
             const point = tileCenter(facility.access);
             return <div key={`${facility.id}-access`} className="facility-access" style={{ left: point.x, top: point.y }}>◆</div>;
           })}
-          <div data-character className={`cafe-character cafe-character-${direction} ${path.length ? 'is-walking' : ''}`} style={{ left: characterWorld.x, top: characterWorld.y }} aria-label="나의 캐릭터"><span>🧑‍🍳</span><i /></div>
+          <div data-character className={`cafe-character cafe-character-${direction} ${path.length ? 'is-walking' : ''}`} style={{ left: characterWorld.x, top: characterWorld.y }} aria-label="나의 캐릭터"><img src={playerChefImage} alt="나의 제빵사" draggable={false}/><i /></div>
+          {npcVisit && (() => {
+            const appearance = appearanceForBuyer(npcVisit.buyerName);
+            const door = CAFE_FACILITIES.find((facility) => facility.id === 'cafe-door')!;
+            const point = tileCenter(door.access);
+            return (
+              <div className="cafe-npc-visitor" style={{ left: point.x, top: point.y }} aria-label={`${npcVisit.buyerName} 손님`}>
+                <div className="cafe-npc-bubble"><strong>{npcVisit.buyerName}</strong><span>“{npcVisit.dessertName}, 잘 먹을게요!”</span><b>+{npcVisit.totalPrice}G</b></div>
+                <img src={appearance.image} alt={`${npcVisit.buyerName} 손님`} draggable={false}/><i />
+              </div>
+            );
+          })()}
         </div>
 
         <div className="camera-controls">
