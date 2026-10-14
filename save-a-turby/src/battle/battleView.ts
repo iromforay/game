@@ -251,10 +251,71 @@ export function resultLayout(scale: number, rowCount: number, framed = false): R
 // 작은 화면의 유닛 라벨: "이름 HP/최대" 한 줄 + 상태 표식은 짧은 UI 표기로 둘째 줄(대본 문구가 아님)
 const SHORT_TAG: Record<string, string> = { '보호 대상': '보호', '부위 먼저': '부위 먼저' };
 export function unitLabel(u: BattleUnit, compact: boolean): string {
+  // 10-14 v1a: 검은 재봉실은 A/B/C 글자로 구분하고 모바일에서는 "검은 실 A" 한 줄(HP 1/1은 생략)
+  if (isSeam(u)) return compact ? `검은 실 ${seamLetter(u)}` : `${u.name} ${seamLetter(u)} HP ${u.hp}/${u.maxHp}`;
   const tags = unitTags(u);
   if (!compact) return `${u.name} HP ${u.hp}/${u.maxHp}${tags.length > 0 ? ` (${tags.join(' · ')})` : ''}`;
   const short = tags.map((t) => SHORT_TAG[t] ?? t);
   return `${u.name} ${u.hp}/${u.maxHp}${short.length > 0 ? `\n${short.join(' · ')}` : ''}`;
+}
+
+// ---------- 10-14 C2-5A 시각 보완(v1a) ----------
+// 검은 재봉실(보스의 부위): 끊어지면 스프라이트·HP·이름표를 숨긴다(서버 스냅샷 상태는 그대로 — 화면 표시만)
+export const isSeam = (u: BattleUnit) => u.characterCode === 'black_seam';
+export const seamLetter = (u: BattleUnit) => u.unitId.slice(-1).toUpperCase();
+export const isRemovedSeam = (u: BattleUnit) => isSeam(u) && (u.stunned || u.inactive);
+export const isHiddenUnit = (u: BattleUnit) => !!u.fled || isRemovedSeam(u);
+
+// 색 구역 공용 발자국: 세 구역을 겹치지 않는 영역으로 나눠 한 장 크기(720×480) 안에서 표현한다. 알파는 격자 선이 읽히는 0.32~0.48
+export const ZONE_FOOTPRINT = { w: 720, h: 480 } as const;
+export const ZONE_ALPHA = 0.4;
+export type ZoneRegion = { fx: number; fy: number; fw: number; fh: number }; // 공용 발자국 안의 비율 영역(0~1)
+// 서버가 내려 준 구역 위치(col,row)로 영역을 정한다: 왼쪽 위 / 왼쪽 아래 / 오른쪽 절반 — 합이 발자국 한 장 크기이며 겹치지 않는다
+export function zoneRegion(z: { col: number; row: number }, grid: { cols: number; rows: number }): ZoneRegion {
+  if (z.col >= grid.cols / 2) return { fx: 0.5, fy: 0, fw: 0.5, fh: 1 };
+  return z.row < grid.rows / 2 ? { fx: 0, fy: 0, fw: 0.5, fh: 0.5 } : { fx: 0, fy: 0.5, fw: 0.5, fh: 0.5 };
+}
+// 발자국 왼쪽 위(캔버스 좌표): 전투판 가운데
+export function zoneFootprintOrigin(board: { x: number; y: number; w: number; h: number }) {
+  return { x: Math.round(board.x + (board.w - ZONE_FOOTPRINT.w) / 2), y: Math.round(board.y + (board.h - ZONE_FOOTPRINT.h) / 2) };
+}
+
+// 유닛 라벨 배치: 우선순위 순서로 놓되 이미 놓인 라벨과 겹치면 위·아래·좌우로 비켜 서로 겹치지 않는 자리를 찾는다(격자 안으로 끌어옴)
+export interface LabelBox {
+  id: string;
+  cx: number; // 유닛 가운데 x
+  anchorY: number; // 유닛 가운데 y
+  w: number;
+  h: number;
+  pref: 'above' | 'below';
+}
+export function resolveLabels(boxes: LabelBox[], bounds: { x: number; y: number; w: number; h: number }, gap: number): Map<string, { cx: number; top: number }> {
+  const placed: { x0: number; y0: number; x1: number; y1: number }[] = [];
+  const out = new Map<string, { cx: number; top: number }>();
+  const overlap = (a: { x0: number; y0: number; x1: number; y1: number }, b: { x0: number; y0: number; x1: number; y1: number }) => a.x0 < b.x1 + 2 && a.x1 + 2 > b.x0 && a.y0 < b.y1 + 2 && a.y1 + 2 > b.y0;
+  for (const b of boxes) {
+    const sides: ('above' | 'below')[] = b.pref === 'above' ? ['above', 'below'] : ['below', 'above'];
+    const shifts = [0, b.w / 2 + 4, -(b.w / 2 + 4), b.w + 8, -(b.w + 8)];
+    let best: { cx: number; top: number; rect: { x0: number; y0: number; x1: number; y1: number } } | null = null;
+    let chosen = false;
+    for (const side of sides) {
+      for (const dx of shifts) {
+        const top = side === 'above' ? b.anchorY - gap - b.h : b.anchorY + gap;
+        const c = clampLabel(b.cx + dx, top, b.w, b.h, bounds);
+        const rect = { x0: c.cx - b.w / 2, y0: c.top, x1: c.cx + b.w / 2, y1: c.top + b.h };
+        if (!best) best = { ...c, rect };
+        if (!placed.some((p) => overlap(p, rect))) {
+          best = { ...c, rect };
+          chosen = true;
+          break;
+        }
+      }
+      if (chosen) break;
+    }
+    placed.push(best!.rect);
+    out.set(b.id, { cx: best!.cx, top: best!.top });
+  }
+  return out;
 }
 
 // 라벨이 격자·화면 밖으로 나가지 않게 가운데 좌표를 끌어온다(bounds 안에 w×h 상자가 들어오도록)

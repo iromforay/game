@@ -28,10 +28,22 @@ const MAP_READY = 's.map && s.map.ready && s.map.inRoom && s.map.positioned && s
 const ROUTE = [{ x: 900, y: 1500 }, { x: 1265, y: 1350 }, { x: 1440, y: 1350 }, { x: 1440, y: 1100 }, { x: 1560, y: 1000 }, { x: 1900, y: 1000 }, { x: 2020, y: 1000 }, { x: 2040, y: 800 }, { x: 2400, y: 790 }, { x: 2370, y: 740 }, { x: 2370, y: 590 }, { x: 2370, y: 540 }, { x: 2600, y: 440 }, { x: 2830, y: 420 }];
 
 type BUnit = { id: string; side: string; col: number; row: number; hp: number; maxHp: number; ap: number; stunned: boolean; phase: string | null };
-type BState = { units: BUnit[]; round: number; zones: { id: string; state: string }[] | null; telegraphed: { direction: string; round: number } | null; lastCurrent: { round: number; direction: string; moved: string[]; skipped: string[] } | null; hintsShown: { code: string; text: string }[] | null; outcome: string | null; resultButton: unknown; settled: boolean | null; hudMode: string };
+type BState = { labels: { id: string; x: number; y: number; w: number; h: number }[]; units: BUnit[]; round: number; zones: { id: string; state: string }[] | null; telegraphed: { direction: string; round: number } | null; lastCurrent: { round: number; direction: string; moved: string[]; skipped: string[] } | null; hintsShown: { code: string; text: string }[] | null; outcome: string | null; resultButton: unknown; settled: boolean | null; hudMode: string };
 const battle = async (g: Game) => (await g.state()).battle as unknown as BState;
 const unit = (b: BState, id: string) => b.units.find((u) => u.id === id)!;
 const texts = (g: Game) => g.page.evaluate('window.__dev.texts()') as Promise<string[]>;
+
+// 보이는 이름표가 서로 겹치지 않는다(v1a: 가독성)
+function assertNoLabelOverlap(b: BState, where: string) {
+  for (let i = 0; i < b.labels.length; i++) {
+    for (let j = i + 1; j < b.labels.length; j++) {
+      const a = b.labels[i];
+      const c = b.labels[j];
+      const crossing = a.x < c.x + c.w && a.x + a.w > c.x && a.y < c.y + c.h && a.y + a.h > c.y;
+      assert.equal(crossing, false, `${where}: 이름표 교차 ${a.id} ↔ ${c.id}`);
+    }
+  }
+}
 
 const permanent = (device: string) => {
   const p = backend.playerByDevice(device)!;
@@ -90,6 +102,7 @@ test('2장 C2-5A ①(1280×720): 입장 → 보스 피해 차단 → 재봉실 3
     assert.equal(unit(b, 'waterlogged_sewn_doll').phase, 'bound');
     assert.deepEqual(b.zones!.map((z) => z.state), ['drained', 'drained', 'drained']);
     assert.deepEqual(b.units.filter((u) => u.id.startsWith('black_seam')).map((u) => u.stunned), [false, false, false]);
+    assertNoLabelOverlap(b, 'bound');
     await g.capture('boss_bound');
 
     // 결박 상태의 보스: 옆까지 돌아가 공격해도 피해 0(행동은 쓴다), 안내는 한 번만
@@ -114,11 +127,17 @@ test('2장 C2-5A ①(1280×720): 입장 → 보스 피해 차단 → 재봉실 3
     b = await battle(g);
     assert.ok(b.zones!.some((z) => z.state === 'restored'));
     assert.equal(unit(b, 'waterlogged_sewn_doll').phase, 'bound', '아직 결박');
+    const removed = b.units.filter((u) => u.id.startsWith('black_seam') && u.stunned).map((u) => u.id);
+    assert.ok(removed.length >= 1);
+    for (const id of removed) assert.equal(b.labels.some((l) => l.id === id), false, `끊어진 ${id}의 이름표가 남음`);
+    assertNoLabelOverlap(b, 'restored');
     await g.capture('zone_restored');
     await g.playBattle(240_000, "s.battle && s.battle.units.some((u) => u.id === 'waterlogged_sewn_doll' && u.phase === 'exposed')");
     b = await battle(g);
     assert.deepEqual(b.zones!.map((z) => z.state), ['restored', 'restored', 'restored']);
     assert.deepEqual(b.units.filter((u) => u.id.startsWith('black_seam')).map((u) => u.stunned), [true, true, true]);
+    assert.equal(b.labels.filter((l) => l.id.startsWith('black_seam')).length, 0, 'exposed 상태의 재봉실 이름표 0개');
+    assertNoLabelOverlap(b, 'exposed');
     await g.capture('boss_exposed');
     await finish(g);
     assert.equal(permanent(device), before, '사건·체크포인트·인벤토리·성장 단계 불변');
@@ -140,6 +159,8 @@ test('2장 C2-5A ②(640×360): 물살 예고와 적용 → 중간 새로고침 
     assert.equal(b.round, 2);
     assert.deepEqual(b.telegraphed, { direction: 'east', round: 3 });
     assert.ok((await texts(g)).some((t) => t.includes('다음 물살: →')), '방향이 글자로 표시된다');
+    assert.ok((await texts(g)).some((t) => t.includes('턴 종료')), '턴 종료 버튼과 동시에 보인다');
+    assertNoLabelOverlap(b, '640 예고');
     await g.capture('current_telegraph');
     const restoredBefore = b.zones!.map((z) => z.state);
     const seamsBefore = b.units.filter((u) => u.id.startsWith('black_seam')).map((u) => u.stunned);

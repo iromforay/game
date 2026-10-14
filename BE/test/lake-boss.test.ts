@@ -390,14 +390,7 @@ test('에셋: 네 키·파일·프레임·표시 수치 계약, water-dye-yarn�
   assert.deepEqual(dims('world/lake/overlays/color-restored-zone.png'), [1536, 1024]);
   const reg = readFileSync(join(assets, 'registry.ts'), 'utf8');
   for (const k of ['waterlogged-sewn-doll-idle', 'waterlogged-sewn-doll-exposed']) assert.match(reg, new RegExp(`'${k}': \\{ size: 256, frames: 4, fps: 4 \\}`)); // 4×256², 3~5fps
-  const scene = readFileSync(join(__dirname, '..', '..', 'save-a-turby', 'src', 'scenes', 'BattleScene.ts'), 'utf8');
-  const px = Number(/const BOSS_DISPLAY_PX = (\d+);/.exec(scene)![1]);
-  const [zw, zh] = [Number(/const ZONE_W = (\d+);/.exec(scene)![1]), Number(/const ZONE_H = (\d+);/.exec(scene)![1])];
-  assert.ok(px >= 220 && px <= 280, `보스 표시 ${px}px`);
-  assert.ok(zw >= 620 && zw <= 760 && zh >= 410 && zh <= 510, `구역 표시 ${zw}×${zh}`);
-  // 구역은 유닛(깊이 10)·HUD(2000)보다 아래 — 두 상태가 같은 객체의 텍스처 교체라 중심·크기가 같다
-  assert.match(scene, /setDisplaySize\(ZONE_W, ZONE_H\)\.setDepth\(2\)/);
-  assert.match(scene, /img\.setTexture\(key\)\.setDisplaySize\(ZONE_W, ZONE_H\)/);
+  // 표시 크기·깊이 계약(보스 220~280px, 공용 구역 발자국 720×480 이하)은 프런트 시험 battleView.test.ts가 고정한다
   // water-dye-yarn: 파일·등록·사건 모두 없다(C2-5B)
   assert.equal(existsSync(join(assets, 'items', 'relics', 'water-dye-yarn.png')), false);
   assert.equal(/water-dye-yarn/.test(reg), false);

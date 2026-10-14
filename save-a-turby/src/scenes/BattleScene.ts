@@ -10,11 +10,11 @@ import { showToast, feltPanel, pillButton, TEXT } from '../ui/kit';
 import { loadWorldImages } from '../assets/loader';
 import { ENEMY_SHEET_OF, SPRITESHEET_FRAMES } from '../assets/registry';
 import coopSlots from '../data/coop-slots.json';
-import { actionHint, battleHudLayout, clampLabel, goalSummary, resultLayout, unitLabel, type BattleHudLayout } from '../battle/battleView';
+import { actionHint, battleHudLayout, goalSummary, isHiddenUnit, resolveLabels, resultLayout, unitLabel, zoneFootprintOrigin, zoneRegion, ZONE_ALPHA, ZONE_FOOTPRINT, type BattleHudLayout, type LabelBox } from '../battle/battleView';
 import { watchLayout } from '../ui/relayout';
 import { displayScaleOf } from '../ui/responsive';
 import { ackFailureAllowsExit, RESULT_ACK_RETRY_TEXT } from '../state/restoreAttempt';
-import { isStoryBattle, labelPlacement, objectiveLines, reachableCells, returnDestination, showsCornerEscape, storyResultText, targetState, STORY_BADGE, STORY_NOTICE, TARGET_HINT, type BattleReturn } from '../battle/battleView';
+import { canAttack as canAttackUnit, isStoryBattle, labelPlacement, objectiveLines, reachableCells, returnDestination, showsCornerEscape, storyResultText, targetState, STORY_BADGE, STORY_NOTICE, TARGET_HINT, type BattleReturn } from '../battle/battleView';
 
 interface BattleInitData {
   stageCode: string;
@@ -44,8 +44,6 @@ const wait = (scene: Phaser.Scene, ms: number) => new Promise<void>((resolve) =>
 // 10-14 C2-5A 보스 시트(결박/약점 노출)와 표시 크기, 색 구역 표시 크기(자산 계약: 보스 220~280px, 구역 620~760x410~510px)
 const BOSS_SHEETS: Record<string, { idle: string; exposed: string }> = { waterlogged_sewn_doll: { idle: 'waterlogged-sewn-doll-idle', exposed: 'waterlogged-sewn-doll-exposed' } };
 const BOSS_DISPLAY_PX = 240;
-const ZONE_W = 640;
-const ZONE_H = 420;
 
 export class BattleScene extends Phaser.Scene {
   private initData!: BattleInitData;
@@ -217,9 +215,11 @@ export class BattleScene extends Phaser.Scene {
     const g = this.add.graphics();
     g.fillStyle(0x241a3d, 1);
     g.fillRect(this.offsetX, this.offsetY, this.gridW, this.gridH);
-    g.lineStyle(1, 0x3d2f66, 1);
-    for (let c = 0; c <= this.snap.grid.cols; c++) g.lineBetween(this.offsetX + c * BATTLE_TILE_SIZE, this.offsetY, this.offsetX + c * BATTLE_TILE_SIZE, this.offsetY + this.gridH);
-    for (let r = 0; r <= this.snap.grid.rows; r++) g.lineBetween(this.offsetX, this.offsetY + r * BATTLE_TILE_SIZE, this.offsetX + this.gridW, this.offsetY + r * BATTLE_TILE_SIZE);
+    // 격자 선은 색 구역 오버레이(깊이 2)보다 위(깊이 3)에 그려 오버레이 위에서도 읽힌다. 선을 오버레이 대비로 조금 밝게
+    const lines = this.add.graphics().setDepth(3);
+    lines.lineStyle(1, this.snap.zones ? 0x8d7fc4 : 0x3d2f66, this.snap.zones ? 0.85 : 1);
+    for (let c = 0; c <= this.snap.grid.cols; c++) lines.lineBetween(this.offsetX + c * BATTLE_TILE_SIZE, this.offsetY, this.offsetX + c * BATTLE_TILE_SIZE, this.offsetY + this.gridH);
+    for (let r = 0; r <= this.snap.grid.rows; r++) lines.lineBetween(this.offsetX, this.offsetY + r * BATTLE_TILE_SIZE, this.offsetX + this.gridW, this.offsetY + r * BATTLE_TILE_SIZE);
 
     // 퇴각존(네 꼭짓점, 3.4/3.5.2 확정) — 스토리(정의) 전투는 정의가 켠 경우만
     if (!showsCornerEscape(this.snap)) return;
@@ -235,14 +235,21 @@ export class BattleScene extends Phaser.Scene {
     return { x: this.offsetX + col * BATTLE_TILE_SIZE + BATTLE_TILE_SIZE / 2, y: this.offsetY + row * BATTLE_TILE_SIZE + BATTLE_TILE_SIZE / 2 };
   }
 
-  // 이웃과 엇갈리게(labelPlacement) 두되, 격자 안으로 끌어온다(맨 윗줄은 아래로, 맨 아랫줄은 위로 — 목표 패널·화면 밖으로 넘지 않게)
-  private placeLabel(t: Phaser.GameObjects.Text, u: BattleUnit, x: number, y: number) {
-    let above = labelPlacement(this.snap, u) === 'above';
-    if (u.row === 0) above = false;
-    if (u.row === this.snap.grid.rows - 1) above = true;
-    const top = above ? y - LABEL_GAP - t.height : y + LABEL_GAP;
-    const c = clampLabel(x, top, t.width, t.height, { x: this.offsetX, y: this.offsetY, w: this.gridW, h: this.gridH });
-    t.setOrigin(0.5, 0).setPosition(c.cx, c.top);
+  // 보이는 모든 라벨을 우선순위(내 유닛 > 보스·중심부 > 그 밖) 순서로 서로 겹치지 않게 놓는다
+  private layoutLabels() {
+    const boxes: LabelBox[] = [];
+    const rank = (u: BattleUnit) => (u.side === 'party' ? 0 : u.phase ? 1 : 2);
+    for (const u of [...this.snap.units].sort((a, b) => rank(a) - rank(b))) {
+      const v = this.views.get(u.unitId);
+      if (!v || isHiddenUnit(u)) continue;
+      const { x, y } = this.tileToWorld(u.col, u.row);
+      let pref = labelPlacement(this.snap, u);
+      if (u.row === 0) pref = 'below';
+      if (u.row === this.snap.grid.rows - 1) pref = 'above';
+      boxes.push({ id: u.unitId, cx: x, anchorY: y, w: v.hpText.width, h: v.hpText.height, pref });
+    }
+    const spots = resolveLabels(boxes, { x: this.offsetX, y: this.offsetY, w: this.gridW, h: this.gridH }, LABEL_GAP);
+    for (const [id, p] of spots) this.views.get(id)!.hpText.setOrigin(0.5, 0).setPosition(p.cx, p.top);
   }
 
   private hpLabel(u: BattleUnit) {
@@ -359,12 +366,14 @@ export class BattleScene extends Phaser.Scene {
         this.views.set(u.unitId, view);
       }
       const { x, y } = this.tileToWorld(u.col, u.row);
-      view.container.setPosition(x, y).setAlpha(u.stunned || u.inactive ? 0.4 : 1).setVisible(!u.fled);
-      view.hpText.setText(this.hpLabel(u)).setAlpha(u.stunned || u.inactive ? 0.6 : 1).setVisible(!u.fled);
+      // 끊어진 검은 재봉실(보스 부위)은 스프라이트·HP·이름표를 숨긴다(서버 스냅샷 상태는 그대로 — 표시만)
+      const hidden = isHiddenUnit(u);
+      view.container.setPosition(x, y).setAlpha(u.stunned || u.inactive ? 0.4 : 1).setVisible(!hidden);
+      view.hpText.setText(this.hpLabel(u)).setAlpha(u.stunned || u.inactive ? 0.6 : 1).setVisible(!hidden);
       // 쓰러진·이탈한 유닛의 그림은 입력을 받지 않는다 — 그 칸으로 이동하려는 누름이 그림에 가로막히지 않게(부서진 거대 매듭의 실 칸 등)
       for (const o of view.container.list) if (o.input) o.input.enabled = !(u.stunned || u.inactive);
-      this.placeLabel(view.hpText, u, x, y);
     }
+    this.layoutLabels();
     this.drawBlocked(this.snap.blocked ?? []);
     this.syncBoss();
     this.syncZones();
@@ -500,11 +509,20 @@ export class BattleScene extends Phaser.Scene {
     const unit = this.unit(this.selectedUnitId);
     if (this.busy || !this.isMyTurn || !unit || !this.actionable(unit)) return;
     // 막힌 칸 우회·속박 감소량까지 반영한 서버와 같은 이동 규칙(최종 판정은 서버)
+    // 현재 유닛 칸과 공격할 수 있는 목표 칸의 윤곽(구역 오버레이 위, 유닛 아래)
+    const me = this.tileToWorld(unit.col, unit.row);
+    this.moveHighlights.push(this.add.rectangle(me.x, me.y, BATTLE_TILE_SIZE - 4, BATTLE_TILE_SIZE - 4).setStrokeStyle(3, 0xffe9a8, 1).setDepth(4));
+    for (const f of this.snap.units) {
+      if (f.side !== 'wild' || isHiddenUnit(f) || Math.abs(f.col - unit.col) + Math.abs(f.row - unit.row) !== 1 || !canAttackUnit(this.snap, unit, f)) continue;
+      const p = this.tileToWorld(f.col, f.row);
+      this.moveHighlights.push(this.add.rectangle(p.x, p.y, BATTLE_TILE_SIZE - 4, BATTLE_TILE_SIZE - 4).setStrokeStyle(3, 0xff9fb0, 1).setDepth(4));
+    }
     for (const { col, row } of reachableCells(this.snap, unit)) {
       const { x, y } = this.tileToWorld(col, row);
       const rect = this.add
         .rectangle(x, y, BATTLE_TILE_SIZE - 6, BATTLE_TILE_SIZE - 6, 0x9fe58a, 0.22)
         .setStrokeStyle(2, 0x9fe58a, 0.6)
+        .setDepth(4)
         .setInteractive({ useHandCursor: true })
         .on('pointerdown', () => void this.send({ type: 'move', unitId: unit.unitId, targetCol: col, targetRow: row }));
       this.moveHighlights.push(rect);
@@ -557,12 +575,20 @@ export class BattleScene extends Phaser.Scene {
     for (const z of this.snap.zones ?? []) {
       const key = z.state === 'restored' ? 'color-restored-zone' : 'color-drained-zone';
       if (!this.textures.exists(key)) continue;
+      // 공용 720×480 발자국 한 장을 세 영역(왼쪽 위·왼쪽 아래·오른쪽 절반)으로 나눠 구역마다 자기 영역만 보인다 — 서로 겹치지 않는다
+      const origin = zoneFootprintOrigin({ x: this.offsetX, y: this.offsetY, w: this.gridW, h: this.gridH });
+      const r = zoneRegion(z, this.snap.grid);
+      const crop = (img: Phaser.GameObjects.Image) => img.setCrop(r.fx * img.width, r.fy * img.height, r.fw * img.width, r.fh * img.height);
       let img = this.zoneImages.get(z.id);
       if (!img || !img.active) {
-        img = this.add.image(this.offsetX + z.col * BATTLE_TILE_SIZE, this.offsetY + z.row * BATTLE_TILE_SIZE, key).setDisplaySize(ZONE_W, ZONE_H).setDepth(2).setAlpha(0.8);
+        img = this.add.image(origin.x, origin.y, key).setOrigin(0, 0).setDisplaySize(ZONE_FOOTPRINT.w, ZONE_FOOTPRINT.h).setDepth(2).setAlpha(ZONE_ALPHA);
+        crop(img);
         this.zoneImages.set(z.id, img);
       }
-      if (img.texture.key !== key) img.setTexture(key).setDisplaySize(ZONE_W, ZONE_H);
+      if (img.texture.key !== key) {
+        img.setTexture(key).setDisplaySize(ZONE_FOOTPRINT.w, ZONE_FOOTPRINT.h);
+        crop(img);
+      }
     }
   }
 

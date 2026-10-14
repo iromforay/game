@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { canAttack, isStoryBattle, labelPlacement, moveAllowance, objectiveLines, reachableCells, showsCornerEscape, storyResultText, targetState, unitTags, STORY_NOTICE } from '../src/battle/battleView.ts';
+import { canAttack, isHiddenUnit, isRemovedSeam, isSeam, isStoryBattle, labelPlacement, resolveLabels, unitLabel as unitLabelOf, zoneFootprintOrigin, zoneRegion, ZONE_ALPHA, ZONE_FOOTPRINT, type LabelBox, moveAllowance, objectiveLines, reachableCells, showsCornerEscape, storyResultText, targetState, unitTags, STORY_NOTICE } from '../src/battle/battleView.ts';
 import type { BattleSnapshot, BattleUnit } from '../src/net/battleTypes.ts';
 
 interface DefUnit {
@@ -211,4 +211,82 @@ test('보스 표시 계약: 시트 키 연결, 구역 상태 교체(같은 객�
   assert.match(scene, /this\.snap\.telegraphedCurrent/);
   assert.match(scene, /this\.snap\.zones/);
   assert.doesNotMatch(scene, /Math\.random\(/);
+});
+
+// ---------- 10-14 v1a: 전투 가독성 보완 ----------
+const gridOf = { cols: 12, rows: 8 };
+const BOARD = { x: 160, y: 40, w: 960, h: 640 };
+
+test('색 구역: 세 영역이 겹치지 않고 합이 공용 발자국(720×480) 한 장 크기이며 전투판 안에 들어가고 알파는 0.32~0.48', () => {
+  const origin = zoneFootprintOrigin(BOARD);
+  const rects = [
+    { col: 3.5, row: 2.2 },
+    { col: 3.5, row: 5.8 },
+    { col: 8.2, row: 4.0 },
+  ].map((z) => {
+    const r = zoneRegion(z, gridOf);
+    return { x: origin.x + r.fx * ZONE_FOOTPRINT.w, y: origin.y + r.fy * ZONE_FOOTPRINT.h, w: r.fw * ZONE_FOOTPRINT.w, h: r.fh * ZONE_FOOTPRINT.h };
+  });
+  const inter = (a: (typeof rects)[number], b: (typeof rects)[number]) => Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)) * Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+  for (let i = 0; i < 3; i++) for (let j = i + 1; j < 3; j++) assert.equal(inter(rects[i], rects[j]), 0, `영역 ${i}-${j} 교차 면적`);
+  const x0 = Math.min(...rects.map((r) => r.x));
+  const y0 = Math.min(...rects.map((r) => r.y));
+  const x1 = Math.max(...rects.map((r) => r.x + r.w));
+  const y1 = Math.max(...rects.map((r) => r.y + r.h));
+  assert.ok(x1 - x0 <= 720 && y1 - y0 <= 480, `합성 외곽 ${x1 - x0}×${y1 - y0}`);
+  assert.equal(rects.reduce((s, r) => s + r.w * r.h, 0), 720 * 480, '세 영역의 합 = 발자국 한 장');
+  assert.ok(x0 >= BOARD.x && y0 >= BOARD.y && x1 <= BOARD.x + BOARD.w && y1 <= BOARD.y + BOARD.h, '전투판 안');
+  assert.ok(ZONE_ALPHA >= 0.32 && ZONE_ALPHA <= 0.48);
+  assert.ok(ZONE_FOOTPRINT.w <= 720 && ZONE_FOOTPRINT.h <= 480);
+});
+
+test('제거된 재봉실: 렌더 계획·이름표에서 빠지고 exposed 상태에서 재봉실 이름표 0개', () => {
+  const seam = (id: string, stunned: boolean, col: number, row: number): BattleUnit => ({ unitId: id, side: 'wild', ownerPlayerId: null, participantSlot: 0, characterCode: 'black_seam', name: '검은 재봉실', col, row, hp: stunned ? 0 : 1, maxHp: 1, ap: 0, maxAp: 0, stunned, inactive: false, partOf: 'waterlogged_sewn_doll' });
+  const alive = seam('black_seam_a', false, 3, 3);
+  const dead = seam('black_seam_b', true, 3, 5);
+  assert.deepEqual([isRemovedSeam(alive), isRemovedSeam(dead), isHiddenUnit(dead)], [false, true, true]);
+  const units = [seam('black_seam_a', true, 3, 3), seam('black_seam_b', true, 3, 5), seam('black_seam_c', true, 4, 4), boss({ phase: 'exposed', invulnerable: false })];
+  assert.equal(units.filter((u) => !isHiddenUnit(u) && isSeam(u)).length, 0, 'exposed 상태의 재봉실 이름표');
+  assert.equal(units.filter((u) => !isHiddenUnit(u)).length, 1);
+  // 라벨 문구: 모바일은 한 줄 "검은 실 A"(HP 생략), 보통 화면은 글자로 구분
+  assert.equal(unitLabelOf(alive, true), '검은 실 A');
+  assert.equal(unitLabelOf(alive, false), '검은 재봉실 A HP 1/1');
+  assert.equal(unitLabelOf(boss({ phase: 'bound', invulnerable: true }), true).split('\n').length <= 2, true, '보스 이름표는 두 줄 이내');
+});
+
+test('640×360 이름표: 가까이 붙은 누비·재봉실·보스 라벨이 서로 겹치지 않는다(모든 배치 후보 검사)', () => {
+  const BOUNDS = { x: 160, y: 40, w: 960, h: 640 };
+  // 보통 좌표계의 라벨 크기(작은 화면은 글자를 키우므로 같은 좌표계에서 더 크게 잡는다)
+  const sizes = { nubi: { w: 150, h: 54 }, seam: { w: 118, h: 34 }, boss: { w: 150, h: 60 } };
+  const cell = (c: number, r: number) => ({ x: 160 + c * 80 + 40, y: 40 + r * 80 + 40 });
+  const boxes: LabelBox[] = [
+    { id: 'nubi', ...sizes.nubi, cx: cell(4, 5).x, anchorY: cell(4, 5).y, pref: 'below' },
+    { id: 'boss', ...sizes.boss, cx: cell(8, 4).x, anchorY: cell(8, 4).y, pref: 'below' },
+    { id: 'a', ...sizes.seam, cx: cell(3, 3).x, anchorY: cell(3, 3).y, pref: 'above' },
+    { id: 'b', ...sizes.seam, cx: cell(3, 5).x, anchorY: cell(3, 5).y, pref: 'below' },
+    { id: 'c', ...sizes.seam, cx: cell(4, 4).x, anchorY: cell(4, 4).y, pref: 'above' },
+  ];
+  const out = resolveLabels(boxes, BOUNDS, 30);
+  const rect = (b: LabelBox) => ({ x0: out.get(b.id)!.cx - b.w / 2, y0: out.get(b.id)!.top, x1: out.get(b.id)!.cx + b.w / 2, y1: out.get(b.id)!.top + b.h });
+  for (let i = 0; i < boxes.length; i++) {
+    const a = rect(boxes[i]);
+    assert.ok(a.x0 >= BOUNDS.x && a.x1 <= BOUNDS.x + BOUNDS.w && a.y0 >= BOUNDS.y && a.y1 <= BOUNDS.y + BOUNDS.h, `${boxes[i].id} 격자 안`);
+    for (let j = i + 1; j < boxes.length; j++) {
+      const b = rect(boxes[j]);
+      const crossing = a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0;
+      assert.equal(crossing, false, `${boxes[i].id}↔${boxes[j].id} 라벨 교차`);
+    }
+  }
+});
+
+test('깊이: 격자 선(3)·이동 칸·현재 유닛 윤곽(4)은 구역 오버레이(2) 위, 유닛(10)·HUD(2000) 아래이고 보스 표시 크기는 220~280px', () => {
+  const scene = readFileSync(fileURLToPath(new URL('../src/scenes/BattleScene.ts', import.meta.url)), 'utf8');
+  assert.match(scene, /const lines = this\.add\.graphics\(\)\.setDepth\(3\)/);
+  assert.match(scene, /\.setDepth\(2\)\.setAlpha\(ZONE_ALPHA\)/);
+  assert.match(scene, /setStrokeStyle\(3, 0xffe9a8, 1\)\.setDepth\(4\)/);
+  assert.match(scene, /\.setDepth\(4\)\n\s*\.setInteractive/);
+  const px = Number(/const BOSS_DISPLAY_PX = (\d+);/.exec(scene)![1]);
+  assert.ok(px >= 220 && px <= 280, `보스 ${px}px`);
+  // 같은 객체의 텍스처 교체 + 같은 crop → 복구 전후 외곽·중심 차이 0
+  assert.match(scene, /img\.setTexture\(key\)\.setDisplaySize\(ZONE_FOOTPRINT\.w, ZONE_FOOTPRINT\.h\);\n\s*crop\(img\);/);
 });
