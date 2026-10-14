@@ -474,6 +474,72 @@
           "soundCue": null
         }
       ]
+    },
+    {
+      "segmentId": "ch02.chapter_complete",
+      "resumeFrom": "CH02_COMPLETE",
+      "replayOnResume": true,
+      "completesWith": "lake_chapter_complete_seen",
+      "entries": [
+        {
+          "kind": "narration",
+          "dialogueId": "ch02.chapter_complete.001",
+          "text": "물빛 염색실은 물들이에게는 반응하지 않고 누비에게만 천천히 다가간다. 주인공이 실을 누비의 몸 한쪽에 감자 푸른 줄무늬가 생기며 색이 돌아온다.",
+          "cameraCue": "nubi-color-restore",
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch02.chapter_complete.002",
+          "speaker": "nubi",
+          "speakerLabel": "누비",
+          "text": "따뜻해. 물속인데도 네 손을 잡고 있는 것 같아.",
+          "portrait": "nubi",
+          "expression": "happy",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch02.chapter_complete.003",
+          "speaker": "player",
+          "speakerLabel": "{playerName}",
+          "text": "내 이름은?",
+          "portrait": "player",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch02.chapter_complete.004",
+          "speaker": "nubi",
+          "speakerLabel": "누비",
+          "text": "{playerName}. 이번에는 바로 기억났어.",
+          "portrait": "nubi",
+          "expression": "happy",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch02.chapter_complete.005",
+          "text": "염색 샘 바닥에서 낮은 울림이 전해진다. 푸른 실의 빛이 호수 아래를 지나 마루바닥 밑으로 이어진다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch02.chapter_complete.006",
+          "speaker": "muldeuli",
+          "speakerLabel": "물들이",
+          "text": "저 울림은 집의 가장 오래된 틈에서 올라오고 있어.",
+          "portrait": null,
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        }
+      ]
     }
   ]
 }

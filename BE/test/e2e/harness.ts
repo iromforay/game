@@ -93,6 +93,13 @@ export class Backend {
     const results = await Promise.all(Array.from({ length: n }, () => story.completeEvent(p.id, eventId, 'server')));
     return results.filter((r) => !r.alreadyCompleted).length;
   }
+  // 인벤토리 "누비에게 장착"과 같은 서버 경로를 n번 동시에 요청한다 — 새로 기록된 횟수(0이어야 멱등)
+  async equipConcurrently(device: string, itemCode: string, n: number): Promise<number> {
+    const p = this.playerByDevice(device)!;
+    const story = this.app!.get(StoryService);
+    const results = await Promise.all(Array.from({ length: n }, () => story.equipRelic(p.id, itemCode)));
+    return results.filter((r) => !r.alreadyCompleted).length;
+  }
   // 서버에 열려 있는 탐험 세션(방) 수 — 재시도가 방을 새로 만들지 않는지 확인하는 데 쓴다
   roomCount(): number {
     return ((this.app!.get(RoomsService) as unknown as { rooms: Map<string, unknown> }).rooms).size;

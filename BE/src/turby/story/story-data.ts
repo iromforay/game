@@ -80,6 +80,8 @@ export interface StoryEventDef {
   grantStoryNubi?: boolean;
   equipRelic?: { itemCode: string; slotKey: string; growthStage: number };
   requireGrowth?: number;
+  requireGrowthEq?: number; // 성장 단계가 정확히 이 값이어야 한다(C2-6 장착 — 2 초과·재증가 방지)
+  requireEquipped?: string[]; // 이야기 누비에 이미 장착돼 있어야 하는 슬롯(예: story_1)
   alsoComplete?: string[]; // 같은 트랜잭션에서 함께 기록할 이벤트(예: 장 완료 + 다음 지역 개방)
   to?: Checkpoint; // 도착 체크포인트(현재보다 앞설 때만 갱신)
 }
@@ -173,6 +175,24 @@ export const STORY_EVENTS: StoryEventDef[] = [
   ev({ id: 'lake_boss_defeated', chapter: 2, allowedAt: ['CH02_NUBI_CRISIS_SEEN'], requires: ['lake_nubi_crisis_seen'], serverOnly: true, evidence: { kind: 'none' }, alsoComplete: ['lake_dye_thread_granted'], grant: [{ itemCode: 'water_dye_yarn', quantity: 1 }], to: 'CH02_BOSS_DEFEATED' }),
   ev({ id: 'lake_dye_thread_granted', chapter: 2, allowedAt: ['CH02_NUBI_CRISIS_SEEN'], requires: ['lake_nubi_crisis_seen'], serverOnly: true, evidence: { kind: 'none' } }),
   // 승리 장면(ch02.boss_victory)을 끝까지 본 뒤 클라이언트가 완료를 요청한다(대화 구간 completesWith). 체크포인트·아이템·성장은 바꾸지 않는다. C2-6 장착 지점의 선행 조건
+  // 10-14 C2-6: 인벤토리 "누비에게 장착"(POST /player/me/story/relics/water_dye_yarn/equip)만 기록. 한 트랜잭션: story_2 장착 + 성장 1→2 + 이 사건 + underfloor_unlocked + CH02_COMPLETE.
+  //   water_dye_yarn 보유 레코드는 삭제하지 않는다. 선행: 승리 장면 완료·첫 매듭(story_1) 장착·성장 정확히 1
+  ev({
+    id: 'lake_dye_thread_equipped',
+    chapter: 2,
+    allowedAt: ['CH02_BOSS_DEFEATED'],
+    requires: ['lake_boss_defeated', 'lake_dye_thread_granted', 'lake_boss_aftermath_seen'],
+    serverOnly: true,
+    evidence: { kind: 'none' },
+    requireGrowthEq: 1,
+    requireEquipped: ['story_1'],
+    equipRelic: { itemCode: 'water_dye_yarn', slotKey: 'story_2', growthStage: 2 },
+    alsoComplete: ['underfloor_unlocked'],
+    to: 'CH02_COMPLETE',
+  }),
+  ev({ id: 'underfloor_unlocked', chapter: 2, allowedAt: ['CH02_BOSS_DEFEATED'], requires: ['lake_boss_aftermath_seen'], serverOnly: true, evidence: { kind: 'none' } }),
+  // '돌아온 색' 장면(ch02.chapter_complete)을 끝까지 본 뒤 클라이언트가 완료를 요청한다(대화 구간 completesWith). 체크포인트·보상·성장은 다시 바꾸지 않는다
+  ev({ id: 'lake_chapter_complete_seen', chapter: 2, allowedAt: ['CH02_COMPLETE'], requires: ['lake_dye_thread_equipped', 'underfloor_unlocked'], evidence: { kind: 'none' } }),
   ev({ id: 'lake_boss_aftermath_seen', chapter: 2, allowedAt: ['CH02_BOSS_DEFEATED'], requires: ['lake_boss_defeated', 'lake_dye_thread_granted'], evidence: { kind: 'none' } }),
 ];
 
@@ -346,6 +366,7 @@ export const SEGMENT_CHAIN_END: Record<string, string> = {
   'ch01.first_knot_awaken': 'ch01.first_knot_awaken',
   'ch01.first_knot_equipped': 'ch01.first_knot_equipped',
   'ch01.primordial_knot': 'ch01.primordial_knot',
+  'ch02.chapter_complete': 'ch02.chapter_complete',
 };
 
 // 숲 입구 복귀 범위: 잘린 실을 살펴보기 전까지는 첫 길의 걷는 장면(001~004)만 다시 보여 준다. 그 뒤는 지점이 이어 간다
@@ -354,6 +375,7 @@ export const FIRST_PATH_INTRO: StoryPlayRange = { segmentId: FIRST_PATH, endAfte
 // 이벤트를 새로 기록했을 때 이어서 재생할 구간(유물 장착 → 장착 장면)
 export const SEGMENT_AFTER_EVENT: Record<string, string> = {
   forest_first_knot_equipped: 'ch01.first_knot_equipped',
+  lake_dye_thread_equipped: 'ch02.chapter_complete', // 장착이 처음 기록되면 '돌아온 색' 장면을 이어 재생
 };
 
 // ---- 스토리 전투 조우(M4-B) ----

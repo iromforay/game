@@ -51,6 +51,7 @@ export class InventoryService {
     for (const e of equippedRows) equippedById.set(e.item_definition_id, (equippedById.get(e.item_definition_id) ?? 0) + 1);
     const nubiId = progress?.story_nubi_turby_instance_id ?? null;
     const onNubi = new Set(equippedRows.filter((e) => nubiId !== null && e.turby_instance_id === nubiId && e.slot_key.startsWith(STORY_SLOT_PREFIX)).map((e) => e.item_definition_id));
+    const nubiSlots = new Set(equippedRows.filter((e) => nubiId !== null && e.turby_instance_id === nubiId).map((e) => e.slot_key));
     const snap = { checkpoint: toCheckpoint(progress?.checkpoint ?? 'OPENING_NOT_STARTED'), events: new Set(events.map((e) => e.event_id)), objectives: new Map(), growthStage: progress?.nubi_growth_stage ?? 0 };
 
     // 수량 0인 행은 수집 기록으로만 남는다(가방에는 표시하지 않음)
@@ -63,7 +64,9 @@ export class InventoryService {
         const equipped = equippedById.get(r.item_definition_id) ?? 0;
         const relicEvent = d.category === 'relic' ? (RELIC_EQUIP_EVENT.get(d.code) ?? null) : null;
         // 누비에게 장착: 서버 규칙(체크포인트·선행 이벤트·이야기 누비)으로 지금 가능한지 판정해 알려 준다. 실행 때 서버가 다시 검증한다
-        const storyFailure = relicEvent && !onNubi.has(r.item_definition_id) ? checkEvent(EVENT_BY_ID.get(relicEvent)!, snap) : null;
+        const relicDef = relicEvent ? EVENT_BY_ID.get(relicEvent)! : null;
+        const slotsMissing = !!relicDef?.requireEquipped?.some((k) => !nubiSlots.has(k));
+        const storyFailure = relicEvent && !onNubi.has(r.item_definition_id) ? (checkEvent(relicDef!, snap) ?? (slotsMissing ? ({ code: 'STORY_PREREQUISITE_MISSING', detail: 'slot' } as const) : null)) : null;
         const storyAction =
           relicEvent && !onNubi.has(r.item_definition_id)
             ? {

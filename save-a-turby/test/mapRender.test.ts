@@ -413,7 +413,7 @@ test('MapScene: 덫 보정은 서버가 정한 시간만 적용(50%)·구조 지
 });
 
 // ---------- 10-13 C2-4: 누비 색 빠짐 연출 계약 ----------
-test('nubi-color-drain: 1152×192(6×192 프레임) 파일, 1회 재생(repeat 0)·8~10fps, 대화창 영역과 겹치지 않는 배치, nubi-color-restore는 미사용', () => {
+test('nubi-color-drain: 1152×192(6×192 프레임) 파일, 1회 재생(repeat 0)·8~10fps, 대화창 영역과 겹치지 않는 배치, nubi-color-restore는 C2-6에서 연결(역재생 아님)', () => {
   const root = fileURLToPath(new URL('../src/assets/fx/story/', import.meta.url));
   const b = readFileSync(root + 'nubi-color-drain.png');
   assert.deepEqual([...b.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
@@ -428,7 +428,8 @@ test('nubi-color-drain: 1152×192(6×192 프레임) 파일, 1회 재생(repeat 0
   // 금지 연출 없음: 붉은 화면·카메라 흔들림·섬광
   assert.doesNotMatch(scene, /shake\(|flash\(|0xff0000/);
   // 색 회복 에셋은 C2-6 전까지 파일·등록·재생이 없다
-  assert.equal(existsSync(root + 'nubi-color-restore.png'), false);
-  assert.doesNotMatch(reg, /'nubi-color-restore'/);
-  assert.doesNotMatch(scene, /nubi-color-restore/);
+  assert.equal(existsSync(root + 'nubi-color-restore.png'), true);
+  assert.match(reg, /'nubi-color-restore': \{ size: 192, frames: 6, fps: 9 \}/);
+  assert.match(scene, /'nubi-color-restore'/);
+  assert.doesNotMatch(scene, /start: sheet\.frames - 1, end: 0/, '역재생 없음');
 });

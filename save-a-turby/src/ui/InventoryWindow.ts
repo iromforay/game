@@ -5,7 +5,7 @@ import { equipRelicToNubi, fetchInventory, fetchStory, markItemSeen } from '../a
 import { EMPTY_TEXT, NUBI_FIXED_NOTE, TABS, detailOf, filterItems, gridCells, inventoryLayout, itemIconCandidates, keepSelection, nubiSlots, pageCells, type InventoryItem, type InventoryLayout, type InventoryList, type TabFilter } from '../inventory/inventoryView';
 import type { StoryPlay } from '../story/storyFlow';
 
-type NubiState = { slots: { slotKey: string; itemCode: string; name: string }[] } | null;
+type NubiState = { growthStage?: number; slots: { slotKey: string; itemCode: string; name: string }[] } | null;
 
 const DESC_LINES = 3; // 설명 영역 줄 수(넘으면 "더 보기")
 const LOCK_LABEL = '잠금 이유';
@@ -57,7 +57,7 @@ export class InventoryWindow {
 
   // 진단용 요약(화면 상태만 — 서버 값·식별 정보 없음)
   get debugState() {
-    return { visible: this.layer.visible, state: this.state, tab: this.tab, page: this.page, selected: this.selected, mode: this.layout.mode, itemCount: this.data?.items.length ?? 0, busy: this.busy, detailView: this.detailView, descOpen: this.descOpen, nubiCollapsed: this.nubiCollapsed, detailIcon: this.detailIcon, cells: this.cellRects };
+    return { visible: this.layer.visible, state: this.state, tab: this.tab, page: this.page, selected: this.selected, mode: this.layout.mode, itemCount: this.data?.items.length ?? 0, busy: this.busy, detailView: this.detailView, descOpen: this.descOpen, nubiCollapsed: this.nubiCollapsed, detailIcon: this.detailIcon, cells: this.cellRects, nubiGrowth: this.nubi?.growthStage ?? null, nubiSlotKeys: (this.nubi?.slots ?? []).map((s) => s.slotKey) };
   }
 
   async open(tab: TabFilter = 'all') {
@@ -339,6 +339,7 @@ export class InventoryWindow {
     const f = this.layout.font;
     const box = this.add(this.scene.add.rectangle(x, y, w, 10, 0xf6f9ff).setOrigin(0, 0).setStrokeStyle(2, 0xb9c8e6));
     const head = this.text(x + 10, y + 6, NUBI_HEAD, f.badge, '#ffffff', { backgroundColor: '#6f86b8', padding: { x: 6, y: 2 } });
+    if (this.nubi) this.text(x + 10 + head.width + 8, y + 6, `성장 단계 ${this.nubi.growthStage ?? 1}`, f.badge, '#ffffff', { backgroundColor: '#7a9a6a', padding: { x: 6, y: 2 } });
     let yy = y + 6 + head.height + 6;
     const slots = nubiSlots(this.nubi, this.data?.items ?? []);
     if (slots.length === 0) {

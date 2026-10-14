@@ -44,7 +44,7 @@ export class OpeningScene extends Phaser.Scene {
     this.opts = data;
     this.advanceResolver = null;
     this.typing = null;
-    this.fxState = { drainPlayed: 0, saturation: 1, bounds: null, relicShown: 0, relicBounds: null }; // 같은 장면 객체를 다시 쓸 때 연출 상태를 비운다
+    this.fxState = { drainPlayed: 0, saturation: 1, bounds: null, relicShown: 0, relicBounds: null, restorePlayed: 0 }; // 같은 장면 객체를 다시 쓸 때 연출 상태를 비운다
     this.fxNubi = undefined;
     this.fxRelic = undefined;
     this.satTween = undefined;
@@ -229,12 +229,13 @@ export class OpeningScene extends Phaser.Scene {
     if (cam === 'nubi-color-drain') this.playNubiColorDrain();
     else if (cam === 'world-saturation-steady') this.setWorldSaturation(WORLD_SATURATION_STEADY);
     else if (cam === 'water-dye-yarn-rise') this.playRelicRise();
+    else if (cam === 'nubi-color-restore') this.playNubiColorRestore();
   }
 
   // ---------- 누비 색 빠짐 연출(10-13 C2-4) ----------
   // 누비 그림 위에 같은 중심으로 투명 오버레이를 1회 재생하고(캐릭터를 대체하지 않는다), 배경 채도를 부드럽게 낮춘다.
   // 대화창·이름표·버튼(this.layer)은 별도 레이어라 탈색되지 않는다. 붉은 화면·섬광·흔들림·시간 제한은 쓰지 않는다.
-  fxState: { drainPlayed: number; saturation: number; bounds: { x: number; y: number; w: number; h: number } | null; relicShown: number; relicBounds: { x: number; y: number; w: number; h: number } | null } = { drainPlayed: 0, saturation: 1, bounds: null, relicShown: 0, relicBounds: null };
+  fxState: { drainPlayed: number; saturation: number; bounds: { x: number; y: number; w: number; h: number } | null; relicShown: number; relicBounds: { x: number; y: number; w: number; h: number } | null; restorePlayed: number } = { drainPlayed: 0, saturation: 1, bounds: null, relicShown: 0, relicBounds: null, restorePlayed: 0 };
   private fxNubi?: Phaser.GameObjects.Image;
   private fxRelic?: Phaser.GameObjects.Image;
   private satTween?: Phaser.Tweens.Tween;
@@ -255,6 +256,25 @@ export class OpeningScene extends Phaser.Scene {
     this.setWorldSaturation(WORLD_SATURATION_DRAINED);
   }
 
+  // ---------- 누비 색 회복 연출(10-14 C2-6) ----------
+  // drain과 같은 누비 중심·피벗(240×240)에 회복 오버레이를 1→6 순서로 1회 재생하고, 채도를 안정 상태(0.65)에서 원래(1)로 천천히 올린다.
+  // 누비 그림은 대체하지 않는다. 섬광·후광·왕관 없음
+  private playNubiColorRestore() {
+    this.fxState.restorePlayed++;
+    const cx = CANVAS_WIDTH / 2;
+    const cy = 300;
+    this.fxState.bounds = { x: cx - 120, y: cy - 120, w: 240, h: 240 };
+    if (this.textures.exists('turby-nubi') && !this.fxNubi) this.fxNubi = this.add.image(cx, cy, 'turby-nubi').setDisplaySize(200, 200).setDepth(5);
+    const sheet = SPRITESHEET_FRAMES['nubi-color-restore'];
+    if (this.textures.exists('nubi-color-restore') && sheet) {
+      if (!this.anims.exists('nubi-color-restore-once')) this.anims.create({ key: 'nubi-color-restore-once', frames: this.anims.generateFrameNumbers('nubi-color-restore', { start: 0, end: sheet.frames - 1 }), frameRate: sheet.fps, repeat: 0 });
+      const fx = this.add.sprite(cx, cy, 'nubi-color-restore').setOrigin(0.5, 0.5).setDisplaySize(240, 240).setDepth(6);
+      fx.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => this.tweens.add({ targets: fx, alpha: 0, duration: 500, onComplete: () => fx.destroy() }));
+      fx.play('nubi-color-restore-once');
+    }
+    this.setWorldSaturation(1, WORLD_SATURATION_STEADY);
+  }
+
   // ---------- 물빛 염색실이 떠오르는 연출(10-14 C2-5B) ----------
   // 정본 승리 장면: 몸의 중심에서 푸른 물빛 염색실이 떠오른다. 화면 중앙(대화창·건너뛰기 버튼 밖)에 한 번 나타나 서서히 올라오고 장면 끝까지 머문다.
   // 섬광·흔들림·시간 제한 없음. 에셋이 없으면 아무것도 그리지 않는다(오류 아님)
@@ -271,10 +291,10 @@ export class OpeningScene extends Phaser.Scene {
   }
 
   // 월드(배경·누비 그림)의 채도를 부드럽게 바꾼다. WebGL이 아니면 같은 방향의 회청색 틴트로 대신한다
-  private setWorldSaturation(target: number) {
+  private setWorldSaturation(target: number, startFrom?: number) {
     const targets = [this.bg, this.fxNubi].filter((o): o is Phaser.GameObjects.TileSprite | Phaser.GameObjects.Image => !!o);
     if (targets.length === 0) return;
-    const from = this.fxState.saturation;
+    const from = startFrom ?? this.fxState.saturation;
     this.satTween?.remove();
     const cms = targets.map((o) => (this.game.renderer.type === Phaser.WEBGL && o.postFX ? o.postFX.addColorMatrix() : null));
     const holder = { v: from };

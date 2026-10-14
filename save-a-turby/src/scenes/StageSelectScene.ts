@@ -31,6 +31,10 @@ const STATE_STYLE = {
 
 // 마을 출구에서 들어오는 지역 선택. 개방·진행 상태는 서버가 판정하고(M2, story.stageAccessV2) 이 화면은 결과만 그린다.
 // 서버 상태를 받지 못하면 모든 지역을 잠그고 다시 시도 버튼을 보여 준다(추측으로 열지 않음).
+// 장 이야기·지도가 아직 없는 지역(10-14 C2-6: 3장은 열리지만 콘텐츠는 이후 단계). 입장 대신 준비 문구를 보여 준다
+const STORY_PREPARING = new Set(['underground', 'ice', 'desert']);
+const PREPARING_HINT = '이야기를 준비하고 있어요. 곧 만나요!';
+
 export class StageSelectScene extends Phaser.Scene {
   private busy = false;
   private page = 0;
@@ -155,7 +159,8 @@ export class StageSelectScene extends Phaser.Scene {
     keep(this.add.text(repX, ty + 2, ellipsize(st.clearCharacterName, 8), { fontSize: `${L.font.name}px`, color: locked ? TEXT.sub : TEXT.body }));
 
     // 잠금 이유(또는 백필 지역의 이야기 대기 안내)·구 판정 안내 — 잘리지 않게 카드 안쪽 폭에서 줄바꿈
-    const hints = [st.legacyTargetCode ? '직접 포획하면 장 완료' : null, (locked || st.state === 'open') && st.unlockHint ? st.unlockHint : null].filter((t): t is string => !!t);
+    const preparing = st.enterable && STORY_PREPARING.has(st.chapter.stageCode);
+    const hints = [st.legacyTargetCode ? '직접 포획하면 장 완료' : null, (locked || st.state === 'open') && st.unlockHint ? st.unlockHint : null, preparing ? PREPARING_HINT : null].filter((t): t is string => !!t);
     if (hints.length > 0) {
       keep(this.add.text(x + I.pad, y + I.hintY, hints.join('\n'), { fontSize: `${L.font.small}px`, color: TEXT.sub, wordWrap: { width: iw, useAdvancedWrap: true }, lineSpacing: 2, maxLines: I.hintLines }));
     }
@@ -181,6 +186,7 @@ export class StageSelectScene extends Phaser.Scene {
         .setInteractive({ useHandCursor: true })
         .on('pointerdown', () => {
           if (!st.enterable) showToast(this, st.unlockHint ?? '아직 열리지 않았습니다.', { y: L.toastY });
+          else if (preparing) showToast(this, PREPARING_HINT, { y: L.toastY });
           else void this.enterStage(st.chapter.stageCode);
         }),
     );

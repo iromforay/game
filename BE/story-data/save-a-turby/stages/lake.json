@@ -233,10 +233,20 @@
       ]
     },
     {
+      "id": "follow_resonance",
+      "text": "마루바닥 밑에서 들려오는 울림을 따라가자.",
+      "requires": [
+        "lake_dye_thread_equipped"
+      ]
+    },
+    {
       "id": "bring_dye_thread",
       "text": "물빛 염색실을 누비에게 가져가자.",
       "requires": [
         "lake_boss_aftermath_seen"
+      ],
+      "unless": [
+        "lake_dye_thread_equipped"
       ]
     },
     {

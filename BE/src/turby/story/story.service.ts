@@ -244,7 +244,7 @@ export class StoryService {
         for (const g of def.grant ?? []) grants.push(await this.grantItem(tx, playerId, g, `story:${def.id}:${g.itemCode}`));
         for (const code of def.markUsed ?? []) await this.markUsed(tx, playerId, code);
         if (def.grantStoryNubi) await this.grantStoryNubi(tx, playerId, progress.story_nubi_turby_instance_id);
-        if (def.equipRelic) await this.equipRelicTx(tx, playerId, progress.story_nubi_turby_instance_id, def.equipRelic.itemCode, def.equipRelic.slotKey);
+        if (def.equipRelic) await this.equipRelicTx(tx, playerId, progress.story_nubi_turby_instance_id, def.equipRelic.itemCode, def.equipRelic.slotKey, def.requireEquipped ?? []);
 
         const growth = def.equipRelic ? Math.max(snap.growthStage, def.equipRelic.growthStage) : snap.growthStage;
         const to = nextCheckpoint(snap.checkpoint, def.to);
@@ -715,7 +715,7 @@ export class StoryService {
     await tx.player_story_progress.update({ where: { player_id: playerId }, data: { story_nubi_turby_instance_id: instanceId } });
   }
 
-  private async equipRelicTx(tx: Tx, playerId: bigint, nubiId: bigint | null, itemCode: string, slotKey: string) {
+  private async equipRelicTx(tx: Tx, playerId: bigint, nubiId: bigint | null, itemCode: string, slotKey: string, requireEquipped: string[] = []) {
     if (!nubiId) throw gameError(409, 'STORY_NUBI_MISSING', '이야기 누비를 찾을 수 없습니다.');
     const nubi = await tx.turby_instance.findUnique({ where: { id: nubiId } });
     if (!nubi || nubi.owner_player_id !== playerId || !nubi.is_story_companion) throw gameError(409, 'STORY_NUBI_MISSING', '이야기 누비를 찾을 수 없습니다.');
@@ -723,6 +723,10 @@ export class StoryService {
     if (def.category !== 'relic' || def.story_slot !== slotKey) throw gameError(500, 'STORY_DATA_MISSING', '유물 정의가 올바르지 않습니다.');
     const owned = await tx.player_item.findUnique({ where: { player_id_item_definition_id: { player_id: playerId, item_definition_id: def.id } } });
     if (!owned || owned.quantity < 1) throw gameError(409, 'STORY_PREREQUISITE_MISSING', '유물을 가지고 있지 않습니다.');
+    for (const need of requireEquipped) {
+      const have = await tx.turby_equipment.findUnique({ where: { turby_instance_id_slot_key: { turby_instance_id: nubiId, slot_key: need } } });
+      if (!have) throw gameError(409, 'STORY_PREREQUISITE_MISSING', '먼저 앞선 이야기 유물을 장착해야 합니다.');
+    }
     const current = await tx.turby_equipment.findUnique({ where: { turby_instance_id_slot_key: { turby_instance_id: nubiId, slot_key: slotKey } } });
     if (current) throw gameError(409, 'STORY_SLOT_OCCUPIED', '이미 다른 유물이 장착되어 있습니다.');
     await tx.turby_equipment.create({ data: { turby_instance_id: nubiId, item_definition_id: def.id, slot_key: slotKey } });

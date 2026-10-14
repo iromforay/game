@@ -71,6 +71,7 @@ export function checkEvent(def: StoryEventDef, snap: StorySnapshot): RuleFailure
     const got = snap.objectives.get(def.requireObjective.key)?.size ?? 0;
     if (got < def.requireObjective.count) return { code: 'STORY_PREREQUISITE_MISSING', detail: `${def.requireObjective.key} ${got}/${def.requireObjective.count}` };
   }
+  if (def.requireGrowthEq !== undefined && snap.growthStage !== def.requireGrowthEq) return { code: 'STORY_PREREQUISITE_MISSING', detail: `growth ${snap.growthStage} != ${def.requireGrowthEq}` };
   if (def.requireGrowth !== undefined && snap.growthStage < def.requireGrowth) return { code: 'STORY_PREREQUISITE_MISSING', detail: `growth ${snap.growthStage} < ${def.requireGrowth}` };
   return null;
 }
@@ -107,6 +108,8 @@ export function resumeOf(snap: StorySnapshot): { segmentId: string | null; tutor
         return has('forest_giant_knot_defeated') && !has('forest_first_knot_awakened') ? 'ch01.first_knot_awaken' : null;
       case 'CH01_FIRST_KNOT_EQUIPPED':
         return has('forest_dansuring_found') ? 'ch01.primordial_knot' : null;
+      case 'CH02_COMPLETE':
+        return has('lake_chapter_complete_seen') ? null : 'ch02.chapter_complete'; // 장착은 끝났고 장면을 끝까지 보기 전 — 장착·성장은 반복하지 않고 장면만 처음부터
       case 'CH02_BOSS_DEFEATED':
         return has('lake_boss_aftermath_seen') ? null : 'ch02.boss_victory'; // 정산은 끝났고 장면을 끝까지 보기 전 — 보스전·보상은 반복하지 않고 승리 장면만 처음부터
       case 'CH01_COMPLETE':

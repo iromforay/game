@@ -76,7 +76,8 @@ export const SPRITESHEET_FRAMES: Record<string, { size: number; frames: number; 
   'wet-sewn-doll-idle': { size: 160, frames: 4, fps: 5 },
   'waterlogged-sewn-doll-idle': { size: 256, frames: 4, fps: 4 }, // 10-14 C2-5A 보스(결박)
   'waterlogged-sewn-doll-exposed': { size: 256, frames: 4, fps: 4 }, // 보스(약점 노출) — 같은 프레임 인덱스·표시 중심으로 교체
-  'nubi-color-drain': { size: 192, frames: 6, fps: 9 }, // 10-13 C2-4 누비 색 빠짐 오버레이(1회 재생, 8~10fps). nubi-color-restore는 C2-6 전까지 등록하지 않는다
+  'nubi-color-drain': { size: 192, frames: 6, fps: 9 }, // 10-13 C2-4 누비 색 빠짐 오버레이(1회 재생, 8~10fps)
+  'nubi-color-restore': { size: 192, frames: 6, fps: 9 }, // 10-14 C2-6 색 회복 오버레이(1→6 순서 1회 재생 — 시트가 이미 회복 방향이다. drain을 역재생하지 않는다)
 };
 
 // 전투 정의의 characterCode → 전투·지도에서 쓰는 적 시트 키(없으면 기존 터비 그림/임시 도형)

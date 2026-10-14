@@ -184,11 +184,11 @@ test('인벤토리·잠금: 이야기 유물로 보이고 새 아이템이며, �
   assert.ok(it);
   assert.deepEqual([it.name, it.tab, it.category, it.quantity, it.maxStack, it.isNew, it.isLocked, it.storySlot, it.slotsUsed], ['물빛 염색실', 'story', 'relic', 1, 1, true, true, 'story_2', 0]);
   assert.deepEqual(it.permissions, { sell: false, discard: false, trade: false, consume: false, unequip: false });
-  assert.equal(it.storyAction, null, '누비에게 장착은 C2-6 전까지 열리지 않는다');
+  assert.deepEqual([it.storyAction?.kind, it.storyAction?.available], ['equip_story_nubi', false], '승리 장면을 끝까지 보기 전에는 장착 버튼이 비활성(C2-6)');
   assert.equal(it.equippedOnStoryNubi, false);
   assert.ok(it.lockReason);
   // 장착 경로 모두 거부
-  assert.equal(await codeOf(s.story.equipRelic(P, 'water_dye_yarn')), 'RELIC_UNKNOWN');
+  assert.equal(await codeOf(s.story.equipRelic(P, 'water_dye_yarn')), 'STORY_PREREQUISITE_MISSING', '장면 완료 전 장착 거부');
   assert.equal(await codeOf(s.equipment.equip('1', String(s.nubiId), 'water_dye_yarn')), 'NOT_EQUIPPABLE');
   assert.equal(await codeOf(s.equipment.unequip('1', String(s.nubiId), 'story_2')), 'STORY_SLOT_RESERVED');
   // 열람하면 새 아이템 표시만 해제된다
