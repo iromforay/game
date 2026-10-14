@@ -29,6 +29,7 @@ export class SweetShopGateway {
   @SubscribeMessage(SWEET_SHOP_EVENTS.updateListing) updateListing() { return disabled(); }
   @SubscribeMessage(SWEET_SHOP_EVENTS.removeListing) removeListing() { return disabled(); }
   @SubscribeMessage(SWEET_SHOP_EVENTS.visitCafe) visitCafe() { return disabled(); }
+  @SubscribeMessage(SWEET_SHOP_EVENTS.listCafeStreet) listCafeStreet() { return disabled(); }
   @SubscribeMessage(SWEET_SHOP_EVENTS.buyDessert) buyDessert() { return disabled(); }
   @SubscribeMessage(SWEET_SHOP_EVENTS.eatDessert) eatDessert() { return disabled(); }
   @SubscribeMessage(SWEET_SHOP_EVENTS.createGuestbook) createGuestbook() { return disabled(); }

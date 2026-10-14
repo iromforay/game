@@ -1,12 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   INGREDIENTS, RECIPES, type IngredientId, type RecipeId,
-  type SweetShopCafeState, type SweetShopResult,
+  type SweetShopCafeState, type SweetShopCafeSummary, type SweetShopResult, type SweetShopVisitedCafe,
 } from 'sweet-shop-contracts';
-import type { LocalSweetShopGateway } from './shopGateway';
+import { dessertPriceRange, type LocalSweetShopGateway } from './shopGateway';
 
 const INGREDIENT_ICON: Record<IngredientId, string> = { flour: '🌾', sugar: '🍬', egg: '🥚', milk: '🥛', butter: '🧈', strawberry: '🍓' };
-const RECIPE_ICON: Record<RecipeId, string> = { 'butter-cookie': '🍪', 'strawberry-macaron': '🩷', 'milk-pudding': '🍮' };
+const RECIPE_ICON: Record<RecipeId, string> = { 'butter-cookie': '🍪', 'strawberry-macaron': '🩷', 'milk-pudding': '🍮', 'choco-cupcake': '🧁', 'honey-cake': '🍰' };
 const QUALITY_NAME = { normal: '보통', good: '좋음', excellent: '훌륭함', premium: '최고급' } as const;
 const id = () => typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
 
@@ -26,9 +26,11 @@ export function ShopFacilityPanel(props: Props) {
   if (props.facilityId === 'ingredient-storage') return <InventoryPanel {...props} initialTab="ingredients" />;
   if (props.facilityId === 'dessert-box') return <InventoryPanel {...props} initialTab="desserts" />;
   if (props.facilityId === 'recipe-book') return <InventoryPanel {...props} initialTab="recipes" />;
-  if (props.facilityId === 'display-stand') return <div className="facility-notice"><span>🍰</span><strong>판매 준비 중이에요</strong><p>먼저 디저트를 만든 뒤 판매대에 진열할 수 있습니다.</p></div>;
-  if (props.facilityId === 'notice-board') return <div className="facility-notice"><span>💌</span><strong>카페 홍보 준비 중이에요</strong><p>판매할 디저트가 생기면 알림노트로 손님을 초대할 수 있습니다.</p></div>;
-  if (props.facilityId === 'cafe-door') return <div className="facility-notice"><span>🚪</span><strong>카페 거리는 아직 닫혀 있어요</strong><p>내 카페에서 디저트를 만들며 영업 준비를 해주세요.</p></div>;
+  if (props.facilityId === 'display-stand') return <DisplayStandPanel {...props} />;
+  if (props.facilityId === 'notice-board') return <SalesPanel {...props} />;
+  if (props.facilityId === 'cafe-door') return props.cafe.tutorial.firstCookingCompleted
+    ? <CafeStreetPanel {...props} />
+    : <div className="facility-notice"><span>🚪</span><strong>첫 디저트를 먼저 완성해요</strong><p>버터 쿠키를 한 번 완성하면 카페 거리가 열립니다.</p><button className="primary-action" onClick={() => props.onNavigate('order-board')}>첫 재료 주문하기</button></div>;
   return <p>아직 사용할 수 없는 시설입니다.</p>;
 }
 
@@ -70,15 +72,51 @@ function OrderPanel({ cafe, gateway, now, onRefresh, onMessage }: Props) {
   </div>;
 }
 
-function InventoryPanel({ cafe, initialTab }: Props & { initialTab: 'ingredients' | 'desserts' | 'recipes' }) {
+function InventoryPanel({ cafe, gateway, onRefresh, onMessage, initialTab }: Props & { initialTab: 'ingredients' | 'desserts' | 'recipes' }) {
   const [tab, setTab] = useState(initialTab);
+  const [busy, setBusy] = useState(false);
   const ingredientSlots = Object.values(cafe.ingredients).filter((quantity) => (quantity ?? 0) > 0).length;
   return <div className="shop-panel-content">
     <nav className="inventory-tabs"><button className={tab === 'ingredients' ? 'active' : ''} onClick={() => setTab('ingredients')}>재료 상자</button><button className={tab === 'desserts' ? 'active' : ''} onClick={() => setTab('desserts')}>디저트 상자</button><button className={tab === 'recipes' ? 'active' : ''} onClick={() => setTab('recipes')}>레시피</button></nav>
     {tab === 'ingredients' && <><div className="slot-meter"><span>보관 슬롯</span><b>{ingredientSlots}/{cafe.storage.ingredientSlotLimit}</b></div><div className="inventory-grid">{INGREDIENTS.map((item) => <article className={(cafe.ingredients[item.id] ?? 0) ? 'filled' : 'empty'} key={item.id}><i>{INGREDIENT_ICON[item.id]}</i><strong>{item.name}</strong><b>×{cafe.ingredients[item.id] ?? 0}</b></article>)}</div></>}
-    {tab === 'desserts' && <><div className="slot-meter"><span>디저트 슬롯</span><b>{cafe.desserts.length}/{cafe.storage.dessertSlotLimit}</b></div><div className="inventory-grid dessert-grid">{cafe.desserts.map((item) => <article className="filled" key={item.id}><i>{RECIPE_ICON[item.recipeId]}</i><strong>{item.name}</strong><small>{QUALITY_NAME[item.quality]}</small><b>×{item.quantity}</b></article>)}{!cafe.desserts.length && <div className="empty-box wide">🎁<span>완성한 디저트가 없어요</span></div>}</div></>}
+    {tab === 'desserts' && <><div className="slot-meter"><span>디저트 슬롯</span><b>{cafe.desserts.length}/{cafe.storage.dessertSlotLimit}</b></div>{cafe.buff && <div className="buff-banner">✨ {cafe.buff.sourceDessertName} 효과 · Lv.{cafe.buff.eligibleRecipeLevel} 이하 품질 +{cafe.buff.qualityBonus}</div>}<div className="inventory-grid dessert-grid">{cafe.desserts.map((item) => <article className="filled" key={item.id}><i>{RECIPE_ICON[item.recipeId]}</i><strong>{item.name}</strong><small>{QUALITY_NAME[item.quality]} · Lv.{item.level}</small><b>×{item.quantity}</b>{item.source === 'npc-cafe' && <button disabled={busy} onClick={() => { setBusy(true); void gateway.eatDessert({ requestId: id(), dessertId: item.id }).then(async (result) => { onMessage(result.message ?? '디저트를 먹었습니다.', result.ok); await onRefresh(); setBusy(false); }); }}>먹기</button>}</article>)}{!cafe.desserts.length && <div className="empty-box wide">🎁<span>완성한 디저트가 없어요</span></div>}</div></>}
     {tab === 'recipes' && <RecipeList cafe={cafe} />}
   </div>;
+}
+
+function DisplayStandPanel({ cafe, gateway, onRefresh, onMessage }: Props) {
+  const [prices, setPrices] = useState<Record<string, number>>({});
+  const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const [busy, setBusy] = useState(false);
+  const crafted = cafe.desserts.filter((item) => item.source === 'crafted');
+  const act = async (promise: Promise<SweetShopResult<unknown>>) => { setBusy(true); const result = await promise; onMessage(result.message ?? '처리했습니다.', result.ok); await onRefresh(); setBusy(false); };
+  return <div className="shop-panel-content display-panel">
+    <div className="slot-meter"><span>판매대</span><b>{cafe.listings.length}/3칸</b></div>
+    <section className="listing-grid">{cafe.listings.map((listing) => {
+      const [min, max] = dessertPriceRange(listing.recipeId, listing.quality); const price = prices[listing.id] ?? listing.unitPrice;
+      return <article className="listing-card active" key={listing.id}><i>{RECIPE_ICON[listing.recipeId]}</i><div><strong>{listing.name}</strong><small>{QUALITY_NAME[listing.quality]} · ×{listing.quantity}</small></div><b>{listing.unitPrice}G</b><input aria-label={`${listing.name} 가격`} type="range" min={min} max={max} value={price} onChange={(event) => setPrices({ ...prices, [listing.id]: Number(event.target.value) })}/><small>{min}~{max}G · 수정 {price}G</small><div className="listing-actions"><button disabled={busy || price === listing.unitPrice} onClick={() => void act(gateway.updateListing({ requestId: id(), listingId: listing.id, quantity: listing.quantity, unitPrice: price }))}>가격 변경</button><button className="secondary" disabled={busy} onClick={() => void act(gateway.removeListing({ requestId: id(), listingId: listing.id }))}>회수</button></div></article>;
+    })}{Array.from({ length: Math.max(0, 3 - cafe.listings.length) }, (_, index) => <div className="empty-display" key={index}>＋<small>빈 판매칸</small></div>)}</section>
+    <h3>진열할 디저트</h3>
+    {!crafted.length && <div className="empty-box">🧁<span>직접 만든 디저트가 없습니다.</span></div>}
+    <div className="sellable-list">{crafted.map((dessert) => {
+      const [min, max] = dessertPriceRange(dessert.recipeId, dessert.quality); const price = prices[dessert.id] ?? Math.round((min + max) / 2); const quantity = Math.min(quantities[dessert.id] ?? 1, dessert.quantity);
+      return <article key={dessert.id}><i>{RECIPE_ICON[dessert.recipeId]}</i><div><strong>{dessert.name}</strong><small>{QUALITY_NAME[dessert.quality]} · 보유 {dessert.quantity}개 · 권장 {min}~{max}G</small></div><div className="quantity-stepper"><button onClick={() => setQuantities({ ...quantities, [dessert.id]: Math.max(1, quantity - 1) })}>−</button><b>{quantity}</b><button onClick={() => setQuantities({ ...quantities, [dessert.id]: Math.min(dessert.quantity, quantity + 1) })}>＋</button></div><input aria-label={`${dessert.name} 판매가격`} type="number" min={min} max={max} value={price} onChange={(event) => setPrices({ ...prices, [dessert.id]: Number(event.target.value) })}/><button disabled={busy || cafe.listings.length >= 3 || price < min || price > max} onClick={() => void act(gateway.createListing({ requestId: id(), dessertId: dessert.id, quantity, unitPrice: price }))}>진열하기</button></article>;
+    })}</div>
+    <p className="npc-sale-note">손님은 약 12초마다 진열 상품을 한 개씩 구매합니다. 판매대나 알림노트에서 판매 내역을 확인하세요.</p>
+  </div>;
+}
+
+function SalesPanel({ cafe }: Props) {
+  return <div className="shop-panel-content"><div className="panel-summary"><span>누적 판매</span><strong>🪙 {cafe.sales.reduce((sum, sale) => sum + sale.totalPrice, 0)}G</strong></div><div className="sales-list">{cafe.sales.map((sale) => <article key={sale.id}><span>💌</span><div><strong>{sale.buyerName}님이 {sale.dessertName} 구매</strong><small>{new Date(sale.soldAt).toLocaleTimeString()} · ×{sale.quantity}</small></div><b>+{sale.totalPrice}G</b></article>)}{!cafe.sales.length && <div className="empty-box">📭<span>아직 판매 소식이 없어요.</span></div>}</div></div>;
+}
+
+function CafeStreetPanel({ cafe, gateway, onRefresh, onMessage }: Props) {
+  const [cafes, setCafes] = useState<SweetShopCafeSummary[]>([]); const [visited, setVisited] = useState<SweetShopVisitedCafe | null>(null); const [busy, setBusy] = useState(false);
+  useEffect(() => { void gateway.listCafeStreet().then((result) => { if (result.ok) setCafes(result.data ?? []); }); }, [gateway]);
+  const visit = async (accountId: string) => { setBusy(true); const result = await gateway.visitCafe({ cafeAccountId: accountId }); if (result.ok) setVisited(result.data ?? null); else onMessage(result.message ?? '카페를 방문하지 못했습니다.'); setBusy(false); };
+  const buy = async (listingId: string) => { setBusy(true); const result = await gateway.buyDessert({ requestId: id(), listingId, quantity: 1 }); onMessage(result.message ?? '구매했습니다.', result.ok); await onRefresh(); setBusy(false); };
+  if (visited) return <div className="shop-panel-content visited-cafe"><button className="back-to-street" onClick={() => setVisited(null)}>← 카페 거리</button><div className="visited-owner"><span>{visited.icon}</span><div><strong>{visited.cafeName}</strong><small>Lv.{visited.level} · {visited.ownerName}</small></div></div><p>{visited.greeting}</p><div className="visitor-listings">{visited.listings.map((listing) => <article key={listing.id}><i>{RECIPE_ICON[listing.recipeId]}</i><div><strong>{listing.name}</strong><small>{QUALITY_NAME[listing.quality]} · Lv.{listing.level} · 남은 수량 {listing.quantity}</small></div><b>{listing.unitPrice}G</b><button disabled={busy || cafe.profile.gold < listing.unitPrice} onClick={() => void buy(listing.id)}>구매</button></article>)}</div><p className="buff-help">다른 카페의 디저트를 구매한 뒤 디저트 상자에서 먹으면, 디저트 레벨 이하의 조리 품질이 상승합니다.</p></div>;
+  return <div className="shop-panel-content cafe-street"><div className="panel-summary"><span>카페 거리</span><strong>보유 🪙 {cafe.profile.gold}</strong></div>{cafes.map((item) => <button disabled={busy} key={item.accountId} onClick={() => void visit(item.accountId)}><span>{item.icon}</span><div><strong>{item.cafeName}</strong><small>Lv.{item.level} {item.ownerName} · 대표 {item.representativeDessert}</small></div><b>{item.listingCount}개 판매 중 →</b></button>)}</div>;
 }
 
 function RecipeList({ cafe }: { cafe: SweetShopCafeState }) {

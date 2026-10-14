@@ -45,6 +45,9 @@ export class SweetShopService {
       deliveries: [],
       cookingJobs: [],
       desserts: [],
+      listings: [],
+      sales: [],
+      buff: null,
       recipeProgress: Object.fromEntries(recipes.map((item) => [item.recipe_id, {
         masteryExperience: item.mastery_experience,
         craftCount: item.total_cooked,
