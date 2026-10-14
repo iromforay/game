@@ -4,7 +4,9 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { EMPTY_TEXT, detailOf, filterItems, gridCells, insideCanvas, inventoryLayout, keepSelection, nubiSlots, overlaps, pageCells, type InventoryItem } from '../src/inventory/inventoryView.ts';
+import { createHash } from 'node:crypto';
+import { inflateSync } from 'node:zlib';
+import { EMPTY_TEXT, RELIC_CATEGORY_LABEL, RELIC_LOCK_LABEL, detailOf, filterItems, itemIconCandidates, gridCells, insideCanvas, inventoryLayout, keepSelection, nubiSlots, overlaps, pageCells, type InventoryItem } from '../src/inventory/inventoryView.ts';
 import { partySelectLayout } from '../src/battle/partySelectLayout.ts';
 import { actionHint, battleHudLayout, clampLabel, goalSummary, resultLayout, unitLabel } from '../src/battle/battleView.ts';
 import { displayScaleOf, finalPx, layoutKey, layoutModeOf, MIN_BODY_PX, MIN_BUTTON_PX } from '../src/ui/responsive.ts';
@@ -209,8 +211,8 @@ test('v5 인벤토리 상세 위계: 이름·배지 → 설명 → 수량·분�
   const d = detailOf({ ...knot, description: '누비의 첫 기억', isNew: true, lastAcquiredAt: '2026-09-30T01:00:00Z' });
   assert.deepEqual(d.badges, ['신규', '잠김']);
   assert.equal(d.description, '누비의 첫 기억');
-  assert.deepEqual(d.meta, ['수량: 1', '분류: 스토리', '최근 획득: 2026-09-30']);
-  assert.equal(d.lockNote, '이야기에 필요한 물건');
+  assert.deepEqual(d.meta, ['수량: 1', '분류: 이야기 유물', '최근 획득: 2026-09-30']);
+  assert.equal(d.lockNote, '이야기 동료 전용 · 이야기에 필요한 물건');
   assert.equal(d.equip?.label, '누비에게 장착');
   assert.deepEqual(detailOf({ ...knot, equippedOnStoryNubi: true, storyAction: null }).badges, ['잠김', '장착됨']);
   assert.deepEqual(detailOf(needle).badges, [], '일반 장비는 배지 없음');
@@ -235,4 +237,107 @@ test('v5 개발 도구 격리: 게임 소스(src)가 dev/ 도우미를 import하
   const dir = fileURLToPath(new URL('../src/', import.meta.url));
   const walk = (d: string): string[] => readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(join(d, e.name)) : e.name.endsWith('.ts') ? [join(d, e.name)] : []));
   for (const f of walk(dir)) assert.doesNotMatch(readFileSync(f, 'utf8'), /from ['"][^'"]*\/dev\/|import\(['"][^'"]*\/dev\//, f);
+});
+
+// ---------- 10-14 C2-5B: 물빛 염색실 ----------
+const dye = item({
+  itemCode: 'water_dye_yarn', iconKey: 'water_dye_yarn', name: '물빛 염색실', description: '푸른 물빛 염색실', tab: 'story', tabLabel: '스토리', category: 'relic', storySlot: 'story_2',
+  isLocked: true, isNew: true, lockReason: '이야기에 필요한 물건이라 팔거나 버리거나 해제할 수 없어요', storyAction: null,
+  permissions: { sell: false, discard: false, trade: false, consume: false, unequip: false },
+});
+
+test('물빛 염색실 상세: 이름·분류(이야기 유물)·수량 1·신규·잠금(이야기 동료 전용)이 보이고 판매·버리기·분해·사용·장착 행동은 없다', () => {
+  const d = detailOf(dye);
+  assert.equal(d.title, '물빛 염색실');
+  assert.deepEqual(d.badges, ['신규', '잠김']);
+  assert.deepEqual(d.meta, ['수량: 1', '분류: 이야기 유물']);
+  assert.equal(RELIC_CATEGORY_LABEL, '이야기 유물');
+  assert.equal(RELIC_LOCK_LABEL, '이야기 동료 전용');
+  assert.match(d.lockNote ?? '', /^이야기 동료 전용/);
+  assert.equal(d.equip, null, '누비에게 장착은 C2-6 전까지 열리지 않는다');
+  assert.equal(d.equippedLabel, null);
+  assert.deepEqual(Object.values(dye.permissions), [false, false, false, false, false]);
+  assert.deepEqual(filterItems([needle, dye], 'story').map((i) => i.itemCode), ['water_dye_yarn']);
+  // 아이콘 후보: item-<코드> → items/** 파일명(kebab)
+  assert.deepEqual(itemIconCandidates('water_dye_yarn'), ['item-water_dye_yarn', 'water-dye-yarn']);
+  // 한 칸 격자: 수량 배지 없음(1개)
+  assert.deepEqual(gridCells([dye]).map((c) => [c.item.itemCode, c.count, c.badge]), [['water_dye_yarn', 1, null]]);
+});
+
+// PNG(8비트 RGBA, 비인터레이스) 디코드 — 시험 전용
+function decodePng(bytes: Buffer) {
+  const w = bytes.readUInt32BE(16);
+  const h = bytes.readUInt32BE(20);
+  assert.equal(bytes[24], 8);
+  assert.equal(bytes[25], 6);
+  const idat: Buffer[] = [];
+  for (let o = 8; o < bytes.length; ) {
+    const len = bytes.readUInt32BE(o);
+    if (bytes.toString('latin1', o + 4, o + 8) === 'IDAT') idat.push(bytes.subarray(o + 8, o + 8 + len));
+    o += 12 + len;
+  }
+  const raw = inflateSync(Buffer.concat(idat));
+  const stride = w * 4;
+  const out = Buffer.alloc(h * stride);
+  for (let y = 0; y < h; y++) {
+    const f = raw[y * (stride + 1)];
+    for (let x = 0; x < stride; x++) {
+      const v = raw[y * (stride + 1) + 1 + x];
+      const a = x >= 4 ? out[y * stride + x - 4] : 0;
+      const b = y > 0 ? out[(y - 1) * stride + x] : 0;
+      const c = x >= 4 && y > 0 ? out[(y - 1) * stride + x - 4] : 0;
+      const p = a + b - c;
+      const pa = Math.abs(p - a);
+      const pb = Math.abs(p - b);
+      const pc = Math.abs(p - c);
+      const paeth = pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
+      out[y * stride + x] = (v + (f === 0 ? 0 : f === 1 ? a : f === 2 ? b : f === 3 ? (a + b) >> 1 : paeth)) & 255;
+    }
+  }
+  return { w, h, px: out };
+}
+
+test('물빛 염색실 에셋: 160×160 투명 PNG·원본 해시 일치, 80×80으로 줄여도 투명 여백 안에 아쿠아 색 실체가 남는다', () => {
+  const file = fileURLToPath(new URL('../src/assets/items/relics/water-dye-yarn.png', import.meta.url));
+  assert.ok(existsSync(file));
+  const bytes = readFileSync(file);
+  assert.equal(createHash('sha256').update(bytes).digest('hex').toUpperCase(), 'EFA8EAD2B45AC1F1CF3EFB9100CA30F04EF6E96A1EBA7070A8ADFDE7D706081F');
+  const { w, h, px } = decodePng(bytes);
+  assert.deepEqual([w, h], [160, 160]);
+  // 80×80 축소(2×2 평균): 불투명 칸 비율·아쿠아(청록) 우세·네 모서리 투명
+  let opaque = 0;
+  let aqua = 0;
+  const cell = (x: number, y: number) => {
+    let r = 0, g = 0, b = 0, a = 0;
+    for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
+      const i = ((y * 2 + dy) * w + x * 2 + dx) * 4;
+      r += px[i]; g += px[i + 1]; b += px[i + 2]; a += px[i + 3];
+    }
+    return { r: r / 4, g: g / 4, b: b / 4, a: a / 4 };
+  };
+  for (let y = 0; y < 80; y++) {
+    for (let x = 0; x < 80; x++) {
+      const c = cell(x, y);
+      if (c.a > 128) {
+        opaque++;
+        if (c.b > c.r + 20 && c.g > c.r) aqua++;
+      }
+    }
+  }
+  assert.ok(opaque >= 80 * 80 * 0.12 && opaque <= 80 * 80 * 0.75, `불투명 비율 ${opaque / 6400}`);
+  assert.ok(aqua / opaque >= 0.5, `아쿠아 색 비율 ${aqua / opaque}`);
+  for (const [x, y] of [[0, 0], [79, 0], [0, 79], [79, 79]]) assert.ok(cell(x, y).a < 16, '모서리 투명');
+});
+
+test('승리 장면 연출: water-dye-yarn-rise cue는 화면 중앙(대화창·건너뛰기 밖)에 160×160 한 번 그리고 에셋이 없으면 무연출이다', () => {
+  const src = readFileSync(fileURLToPath(new URL('../src/scenes/OpeningScene.ts', import.meta.url)), 'utf8');
+  assert.match(src, /cam === 'water-dye-yarn-rise'\) this\.playRelicRise\(\)/);
+  assert.match(src, /if \(this\.fxRelic\) return;/, '한 번만');
+  assert.match(src, /relicBounds = \{ x: cx - 80, y: cy - 80, w: 160, h: 160 \}/);
+  assert.match(src, /if \(!this\.textures\.exists\('water-dye-yarn'\)\) return;/);
+  // 대화창 상단 y=488, 건너뛰기 버튼 y<=104, 유물 영역 y 220~380 — 서로 겹치지 않는다
+  const b = { x: 640 - 80, y: 300 - 80, w: 160, h: 160 };
+  const box = { x: 40, y: 488, w: 1200, h: 200 };
+  const skip = { x: 1280 - 130 - 110, y: 60 - 44, w: 220, h: 88 };
+  assert.ok(!overlaps(b, box) && !overlaps(b, skip));
 });

@@ -86,8 +86,17 @@ export interface DetailView {
   equippedLabel: string | null;
   lockNote: string | null;
 }
+// 이야기 유물(category relic)은 탭 이름(스토리) 대신 정본 분류명으로 보이고, 잠금 이유 앞에 전용 표기를 붙인다(10-14 C2-5B)
+export const RELIC_CATEGORY_LABEL = '이야기 유물';
+export const RELIC_LOCK_LABEL = '이야기 동료 전용';
+
+// 인벤토리 아이콘 후보 키(item-<코드> → items/** 에셋의 kebab 파일명). 앞에서부터 있는 것을 쓴다
+export function itemIconCandidates(iconKey: string): string[] {
+  return [`item-${iconKey}`, iconKey.replace(/_/g, '-')];
+}
+
 export function detailOf(item: InventoryItem): DetailView {
-  const meta = [`수량: ${item.quantity}${item.maxStack > 1 ? ` (한 칸 최대 ${item.maxStack})` : ''}`, `분류: ${item.tabLabel}`];
+  const meta = [`수량: ${item.quantity}${item.maxStack > 1 ? ` (한 칸 최대 ${item.maxStack})` : ''}`, `분류: ${item.category === 'relic' ? RELIC_CATEGORY_LABEL : item.tabLabel}`];
   if (item.lastAcquiredAt) meta.push(`최근 획득: ${item.lastAcquiredAt.slice(0, 10)}`);
   const badges = [item.isNew ? '신규' : null, item.isLocked ? '잠김' : null, item.equippedOnStoryNubi ? '장착됨' : null].filter((b): b is string => b !== null);
   return {
@@ -98,7 +107,7 @@ export function detailOf(item: InventoryItem): DetailView {
     lines: [...(item.description ? [item.description] : []), ...meta],
     equip: item.storyAction ? { label: item.storyAction.label, enabled: item.storyAction.available, note: item.storyAction.available ? null : item.storyAction.reason } : null,
     equippedLabel: item.equippedOnStoryNubi ? '누비에게 장착됨' : null,
-    lockNote: item.isLocked ? (item.lockReason ?? '잠긴 아이템이에요') : null,
+    lockNote: item.isLocked ? (item.category === 'relic' ? `${RELIC_LOCK_LABEL} · ${item.lockReason ?? '잠긴 아이템이에요'}` : (item.lockReason ?? '잠긴 아이템이에요')) : null,
   };
 }
 

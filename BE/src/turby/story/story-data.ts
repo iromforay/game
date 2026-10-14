@@ -168,6 +168,12 @@ export const STORY_EVENTS: StoryEventDef[] = [
   // 10-13 C2-4: 안전 물길 너머 위기 지점에서 '잊어버린 이름' 장면을 끝까지 본 뒤 클라이언트가 완료를 요청한다(대화 구간 completesWith). 사건과 CH02_NUBI_CRISIS_SEEN을 한 트랜잭션으로 기록.
   //   서버는 CH02_MAZE_CLEARED·lake_safe_route_opened와 지점 반경 증거를 요구한다. 위기는 실패가 아니다 — 아이템·통화·성장·능력치 변화 없음
   ev({ id: 'lake_nubi_crisis_seen', chapter: 2, allowedAt: ['CH02_MAZE_CLEARED'], requires: ['lake_safe_route_opened'], evidence: { kind: 'point', stageCode: 'lake', pointId: 'lake_nubi_crisis' }, to: 'CH02_NUBI_CRISIS_SEEN' }),
+  // 10-14 C2-5B: 물먹은 박음이 승리 정산(서버 전용 — 전투 확정만 기록). 한 트랜잭션: 보스 격퇴 + 염색실 지급 사건 + 물빛 염색실 1개(확률 아님) + CH02_BOSS_DEFEATED.
+  //   장착·성장 단계·색 회복·CH02_COMPLETE·3장 개방은 C2-6. 유물은 한 번만 지급된다(grantItem의 relic 1회 규칙)
+  ev({ id: 'lake_boss_defeated', chapter: 2, allowedAt: ['CH02_NUBI_CRISIS_SEEN'], requires: ['lake_nubi_crisis_seen'], serverOnly: true, evidence: { kind: 'none' }, alsoComplete: ['lake_dye_thread_granted'], grant: [{ itemCode: 'water_dye_yarn', quantity: 1 }], to: 'CH02_BOSS_DEFEATED' }),
+  ev({ id: 'lake_dye_thread_granted', chapter: 2, allowedAt: ['CH02_NUBI_CRISIS_SEEN'], requires: ['lake_nubi_crisis_seen'], serverOnly: true, evidence: { kind: 'none' } }),
+  // 승리 장면(ch02.boss_victory)을 끝까지 본 뒤 클라이언트가 완료를 요청한다(대화 구간 completesWith). 체크포인트·아이템·성장은 바꾸지 않는다. C2-6 장착 지점의 선행 조건
+  ev({ id: 'lake_boss_aftermath_seen', chapter: 2, allowedAt: ['CH02_BOSS_DEFEATED'], requires: ['lake_boss_defeated', 'lake_dye_thread_granted'], evidence: { kind: 'none' } }),
 ];
 
 // 부분 사건이 모두 기록되면 같은 트랜잭션에서 함께 기록하는 집계 사건(C2-3). 이미 기록돼 있으면 다시 만들지 않는다
@@ -325,8 +331,9 @@ export const STORY_TRIGGERS: StoryTriggerDef[] = [
   { id: 'lake_safe_route', stageCode: 'lake', evidence: { kind: 'point', stageCode: 'lake', pointId: 'lake_safe_route' }, activeAt: ['CH02_SETTLEMENT_MET'], requires: ['lake_trapped_turbies_rescued'], unless: ['lake_safe_route_opened'], repeatable: true, play: { segmentId: 'ch02.maze', endAfter: 'ch02.maze' } },
   // 6) 누비 이름 망각 위기(C2-4) — 안전 물길 너머. 장면을 끝까지 보면 lake_nubi_crisis_seen + CH02_NUBI_CRISIS_SEEN(대화 구간 completesWith). 중간에 끊기면 같은 지점에서 처음부터
   { id: 'lake_nubi_crisis', stageCode: 'lake', evidence: { kind: 'point', stageCode: 'lake', pointId: 'lake_nubi_crisis' }, activeAt: ['CH02_MAZE_CLEARED'], requires: ['lake_safe_route_opened'], unless: ['lake_nubi_crisis_seen'], repeatable: true, play: { segmentId: 'ch02.nubi_crisis', endAfter: 'ch02.nubi_crisis' } },
-  // 7) 염색 샘 보스 입장(C2-5A) — 위기 장면 뒤에만 보인다. 대화 구간의 storyBattle이 서버 스토리 전투를 연다(지점 반경 증거). 완료 사건 없음(개발 격리)
-  { id: 'lake_boss_entrance', stageCode: 'lake', evidence: { kind: 'point', stageCode: 'lake', pointId: 'lake_boss_entrance' }, activeAt: ['CH02_NUBI_CRISIS_SEEN'], requires: ['lake_nubi_crisis_seen'], encounterKey: 'lake_boss_sewn_doll', repeatable: true, play: { segmentId: 'ch02.boss_intro', endAfter: 'ch02.boss_intro' } },
+  // 7) 염색 샘 보스 입장(C2-5A) — 위기 장면 뒤에만 보인다. 대화 구간의 storyBattle이 서버 스토리 전투를 연다(지점 반경 증거).
+  //    C2-5B: 승리하면 서버가 lake_boss_defeated를 정산하고, 같은 재생 범위가 정본 승리 장면(ch02.boss_victory)으로 이어진다. 정산 뒤에는 입장 지점이 닫힌다
+  { id: 'lake_boss_entrance', stageCode: 'lake', evidence: { kind: 'point', stageCode: 'lake', pointId: 'lake_boss_entrance' }, activeAt: ['CH02_NUBI_CRISIS_SEEN'], requires: ['lake_nubi_crisis_seen'], unless: ['lake_boss_defeated'], encounterKey: 'lake_boss_sewn_doll', repeatable: true, play: { segmentId: 'ch02.boss_intro', endAfter: 'ch02.boss_victory' } },
 ];
 export const TRIGGER_BY_ID = new Map(STORY_TRIGGERS.map((t) => [t.id, t]));
 
@@ -365,8 +372,9 @@ export const STORY_ENCOUNTERS: StoryEncounterDef[] = [
   { key: 'forest_stitchling_ambush', chapter: 1, stageCode: 'forest', allowedAt: ['CH01_STARTED'], requires: ['forest_first_path_started', 'forest_cut_thread_inspected'], onWinEvents: ['forest_stitchling_battle_won'] },
   // 2장 물풀 미로(C2-3): 구조 지점마다 젖은 실밥이 수호 전투. 승리하면 그 지점의 구조 사건만 기록한다(다른 지점의 승리는 증거가 아니다)
   ...(['a', 'b', 'c'] as const).map((k) => ({ key: `lake_guard_${k}`, chapter: 2, stageCode: 'lake', allowedAt: ['CH02_SETTLEMENT_MET'] as Checkpoint[], requires: ['lake_wave_drum_awakened'], onWinEvents: [`lake_trapped_mulduri_${k}_rescued`] })),
-  // 10-14 C2-5A: 물먹은 박음이 보스 전투 본체. 영구 사건·체크포인트를 바꾸지 않는다(onWinEvents 없음 — C2-5B에서 승리 정산을 연결). 이겨도 다시 입장해 싸울 수 있다
-  { key: 'lake_boss_sewn_doll', chapter: 2, stageCode: 'lake', allowedAt: ['CH02_NUBI_CRISIS_SEEN'], requires: ['lake_nubi_crisis_seen'], onWinEvents: [] },
+  // 10-14 C2-5B: 물먹은 박음이. 승리하면 lake_boss_defeated(염색실 지급 사건·물빛 염색실 1개·CH02_BOSS_DEFEATED)를 서버가 한 트랜잭션으로 정산한다.
+  //   정산 뒤에는 STORY_ENCOUNTER_DONE이라 다시 싸울 수 없다(체크포인트도 허용 범위를 벗어난다)
+  { key: 'lake_boss_sewn_doll', chapter: 2, stageCode: 'lake', allowedAt: ['CH02_NUBI_CRISIS_SEEN'], requires: ['lake_nubi_crisis_seen'], onWinEvents: ['lake_boss_defeated'] },
   { key: 'forest_giant_knot', chapter: 1, stageCode: 'forest', allowedAt: ['CH01_COMPASS_ACQUIRED'], requires: ['forest_compass_granted', 'forest_hidden_path_opened'], onWinEvents: ['forest_giant_knot_defeated'] },
 ];
 

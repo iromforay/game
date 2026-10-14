@@ -1,6 +1,6 @@
 // 10-14 C2-5A: 물먹은 박음이 보스 전투 본체 — 입장 → 보스 피해 차단 → 재봉실 3개 → 구역 복구 → 약점 노출 → 승리(1280×720),
 // 물살 예고·적용 → 중간 새로고침 → 상태 복원 → 승리(640×360). 상태(CH02_NUBI_CRISIS_SEEN)는 테스트 격리 DB에 직접 준비한다.
-// 승리해도 영구 사건·아이템·체크포인트는 바뀌지 않는다(C2-5B 전).
+// 승리 정산(사건·물빛 염색실·체크포인트)은 C2-5B의 lake-boss-reward.e2e.ts가 본다.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Browser } from 'playwright-core';
@@ -140,7 +140,10 @@ test('2장 C2-5A ①(1280×720): 입장 → 보스 피해 차단 → 재봉실 3
     assertNoLabelOverlap(b, 'exposed');
     await g.capture('boss_exposed');
     await finish(g);
-    assert.equal(permanent(device), before, '사건·체크포인트·인벤토리·성장 단계 불변');
+    // C2-5B: 승리는 서버가 한 번 정산한다(세부는 lake-boss-reward.e2e.ts) — 사건·물빛 염색실·체크포인트가 바뀌고 성장 단계는 그대로
+    assert.notEqual(permanent(device), before);
+    const progress = backend.db.rows('player_story_progress', { player_id: backend.playerByDevice(device)!.id })[0] as { checkpoint: string; nubi_growth_stage: number };
+    assert.deepEqual([progress.checkpoint, progress.nubi_growth_stage], ['CH02_BOSS_DEFEATED', 1]);
   }, backend, device);
   await g.close();
 });

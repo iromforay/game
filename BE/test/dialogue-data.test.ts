@@ -156,7 +156,8 @@ test('ch02(C2-1): 스키마 규칙을 지키고, 물빛 입구·색을 잃은 �
     } else md.push({ who: null, text: l });
   }
   // 문서의 "## 색을 잃은 정착지" 제목 앞뒤 구간은 JSON의 title 항목으로 따로 있으므로 title은 비교에서 뺀다
-  const json = file.segments.flatMap((s) => s.entries).filter((e) => e.kind === 'line' || e.kind === 'narration');
+  // boss_victory(C2-5B)는 문서의 '물먹은 박음이' 전투 뒤 구간이라 이 대조 범위(보스 입장 전)에 없다 — story-lake/lake-reward 시험이 따로 대조한다
+  const json = file.segments.filter((s) => s.segmentId !== 'ch02.boss_victory').flatMap((s) => s.entries).filter((e) => e.kind === 'line' || e.kind === 'narration');
   assert.equal(json.length, md.length, `항목 수: JSON ${json.length} / MD ${md.length}`);
   json.forEach((e, i) => {
     assert.equal(e.text, md[i].text, `${e.dialogueId}: 문구`);
@@ -164,7 +165,7 @@ test('ch02(C2-1): 스키마 규칙을 지키고, 물빛 입구·색을 잃은 �
     else assert.equal(md[i].who, null, `${e.dialogueId}: 서술`);
   });
   // 구간 시작 체크포인트·완료 이벤트가 서버 전이표와 맞다
-  assert.deepEqual(file.segments.map((s) => [s.segmentId, s.resumeFrom, s.completesWith]), [['ch02.lake_entry', 'CH01_COMPLETE', 'lake_entry_seen'], ['ch02.settlement', 'CH02_STARTED', null], ['ch02.rescue_a', 'CH02_SETTLEMENT_MET', null], ['ch02.rescue_b', 'CH02_SETTLEMENT_MET', null], ['ch02.rescue_c', 'CH02_SETTLEMENT_MET', null], ['ch02.maze', 'CH02_SETTLEMENT_MET', 'lake_safe_route_opened'], ['ch02.nubi_crisis', 'CH02_MAZE_CLEARED', 'lake_nubi_crisis_seen'], ['ch02.boss_intro', 'CH02_NUBI_CRISIS_SEEN', null]]);
+  assert.deepEqual(file.segments.map((s) => [s.segmentId, s.resumeFrom, s.completesWith]), [['ch02.lake_entry', 'CH01_COMPLETE', 'lake_entry_seen'], ['ch02.settlement', 'CH02_STARTED', null], ['ch02.rescue_a', 'CH02_SETTLEMENT_MET', null], ['ch02.rescue_b', 'CH02_SETTLEMENT_MET', null], ['ch02.rescue_c', 'CH02_SETTLEMENT_MET', null], ['ch02.maze', 'CH02_SETTLEMENT_MET', 'lake_safe_route_opened'], ['ch02.nubi_crisis', 'CH02_MAZE_CLEARED', 'lake_nubi_crisis_seen'], ['ch02.boss_intro', 'CH02_NUBI_CRISIS_SEEN', null], ['ch02.boss_victory', 'CH02_BOSS_DEFEATED', 'lake_boss_aftermath_seen']]);
   // 구조 구간은 전투 항목 하나뿐(문구 없음) — 전투 키가 서버 스토리 전투 정의·트리거와 같다
   for (const k of ['a', 'b', 'c']) {
     const seg = file.segments.find((s) => s.segmentId === `ch02.rescue_${k}`)!;

@@ -445,6 +445,35 @@
           "encounterKey": "lake_boss_sewn_doll"
         }
       ]
+    },
+    {
+      "segmentId": "ch02.boss_victory",
+      "resumeFrom": "CH02_BOSS_DEFEATED",
+      "replayOnResume": true,
+      "completesWith": "lake_boss_aftermath_seen",
+      "entries": [
+        {
+          "kind": "narration",
+          "dialogueId": "ch02.boss_victory.001",
+          "text": "마지막 재봉실을 끊자 물먹은 박음이는 젖은 천 조각과 검은 실밥으로 풀어진다. 몸의 중심에서 푸른 물빛 염색실이 떠오른다.",
+          "cameraCue": "water-dye-yarn-rise",
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch02.boss_victory.002",
+          "text": "멀리서 기계가 실을 빠르게 감아들이는 소리가 들리지만, 이번에는 아무것도 회수하지 못한 채 끊어진다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch02.boss_victory.003",
+          "text": "타다닥— 철컥.",
+          "cameraCue": null,
+          "soundCue": null
+        }
+      ]
     }
   ]
 }

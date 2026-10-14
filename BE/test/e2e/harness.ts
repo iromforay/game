@@ -13,6 +13,7 @@ import { seedBase, startTurbyApp } from '../helpers/turby-app';
 import { RoomsService } from '../../src/turby/rooms/rooms.service';
 import { RoomError } from '../../src/turby/rooms/types';
 import { StoryContentService, type StageStoryData } from '../../src/turby/story/story-content.service';
+import { StoryService } from '../../src/turby/story/story.service';
 import { walkRoute } from '../helpers/forest-geo';
 import { SettingsService } from '../../src/turby/rooms/settings.service';
 import { BattleService } from '../../src/turby/battle/battle.service';
@@ -84,6 +85,13 @@ export class Backend {
     const p = this.playerByDevice(device);
     const room = p ? this.app?.get(RoomsService).roomOf(p.id.toString()) : undefined;
     return room ? { code: room.code, wilds: room.wilds.map((w) => ({ index: w.index, characterCode: w.characterCode, x: w.x, y: w.y, state: w.state })) } : null;
+  }
+  // 서버 경로(전투 확정과 같은 'server' 경로)로 같은 이벤트 정산을 동시에 n번 요청한다 — 중복 기록·지급이 없는지 보는 시험용. 새로 기록된 횟수를 돌려준다
+  async settleConcurrently(device: string, eventId: string, n: number): Promise<number> {
+    const p = this.playerByDevice(device)!;
+    const story = this.app!.get(StoryService);
+    const results = await Promise.all(Array.from({ length: n }, () => story.completeEvent(p.id, eventId, 'server')));
+    return results.filter((r) => !r.alreadyCompleted).length;
   }
   // 서버에 열려 있는 탐험 세션(방) 수 — 재시도가 방을 새로 만들지 않는지 확인하는 데 쓴다
   roomCount(): number {

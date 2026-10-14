@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { PAL, TEXT, feltPanel } from './kit';
 import { displayScaleOf } from './responsive';
 import { equipRelicToNubi, fetchInventory, fetchStory, markItemSeen } from '../api/client';
-import { EMPTY_TEXT, NUBI_FIXED_NOTE, TABS, detailOf, filterItems, gridCells, inventoryLayout, keepSelection, nubiSlots, pageCells, type InventoryItem, type InventoryLayout, type InventoryList, type TabFilter } from '../inventory/inventoryView';
+import { EMPTY_TEXT, NUBI_FIXED_NOTE, TABS, detailOf, filterItems, gridCells, inventoryLayout, itemIconCandidates, keepSelection, nubiSlots, pageCells, type InventoryItem, type InventoryLayout, type InventoryList, type TabFilter } from '../inventory/inventoryView';
 import type { StoryPlay } from '../story/storyFlow';
 
 type NubiState = { slots: { slotKey: string; itemCode: string; name: string }[] } | null;
@@ -57,7 +57,7 @@ export class InventoryWindow {
 
   // 진단용 요약(화면 상태만 — 서버 값·식별 정보 없음)
   get debugState() {
-    return { visible: this.layer.visible, state: this.state, tab: this.tab, page: this.page, selected: this.selected, mode: this.layout.mode, itemCount: this.data?.items.length ?? 0, busy: this.busy, detailView: this.detailView, descOpen: this.descOpen, nubiCollapsed: this.nubiCollapsed };
+    return { visible: this.layer.visible, state: this.state, tab: this.tab, page: this.page, selected: this.selected, mode: this.layout.mode, itemCount: this.data?.items.length ?? 0, busy: this.busy, detailView: this.detailView, descOpen: this.descOpen, nubiCollapsed: this.nubiCollapsed, detailIcon: this.detailIcon, cells: this.cellRects };
   }
 
   async open(tab: TabFilter = 'all') {
@@ -188,13 +188,15 @@ export class InventoryWindow {
       this.button(next, '▶', L.font.button, true, () => go(1), PAL.lavender);
       this.text(label.x, label.y, `${paging.page + 1} / ${paging.pages}`, L.font.body, TEXT.body).setOrigin(0.5);
     }
+    this.cellRects = [];
     paging.cells.forEach((c, i) => {
       const x = g.x + (i % L.cols) * (L.cell + 8);
       const y = g.y + Math.floor(i / L.cols) * (L.cell + 8);
+      this.cellRects.push({ code: c.item.itemCode, x: Math.round(x), y: Math.round(y), w: L.cell, h: L.cell });
       const selected = c.item.itemCode === this.selected;
       const bg = this.add(this.scene.add.rectangle(x, y, L.cell, L.cell, 0xfffaf1).setOrigin(0, 0).setStrokeStyle(selected ? 5 : 2, selected ? 0xe58aa6 : PAL.lavender));
       bg.setInteractive({ useHandCursor: true }).on('pointerdown', () => void this.select(c.item));
-      const iconKey = `item-${c.item.iconKey}`;
+      const iconKey = this.iconOf(c.item) ?? '';
       const cx = x + L.cell / 2;
       const cy = y + L.cell / 2;
       if (this.scene.textures.exists(iconKey)) this.add(this.scene.add.image(cx, cy, iconKey).setDisplaySize(L.cell * 0.66, L.cell * 0.66));
@@ -210,9 +212,17 @@ export class InventoryWindow {
     });
   }
 
+  private cellRects: { code: string; x: number; y: number; w: number; h: number }[] = []; // 진단용: 그린 격자 칸(캔버스 좌표)
+  private detailIcon: { key: string; x: number; y: number; size: number } | null = null; // 진단용: 상세에 그린 아이콘(텍스처 키·위치·표시 크기)
+
+  private iconOf(item: InventoryItem): string | null {
+    return itemIconCandidates(item.iconKey).find((k) => this.scene.textures.exists(k)) ?? null;
+  }
+
   private renderDetail(item: InventoryItem | null, L: InventoryLayout) {
     const d = L.detail;
     const f = L.font;
+    this.detailIcon = null;
     this.add(this.scene.add.rectangle(d.x, d.y, d.w, d.h, 0xfffaf1).setOrigin(0, 0).setStrokeStyle(2, PAL.lavender));
     const pad = 14;
     let y = d.y + pad;
@@ -226,23 +236,29 @@ export class InventoryWindow {
     }
     const view = detailOf(item);
     const inner = d.w - pad * 2;
+    // 아이콘이 있는 아이템은 상세 오른쪽 위에 80×80으로 보여 준다(이름·배지는 그 왼쪽에 줄바꿈)
+    const iconKey = this.iconOf(item);
+    const ICON = 80;
+    const iconRoom = iconKey ? ICON + 8 : 0;
+    this.detailIcon = iconKey ? { key: iconKey, x: Math.round(d.x + d.w - pad - ICON), y: Math.round(y), size: ICON } : null;
+    if (iconKey) this.add(this.scene.add.image(d.x + d.w - pad - ICON / 2, y + ICON / 2, iconKey).setDisplaySize(ICON, ICON));
     const bottom = d.y + d.h - pad; // 상세 영역 아래 끝 — 넘치면 누비 영역은 전환 버튼 뒤로 보낸다(문구는 지우지 않는다)
     // 1) 이름 + 상태 배지(이름 오른쪽, 자리가 모자라면 다음 줄)
-    const title = this.text(d.x + pad, y, view.title, f.title, TEXT.body, wrap);
+    const title = this.text(d.x + pad, y, view.title, f.title, TEXT.body, { wordWrap: { width: d.w - pad * 2 - iconRoom, useAdvancedWrap: true } });
     let bx = d.x + pad + title.width + 10;
     let by = y + Math.max(0, (title.height - f.body * 1.4) / 2);
     const BADGE: Record<string, [string, string]> = { 신규: ['#ffffff', '#e0708a'], 잠김: ['#ffffff', '#8a6aa8'], 장착됨: [TEXT.onMint, '#cfeedd'] };
     for (const b of view.badges) {
       const [fg, bg] = BADGE[b] ?? [TEXT.body, '#eeeeee'];
       const t = this.text(bx, by, b, f.body, fg, { backgroundColor: bg, padding: { x: 6, y: 2 } });
-      if (bx + t.width > d.x + d.w - pad) {
+      if (bx + t.width > d.x + d.w - pad - iconRoom) {
         by = y + title.height + 4;
         bx = d.x + pad;
         t.setPosition(bx, by);
       }
       bx += t.width + 6;
     }
-    y = Math.max(y + title.height, by + f.body * 1.4) + 10;
+    y = Math.max(y + title.height, by + f.body * 1.4, iconKey ? y + ICON : 0) + 10;
 
     // 누비 영역을 따로 보는 중(작은 화면에서 한 번에 다 들어가지 않을 때): 이름·배지 아래에 누비 영역만, 돌아가기 버튼과 함께
     if (showNubi && this.detailView === 'nubi') {

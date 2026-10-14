@@ -44,8 +44,9 @@ export class OpeningScene extends Phaser.Scene {
     this.opts = data;
     this.advanceResolver = null;
     this.typing = null;
-    this.fxState = { drainPlayed: 0, saturation: 1, bounds: null }; // 같은 장면 객체를 다시 쓸 때 연출 상태를 비운다
+    this.fxState = { drainPlayed: 0, saturation: 1, bounds: null, relicShown: 0, relicBounds: null }; // 같은 장면 객체를 다시 쓸 때 연출 상태를 비운다
     this.fxNubi = undefined;
+    this.fxRelic = undefined;
     this.satTween = undefined;
     try {
       this.seen = new Set(JSON.parse(localStorage.getItem(data.seenKey) ?? '[]') as string[]);
@@ -227,13 +228,15 @@ export class OpeningScene extends Phaser.Scene {
     const cam = 'cameraCue' in entry ? entry.cameraCue : null;
     if (cam === 'nubi-color-drain') this.playNubiColorDrain();
     else if (cam === 'world-saturation-steady') this.setWorldSaturation(WORLD_SATURATION_STEADY);
+    else if (cam === 'water-dye-yarn-rise') this.playRelicRise();
   }
 
   // ---------- 누비 색 빠짐 연출(10-13 C2-4) ----------
   // 누비 그림 위에 같은 중심으로 투명 오버레이를 1회 재생하고(캐릭터를 대체하지 않는다), 배경 채도를 부드럽게 낮춘다.
   // 대화창·이름표·버튼(this.layer)은 별도 레이어라 탈색되지 않는다. 붉은 화면·섬광·흔들림·시간 제한은 쓰지 않는다.
-  fxState: { drainPlayed: number; saturation: number; bounds: { x: number; y: number; w: number; h: number } | null } = { drainPlayed: 0, saturation: 1, bounds: null };
+  fxState: { drainPlayed: number; saturation: number; bounds: { x: number; y: number; w: number; h: number } | null; relicShown: number; relicBounds: { x: number; y: number; w: number; h: number } | null } = { drainPlayed: 0, saturation: 1, bounds: null, relicShown: 0, relicBounds: null };
   private fxNubi?: Phaser.GameObjects.Image;
+  private fxRelic?: Phaser.GameObjects.Image;
   private satTween?: Phaser.Tweens.Tween;
 
   private playNubiColorDrain() {
@@ -250,6 +253,21 @@ export class OpeningScene extends Phaser.Scene {
       fx.play('nubi-color-drain-once');
     }
     this.setWorldSaturation(WORLD_SATURATION_DRAINED);
+  }
+
+  // ---------- 물빛 염색실이 떠오르는 연출(10-14 C2-5B) ----------
+  // 정본 승리 장면: 몸의 중심에서 푸른 물빛 염색실이 떠오른다. 화면 중앙(대화창·건너뛰기 버튼 밖)에 한 번 나타나 서서히 올라오고 장면 끝까지 머문다.
+  // 섬광·흔들림·시간 제한 없음. 에셋이 없으면 아무것도 그리지 않는다(오류 아님)
+  private playRelicRise() {
+    if (this.fxRelic) return;
+    const cx = CANVAS_WIDTH / 2;
+    const cy = 300;
+    this.fxState.relicShown++;
+    this.fxState.relicBounds = { x: cx - 80, y: cy - 80, w: 160, h: 160 };
+    if (!this.textures.exists('water-dye-yarn')) return;
+    const img = this.add.image(cx, cy + 40, 'water-dye-yarn').setDisplaySize(160, 160).setAlpha(0).setDepth(6);
+    this.fxRelic = img;
+    this.tweens.add({ targets: img, alpha: 1, y: cy, duration: 1400, ease: 'Sine.easeOut' });
   }
 
   // 월드(배경·누비 그림)의 채도를 부드럽게 바꾼다. WebGL이 아니면 같은 방향의 회청색 틴트로 대신한다

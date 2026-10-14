@@ -268,6 +268,7 @@ function setupService(opts: { events?: string[]; checkpoint?: string } = {}) {
   db.seed('story_chapter', { chapter_order: 2, stage_code: 'lake', clear_character_code: 'muldeuli', title: '2장 — 호수', map_width: 3200, map_height: 2400 });
   db.seed('turby_grade', { id: 1, name: '일반', base_attack: 30, base_defense: 6, base_action_power: 4, base_hp: 200 });
   const nubiChar = db.seed('turby_character', { code: 'nubi', name: '누비', grade_id: 1, atk_mod: 0, def_mod: 0, ap_mod: 0, hp_mod: 0 });
+  db.seed('item_definition', { code: 'water_dye_yarn', name: '물빛 염색실', category: 'relic', story_slot: 'story_2', max_stack: 1 });
   db.seed('player', { id: P, device_uuid: 'dev-boss-one', nickname: '하늘' });
   const nubi = db.seed('turby_instance', { owner_player_id: P, character_id: nubiChar.id, acquired_via: 'starter', is_story_companion: true, atk_bonus: 0, def_bonus: 0, ap_bonus: 0, hp_bonus: 0 });
   db.seed('player_story_progress', { player_id: P, checkpoint: opts.checkpoint ?? 'CH02_NUBI_CRISIS_SEEN', story_nubi_turby_instance_id: nubi.id, nubi_growth_stage: 1 });
@@ -316,10 +317,10 @@ test('입장: 선행 체크포인트·사건 누락·원거리·다른 전투 �
   assert.notEqual(await codeOf(s.battles.startStory('1', 'lake_guard_a')), 'NO_ERROR', '다른 전투(이미 끝난 구조 수호)는 이 지점에서 시작할 수 없다');
   const snap = await s.battles.startStory('1', 'lake_boss_sewn_doll');
   assert.deepEqual([snap.phase, snap.story?.encounterKey], ['party_select', 'lake_boss_sewn_doll']);
-  // 트리거 정의: 위기 장면 뒤에만 열리고 완료 사건이 없다
+  // 트리거 정의: 위기 장면 뒤에만 열리고, 승리 정산 뒤에는 닫힌다(C2-5B)
   const t = STORY_TRIGGERS.find((x) => x.id === 'lake_boss_entrance')!;
-  assert.deepEqual([t.activeAt, t.requires, t.encounterKey, t.unless ?? null, t.event ?? null], [['CH02_NUBI_CRISIS_SEEN'], ['lake_nubi_crisis_seen'], 'lake_boss_sewn_doll', null, null]);
-  assert.deepEqual(ENCOUNTER_BY_KEY.get('lake_boss_sewn_doll')!.onWinEvents, [], '승리가 영구 사건을 만들지 않는다');
+  assert.deepEqual([t.activeAt, t.requires, t.encounterKey, t.unless ?? null, t.event ?? null], [['CH02_NUBI_CRISIS_SEEN'], ['lake_nubi_crisis_seen'], 'lake_boss_sewn_doll', ['lake_boss_defeated'], null]);
+  assert.deepEqual(ENCOUNTER_BY_KEY.get('lake_boss_sewn_doll')!.onWinEvents, ['lake_boss_defeated'], '승리 정산 사건은 서버가 기록한다(C2-5B)');
 });
 
 test('지점 노출: 위기 장면 전에는 보스 입장 지점이 지도에 내려오지 않고, 장면 뒤에만 내려온다', async () => {
@@ -331,7 +332,7 @@ test('지점 노출: 위기 장면 전에는 보스 입장 지점이 지도에 �
   assert.equal(view.goal?.text, '누비를 지키기 위해 염색 샘으로 가자.');
 });
 
-test('재접속 복원 + 영구 진행 불변: 페이즈·재봉실·구역·예고 물살이 스냅샷으로 복원되고, 승리해도 사건·체크포인트·인벤토리·성장은 그대로이며 다시 싸울 수 있다', async () => {
+test('재접속 복원 + 영구 진행 불변: 페이즈·재봉실·구역·예고 물살이 스냅샷으로 복원되고, 승리하면 한 번 정산되고(사건·체크포인트·물빛 염색실) 성장은 그대로이며 다시 싸울 수 없다', async () => {
   const s = setupService();
   await enter(s);
   standAt(s);
@@ -368,11 +369,12 @@ test('재접속 복원 + 영구 진행 불변: 페이즈·재봉실·구역·예
   assert.equal(cur.outcome, 'win');
   const ended = (await s.battles.snapshot('1', cur.battleId)).ended!;
   assert.deepEqual([ended.outcome, ended.rewards.length, ended.settled], ['win', 0, true]);
-  assert.equal(snapshotDb(s), before, '사건·체크포인트·인벤토리·누비 상태·성장 불변');
-  // 재입장 시 다시 싸울 수 있다
-  assert.equal((await s.story.stageData(P, 'lake')).points.some((p) => p.id === 'lake_boss_entrance'), true);
-  const again = await s.battles.startStory('1', 'lake_boss_sewn_doll');
-  assert.equal(again.phase, 'party_select');
+  // C2-5B: 승리는 한 번의 정산으로 사건·체크포인트·물빛 염색실을 기록한다(세부는 lake-reward.test.ts). 성장 단계·누비 능력치는 그대로
+  assert.notEqual(snapshotDb(s), before);
+  assert.equal((s.db.rows('player_story_progress', { player_id: P })[0] as { checkpoint: string }).checkpoint, 'CH02_BOSS_DEFEATED');
+  // 정산 뒤에는 입장 지점이 닫히고 다시 싸울 수 없다
+  assert.equal((await s.story.stageData(P, 'lake')).points.some((p) => p.id === 'lake_boss_entrance'), false);
+  assert.notEqual(await codeOf(s.battles.startStory('1', 'lake_boss_sewn_doll')), 'NO_ERROR');
 });
 
 // ---------- 에셋 계약 ----------
@@ -391,9 +393,8 @@ test('에셋: 네 키·파일·프레임·표시 수치 계약, water-dye-yarn�
   const reg = readFileSync(join(assets, 'registry.ts'), 'utf8');
   for (const k of ['waterlogged-sewn-doll-idle', 'waterlogged-sewn-doll-exposed']) assert.match(reg, new RegExp(`'${k}': \\{ size: 256, frames: 4, fps: 4 \\}`)); // 4×256², 3~5fps
   // 표시 크기·깊이 계약(보스 220~280px, 공용 구역 발자국 720×480 이하)은 프런트 시험 battleView.test.ts가 고정한다
-  // water-dye-yarn: 파일·등록·사건 모두 없다(C2-5B)
-  assert.equal(existsSync(join(assets, 'items', 'relics', 'water-dye-yarn.png')), false);
-  assert.equal(/water-dye-yarn/.test(reg), false);
-  assert.equal(EVENT_BY_ID.has('lake_boss_defeated'), false);
-  assert.equal(EVENT_BY_ID.has('lake_dye_thread_granted'), false);
+  // water-dye-yarn(C2-5B): 파일은 160×160, 키는 items/** glob이 파일명으로 자동 등록한다(세부 계약은 lake-reward.test.ts)
+  assert.deepEqual(dims('items/relics/water-dye-yarn.png'), [160, 160]);
+  assert.equal(EVENT_BY_ID.has('lake_boss_defeated'), true);
+  assert.equal(EVENT_BY_ID.has('lake_dye_thread_granted'), true);
 });
