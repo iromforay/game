@@ -349,9 +349,41 @@ export class MapScene extends Phaser.Scene {
     this.add.text(width / 2, noteY, '회색상자(임시 배치) — 기능·동선 확인용', { fontSize: '15px', color: '#e8c96a', backgroundColor: '#00000066', padding: { x: 8, y: 4 } }).setOrigin(0.5).setDepth(DEPTH_GROUND + 1);
   }
 
+  // ----- 개발 전용 충돌 디버그 오버레이(10-14 C2-7A) -----
+  // 서버가 내려 준 막힌 곳·문·깊은 물·마른 발판·이야기 지점 반경을 반투명 선으로 그린다. 개발 모드(import.meta.env.DEV)에서만 켤 수 있고 운영 빌드에는 들어가지 않는다.
+  // 판정에는 쓰이지 않는다(서버 값을 그대로 보여 줄 뿐). 켜고 끄기: window.__dev.collisionDebug(true|false)
+  private collisionDebug?: Phaser.GameObjects.Graphics;
+  private collisionDebugOn = false;
+  setCollisionDebug(on: boolean) {
+    if (!import.meta.env.DEV) return;
+    this.collisionDebugOn = on;
+    this.drawCollisionDebug();
+  }
+  private drawCollisionDebug() {
+    if (!import.meta.env.DEV) return;
+    this.collisionDebug?.destroy();
+    this.collisionDebug = undefined;
+    const view = this.stageView;
+    if (!this.collisionDebugOn || !view) return;
+    const g = (this.collisionDebug = this.add.graphics().setDepth(1500));
+    const rect = (r: { x: number; y: number; width: number; height: number }, color: number, fill: number) => g.fillStyle(color, fill).fillRect(r.x, r.y, r.width, r.height).lineStyle(3, color, 0.9).strokeRect(r.x, r.y, r.width, r.height);
+    for (const w of view.layout?.water ?? []) rect(w, w.kind === 'deep' ? 0x2040ff : 0x40d0e0, 0.18);
+    for (const b of view.layout?.blockers ?? []) rect(b, 0xff3030, 0.22);
+    for (const gt of view.gates) rect(gt, gt.open ? 0x40ff80 : 0xffa030, 0.22);
+    for (const a of view.layout?.anchors ?? []) g.lineStyle(3, 0x30ff30, 0.9).strokeCircle(a.x, a.y, a.radius);
+    for (const p of view.points) g.lineStyle(3, 0xffff30, 0.9).strokeCircle(p.x, p.y, p.radius);
+  }
+  // 개발 전용: 카메라를 월드 좌표에 맞춘다(플레이어는 움직이지 않는다). 캡처·정합성 측정용
+  lookAt(x: number, y: number) {
+    if (!import.meta.env.DEV) return;
+    this.cameras.main.stopFollow();
+    this.cameras.main.centerOn(x, y);
+  }
+
   // 서버가 내려 준 화면 상태로 맞춘다: 문·오브젝트·지점 표식, 막힌 곳, 지도 마커, 안내 버튼
   private applyStageView(view: StageView | null) {
     this.stageView = view;
+    this.drawCollisionDebug();
     this.solids = solidRects(view);
     this.storyLayer.forEach((o) => o.destroy());
     this.storyLayer = [];
@@ -683,6 +715,8 @@ export class MapScene extends Phaser.Scene {
       pointArts: plan.points.map((p) => ({ id: p.id, assetKey: p.assetKey, art: p.art })),
       gates: plan.gates.map((g) => ({ id: g.id, open: g.open, art: g.art?.assetKey ?? null, placeholder: g.placeholder })),
       tileSprites: this.children.list.filter((c) => c.type === 'TileSprite').length,
+      collisionDebug: !!this.collisionDebug, // 개발 전용 충돌 오버레이가 지금 그려져 있는가(C2-7A)
+      camera: { x: Math.round(this.cameras.main.worldView.x), y: Math.round(this.cameras.main.worldView.y), w: Math.round(this.cameras.main.worldView.width), h: Math.round(this.cameras.main.worldView.height) },
       imageObjects: this.storyLayer.filter((o) => o.type === 'Image').length,
       ...this.debugPlaceholders(plan),
     };

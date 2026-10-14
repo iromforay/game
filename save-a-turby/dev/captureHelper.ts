@@ -210,5 +210,8 @@ function texts(): string[] {
 // 변조한 클라이언트 흉내(시험 전용): 게임 화면을 거치지 않고 같은 소켓으로 임의 요청을 보낸다 — 서버가 무시·거절하는지 확인하는 데만 쓴다
 const rawRequest = (event: string, body?: unknown) => roomClient.request<unknown>(event, body).catch((e: { code?: string; message?: string; battleId?: string | null }) => ({ ok: false, code: e.code ?? null, message: e.message ?? String(e), battleId: e.battleId ?? undefined }));
 
-(window as unknown as { __dev?: unknown }).__dev = { cap, tap, find, state, texts, battleStep, keepAlive, active, rawRequest };
+// 개발 전용(C2-7A): 충돌 디버그 오버레이 켜고 끄기, 카메라를 월드 좌표에 맞추기(플레이어는 그대로)
+const collisionDebug = (on: boolean) => (game().scene.getScene('Map') as unknown as Any).setCollisionDebug(on);
+const lookAt = (x: number, y: number) => (game().scene.getScene('Map') as unknown as Any).lookAt(x, y);
+(window as unknown as { __dev?: unknown }).__dev = { cap, tap, find, state, texts, battleStep, keepAlive, active, rawRequest, collisionDebug, lookAt };
 export {};

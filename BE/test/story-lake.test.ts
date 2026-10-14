@@ -77,7 +77,7 @@ test('호수 지역 데이터: 3200×2400, 시작 지점·이야기 지점 좌�
   assert.ok(inside(LAKE.spawnPoint!, { x: 120, y: 1750, w: 580, h: 530 }), '시작 지점은 숲 연결 입구 범위');
   assert.ok(inside(pointOf('lake_mulduri'), { x: 400, y: 760, w: 850, h: 890 }), '물들이는 정착지 범위');
   assert.ok(inside(pointOf('lake_wave_drum'), { x: 400, y: 760, w: 850, h: 890 }), '물결북은 정착지 범위');
-  assert.equal(LAKE.greybox, true, '기능 맵 단계(최종 미술 좌표 아님)');
+  assert.equal(LAKE.greybox, false, 'C2-7A: 최종 배경(lake-base) 연결 — 기능 좌표는 C2-7B 전까지 그대로');
   assert.equal((LAKE.layout!.gates[0].openEvent), 'lake_wave_drum_awakened', '물풀 미로 입구 문은 물결북 반응 사건에서 파생');
 });
 
