@@ -5,6 +5,10 @@ import type {
   VisitCafeRequest,
 } from 'sweet-shop-contracts';
 
+// 허브에서 빌드하므로 접속 주소는 hub/.env를 단일 설정 원본으로 사용한다.
+export const SWEET_SHOP_SERVER_URL: string =
+  import.meta.env.VITE_SWEET_SHOP_SERVER_URL ?? 'http://localhost:3005';
+
 const STORAGE_KEY = 'sweet-shop-local-state-v1';
 const DEFAULT_STATE: SweetShopCafeState = {
   profile: { cafeName: '나의 달콤상점', level: 1, experience: 0, gold: 100 },
@@ -50,6 +54,8 @@ export class LocalSweetShopGateway implements SweetShopGateway {
 }
 
 export class SocketSweetShopGateway implements SweetShopGateway {
+  readonly serverUrl = SWEET_SHOP_SERVER_URL;
+
   async loadCafe(): Promise<SweetShopCafeState> {
     throw new Error('달콤상점 멀티플레이는 아직 비활성화되어 있습니다.');
   }
