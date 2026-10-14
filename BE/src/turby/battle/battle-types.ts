@@ -53,6 +53,9 @@ export interface BattleUnit {
   onHit?: StatusEffectDef | null; // 이 적이 공격해 맞히면 대상에게 거는 상태 이상
   exitOnDefeat?: 'flee' | null; // 쓰러지면 "도주" 연출 표시(승패·보상 판정과 무관)
   fled?: boolean; // 연출 표시 상태
+  // 10-14 C2-5A(보스): 부위가 남은 중심부를 공격했을 때 — 'zero'면 행동은 소모되지만 피해 0 + 안내 1회(기본은 거부 TARGET_PROTECTED)
+  protectMode?: 'reject' | 'zero';
+  maxHitPercent?: number; // 이 유닛의 공격 한 번이 대상 최대 HP의 몇 %를 넘지 못하는가
 }
 
 // 지속 턴 상태 이상(M4-A). bind = 지속 턴 동안 이동력 감소. wet_bind(10-13 C2-3 젖은 속박) = 다음 이동 행동 한 번의 이동 가능 거리만 1칸 줄고(최소 1칸) 즉시 해제 —
@@ -99,6 +102,23 @@ export interface BattleUnitDefinition extends UnitStatsInput {
   breakOrder?: number | null;
   onHit?: StatusEffectDef | null;
   exitOnDefeat?: 'flee' | null;
+  protectMode?: 'reject' | 'zero';
+  maxHitPercent?: number;
+}
+
+// 10-14 C2-5A: 보스전 전용 규칙(모두 전투 정의 데이터가 소유한다 — 전투 밖 C2-2 물살과 상태를 공유하지 않는다)
+export interface BattleZoneDef {
+  id: string;
+  partId: string; // 이 부위가 끊어지면 구역이 drained → restored
+  col: number; // 격자 가장자리 기준 중심(칸 단위 실수)
+  row: number;
+}
+export interface BattleCurrentDef {
+  everyRounds: number; // N라운드 시작마다 다음 라운드의 방향을 예고한다
+  directions: ('east' | 'west')[]; // 고정 순서(난수 아님), 예고할 때마다 다음 값
+}
+export interface BattleHintDef {
+  zeroDamage: string; // 보호된 중심부를 처음 공격했을 때 한 번 보여 줄 안내
 }
 
 export interface BattleDefinition {
@@ -108,6 +128,9 @@ export interface BattleDefinition {
   blocked?: { col: number; row: number }[]; // 시작 시 통행 불가 칸
   terrainRules?: TerrainRule[];
   cornerEscape?: boolean;
+  zones?: BattleZoneDef[];
+  current?: BattleCurrentDef;
+  hints?: BattleHintDef;
 }
 
 export interface Participant {
@@ -151,6 +174,11 @@ export interface BattleState {
   definition?: BattleDefinition | null; // 있으면 야생 1마리 대신 정의 데이터로 적·NPC·목표·지형을 만든다
   blocked?: string[]; // 현재 통행 불가 칸 "col,row"
   story?: { encounterKey: string } | null; // 스토리 전투 표식
+  // 10-14 C2-5A
+  currentSeq?: number; // 지금까지 예고한 횟수(방향 순서의 위치)
+  telegraphed?: { direction: 'east' | 'west'; round: number } | null; // round = 이 물살이 적용될 라운드
+  lastCurrent?: { round: number; direction: 'east' | 'west'; moved: string[]; skipped: string[] } | null;
+  hintsShown?: { code: string; text: string }[];
 }
 
 export type BattleEvent =
@@ -164,7 +192,11 @@ export type BattleEvent =
   | { version: number; type: 'status'; unitId: string; statuses: StatusEffect[] }
   | { version: number; type: 'part_broken'; unitId: string; coreId: string; coreExposed: boolean }
   | { version: number; type: 'terrain'; blocked: string[] }
-  | { version: number; type: 'unit_exit'; unitId: string; mode: 'flee' };
+  | { version: number; type: 'unit_exit'; unitId: string; mode: 'flee' }
+  | { version: number; type: 'phase'; unitId: string; phase: 'exposed' } // 보스: 모든 부위가 끊겨 약점이 드러났다(한 번만)
+  | { version: number; type: 'hint'; code: string; text: string }
+  | { version: number; type: 'telegraph'; direction: 'east' | 'west'; round: number }
+  | { version: number; type: 'current'; direction: 'east' | 'west'; round: number; moved: string[]; skipped: string[] };
 
 export type ActionRequest =
   | { type: 'move'; unitId: unknown; targetCol: unknown; targetRow: unknown }
@@ -215,6 +247,8 @@ export interface BattleUnitDto {
   partOf?: string | null;
   breakOrder?: number | null;
   fled?: boolean;
+  phase?: 'bound' | 'exposed'; // 부위를 가진 중심부(보스)만
+  zeroDamage?: boolean; // 보호 중에도 공격은 되지만 피해 0(안내 표시)
 }
 
 export interface BattleSnapshotDto {
@@ -239,4 +273,9 @@ export interface BattleSnapshotDto {
   objectives?: { win: BattleObjective[]; lose: BattleObjective[] }; // 정의 전투만: 기본값을 채운 목표(프런트 표시용)
   cornerEscape?: boolean; // 정의 전투만: 꼭짓점 퇴각(무승부) 사용 여부 — 프런트가 퇴각존을 그릴지 정한다
   story?: { encounterKey: string; captureEnabled: false; wildRewards: false }; // 스토리 전투 표식 — 포획·일반 야생 보상 없음
+  // 10-14 C2-5A 보스전(정의가 켠 경우만): 색 구역 상태, 예고된 물살과 마지막 적용 결과, 이미 보여 준 안내
+  zones?: { id: string; partId: string; state: 'drained' | 'restored'; col: number; row: number }[];
+  telegraphedCurrent?: { direction: 'east' | 'west'; round: number } | null;
+  lastCurrent?: { round: number; direction: 'east' | 'west'; moved: string[]; skipped: string[] } | null;
+  hintsShown?: { code: string; text: string }[];
 }

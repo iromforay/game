@@ -110,7 +110,7 @@ test('2장 C2-4 ①(1280×720): 위기 지점 → 색 빠짐 → 이름 망각 �
     assert.equal(checkpointOf(device), 'CH02_NUBI_CRISIS_SEEN');
     assert.equal(eventsOf(device).filter((e) => e === 'lake_nubi_crisis_seen').length, 1);
     m = await map(g);
-    assert.deepEqual(m.story.points, [], '위기 지점은 사라진다');
+    assert.deepEqual(m.story.points, ['lake_boss_entrance'], '위기 지점은 사라지고 다음 지점(보스 입장)만 남는다');
     assert.equal(m.story.goalShown, GOAL_AFTER);
 
     // 완료 뒤 새로고침: 장면 미반복, 다음 목표만
@@ -118,7 +118,7 @@ test('2장 C2-4 ①(1280×720): 위기 지점 → 색 빠짐 → 이름 망각 �
     await g.until('호수 지도', MAP_READY, 30_000);
     assert.equal((await g.state()).scenes.includes('StoryDialogue'), false);
     m = await map(g);
-    assert.deepEqual(m.story.points, []);
+    assert.deepEqual(m.story.points, ['lake_boss_entrance']);
     assert.equal(m.story.goalShown, GOAL_AFTER);
     assert.equal(m.story.gates.gate_lake_safe_route, true);
   }, backend, device);

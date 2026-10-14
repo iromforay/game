@@ -67,8 +67,8 @@ async function codeOf(p: Promise<unknown>): Promise<string> {
 test('호수 지역 데이터: 3200×2400, 시작 지점·이야기 지점 좌표가 서버·클라이언트 같은 계약(지역 JSON 한 곳)에 있고 표시 정보가 있다', () => {
   assert.deepEqual(LAKE.size, { width: 3200, height: 2400 });
   assert.deepEqual(LAKE.spawnPoint, { x: 380, y: 2040 });
-  assert.deepEqual(LAKE.points.map((p) => p.id).sort(), ['lake_mulduri', 'lake_nubi_crisis', 'lake_rescue_a', 'lake_rescue_b', 'lake_rescue_c', 'lake_safe_route', 'lake_wave_drum']);
-  for (const id of ['lake_mulduri', 'lake_wave_drum', 'lake_rescue_a', 'lake_rescue_b', 'lake_rescue_c', 'lake_safe_route', 'lake_nubi_crisis']) {
+  assert.deepEqual(LAKE.points.map((p) => p.id).sort(), ['lake_boss_entrance', 'lake_mulduri', 'lake_nubi_crisis', 'lake_rescue_a', 'lake_rescue_b', 'lake_rescue_c', 'lake_safe_route', 'lake_wave_drum']);
+  for (const id of ['lake_mulduri', 'lake_wave_drum', 'lake_rescue_a', 'lake_rescue_b', 'lake_rescue_c', 'lake_safe_route', 'lake_nubi_crisis', 'lake_boss_entrance']) {
     const look = LAKE.storyPoints!.find((s) => s.id === id)!;
     assert.ok(look.label && look.prompt && look.assetKey, `${id} 표시 정보`);
   }
@@ -99,12 +99,12 @@ test('이벤트·지점 정의: 이름·체크포인트 전이·서버 전용 �
   for (const k of ['a', 'b', 'c']) assert.deepEqual([e(`lake_trapped_mulduri_${k}_rescued`).serverOnly, e(`lake_trapped_mulduri_${k}_rescued`).to ?? null, e(`lake_trapped_mulduri_${k}_rescued`).requires], [true, null, ['lake_wave_drum_awakened']]);
   assert.deepEqual(e('lake_trapped_turbies_rescued').requires, ['a', 'b', 'c'].map((k) => `lake_trapped_mulduri_${k}_rescued`));
   assert.equal(e('lake_trapped_turbies_rescued').serverOnly, true);
-  assert.deepEqual(STORY_TRIGGERS.filter((t) => t.stageCode === 'lake').map((t) => t.id), ['lake_entry', 'lake_mulduri', 'lake_wave_drum', 'lake_rescue_a', 'lake_rescue_b', 'lake_rescue_c', 'lake_safe_route', 'lake_nubi_crisis']);
+  assert.deepEqual(STORY_TRIGGERS.filter((t) => t.stageCode === 'lake').map((t) => t.id), ['lake_entry', 'lake_mulduri', 'lake_wave_drum', 'lake_rescue_a', 'lake_rescue_b', 'lake_rescue_c', 'lake_safe_route', 'lake_nubi_crisis', 'lake_boss_entrance']);
   assert.ok((CHECKPOINTS as readonly string[]).indexOf('CH02_STARTED') < (CHECKPOINTS as readonly string[]).indexOf('CH02_SETTLEMENT_MET'));
 });
 
 test('대화 데이터: 물빛 입구 8항목·색을 잃은 정착지 12항목이 정본 순서·화자·{playerName}를 지키고, 재생 범위·완료 이벤트가 실제 항목을 가리킨다', () => {
-  assert.deepEqual(CH02.segments.map((s) => [s.segmentId, s.resumeFrom, s.completesWith]), [['ch02.lake_entry', 'CH01_COMPLETE', 'lake_entry_seen'], ['ch02.settlement', 'CH02_STARTED', null], ['ch02.rescue_a', 'CH02_SETTLEMENT_MET', null], ['ch02.rescue_b', 'CH02_SETTLEMENT_MET', null], ['ch02.rescue_c', 'CH02_SETTLEMENT_MET', null], ['ch02.maze', 'CH02_SETTLEMENT_MET', 'lake_safe_route_opened'], ['ch02.nubi_crisis', 'CH02_MAZE_CLEARED', 'lake_nubi_crisis_seen']]);
+  assert.deepEqual(CH02.segments.map((s) => [s.segmentId, s.resumeFrom, s.completesWith]), [['ch02.lake_entry', 'CH01_COMPLETE', 'lake_entry_seen'], ['ch02.settlement', 'CH02_STARTED', null], ['ch02.rescue_a', 'CH02_SETTLEMENT_MET', null], ['ch02.rescue_b', 'CH02_SETTLEMENT_MET', null], ['ch02.rescue_c', 'CH02_SETTLEMENT_MET', null], ['ch02.maze', 'CH02_SETTLEMENT_MET', 'lake_safe_route_opened'], ['ch02.nubi_crisis', 'CH02_MAZE_CLEARED', 'lake_nubi_crisis_seen'], ['ch02.boss_intro', 'CH02_NUBI_CRISIS_SEEN', null]]);
   const entry = CH02.segments[0].entries;
   assert.deepEqual(entry.map((x) => x.kind), ['title', 'narration', 'narration', 'line', 'line', 'narration', 'line', 'narration']);
   assert.deepEqual(entry.filter((x) => x.kind === 'line').map((x) => [x.speaker, x.speakerLabel, x.text]), [
@@ -461,7 +461,7 @@ test('위기 장면: 중간에 끊기면 사건·체크포인트 미변경(처�
   assert.equal(ser(s.db.rows('turby_instance', { owner_player_id: P1 })), instBefore);
   // 완료 뒤 재접속: 장면·지점 사라짐, 다음 목표만, 장면 미반복
   const done = await s.connect().stageData(P1, 'lake');
-  assert.deepEqual(done.points, []);
+  assert.deepEqual(done.points.map((p) => p.id), ['lake_boss_entrance'], '다음 지점: 보스 입장(C2-5A)');
   assert.equal(done.goal?.text, '누비를 지키기 위해 염색 샘으로 가자.');
   const replay = await s.service.trigger(P1, 'lake_nubi_crisis');
   assert.equal(replay.play, null);

@@ -1,7 +1,7 @@
 {
   "stageCode": "lake",
   "greybox": true,
-  "note": "2장 호수 기능 맵(10-13 C2-1): 좌표는 기능 검증용이며 최종 미술 좌표가 아니다(design/save-a-turby/chapter02-lake/asset-contract-v1.md 구역 배치 범위 안). 입구→정착지→물풀문→물풀 미로(얕은 물·깊은 물·물살·마른 발판)→염색 샘 순서(10-13 C2-2). 이벤트·지점 ID는 바뀌지 않는다. 10-13 v1c: 물결북 idle/active·파문(wave-path)은 전달 에셋(delivery-v1), 표시 크기는 storyPoints[].art·render.overlays가 단일 출처. C2-3: 구조 지점 3곳·안전 물길 지점·내부 안전 물길 문·검은 실 덫 3곳(기능 좌표). C2-4: 누비 이름 망각 위기 지점(lake_nubi_crisis, 내부 안전 물길 너머).",
+  "note": "2장 호수 기능 맵(10-13 C2-1): 좌표는 기능 검증용이며 최종 미술 좌표가 아니다(design/save-a-turby/chapter02-lake/asset-contract-v1.md 구역 배치 범위 안). 입구→정착지→물풀문→물풀 미로(얕은 물·깊은 물·물살·마른 발판)→염색 샘 순서(10-13 C2-2). 이벤트·지점 ID는 바뀌지 않는다. 10-13 v1c: 물결북 idle/active·파문(wave-path)은 전달 에셋(delivery-v1), 표시 크기는 storyPoints[].art·render.overlays가 단일 출처. C2-3: 구조 지점 3곳·안전 물길 지점·내부 안전 물길 문·검은 실 덫 3곳(기능 좌표). C2-4: 누비 이름 망각 위기 지점(lake_nubi_crisis, 내부 안전 물길 너머). C2-5A: 염색 샘 기능 공터(x2220~3200,y0~760, 지름 720 원 수용)와 보스 입장 지점(lake_boss_entrance).",
   "size": {
     "width": 3200,
     "height": 2400
@@ -49,6 +49,12 @@
       "x": 2370,
       "y": 480,
       "radius": 90
+    },
+    {
+      "id": "lake_boss_entrance",
+      "x": 2830,
+      "y": 400,
+      "radius": 100
     }
   ],
   "objects": [],
@@ -141,6 +147,13 @@
       "assetKey": "placeholder-point",
       "label": "누비",
       "prompt": "누비의 상태 살피기"
+    },
+    {
+      "id": "lake_boss_entrance",
+      "kind": "inspect",
+      "assetKey": "placeholder-point",
+      "label": "염색 샘 중앙",
+      "prompt": "물먹은 박음이에게 다가가기"
     }
   ],
   "goals": [
@@ -254,12 +267,12 @@
         "height": 900
       },
       {
-        "id": "zone_dye_spring_approach",
-        "label": "염색 샘 가는 길(다음 단계)",
+        "id": "zone_dye_spring",
+        "label": "염색 샘",
         "x": 2220,
-        "y": 350,
-        "width": 300,
-        "height": 300
+        "y": 0,
+        "width": 980,
+        "height": 760
       }
     ],
     "paths": [
@@ -324,6 +337,18 @@
           [
             2370,
             520
+          ]
+        ]
+      },
+      {
+        "points": [
+          [
+            2370,
+            520
+          ],
+          [
+            2830,
+            400
           ]
         ]
       }
@@ -394,19 +419,19 @@
         "height": 300
       },
       {
-        "id": "wall_exit_right",
-        "label": "물풀 벽",
-        "x": 2520,
-        "y": 350,
-        "width": 50,
-        "height": 300
-      },
-      {
-        "id": "wall_exit_top",
+        "id": "wall_spring_west",
         "label": "물풀 벽",
         "x": 2170,
-        "y": 300,
-        "width": 400,
+        "y": 0,
+        "width": 50,
+        "height": 350
+      },
+      {
+        "id": "wall_spring_south",
+        "label": "물풀 벽",
+        "x": 2570,
+        "y": 760,
+        "width": 630,
         "height": 50
       }
     ],

@@ -407,6 +407,44 @@
           "soundCue": null
         }
       ]
+    },
+    {
+      "segmentId": "ch02.boss_intro",
+      "resumeFrom": "CH02_NUBI_CRISIS_SEEN",
+      "replayOnResume": false,
+      "completesWith": null,
+      "entries": [
+        {
+          "kind": "narration",
+          "dialogueId": "ch02.boss_intro.001",
+          "text": "염색 샘 중앙에는 물풀과 천 조각을 검은 실로 꿰맨 거대한 인형이 웅크리고 있다. 몸 중앙에서 푸른 실이 빛날 때마다 호수의 색이 인형 안으로 빨려 들어간다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch02.boss_intro.002",
+          "text": "물먹은 박음이가 일어서자 물결북이 누비의 가슴과 같은 박자로 울린다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch02.boss_intro.003",
+          "speaker": "muldeuli",
+          "speakerLabel": "물들이",
+          "text": "저 몸 안에 물빛 염색실이 있어!",
+          "portrait": null,
+          "expression": "worried",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "storyBattle",
+          "dialogueId": "ch02.boss_intro.004",
+          "encounterKey": "lake_boss_sewn_doll"
+        }
+      ]
     }
   ]
 }

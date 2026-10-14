@@ -253,6 +253,8 @@ function addDefinitionUnits(state: BattleState, def: BattleDefinition) {
       onHit: d.onHit ?? null,
       exitOnDefeat: d.exitOnDefeat ?? null,
       fled: false,
+      protectMode: d.protectMode ?? 'reject',
+      ...(d.maxHitPercent !== undefined ? { maxHitPercent: d.maxHitPercent } : {}),
     });
   }
   state.blocked = (def.blocked ?? []).map((c) => cellKey(c.col, c.row));
@@ -412,7 +414,10 @@ function atCorner(state: BattleState, unit: BattleUnit) {
 }
 
 function damageOf(state: BattleState, attacker: BattleUnit, defender: BattleUnit) {
-  return Math.max(state.rules.minDamage, attacker.attack - Math.floor(defender.defense / state.rules.defenseDivisor));
+  const raw = Math.max(state.rules.minDamage, attacker.attack - Math.floor(defender.defense / state.rules.defenseDivisor));
+  // 10-14 C2-5A: 공격 한 번이 대상 최대 HP의 일정 비율을 넘지 못한다(보스 15% — 연속으로 맞아도 즉시 패배하지 않는다)
+  if (attacker.maxHitPercent === undefined) return raw;
+  return Math.min(raw, Math.max(1, Math.floor((defender.maxHp * attacker.maxHitPercent) / 100)));
 }
 
 function strike(state: BattleState, attacker: BattleUnit, defender: BattleUnit, ctx: Ctx) {
@@ -427,7 +432,9 @@ function strike(state: BattleState, attacker: BattleUnit, defender: BattleUnit, 
     }
     if (defender.partOf) {
       const core = state.units.find((x) => x.unitId === defender.partOf);
-      emit(state, ctx, { type: 'part_broken', unitId: defender.unitId, coreId: defender.partOf, coreExposed: !!core && !hasLiveParts(state, core) });
+      const exposed = !!core && !hasLiveParts(state, core);
+      emit(state, ctx, { type: 'part_broken', unitId: defender.unitId, coreId: defender.partOf, coreExposed: exposed });
+      if (exposed) emit(state, ctx, { type: 'phase', unitId: defender.partOf, phase: 'exposed' }); // 부위는 되살아나지 않으므로 한 번만 발생한다
     }
   } else if (attacker.onHit) {
     applyStatus(state, defender, attacker.onHit, attacker.unitId, ctx);
@@ -491,10 +498,22 @@ function attack(state: BattleState, unit: BattleUnit, targetRaw: unknown, ctx: C
     const firstOrder = Math.min(...state.units.filter((p) => p.partOf === target.partOf && !p.stunned).map((p) => p.breakOrder ?? 0));
     if ((target.breakOrder ?? 0) !== firstOrder) throw new BattleError('PART_ORDER', '먼저 끊어야 할 부위가 남아 있습니다.');
   }
-  if (hasLiveParts(state, target)) throw new BattleError('TARGET_PROTECTED', '바깥 부위가 남아 있어 피해를 줄 수 없습니다.');
+  const protectedCore = hasLiveParts(state, target);
+  if (protectedCore && target.protectMode !== 'zero') throw new BattleError('TARGET_PROTECTED', '바깥 부위가 남아 있어 피해를 줄 수 없습니다.');
   if (unit.ap < 1) throw new BattleError('NO_ACTION_POWER', '행동력이 없습니다.');
   if (dist(unit, target) !== 1) throw new BattleError('OUT_OF_RANGE', '인접한 대상만 공격할 수 있습니다.');
   unit.ap -= 1;
+  if (protectedCore) {
+    // 결박 상태의 보스: 행동은 쓰지만 피해는 0 — 안내는 전투당 한 번만 낸다
+    emit(state, ctx, { type: 'attack', attackerId: unit.unitId, targetId: target.unitId, damage: 0, targetHp: target.hp, targetStunned: false });
+    const text = state.definition?.hints?.zeroDamage;
+    const shown = (state.hintsShown ??= []);
+    if (text && !shown.some((h) => h.code === 'zero_damage')) {
+      shown.push({ code: 'zero_damage', text });
+      emit(state, ctx, { type: 'hint', code: 'zero_damage', text });
+    }
+    return;
+  }
   strike(state, unit, target, ctx);
 }
 
@@ -576,6 +595,8 @@ function startNextRound(state: BattleState, ctx: Ctx) {
   state.round += 1;
   tickStatuses(state, endedRound, ctx);
   applyTerrainRules(state, ctx);
+  applyCurrent(state, ctx);
+  telegraphCurrent(state, ctx);
   for (const u of partyUnits(state)) if (isLive(u)) u.ap = u.maxAp;
   state.phase = 'player_subturn';
   state.subturnIndex = roundStartIndex(state);
@@ -599,6 +620,44 @@ function tickStatuses(state: BattleState, endedRound: number, ctx: Ctx) {
       emit(state, ctx, { type: 'status', unitId: unit.unitId, statuses: kept.map((s) => ({ ...s })) });
     }
   }
+}
+
+// 10-14 C2-5A 예고 물살: N라운드 시작마다 다음 라운드의 방향(동·서, 정의의 고정 순서)을 예고하고, 그 라운드 시작에 모든 생존 참전자를 1칸 옮긴다.
+// 맵 밖·점유 칸·통행 불가 칸이면 그 유닛은 움직이지 않는다. 피해·AP 감소·턴 박탈 없음(AP 재충전은 이 뒤에 한다)
+function applyCurrent(state: BattleState, ctx: Ctx) {
+  const t = state.telegraphed;
+  if (!t || t.round !== state.round) return;
+  state.telegraphed = null;
+  const dc = t.direction === 'east' ? 1 : -1;
+  const movers = partyUnits(state)
+    .filter(isLive)
+    .sort((a, b) => a.participantSlot - b.participantSlot || a.partyOrder - b.partyOrder || (a.unitId < b.unitId ? -1 : 1));
+  const moved: string[] = [];
+  const skipped: string[] = [];
+  // 진행 방향 앞쪽 유닛부터 옮겨 같은 줄의 유닛이 서로 막지 않게 한다(결정적 순서)
+  movers.sort((a, b) => (dc > 0 ? b.col - a.col : a.col - b.col) || (a.unitId < b.unitId ? -1 : 1));
+  for (const u of movers) {
+    const col = u.col + dc;
+    const blocked = col < 0 || col >= state.rules.gridCols || isBlockedCell(state, col, u.row) || isOccupied(state, col, u.row, u);
+    if (blocked) {
+      skipped.push(u.unitId);
+      continue;
+    }
+    u.col = col;
+    moved.push(u.unitId);
+  }
+  state.lastCurrent = { round: state.round, direction: t.direction, moved, skipped };
+  emit(state, ctx, { type: 'current', direction: t.direction, round: state.round, moved, skipped });
+}
+
+function telegraphCurrent(state: BattleState, ctx: Ctx) {
+  const c = state.definition?.current;
+  if (!c || c.everyRounds < 1 || c.directions.length === 0 || state.round % c.everyRounds !== 0) return;
+  const seq = state.currentSeq ?? 0;
+  state.currentSeq = seq + 1;
+  const direction = c.directions[seq % c.directions.length];
+  state.telegraphed = { direction, round: state.round + 1 };
+  emit(state, ctx, { type: 'telegraph', direction, round: state.round + 1 });
 }
 
 // 라운드 시작 지형 변화(정의 데이터). 유닛이 서 있는 칸은 막지 않는다(갇힘 방지)
@@ -726,10 +785,16 @@ export function toSnapshot(state: BattleState): BattleSnapshotDto {
             partOf: u.partOf ?? null,
             breakOrder: u.breakOrder ?? null,
             fled: u.fled ?? false,
+            ...(hasParts(state, u) ? { phase: hasLiveParts(state, u) ? ('bound' as const) : ('exposed' as const), zeroDamage: u.protectMode === 'zero' } : {}),
           }
         : {}),
     })),
     ...(state.definition ? { blocked: [...(state.blocked ?? [])], objectives: objectivesOf(state), cornerEscape: cornerEscapeOn(state) } : {}),
     ...(state.story ? { story: { encounterKey: state.story.encounterKey, captureEnabled: false as const, wildRewards: false as const } } : {}),
+    ...(state.definition?.zones
+      ? { zones: state.definition.zones.map((z) => ({ id: z.id, partId: z.partId, state: state.units.find((u) => u.unitId === z.partId)?.stunned ? ('restored' as const) : ('drained' as const), col: z.col, row: z.row })) }
+      : {}),
+    ...(state.definition?.current ? { telegraphedCurrent: state.telegraphed ?? null, lastCurrent: state.lastCurrent ?? null } : {}),
+    ...(state.hintsShown && state.hintsShown.length > 0 ? { hintsShown: state.hintsShown.map((h) => ({ ...h })) } : {}),
   };
 }

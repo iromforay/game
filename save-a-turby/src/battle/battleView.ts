@@ -59,7 +59,7 @@ export function reachableCells(snap: BattleSnapshot, u: BattleUnit): { col: numb
 }
 
 // 대상 상태: ok / 공격 대상 아님(아군·중립·기절) / 부위 순서 아님 / 부위가 남은 중심부
-export type TargetState = 'ok' | 'not_target' | 'part_order' | 'protected';
+export type TargetState = 'ok' | 'not_target' | 'part_order' | 'protected' | 'zero';
 
 export function targetState(snap: BattleSnapshot, target: BattleUnit): TargetState {
   if (target.side !== 'wild' || !isLive(target) || target.targetable === false) return 'not_target';
@@ -68,17 +68,18 @@ export function targetState(snap: BattleSnapshot, target: BattleUnit): TargetSta
     const first = Math.min(...snap.units.filter((p) => p.partOf === target.partOf && !p.stunned).map((p) => p.breakOrder ?? 0));
     if ((target.breakOrder ?? 0) !== first) return 'part_order';
   }
-  if (target.invulnerable) return 'protected';
+  if (target.invulnerable) return target.zeroDamage ? 'zero' : 'protected'; // zero = 공격은 되지만 피해 0(서버가 안내를 한 번 낸다)
   return 'ok';
 }
 
-export const TARGET_HINT: Record<Exclude<TargetState, 'ok' | 'not_target'>, string> = {
+export const TARGET_HINT: Record<Exclude<TargetState, 'ok' | 'not_target' | 'zero'>, string> = {
   part_order: '먼저 끊어야 할 부위가 남아 있어요',
   protected: '바깥 부위를 먼저 끊어야 해요',
 };
 
 export function canAttack(snap: BattleSnapshot, attacker: BattleUnit, target: BattleUnit) {
-  return isLive(attacker) && attacker.ap >= 1 && dist(attacker, target) === 1 && targetState(snap, target) === 'ok';
+  const st = targetState(snap, target);
+  return isLive(attacker) && attacker.ap >= 1 && dist(attacker, target) === 1 && (st === 'ok' || st === 'zero');
 }
 
 const namesOf = (snap: BattleSnapshot, ids: string[]) => ids.map((id) => snap.units.find((u) => u.unitId === id)?.name ?? id).join(', ');
@@ -105,7 +106,9 @@ export function unitTags(u: BattleUnit): string[] {
   if (u.stunned) tags.push('기절');
   if (u.inactive) tags.push('이탈');
   if (u.side === 'neutral') tags.push('보호 대상');
-  if (u.invulnerable) tags.push('부위 먼저');
+  if (u.phase === 'bound') tags.push('결박');
+  else if (u.phase === 'exposed') tags.push('약점 노출');
+  else if (u.invulnerable) tags.push('부위 먼저');
   for (const s of u.statuses ?? []) {
     if (s.kind === 'bind') tags.push(`속박 ${s.turnsLeft}`);
     else if (s.kind === 'wet_bind') tags.push('젖은 속박');

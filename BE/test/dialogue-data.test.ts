@@ -136,7 +136,7 @@ test('ch02(C2-1): 스키마 규칙을 지키고, 물빛 입구·색을 잃은 �
   const raw = readFileSync(join(DOCS, 'docs/scene/2장.md'), 'utf8').split(/\r?\n/).map((l) => l.trim());
   const from = raw.findIndex((l) => l === '## 물빛 입구');
   const maze = raw.findIndex((l) => l === '## 물풀 미로');
-  const to = raw.findIndex((l) => l === '## 물먹은 박음이'); // C2-3·C2-4: 물풀 미로·잊어버린 이름 구간까지 대조
+  const to = raw.findIndex((l) => l.startsWith('전투에서는 물살을')); // C2-3·C2-4·C2-5A: 물풀 미로·잊어버린 이름·보스 입장 전 서술까지 대조(전투 설명 문단부터는 장면 본문이 아니다)
   assert.ok(from >= 0 && maze > from && to > maze);
   const md: { who: string | null; text: string }[] = [];
   let speaker: string | null = null;
@@ -164,7 +164,7 @@ test('ch02(C2-1): 스키마 규칙을 지키고, 물빛 입구·색을 잃은 �
     else assert.equal(md[i].who, null, `${e.dialogueId}: 서술`);
   });
   // 구간 시작 체크포인트·완료 이벤트가 서버 전이표와 맞다
-  assert.deepEqual(file.segments.map((s) => [s.segmentId, s.resumeFrom, s.completesWith]), [['ch02.lake_entry', 'CH01_COMPLETE', 'lake_entry_seen'], ['ch02.settlement', 'CH02_STARTED', null], ['ch02.rescue_a', 'CH02_SETTLEMENT_MET', null], ['ch02.rescue_b', 'CH02_SETTLEMENT_MET', null], ['ch02.rescue_c', 'CH02_SETTLEMENT_MET', null], ['ch02.maze', 'CH02_SETTLEMENT_MET', 'lake_safe_route_opened'], ['ch02.nubi_crisis', 'CH02_MAZE_CLEARED', 'lake_nubi_crisis_seen']]);
+  assert.deepEqual(file.segments.map((s) => [s.segmentId, s.resumeFrom, s.completesWith]), [['ch02.lake_entry', 'CH01_COMPLETE', 'lake_entry_seen'], ['ch02.settlement', 'CH02_STARTED', null], ['ch02.rescue_a', 'CH02_SETTLEMENT_MET', null], ['ch02.rescue_b', 'CH02_SETTLEMENT_MET', null], ['ch02.rescue_c', 'CH02_SETTLEMENT_MET', null], ['ch02.maze', 'CH02_SETTLEMENT_MET', 'lake_safe_route_opened'], ['ch02.nubi_crisis', 'CH02_MAZE_CLEARED', 'lake_nubi_crisis_seen'], ['ch02.boss_intro', 'CH02_NUBI_CRISIS_SEEN', null]]);
   // 구조 구간은 전투 항목 하나뿐(문구 없음) — 전투 키가 서버 스토리 전투 정의·트리거와 같다
   for (const k of ['a', 'b', 'c']) {
     const seg = file.segments.find((s) => s.segmentId === `ch02.rescue_${k}`)!;

@@ -1,0 +1,103 @@
+{
+  "key": "lake_boss_sewn_doll",
+  "_note": "임시 전투 정의(기능 검증용 수치, 밸런스 정본 아님 — C2-5A). 결박된 물먹은 박음이: 검은 재봉실 3개를 끊으면 색 구역이 하나씩 복구되고 약점이 드러난다. 예고 물살(동·서 고정 순서)은 전투 데이터가 소유한다. 포획·보상·영구 사건 없음.",
+  "cornerEscape": false,
+  "objectives": {
+    "win": [
+      {
+        "kind": "defeat_units",
+        "unitIds": [
+          "waterlogged_sewn_doll"
+        ]
+      }
+    ]
+  },
+  "current": {
+    "everyRounds": 2,
+    "directions": [
+      "east",
+      "west"
+    ]
+  },
+  "hints": {
+    "zeroDamage": "검은 재봉실을 먼저 끊자."
+  },
+  "zones": [
+    {
+      "id": "dye_zone_a",
+      "partId": "black_seam_a",
+      "col": 3.5,
+      "row": 2.2
+    },
+    {
+      "id": "dye_zone_b",
+      "partId": "black_seam_b",
+      "col": 3.5,
+      "row": 5.8
+    },
+    {
+      "id": "dye_zone_c",
+      "partId": "black_seam_c",
+      "col": 8.2,
+      "row": 4.0
+    }
+  ],
+  "units": [
+    {
+      "unitId": "waterlogged_sewn_doll",
+      "side": "wild",
+      "characterCode": "waterlogged_sewn_doll",
+      "name": "물먹은 박음이",
+      "col": 8,
+      "row": 4,
+      "attack": 6,
+      "defense": 1,
+      "actionPower": 1,
+      "maxHp": 10,
+      "protectMode": "zero",
+      "maxHitPercent": 15
+    },
+    {
+      "unitId": "black_seam_a",
+      "side": "wild",
+      "characterCode": "black_seam",
+      "name": "검은 재봉실",
+      "col": 3,
+      "row": 3,
+      "attack": 0,
+      "defense": 0,
+      "actionPower": 0,
+      "maxHp": 1,
+      "canAct": false,
+      "partOf": "waterlogged_sewn_doll"
+    },
+    {
+      "unitId": "black_seam_b",
+      "side": "wild",
+      "characterCode": "black_seam",
+      "name": "검은 재봉실",
+      "col": 3,
+      "row": 5,
+      "attack": 0,
+      "defense": 0,
+      "actionPower": 0,
+      "maxHp": 1,
+      "canAct": false,
+      "partOf": "waterlogged_sewn_doll"
+    },
+    {
+      "unitId": "black_seam_c",
+      "side": "wild",
+      "characterCode": "black_seam",
+      "name": "검은 재봉실",
+      "col": 4,
+      "row": 4,
+      "attack": 0,
+      "defense": 0,
+      "actionPower": 0,
+      "maxHp": 1,
+      "canAct": false,
+      "partOf": "waterlogged_sewn_doll"
+    }
+  ]
+}

@@ -41,6 +41,12 @@ const wait = (scene: Phaser.Scene, ms: number) => new Promise<void>((resolve) =>
 
 // 4-B: 서버 권위 전투의 렌더러 겸 입력기. 규칙(이동·공격·AI·승패)은 전부 서버가 계산하고,
 // 이 씬은 서버 snapshot을 그리고 이동/공격/턴 종료 "의도"만 보낸다. 임시 도형 UI(디자인 확정 전)는 그대로 유지한다.
+// 10-14 C2-5A 보스 시트(결박/약점 노출)와 표시 크기, 색 구역 표시 크기(자산 계약: 보스 220~280px, 구역 620~760x410~510px)
+const BOSS_SHEETS: Record<string, { idle: string; exposed: string }> = { waterlogged_sewn_doll: { idle: 'waterlogged-sewn-doll-idle', exposed: 'waterlogged-sewn-doll-exposed' } };
+const BOSS_DISPLAY_PX = 240;
+const ZONE_W = 640;
+const ZONE_H = 420;
+
 export class BattleScene extends Phaser.Scene {
   private initData!: BattleInitData;
   private snap!: BattleSnapshot;
@@ -316,9 +322,16 @@ export class BattleScene extends Phaser.Scene {
     let body: Phaser.GameObjects.Image | Phaser.GameObjects.Arc | Phaser.GameObjects.Sprite;
     if (sheetKey && this.textures.exists(sheetKey)) {
       // 호수 일반 적: 4프레임 idle 시트(알파는 판정에 쓰지 않는다 — 클릭 영역은 아래 setInteractive가 정한 표시 상자)
-      const animKey = `${sheetKey}-battle`;
-      if (!this.anims.exists(animKey)) this.anims.create({ key: animKey, frames: this.anims.generateFrameNumbers(sheetKey, { start: 0, end: SPRITESHEET_FRAMES[sheetKey].frames - 1 }), frameRate: SPRITESHEET_FRAMES[sheetKey].fps, repeat: -1 });
-      body = this.add.sprite(0, 0, sheetKey).setDisplaySize(64, 64).play(animKey);
+      const boss = !!BOSS_SHEETS[u.characterCode];
+      const key = boss ? (u.phase === 'exposed' ? BOSS_SHEETS[u.characterCode].exposed : BOSS_SHEETS[u.characterCode].idle) : sheetKey;
+      const sprite = this.add.sprite(0, 0, key).setDisplaySize(boss ? BOSS_DISPLAY_PX : 64, boss ? BOSS_DISPLAY_PX : 64).play(this.sheetAnim(key));
+      if (boss) {
+        // 보스 그림은 220~280px로 커서 이웃 칸의 누름을 가리지 않게 누름 영역을 한 칸 크기로 제한한다(알파는 판정에 쓰지 않는다)
+        const edge = SPRITESHEET_FRAMES[key].size;
+        const half = BATTLE_TILE_SIZE / 2 / (BOSS_DISPLAY_PX / edge);
+        sprite.setInteractive(new Phaser.Geom.Rectangle(edge / 2 - half, edge / 2 - half, half * 2, half * 2), Phaser.Geom.Rectangle.Contains);
+      }
+      body = sprite;
     } else {
       body = hasImage ? this.add.image(0, 0, `turby-${u.characterCode}`).setDisplaySize(52, 52) : this.add.circle(0, 0, u.partOf ? 16 : 24, fill);
     }
@@ -329,7 +342,8 @@ export class BattleScene extends Phaser.Scene {
     // 라벨은 줄이지 않고 두 칸 폭 안에서 줄바꿈(이웃 라벨은 위·아래로 엇갈려 겹치지 않음 — labelPlacement)
     const hpText = this.add.text(x, y + LABEL_GAP, this.hpLabel(u), { fontSize: `${this.hud.font.label}px`, color: '#ffffff', align: 'center', wordWrap: { width: LABEL_WRAP, useAdvancedWrap: true }, backgroundColor: u.side === 'party' ? slotHex(u.participantSlot) : '#00000090', padding: { x: 4, y: 2 } }).setOrigin(0.5, 0).setDepth(11);
 
-    body.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+    if (!body.input) body.setInteractive({ useHandCursor: true });
+    body.on('pointerdown', () => {
       if (u.side === 'wild') void this.onWildClicked(u.unitId);
       else if (u.side === 'party') this.onPartyUnitClicked(u.unitId);
     });
@@ -352,6 +366,10 @@ export class BattleScene extends Phaser.Scene {
       this.placeLabel(view.hpText, u, x, y);
     }
     this.drawBlocked(this.snap.blocked ?? []);
+    this.syncBoss();
+    this.syncZones();
+    this.syncCurrent();
+    this.syncHints();
     if (this.snap.round !== this.lastRound) {
       this.doneUnits.clear();
       this.lastRound = this.snap.round;
@@ -508,13 +526,108 @@ export class BattleScene extends Phaser.Scene {
     this.showMoveHighlights();
   }
 
+  // ---------- 10-14 C2-5A 보스전 표시(모두 서버 스냅샷 값 — 화면이 페이즈·물살·승리를 정하지 않는다) ----------
+
+  private sheetAnim(key: string): string {
+    const animKey = `${key}-battle`;
+    if (!this.anims.exists(animKey)) this.anims.create({ key: animKey, frames: this.anims.generateFrameNumbers(key, { start: 0, end: SPRITESHEET_FRAMES[key].frames - 1 }), frameRate: SPRITESHEET_FRAMES[key].fps, repeat: -1 });
+    return animKey;
+  }
+
+  // 결박 → 약점 노출: 같은 프레임 인덱스·같은 중심에서 텍스처만 바꾼다
+  private syncBoss() {
+    for (const u of this.snap.units) {
+      const sheets = BOSS_SHEETS[u.characterCode];
+      if (!sheets || !u.phase) continue;
+      const sprite = this.views.get(u.unitId)?.container.list.find((o) => o.type === 'Sprite') as Phaser.GameObjects.Sprite | undefined;
+      const want = u.phase === 'exposed' ? sheets.exposed : sheets.idle;
+      if (!sprite || sprite.texture.key === want) continue;
+      const frame = Math.max(0, (sprite.anims.currentFrame?.index ?? 1) - 1);
+      sprite.setTexture(want).setDisplaySize(BOSS_DISPLAY_PX, BOSS_DISPLAY_PX);
+      sprite.play({ key: this.sheetAnim(want), startFrame: frame });
+      const edge = SPRITESHEET_FRAMES[want].size;
+      const half = BATTLE_TILE_SIZE / 2 / (BOSS_DISPLAY_PX / edge);
+      sprite.setInteractive(new Phaser.Geom.Rectangle(edge / 2 - half, edge / 2 - half, half * 2, half * 2), Phaser.Geom.Rectangle.Contains);
+    }
+  }
+
+  // 색 구역: 같은 중심·표시 크기에서 drained → restored 텍스처만 교체. 유닛·HUD보다 낮은 깊이
+  private zoneImages = new Map<string, Phaser.GameObjects.Image>();
+  private syncZones() {
+    for (const z of this.snap.zones ?? []) {
+      const key = z.state === 'restored' ? 'color-restored-zone' : 'color-drained-zone';
+      if (!this.textures.exists(key)) continue;
+      let img = this.zoneImages.get(z.id);
+      if (!img || !img.active) {
+        img = this.add.image(this.offsetX + z.col * BATTLE_TILE_SIZE, this.offsetY + z.row * BATTLE_TILE_SIZE, key).setDisplaySize(ZONE_W, ZONE_H).setDepth(2).setAlpha(0.8);
+        this.zoneImages.set(z.id, img);
+      }
+      if (img.texture.key !== key) img.setTexture(key).setDisplaySize(ZONE_W, ZONE_H);
+    }
+  }
+
+  // 예고 물살: 바닥의 곡선 물결 + 문구 "다음 물살: →/←" — 방향은 화살표 글자와 물결 모양으로 읽는다(색에 의존하지 않는다)
+  private currentObjs: Phaser.GameObjects.GameObject[] = [];
+  private currentDrawn = '';
+  private syncCurrent() {
+    const t = this.snap.telegraphedCurrent ?? null;
+    const key = t ? `${t.direction}:${t.round}` : '';
+    if (key === this.currentDrawn) return;
+    this.currentDrawn = key;
+    this.currentObjs.forEach((o) => o.destroy());
+    this.currentObjs = [];
+    if (!t) return;
+    const east = t.direction === 'east';
+    const g = this.add.graphics().setDepth(3);
+    g.lineStyle(3, 0xcfefff, 0.5);
+    for (let r = 0; r < this.snap.grid.rows; r += 2) {
+      const y = this.offsetY + (r + 1) * BATTLE_TILE_SIZE;
+      let first = true;
+      for (let x = 0; x <= this.gridW; x += 8) {
+        const px = this.offsetX + (east ? x : this.gridW - x);
+        const py = y + Math.sin(x / 38) * 9;
+        if (first) {
+          g.beginPath();
+          g.moveTo(px, py);
+          first = false;
+        } else g.lineTo(px, py);
+      }
+      g.strokePath();
+      // 끝 화살촉(방향)
+      const ax = this.offsetX + (east ? this.gridW - 6 : 6);
+      const dir = east ? -1 : 1;
+      g.fillStyle(0xcfefff, 0.6).fillTriangle(ax, y, ax + dir * 16, y - 9, ax + dir * 16, y + 9);
+    }
+    const F = this.hud.font;
+    const label = this.add
+      .text(CANVAS_WIDTH - 8, 360, `다음 물살: ${east ? '→' : '←'}`, { fontSize: `${Math.round(F.hint * 1.25)}px`, color: '#ffffff', backgroundColor: '#1f4d66', padding: { x: 8, y: 6 }, align: 'center' })
+      .setOrigin(1, 0.5)
+      .setDepth(2000);
+    this.currentObjs.push(g, label);
+  }
+
+  // 서버가 한 번만 내는 안내(예: 검은 재봉실을 먼저 끊자.). 처음 받은 스냅샷에 이미 있던 안내는 다시 띄우지 않는다
+  private hintsSeen: Set<string> | null = null;
+  private syncHints() {
+    const shown = this.snap.hintsShown ?? [];
+    if (this.hintsSeen === null) {
+      this.hintsSeen = new Set(shown.map((h) => h.code));
+      return;
+    }
+    for (const h of shown) {
+      if (this.hintsSeen.has(h.code)) continue;
+      this.hintsSeen.add(h.code);
+      showToast(this, h.text, { y: 660 });
+    }
+  }
+
   private async onWildClicked(targetId: string) {
     const u = this.unit(this.selectedUnitId);
     const target = this.unit(targetId);
     if (this.busy || !this.isMyTurn || !u || !this.actionable(u) || !target) return;
     const st = targetState(this.snap, target);
     if (st === 'not_target') return;
-    if (st !== 'ok') {
+    if (st !== 'ok' && st !== 'zero') {
       showToast(this, TARGET_HINT[st], { y: 660 }); // 부위 순서·중심부 보호 — 서버도 같은 규칙(PART_ORDER/TARGET_PROTECTED)
       return;
     }
@@ -735,6 +848,10 @@ export class BattleScene extends Phaser.Scene {
     } else if (ev.type === 'terrain') {
       this.drawBlocked(ev.blocked);
       await wait(this, 200);
+    } else if (ev.type === 'current') {
+      // 예고된 물살 적용: 서버가 정한 이동만 그린다(스냅샷으로 곧 같은 위치가 확정된다)
+      showToast(this, `물살이 ${ev.direction === 'east' ? '→' : '←'} 방향으로 밀었어요`, { y: 660 });
+      await wait(this, 350);
     } else if (ev.type === 'subturn' && ev.phase === 'wild_turn') {
       this.statusText.setText('야생 터비 차례...');
       await wait(this, 500);

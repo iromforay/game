@@ -404,7 +404,7 @@ export class StoryService {
       this.prisma.player_story_event.findMany({ where: { player_id: playerId } }),
     ]);
     const snap = this.snapshotOf(progress, events, []);
-    if (def.onWinEvents.every((e) => snap.events.has(e))) return { ok: false, code: 'STORY_ENCOUNTER_DONE', message: '이미 끝난 전투입니다.' };
+    if (def.onWinEvents.length > 0 && def.onWinEvents.every((e) => snap.events.has(e))) return { ok: false, code: 'STORY_ENCOUNTER_DONE', message: '이미 끝난 전투입니다.' };
     if (!canProgressChapter(def.chapter, snap.checkpoint) || !def.allowedAt.includes(snap.checkpoint) || def.requires.some((r) => !snap.events.has(r))) {
       return { ok: false, code: 'STORY_ENCOUNTER_NOT_AVAILABLE', message: '지금은 시작할 수 없는 전투입니다.' };
     }

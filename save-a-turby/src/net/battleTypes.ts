@@ -27,6 +27,8 @@ export interface BattleUnit {
   partOf?: string | null; // 이 부위가 속한 중심부 unitId
   breakOrder?: number | null; // 부위 파괴 순서(작은 수부터만 공격 가능)
   fled?: boolean; // 도주 연출로 전장에서 빠짐
+  phase?: 'bound' | 'exposed'; // 부위를 가진 중심부(보스)의 서버 판정 상태
+  zeroDamage?: boolean; // 결박 중에도 공격은 되지만 피해 0
 }
 
 export interface StatusEffect {
@@ -74,6 +76,11 @@ export interface BattleSnapshot {
   objectives?: { win: BattleObjective[]; lose: BattleObjective[] };
   cornerEscape?: boolean;
   story?: { encounterKey: string; captureEnabled: false; wildRewards: false };
+  // 보스전(정의가 켠 경우만): 모두 서버가 정한 값 — 화면은 표시만 한다
+  zones?: { id: string; partId: string; state: 'drained' | 'restored'; col: number; row: number }[];
+  telegraphedCurrent?: { direction: 'east' | 'west'; round: number } | null;
+  lastCurrent?: { round: number; direction: 'east' | 'west'; moved: string[]; skipped: string[] } | null;
+  hintsShown?: { code: string; text: string }[];
 }
 
 export type BattleEvent =
@@ -87,7 +94,11 @@ export type BattleEvent =
   | { version: number; type: 'status'; unitId: string; statuses: StatusEffect[] }
   | { version: number; type: 'part_broken'; unitId: string; coreId: string; coreExposed: boolean }
   | { version: number; type: 'terrain'; blocked: string[] }
-  | { version: number; type: 'unit_exit'; unitId: string; mode: 'flee' };
+  | { version: number; type: 'unit_exit'; unitId: string; mode: 'flee' }
+  | { version: number; type: 'phase'; unitId: string; phase: 'exposed' }
+  | { version: number; type: 'hint'; code: string; text: string }
+  | { version: number; type: 'telegraph'; direction: 'east' | 'west'; round: number }
+  | { version: number; type: 'current'; direction: 'east' | 'west'; round: number; moved: string[]; skipped: string[] };
 
 export interface BattleReward {
   playerId: string;

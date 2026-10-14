@@ -100,7 +100,7 @@ function state() {
   if (scenes.includes('Battle') && battle.snap) {
     // 결과창의 누를 수 있는 버튼(돌아가기·다시 확인) 가운데 좌표
     const btn = (battle.resultObjs ?? []).filter((o: Any) => o.type === 'Container' && o.input?.enabled).pop();
-    out.battle = { battleId: battle.snap.battleId, version: battle.snap.version, round: battle.snap.round, spawnIndex: battle.snap.spawnIndex, units: battle.snap.units.map((u: Any) => ({ id: u.unitId, side: u.side, col: u.col, row: u.row, hp: u.hp, maxHp: u.maxHp, ap: u.ap })), returnTo: battle.initData?.returnTo?.scene ?? null, phase: battle.snap.phase, outcome: battle.snap.outcome, story: !!battle.snap.story, resultShown: battle.resultShown, settled: battle.resultEnded?.settled ?? null, hudMode: battle.hud?.mode, goalOpen: battle.goalOpen, resultButton: btn ? { x: Math.round(btn.x), y: Math.round(btn.y), label: btn.list?.find((c: Any) => typeof c.text === 'string')?.text } : null };
+    out.battle = { battleId: battle.snap.battleId, version: battle.snap.version, round: battle.snap.round, spawnIndex: battle.snap.spawnIndex, units: battle.snap.units.map((u: Any) => ({ id: u.unitId, side: u.side, col: u.col, row: u.row, hp: u.hp, maxHp: u.maxHp, ap: u.ap, stunned: u.stunned, phase: u.phase ?? null })), zones: battle.snap.zones ?? null, telegraphed: battle.snap.telegraphedCurrent ?? null, lastCurrent: battle.snap.lastCurrent ?? null, hintsShown: battle.snap.hintsShown ?? null, returnTo: battle.initData?.returnTo?.scene ?? null, phase: battle.snap.phase, outcome: battle.snap.outcome, story: !!battle.snap.story, resultShown: battle.resultShown, settled: battle.resultEnded?.settled ?? null, hudMode: battle.hud?.mode, goalOpen: battle.goalOpen, resultButton: btn ? { x: Math.round(btn.x), y: Math.round(btn.y), label: btn.list?.find((c: Any) => typeof c.text === 'string')?.text } : null };
   }
   const party = g.scene.getScene('PartySelect') as unknown as Any;
   if (scenes.includes('PartySelect') && party.layout) out.party = { selected: [...party.selected], page: party.page, pages: party.layout.pages, story: !!party.snap?.story, cardW: party.layout.cards[0]?.w };
@@ -168,7 +168,7 @@ function battleStep(): { x: number; y: number; kind: 'attack' | 'move' | 'end' }
   if (snap.phase !== 'player_subturn' || snap.currentPlayerId !== b.myId) return null;
   const u = snap.units.find((x) => x.unitId === b.selectedUnitId) as BattleUnit | undefined;
   const d = (a: { col: number; row: number }, c: { col: number; row: number }) => Math.abs(a.col - c.col) + Math.abs(a.row - c.row);
-  const foes = snap.units.filter((x) => x.side === 'wild' && !x.stunned && !x.inactive && !x.fled && targetState(snap, x) === 'ok');
+  const foes = snap.units.filter((x) => x.side === 'wild' && !x.stunned && !x.inactive && !x.fled && targetState(snap, x) === 'ok' && !x.invulnerable);
   const end = find('턴 종료');
   if (!u || u.ap <= 0 || u.stunned) return end && { ...end, kind: 'end' };
   const adj = foes.find((f) => d(u, f) === 1);

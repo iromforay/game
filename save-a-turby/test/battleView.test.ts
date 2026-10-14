@@ -181,3 +181,34 @@ test('호수 일반 적 시트 계약: 젖은 실밥이 512×128(4×128), 젖은
   const trap = readFileSync(fileURLToPath(new URL('../src/assets/world/lake/props/black-thread-trap.png', import.meta.url)));
   assert.deepEqual([trap.readUInt32BE(16), trap.readUInt32BE(20)], [1536, 1024]);
 });
+
+// ---------- 10-14 C2-5A: 보스 표시 판정(서버 스냅샷 값만 쓴다) ----------
+const boss = (over: Partial<BattleUnit> = {}): BattleUnit => ({ unitId: 'waterlogged_sewn_doll', side: 'wild', ownerPlayerId: null, participantSlot: 0, characterCode: 'waterlogged_sewn_doll', name: '물먹은 박음이', col: 8, row: 4, hp: 10, maxHp: 10, ap: 1, maxAp: 1, stunned: false, inactive: false, targetable: true, ...over });
+const bossSnap = (units: BattleUnit[]) => ({ units, grid: { cols: 12, rows: 8 } }) as unknown as BattleSnapshot;
+
+test('보스: 결박 중 중심부는 공격은 되지만 피해 0(zero), 약점이 드러나면 ok, 예전 보호 방식(protected)은 그대로', () => {
+  const me = unitOf({ col: 7, row: 4 });
+  const bound = boss({ phase: 'bound', invulnerable: true, zeroDamage: true });
+  assert.equal(targetState(bossSnap([me, bound]), bound), 'zero');
+  assert.equal(canAttack(bossSnap([me, bound]), me, bound), true, '결박 중에도 행동은 쓸 수 있다(서버가 피해 0·안내 1회)');
+  const exposed = boss({ phase: 'exposed', invulnerable: false, zeroDamage: true });
+  assert.equal(targetState(bossSnap([me, exposed]), exposed), 'ok');
+  const legacy = boss({ invulnerable: true });
+  assert.equal(targetState(bossSnap([me, legacy]), legacy), 'protected');
+  assert.deepEqual([unitTags(bound), unitTags(exposed)], [['결박'], ['약점 노출']]);
+});
+
+test('보스 표시 계약: 시트 키 연결, 구역 상태 교체(같은 객체·크기), 예고 물살 문구·곡선, 안내는 처음 스냅샷에 있으면 다시 띄우지 않는다', () => {
+  const root = fileURLToPath(new URL('../', import.meta.url));
+  const scene = readFileSync(root + 'src/scenes/BattleScene.ts', 'utf8');
+  const reg = readFileSync(root + 'src/assets/registry.ts', 'utf8');
+  assert.match(reg, /waterlogged_sewn_doll: 'waterlogged-sewn-doll-idle'/);
+  assert.match(scene, /BOSS_SHEETS: Record<string, \{ idle: string; exposed: string \}>/);
+  assert.match(scene, /sprite\.play\(\{ key: this\.sheetAnim\(want\), startFrame: frame \}\)/); // 같은 프레임 인덱스로 교체
+  assert.match(scene, /다음 물살: \$\{east \? '→' : '←'\}/); // 방향을 글자(화살표)로도 표시 — 색에만 의존하지 않는다
+  assert.match(scene, /this\.hintsSeen = new Set\(shown\.map/); // 복원 때 이미 낸 안내는 반복하지 않는다
+  // 화면이 페이즈·물살·승리를 정하지 않는다: 스냅샷 필드만 읽는다
+  assert.match(scene, /this\.snap\.telegraphedCurrent/);
+  assert.match(scene, /this\.snap\.zones/);
+  assert.doesNotMatch(scene, /Math\.random\(/);
+});
