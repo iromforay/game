@@ -71,10 +71,33 @@ test('충돌 디버그 오버레이: 개발 모드(import.meta.env.DEV)에서만
   assert.equal(/collisionDebug|setCollisionDebug/.test(readFileSync(here('../src/main.ts'), 'utf8')), false);
 });
 
-test('기능 좌표 고정(C2-7C): 최종 배경에 맞춘 spawn·story point·구조·문·물·물살·앵커·덫·blocker 값이 의도치 않게 바뀌지 않는다(C2-7B 127b28a 값에서 blocker 병합·문 그림·구조 적 표시 위치만 바뀌었다)', () => {
+test('기능 좌표 고정(C2-7D): 최종 배경에 맞춘 spawn·story point·구조·문·물·물살·앵커·덫·blocker 값이 의도치 않게 바뀌지 않는다(C2-7C 88cb84b 값에서 표식 모드·구조 장면 표시 위치·닫힌 문 그림·열린 문 아래 기둥 x만 바뀌었다)', () => {
   const keys = ['size', 'spawnPoint', 'points', 'regions', 'objects', 'storyPoints', 'layout', 'waterAreas', 'currentFields', 'safeAnchors', 'blackThreadTraps'];
   const canon = (v: unknown): unknown => (Array.isArray(v) ? v.map(canon) : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, canon((v as Record<string, unknown>)[k])])) : v);
   const sub = Object.fromEntries(keys.map((k) => [k, (LAKE_JSON as Record<string, unknown>)[k] ?? null]));
   const digest = createHash('sha256').update(JSON.stringify(canon(sub))).digest('hex');
-  assert.equal(digest, '8b9731b421006c33fa472d3cca31517a21aa77b0cba34db046d5b615cad1d9e0');
+  assert.equal(digest, '4b352ced35206b08dc49471b7e3172ffda1eb2336f8ffc5a94c77b8876e11b4b');
+});
+
+test('최종 표식 모드(C2-7D): 호수는 final — 그림·상태 오버레이가 연결된 지점은 임시 표식이 사라지고, 그림이 없는 필수 지점(안전 물길·누비 위기·보스 입구)은 작은 식별 고리만 남는다', () => {
+  type Pt = { id: string; x: number; y: number; radius: number };
+  type Look = { id: string; kind: string; assetKey: string; label: string; prompt: string; art?: { width: number; height: number; pivot?: [number, number] } };
+  const L = LAKE_JSON as unknown as { render: { markerMode: string; background: { assetKey: string }; overlays: { id: string; assetKey: string; x: number; y: number; width: number; height: number; forPoints?: string[] }[] }; points: Pt[]; storyPoints: Look[] };
+  assert.equal(L.render.markerMode, 'final');
+  const points = L.points.map((p) => ({ ...p, ...L.storyPoints.find((s) => s.id === p.id)! }));
+  const view = { ...asView(LAKE_JSON, 'lake'), points, render: { markerMode: 'final', background: L.render.background, overlays: L.render.overlays } } as unknown as StageView;
+  const loaded = new Set(['lake-base', 'turby-muldeuli', 'wave-drum-idle', 'wave-drum-active', 'wet-stitchling-idle', 'black-thread-trap', 'wave-path', 'current-flow']); // 실제로 로드되는 키(placeholder-point는 텍스처가 없다)
+  const plan = planStageRender(view, (k) => loaded.has(k), LAKE_JSON.size);
+  const marker = Object.fromEntries(plan.points.map((p) => [p.id, p.marker]));
+  assert.deepEqual(marker, { lake_mulduri: false, lake_wave_drum: false, lake_rescue_a: false, lake_rescue_b: false, lake_rescue_c: false, lake_safe_route: true, lake_nubi_crisis: true, lake_boss_entrance: true });
+  // 그림이 로드되지 않으면(로드 실패) 그 지점은 식별 표식으로 되돌아간다 — 대상이 사라지지 않는다
+  assert.equal(planStageRender(view, (k) => k === 'lake-base', LAKE_JSON.size).points.every((p) => p.marker), true);
+  // MapScene: 최종 모드의 표식은 작은 고리(반지름 20)와 점뿐 — 반경 원(pt.radius)·임시 글자(pt.label)는 fallback 분기에만 있다
+  const src = readFileSync(here('../src/scenes/MapScene.ts'), 'utf8');
+  const block = src.slice(src.indexOf('if (ap?.marker ?? true) {'), src.indexOf('this.refreshMiniMap();', src.indexOf('if (ap?.marker ?? true) {')));
+  const [finalPart, fallbackPart] = block.split('else {');
+  assert.match(finalPart, /plan\.markerMode === 'final'/);
+  assert.doesNotMatch(finalPart, /pt\.radius|pt\.label/);
+  assert.match(fallbackPart, /pt\.radius/);
+  assert.match(fallbackPart, /pt\.label/);
 });

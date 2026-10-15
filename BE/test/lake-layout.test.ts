@@ -298,21 +298,41 @@ test('문 화면 위치: 닫힌 문 그림·열린 문 조각의 화면 중심�
   }
 });
 
-test('구조 장면 표시: 붙잡힌 물들이와 지키는 적(젖은 꿰매기) 그림 중심이 서로 48px 이상, 적은 길로 다가오는 쪽이 아니다', () => {
+// 그림의 보이는 외곽(투명 여백 제외) — 원본 PNG 알파(>40) 경계를 표시 크기로 줄인 값. 물들이 512px→88, 젖은 꿰매기 128px 프레임(4프레임 합)→104
+const VISIBLE = { mulduri: { x0: 44 / 512, y0: 49 / 512, x1: 485 / 512, y1: 459 / 512 }, guard: { x0: 5 / 128, y0: 13 / 128, x1: 126 / 128, y1: 128 / 128 } };
+type Box = { x0: number; y0: number; x1: number; y1: number };
+const visibleBox = (x: number, y: number, w: number, h: number, pivot: [number, number], v: Box): Box => {
+  const left = x - w * pivot[0];
+  const top = y - h * pivot[1];
+  return { x0: left + w * v.x0, y0: top + h * v.y0, x1: left + w * v.x1, y1: top + h * v.y1 };
+};
+const boxGap = (a: Box, b: Box) => Math.max(b.x0 - a.x1, a.x0 - b.x1, b.y0 - a.y1, a.y0 - b.y1); // 양수 = 떨어진 간격, 0 이하 = 겹침
+
+test('구조 장면 표시(C2-7D): 붙잡힌 물들이·지키는 적의 보이는 외곽이 서로 8px 이상 떨어지고, 적은 다가오는 길 반대쪽 모래 위(blocker 밖)다. 사건 좌표·반경은 그대로', () => {
   const ov = LAKE.render!.overlays!;
-  const look = LAKE.storyPoints!.find((p) => p.id === 'lake_rescue_a')!.art!;
-  const mul = (p: { x: number; y: number }) => ({ x: p.x, y: p.y - look.height * ((look.pivot ?? [0.5, 0.7])[1] - 0.5) });
+  const blockers = LAKE.layout!.blockers;
+  // 사건 좌표·반경은 C2-7B와 같다
+  assert.deepEqual(['a', 'b', 'c'].map((k) => { const p = point(`lake_rescue_${k}`); return [p.x, p.y, p.radius]; }), [[1933, 1083, 90], [1638, 884, 90], [1600, 1465, 90]]);
   for (const k of ['a', 'b', 'c'] as const) {
     const pt = point(`lake_rescue_${k}`);
-    const guards = ov.filter((o) => o.id.startsWith(`overlay_guard_${k}`)).map((o) => ({ id: o.id, x: o.x, y: o.y - o.height * ((o.pivot ?? [0.5, 0.5])[1] - 0.5) }));
-    assert.ok(guards.length >= 1);
-    const m = mul(pt);
+    const look = LAKE.storyPoints!.find((p) => p.id === `lake_rescue_${k}`)!.art!;
+    const m = visibleBox(pt.x, pt.y, look.width, look.height, look.pivot ?? [0.5, 0.7], VISIBLE.mulduri);
+    const guards = ov.filter((o) => o.id.startsWith(`overlay_guard_${k}`));
+    assert.equal(guards.length, k === 'c' ? 2 : 1);
+    const gb = guards.map((o) => ({ id: o.id, o, box: visibleBox(o.x, o.y, o.width, o.height, o.pivot ?? [0.5, 0.5], VISIBLE.guard) }));
     const route = JUNCTION_TO[k];
-    const approach = route[route.length - 2]; // 마지막 직전 경유지 = 다가오는 쪽
-    for (const g of guards) {
-      assert.ok(Math.hypot(g.x - m.x, g.y - m.y) >= 48, `${g.id} ↔ 물들이 ${Math.hypot(g.x - m.x, g.y - m.y).toFixed(0)}px`);
-      assert.ok(Math.hypot(g.x - approach.x, g.y - approach.y) >= 48, `${g.id}가 다가오는 길목 위`);
+    const from = route[Math.max(0, route.length - 3)]; // 다가오는 쪽
+    for (const g of gb) {
+      assert.ok(boxGap(g.box, m) >= 8, `${g.id} ↔ 물들이 보이는 외곽 간격 ${boxGap(g.box, m).toFixed(1)}px`);
+      assert.equal(blockers.some((b) => g.o.x > b.x - 12 && g.o.x < b.x + b.width + 12 && g.o.y > b.y - 12 && g.o.y < b.y + b.height + 12), false, `${g.id} 발이 blocker 안`);
+      // 접근 반대쪽: 사건 지점에서 적 쪽 방향이 다가오는 방향과 같은 쪽(내적 > 0)
+      const dot = (g.o.x - pt.x) * (pt.x - from.x) + (g.o.y - pt.y) * (pt.y - from.y);
+      assert.ok(dot > 0, `${g.id}가 다가오는 쪽에 있다`);
     }
-    for (let i = 0; i < guards.length; i++) for (let j = i + 1; j < guards.length; j++) assert.ok(Math.hypot(guards[i].x - guards[j].x, guards[i].y - guards[j].y) >= 48, '적끼리 48px 이상');
+    for (let i = 0; i < gb.length; i++) for (let j = i + 1; j < gb.length; j++) assert.ok(boxGap(gb[i].box, gb[j].box) >= 8, `적끼리 보이는 외곽 간격 ${boxGap(gb[i].box, gb[j].box).toFixed(1)}px`);
   }
+});
+
+test('최종 표식 모드(C2-7D): 호수 render.markerMode는 final이다', () => {
+  assert.equal(LAKE.render!.markerMode, 'final');
 });

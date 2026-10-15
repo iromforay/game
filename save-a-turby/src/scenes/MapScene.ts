@@ -517,8 +517,12 @@ export class MapScene extends Phaser.Scene {
       }
       // 임시 표식(고리·글자): 지금(fallback)은 그림이 있어도 눈에 띄는 고리를 함께 둔다 — 목표를 놓치지 않게. 최종 모드(final)에서는 그림이 있는 대상에서 없앤다
       if (ap?.marker ?? true) {
-        c.add([this.add.circle(0, 0, pt.radius).setStrokeStyle(2, 0xb9a6ee, 0.5), this.add.circle(0, 0, 20).setStrokeStyle(4, 0xb9a6ee, 1), this.add.circle(0, 0, 8, 0xb9a6ee)]);
-        if (!art) c.add(this.add.text(0, 28, pt.label, { fontSize: '13px', color: '#e6dcff' }).setOrigin(0.5, 0));
+        // 최종 모드(final)에서 그림이 없는 필수 지점: 작은 식별 고리만(반경 원·임시 글자 없음, 10-15 C2-7D). 목표는 상단 목표 문구·상호작용 버튼이 안내한다
+        if (plan.markerMode === 'final') c.add([this.add.circle(0, 0, 20).setStrokeStyle(4, 0xb9a6ee, 1), this.add.circle(0, 0, 8, 0xb9a6ee)]);
+        else {
+          c.add([this.add.circle(0, 0, pt.radius).setStrokeStyle(2, 0xb9a6ee, 0.5), this.add.circle(0, 0, 20).setStrokeStyle(4, 0xb9a6ee, 1), this.add.circle(0, 0, 8, 0xb9a6ee)]);
+          if (!art) c.add(this.add.text(0, 28, pt.label, { fontSize: '13px', color: '#e6dcff' }).setOrigin(0.5, 0));
+        }
       }
     }
     this.refreshMiniMap();
