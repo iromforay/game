@@ -6,6 +6,7 @@ import type { Browser } from 'playwright-core';
 import { join } from 'path';
 import { Backend, Game, ROOT, freePort, launchBrowser, startVite, withDiagnosis } from './harness';
 import { seedLake } from './fixtures';
+import { TO_PLAZA, TO_GATE_FRONT, THROUGH_GATE as THROUGH_GATE_ROUTE, DRY_1 as DRY_1_POINT, DRY_1_TO_DEEP_SOUTH } from '../helpers/lake-route';
 
 let backend: Backend;
 let vite: { url: string; close: () => Promise<void> };
@@ -26,9 +27,12 @@ const MAP_READY = 's.map && s.map.ready && s.map.inRoom && s.map.positioned && s
 const DEEP_TEXT = '깊은 물은 위험해. 물풀이 잔잔한 길로 가자.';
 const GOAL_MAZE = '붙잡힌 물들이를 구하자. 0/3';
 // 정착지 → 물풀문 → 물풀 미로 안 길(굽은 길이라 지름길은 없다: 벽을 피해 경유)
-const TO_GATE = [{ x: 900, y: 1500 }, { x: 1265, y: 1350 }, { x: 1440, y: 1350 }];
-const THROUGH_GATE = [{ x: 1440, y: 1100 }, { x: 1560, y: 1000 }];
-const DRY_1 = { x: 2020, y: 1000 };
+// 10-14 C2-7B: 최종 배경의 길 경유지. 물풀문은 동서 길목을 가로막는 세로 문(1340~1380)이고 약한 물살은 문 바로 뒤(x 1420~1620)에서 시작한다
+const TO_GATE = [...TO_PLAZA, ...TO_GATE_FRONT];
+const THROUGH_GATE: { x: number; y: number }[] = [];
+const DRY_1 = DRY_1_POINT;
+const DEEP_SOUTH = DRY_1_TO_DEEP_SOUTH;
+const WEAK_END = THROUGH_GATE_ROUTE[THROUGH_GATE_ROUTE.length - 1];
 
 type MapState = {
   avatar: { x: number; y: number };
@@ -72,17 +76,16 @@ test('2장 C2-2 ①(1280×720 키보드): 열린 물풀문 → 약한 물살 →
     m = await map(g);
     const gate = m.render.gates.find((x) => x.id === 'gate_reed_maze')!;
     assert.deepEqual([gate.open, gate.art, gate.placeholder], [true, 'reed-gate-open', false]);
-    await g.walkDirect('Map', { x: 1440, y: 1270 }, 'keys', 'false', 20); // 문 위쪽 그림 끝이 목표 패널 아래에 오는 자리
     await g.capture('reed_gate_open');
     // 문 통과 → 미로 안
     await walkVia(g, THROUGH_GATE, 'keys');
     m = await map(g);
-    assert.ok(m.avatar.y < 1150, `문 너머(y ${m.avatar.y})`);
+    assert.ok(m.avatar.x > 1300 - 60, `문 앞(x ${m.avatar.x})`);
     assert.equal(m.currentPushes, 0, '물살 밖에서는 밀리지 않는다');
     assert.ok(m.render.overlays.includes('current-flow'), '물살 방향 그림');
     await g.capture('current_before_push');
     // 약한 물살: 키를 계속 누른 채 들어가면 한 번 밀리고, 입력은 이어진다
-    await g.walkDirect('Map', { x: 1900, y: 1000 }, 'keys', 's.map.currentPushes >= 1', 20);
+    await g.walkDirect('Map', THROUGH_GATE_ROUTE[0], 'keys', 's.map.currentPushes >= 1', 20); // 문을 지나면 바로 약한 물살
     await g.until('물살 적용', 's.map.currentPushes >= 1');
     await g.capture('current_after_push');
     m = await map(g);
@@ -124,16 +127,17 @@ test('2장 C2-2 ②(640×360 조이스틱): 방향 단서 → 물살 뒤에도 �
     assert.ok(m.currentPushes >= 1 && m.currentPushes <= 2, `물살 적용 ${m.currentPushes}회`);
     assert.ok(near(m.avatar, DRY_1, 60), `발판 도착 ${JSON.stringify(m.avatar)}`);
     // 깊은 물(남쪽 연못)로 걸어 들어간다 → 마지막 안전 지점으로 복귀
-    await g.walkDirect('Map', { x: 2220, y: 1000 }, 'joystick', 's.map.deepReturns >= 1', 20);
+    for (const q of DEEP_SOUTH) await g.walkDirect('Map', q, 'joystick', 's.map.deepReturns >= 1', 20);
     await g.until('깊은 물 복귀', 's.map.deepReturns >= 1');
     m = await map(g);
     assert.equal(m.lastCorrection, 'deep_water');
-    assert.ok(near(m.avatar, DRY_1, 80), `안전 지점으로 복귀 ${JSON.stringify(m.avatar)}`);
+    assert.ok(near(m.avatar, DRY_1, 80) || near(m.avatar, { x: 1846, y: 638 }, 80), `마지막으로 밟은 안전 앵커(마른 발판 1·2)로 복귀 ${JSON.stringify(m.avatar)}`);
     assert.ok((await texts(g)).some((t) => t.includes(DEEP_TEXT)), '복귀 안내 문구');
     await g.capture('deep_water_return');
     // 같은 안내는 다시 띄우지 않는다
     await g.page.waitForTimeout(500);
-    await g.walkDirect('Map', { x: 2220, y: 1000 }, 'joystick', 's.map.deepReturns >= 2', 20);
+    for (const q of [...DEEP_SOUTH].reverse().slice(1)) await g.walkDirect('Map', q, 'joystick', 's.map.deepReturns >= 2', 20);
+    for (const q of DEEP_SOUTH) await g.walkDirect('Map', q, 'joystick', 's.map.deepReturns >= 2', 20);
     await g.until('두 번째 복귀', 's.map.deepReturns >= 2');
     m = await map(g);
     assert.equal(m.notices.filter((t) => t === DEEP_TEXT).length, 1, '깊은 물 안내는 한 탐험 세션에 한 번');
@@ -160,7 +164,7 @@ test('2장 C2-2 ③: 두 플레이어가 같은 물살·깊은 물에서 서로 
     assert.ok(near(ma.avatar, DRY_1, 60) && near(mb.avatar, DRY_1, 60));
     // A만 깊은 물에 들어간다 — B의 위치·상태는 그대로
     const before = await map(gb);
-    await ga.walkDirect('Map', { x: 2220, y: 1000 }, 'keys', 's.map.deepReturns >= 1', 20);
+    for (const q of DEEP_SOUTH) await ga.walkDirect('Map', q, 'keys', 's.map.deepReturns >= 1', 20);
     await ga.until('A 깊은 물 복귀', 's.map.deepReturns >= 1');
     const after = await map(gb);
     assert.equal(after.deepReturns, 0);

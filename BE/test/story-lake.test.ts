@@ -66,7 +66,7 @@ async function codeOf(p: Promise<unknown>): Promise<string> {
 
 test('호수 지역 데이터: 3200×2400, 시작 지점·이야기 지점 좌표가 서버·클라이언트 같은 계약(지역 JSON 한 곳)에 있고 표시 정보가 있다', () => {
   assert.deepEqual(LAKE.size, { width: 3200, height: 2400 });
-  assert.deepEqual(LAKE.spawnPoint, { x: 380, y: 2040 });
+  assert.deepEqual(LAKE.spawnPoint, { x: 350, y: 1981 }); // C2-7B: 최종 배경의 입구 길 중심
   assert.deepEqual(LAKE.points.map((p) => p.id).sort(), ['lake_boss_entrance', 'lake_mulduri', 'lake_nubi_crisis', 'lake_rescue_a', 'lake_rescue_b', 'lake_rescue_c', 'lake_safe_route', 'lake_wave_drum']);
   for (const id of ['lake_mulduri', 'lake_wave_drum', 'lake_rescue_a', 'lake_rescue_b', 'lake_rescue_c', 'lake_safe_route', 'lake_nubi_crisis', 'lake_boss_entrance']) {
     const look = LAKE.storyPoints!.find((s) => s.id === id)!;
@@ -345,7 +345,7 @@ test('wave-path: 물결북에서 미로 입구 방향, 420~560×140~190px, 맵 �
   assert.equal(path.layer, 'overlay');
   const drum = pointOf('lake_wave_drum');
   const gateRect = LAKE.layout!.gates[0];
-  const maze = { x: gateRect.x - 25, y: gateRect.y + 200, radius: 100 }; // 미로 입구(문 왼쪽 통로 중심)
+  const maze = { x: gateRect.x - 25, y: gateRect.y + gateRect.height / 2, radius: 100 }; // 미로 입구(문 서쪽 길목 중심)
   // 방향: 파문 축(회전각)이 물결북→미로 입구 방위각과 5° 이내
   const want = (Math.atan2(maze.y - drum.y, maze.x - drum.x) * 180) / Math.PI;
   assert.ok(Math.abs((path.rotation ?? 0) - want) <= 5, `회전 ${path.rotation}° / 방위 ${want.toFixed(1)}°`);
@@ -406,7 +406,7 @@ test('위기 지점: 지도 안이고 벽·깊은 물과 겹치지 않으며 내
   const exit = water.anchors.find((a) => a.id === 'anchor_maze_exit')!;
   assert.ok(Math.hypot(p.x - exit.x, p.y - exit.y) <= 120, '안전 앵커(anchor_maze_exit) 부근');
   const gate = geo.gates.find((g) => g.id === 'gate_lake_safe_route')!;
-  assert.ok(p.y < gate.y, '내부 안전 물길 문 너머');
+  assert.ok(p.x > gate.x + gate.width, '내부 안전 물길 문 너머(문은 동서 길목의 세로 막대, 동쪽이 염색 샘)');
   assert.equal(EVENT_BY_ID.get('lake_nubi_crisis_seen')!.to, 'CH02_NUBI_CRISIS_SEEN');
   assert.equal(JSON.stringify(LAKE).includes('boss_start'), false, 'C2-5 보스 지점은 만들지 않았다');
 });

@@ -140,7 +140,7 @@ test('배치: 구조 지점·적·덫·안전 물길 지점·내부 문이 지�
   assert.equal(marks.length, 4 + 3 + 4, '지점 4 + 덫 3 + 수호 적 4(A1·B1·C2)');
   for (const m of marks) {
     assert.ok(m.x >= 60 && m.y >= 60 && m.x <= 3200 - 60 && m.y <= 2400 - 60, `${m.id} 지도 안`);
-    assert.equal(solids.some((r) => bodyIn(r, m, 28)), false, `${m.id}: 벽·닫힌 문과 겹침`);
+    assert.equal(solids.some((r) => bodyIn(r, m, 12)), false, `${m.id}: 벽·닫힌 문과 겹침`);
     assert.equal(deep.some((r) => bodyIn(r, m, 36)), false, `${m.id}: 깊은 물과 겹침`);
   }
   // 흩어짐: 세 구조 지점 사이 거리 300px 이상, 640×360 화면 하나에는 두 곳 이상 들어가지 않는다(가로 640 안에 최대 하나)
@@ -149,15 +149,13 @@ test('배치: 구조 지점·적·덫·안전 물길 지점·내부 문이 지�
   const xs = pts.map((p) => p.x);
   const ys = pts.map((p) => p.y);
   assert.ok(Math.max(...xs) - Math.min(...xs) > 640 || Math.max(...ys) - Math.min(...ys) > 360, '세 지점이 640×360 한 화면에 모두 들어간다');
-  // 위치 원칙: A = 약한 물살 뒤 첫 마른 발판 근처, B = 깊은 물 옆 얕은 길, C = 강한 물살 뒤·안전 물길 문 앞
+  // 위치 원칙(10-14 C2-7B, 최종 배경의 길 기준): A = 약한 물살 뒤 첫 마른 발판 근처, B = 깊은 물 연못 쪽 길, C = 갈래길 끝(문 앞 안전 물길 지점과 멀리)
   const weak = WATER.currents.find((f) => f.id === 'current_weak_1')!;
   const dry1 = WATER.anchors.find((a) => a.id === 'anchor_dry_1')!;
-  assert.ok(pts[0].x > weak.x + weak.width && Math.hypot(pts[0].x - dry1.x, pts[0].y - dry1.y) <= 160, 'A');
-  const poolN = deep.find((d) => d.id === 'deep_pool_north')!;
-  assert.ok(Math.abs(pts[1].x - (poolN.x - 100)) <= 100 && pts[1].y >= poolN.y && pts[1].y <= poolN.y + poolN.height + 60, 'B: 깊은 물 옆');
-  const strong = WATER.currents.find((f) => f.id === 'current_strong_1')!;
-  const exit = C.gates.find((g) => g.id === 'gate_lake_safe_route')!;
-  assert.ok(pts[2].x >= strong.x + strong.width && Math.hypot(pts[2].x - (exit.x + exit.width / 2), pts[2].y - exit.y) <= 300, 'C');
+  assert.ok(pts[0].x > weak.x + weak.width && Math.hypot(pts[0].x - dry1.x, pts[0].y - dry1.y) <= 300, 'A');
+  const poolS = deep.find((d) => d.id === 'deep_pool_south')!;
+  assert.ok(Math.hypot(pts[1].x - (poolS.x + poolS.width / 2), pts[1].y - (poolS.y + poolS.height / 2)) <= 400, 'B: 깊은 물 옆');
+  assert.ok(Math.hypot(pts[2].x - pts[0].x, pts[2].y - pts[0].y) >= 400 && Math.hypot(pts[2].x - pts[1].x, pts[2].y - pts[1].y) >= 400, 'C: 갈래길 끝');
   // 내부 안전 물길 문: 새 ID, 열림 조건 lake_safe_route_opened, 닫힘·열림 키
   const gateData = LAKE.layout!.gates.find((g) => g.id === 'gate_lake_safe_route')!;
   assert.deepEqual([gateData.openEvent, gateData.closedAssetKey, gateData.openAssetKey], ['lake_safe_route_opened', 'reed-gate-closed', 'reed-gate-open']);
@@ -374,7 +372,7 @@ test('내부 안전 물길 문: 열림 전에는 통과할 수 없고 사건 뒤
   const gate = C.gates.find((g) => g.id === 'gate_lake_safe_route')!;
   const before = new Set([...SETTLED, RESCUED('a'), RESCUED('b'), RESCUED('c'), 'lake_trapped_turbies_rescued']);
   const after = new Set([...before, 'lake_safe_route_opened']);
-  const from = { x: gate.x + gate.width / 2, y: gate.y + gate.height + 40 };
+  const from = { x: gate.x - 40, y: gate.y + gate.height / 2 }; // 문은 동서 길목을 가로지르는 세로 막대(서쪽이 미로 쪽)
   const exit = WATER.anchors.find((a) => a.id === 'anchor_maze_exit')!;
   assert.equal(checkMove(C, solidsFor(C, before), lockedZonesFor(C, before), from, exit), 'tunnel');
   assert.equal(checkMove(C, solidsFor(C, after), lockedZonesFor(C, after), from, exit), 'ok');

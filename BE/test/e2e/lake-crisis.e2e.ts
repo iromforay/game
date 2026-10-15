@@ -6,6 +6,7 @@ import type { Browser } from 'playwright-core';
 import { join } from 'path';
 import { Backend, Game, ROOT, freePort, launchBrowser, startVite, withDiagnosis } from './harness';
 import { seedLake } from './fixtures';
+import { ROUTE_TO_CRISIS } from '../helpers/lake-route';
 
 let backend: Backend;
 let vite: { url: string; close: () => Promise<void> };
@@ -27,7 +28,7 @@ const GOAL_BEFORE = '누비의 상태를 살피며 염색 샘으로 가자.';
 const GOAL_AFTER = '누비를 지키기 위해 염색 샘으로 가자.';
 const NAME = '하늘'; // seedForest 계정 닉네임
 // 정착지 → 입구 문 → 홀 → 안전 물길 문(열림) → 위기 지점
-const ROUTE = [{ x: 900, y: 1500 }, { x: 1265, y: 1350 }, { x: 1440, y: 1350 }, { x: 1440, y: 1100 }, { x: 1560, y: 1000 }, { x: 1900, y: 1000 }, { x: 2020, y: 1000 }, { x: 2040, y: 800 }, { x: 2400, y: 790 }, { x: 2370, y: 740 }, { x: 2370, y: 590 }, { x: 2370, y: 540 }];
+const ROUTE = ROUTE_TO_CRISIS; // 10-14 C2-7B: 최종 배경의 길 경유지
 
 type MapState = { avatar: { x: number; y: number }; story: { points: string[]; gates: Record<string, boolean>; prompt: string | null; promptText: string | null; goalShown: string | null; interact: { x: number; y: number } } };
 type Dlg = { waiting: boolean; line: string; fx: { drainPlayed: number; saturation: number; bounds: { x: number; y: number; w: number; h: number } | null } | null };

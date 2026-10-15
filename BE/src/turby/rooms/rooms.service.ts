@@ -192,7 +192,7 @@ export class RoomsService {
       corrected = safe.corrected;
       // 10-13 C2-2: 저장 위치가 깊은 물이거나 벽·닫힌 문 안이면 이 플레이어의 마지막 안전 앵커(없으면 가장 가까운 유효 앵커)로 복원한다
       if (room.water && (corrected || inDeepWater(room.water, stored))) {
-        const back = returnTarget(room.water, c, solids, member.water, stored);
+        const back = returnTarget(room.water, c, solids, member.water, stored, events);
         member.x = back.x;
         member.y = back.y;
         corrected = true;

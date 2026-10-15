@@ -28,6 +28,7 @@ export interface SafeAnchor {
   x: number;
   y: number;
   radius: number;
+  requires: string[]; // 이 사건이 모두 기록된 플레이어만 쓸 수 있다(문 너머의 앵커 — 10-14 C2-7B). 비면 항상
 }
 // 검은 실 덫(10-13 C2-3): 구조 전까지 그 자리에 있다. 밟으면(반경 안으로 들어서면) slowMs 동안 이동 속도가 slowFactor배로 제한되고,
 // 그 상태에서 물살을 맞으면 그 1회 밀림만 extraPushPx 늘어난 뒤 속박·추가 밀림이 함께 풀린다. 구조 사건(rescueEvent)이 기록되면 사라져 다시 발동하지 않는다
@@ -132,7 +133,7 @@ export function parseStageWater(raw: RawWater, geo: StageGeometry, stageCode: st
     if (!num(r.x) || !num(r.y) || !num(r.radius) || r.radius <= 0 || r.radius > 400) return void bad.push(`${at}(${id}): x·y·radius는 숫자(radius 0 초과 400 이하)`);
     const p = { x: r.x, y: r.y };
     if (!inBounds(geo, p)) return void bad.push(`${at}(${id}): 지도 밖`);
-    anchors.push({ id, x: r.x, y: r.y, radius: r.radius });
+    anchors.push({ id, x: r.x, y: r.y, radius: r.radius, requires: Array.isArray(r.requires) ? (r.requires as unknown[]).filter((e): e is string => typeof e === 'string') : [] });
   });
   // 앵커는 벽·문·깊은 물 위에 있으면 안 된다(되돌아갈 자리는 언제나 서 있을 수 있어야 한다). 문은 닫힌 상태 기준으로 본다
   const fixed: Rect[] = [...geo.blockers, ...geo.gates];
@@ -200,8 +201,8 @@ const nearestAnchor = (anchors: SafeAnchor[], p: Point, usable: (a: SafeAnchor) 
 
 // 되돌아갈 앵커: 이 플레이어가 마지막으로 확정한 앵커(지금도 서 있을 수 있는 곳이면), 아니면 현재 위치에서 가장 가까운 유효 앵커,
 // 그것도 없으면 시작 지점. 이 플레이어의 상태만 본다
-export function returnTarget(water: StageWater | null, geo: StageGeometry, solids: Rect[], state: WaterMemberState, from: Point): { x: number; y: number; anchorId: string | null } {
-  const usable = (a: SafeAnchor) => !bodyBlocked(solids, a, SERVER_BODY_HALF);
+export function returnTarget(water: StageWater | null, geo: StageGeometry, solids: Rect[], state: WaterMemberState, from: Point, events: ReadonlySet<string> = new Set()): { x: number; y: number; anchorId: string | null } {
+  const usable = (a: SafeAnchor) => !bodyBlocked(solids, a, SERVER_BODY_HALF) && a.requires.every((e) => events.has(e));
   const remembered = water?.anchors.find((a) => a.id === state.anchorId);
   const a = remembered && usable(remembered) ? remembered : water ? nearestAnchor(water.anchors, from, usable) : null;
   return a ? { x: a.x, y: a.y, anchorId: a.id } : { x: geo.spawn.x, y: geo.spawn.y, anchorId: null };
@@ -244,13 +245,13 @@ export function resolveWater(water: StageWater | null, geo: StageGeometry, solid
     }
   }
   if (inDeepWater(water, to)) {
-    const back = returnTarget(water, geo, solids, state, to);
+    const back = returnTarget(water, geo, solids, state, to, events);
     state.consecutive = 0;
     state.protectUntil = now + SAFE_RETURN_PROTECT_MS;
     return { kind: 'returned', x: back.x, y: back.y, anchorId: back.anchorId };
   }
   const touch = (p: Point) => {
-    const a = nearestAnchor(water.anchors, p, (x) => Math.hypot(x.x - p.x, x.y - p.y) <= x.radius);
+    const a = nearestAnchor(water.anchors, p, (x) => Math.hypot(x.x - p.x, x.y - p.y) <= x.radius && x.requires.every((e) => events.has(e)));
     if (a) state.anchorId = a.id;
   };
   touch(to);

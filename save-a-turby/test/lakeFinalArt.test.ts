@@ -71,10 +71,10 @@ test('충돌 디버그 오버레이: 개발 모드(import.meta.env.DEV)에서만
   assert.equal(/collisionDebug|setCollisionDebug/.test(readFileSync(here('../src/main.ts'), 'utf8')), false);
 });
 
-test('기능 좌표 불변: spawn·story point·구조·문·물·물살·앵커·덫·blocker가 51370ab 기준과 같다(배경 연결은 greybox·background만 바꾼다)', () => {
+test('기능 좌표 고정(C2-7B): 최종 배경에 맞춘 spawn·story point·구조·문·물·물살·앵커·덫·blocker 값이 의도치 않게 바뀌지 않는다(C2-7A 값은 51370ab 기준이었다)', () => {
   const keys = ['size', 'spawnPoint', 'points', 'regions', 'objects', 'storyPoints', 'layout', 'waterAreas', 'currentFields', 'safeAnchors', 'blackThreadTraps'];
   const canon = (v: unknown): unknown => (Array.isArray(v) ? v.map(canon) : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, canon((v as Record<string, unknown>)[k])])) : v);
   const sub = Object.fromEntries(keys.map((k) => [k, (LAKE_JSON as Record<string, unknown>)[k] ?? null]));
   const digest = createHash('sha256').update(JSON.stringify(canon(sub))).digest('hex');
-  assert.equal(digest, 'c1dc2d80523f0fa99f20d5f86bd633d397cdab64e720b2ba9b1723544a652426');
+  assert.equal(digest, '259b43d4bd82c3b38e720fa91cbf9967ec0075ad9c372b27f05beed8cd660f83');
 });

@@ -6,6 +6,7 @@ import type { Browser } from 'playwright-core';
 import { join } from 'path';
 import { Backend, Game, ROOT, freePort, launchBrowser, startVite, withDiagnosis } from './harness';
 import { seedLake } from './fixtures';
+import { ROUTE_TO_JUNCTION, JUNCTION_TO, C_TO_SAFE_ROUTE } from '../helpers/lake-route';
 
 let backend: Backend;
 let vite: { url: string; close: () => Promise<void> };
@@ -26,13 +27,9 @@ const MAP_READY = 's.map && s.map.ready && s.map.inRoom && s.map.positioned && s
 const BATTLE_SCENES = "s.scenes.includes('StoryDialogue') || s.scenes.includes('PartySelect') || s.scenes.includes('Battle')";
 const RESCUE_PROMPT = '붙잡힌 물들이 구하기';
 // 정착지 → 입구 문 → 미로 홀 (굽은 길이라 경유지를 지난다). 구조 지점별 접근 경유지
-const TO_HALL = [{ x: 900, y: 1500 }, { x: 1265, y: 1350 }, { x: 1440, y: 1350 }, { x: 1440, y: 1100 }];
-const ROUTE_TO: Record<string, { x: number; y: number }[]> = {
-  a: [{ x: 1560, y: 1000 }, { x: 1900, y: 1000 }, { x: 1990, y: 1020 }],
-  b: [{ x: 1560, y: 900 }, { x: 1600, y: 830 }],
-  c: [{ x: 1560, y: 1000 }, { x: 1900, y: 1000 }, { x: 2020, y: 1000 }, { x: 2040, y: 800 }, { x: 2400, y: 790 }, { x: 2440, y: 880 }],
-};
-const SAFE_ROUTE = { x: 2465, y: 760 };
+const TO_HALL = ROUTE_TO_JUNCTION; // 10-14 C2-7B: 최종 배경의 길 경유지(스폰 → 정착지 → 물풀문 → 갈림길)
+const ROUTE_TO: Record<string, { x: number; y: number }[]> = JUNCTION_TO;
+const SAFE_ROUTE = { x: 2215, y: 495 }; // lake_safe_route 지점(최종 배경의 길 위)
 
 type MapState = {
   avatar: { x: number; y: number };
@@ -151,7 +148,7 @@ test('2장 C2-3 ②(1280×720): 세 구조 → 정본 장면(끊기면 처음부
     assert.equal(m.story.gates.gate_lake_safe_route, false);
 
     // 장면: 중간에 새로고침하면 처음부터 다시 볼 수 있고, 아무것도 완료 처리되지 않았다
-    await via(g, [{ x: 2440, y: 850 }, SAFE_ROUTE], 'keys');
+    await via(g, [...C_TO_SAFE_ROUTE, SAFE_ROUTE], 'keys');
     await g.until('안전 물길 안내', "s.map.story.prompt === 'lake_safe_route' && !!s.map.story.promptText", 20_000);
     const at = (await map(g)).story.interact;
     await g.clickAt(at.x, at.y, "s.scenes.includes('StoryDialogue')");
@@ -230,7 +227,7 @@ test('2장 C2-3 ④: 두 플레이어의 전투와 구조 진행이 독립이고
         await fightRescue(ga);
       })(),
       (async () => {
-        await via(gb, [...TO_HALL, ...ROUTE_TO.c, { x: 2440, y: 850 }, SAFE_ROUTE], 'keys');
+        await via(gb, [...TO_HALL, ...ROUTE_TO.c, ...C_TO_SAFE_ROUTE, SAFE_ROUTE], 'keys');
         await gb.until('안전 물길 안내', "s.map.story.prompt === 'lake_safe_route' && !!s.map.story.promptText", 20_000);
         const at = (await map(gb)).story.interact;
         await gb.clickAt(at.x, at.y, "s.scenes.includes('StoryDialogue')");

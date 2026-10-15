@@ -100,6 +100,13 @@ export class Backend {
     const results = await Promise.all(Array.from({ length: n }, () => story.equipRelic(p.id, itemCode)));
     return results.filter((r) => !r.alreadyCompleted).length;
   }
+  // 승인된 테스트 시드 갱신(C2-7B): 전투·장면을 다시 검증하지 않고 진행 상태만 앞당긴다 — 사건 기록 + 체크포인트 + 탐험 세션의 문 판정에 바로 반영
+  grantEvents(device: string, eventIds: string[], checkpoint?: string) {
+    const p = this.playerByDevice(device)!;
+    for (const e of eventIds) if (this.db.rows('player_story_event', { player_id: p.id, event_id: e }).length === 0) this.db.seed('player_story_event', { player_id: p.id, event_id: e });
+    if (checkpoint) (this.db.rows('player_story_progress', { player_id: p.id })[0] as { checkpoint: string }).checkpoint = checkpoint;
+    this.app!.get(RoomsService).noteStoryEvents(p.id.toString(), eventIds);
+  }
   // 서버에 열려 있는 탐험 세션(방) 수 — 재시도가 방을 새로 만들지 않는지 확인하는 데 쓴다
   roomCount(): number {
     return ((this.app!.get(RoomsService) as unknown as { rooms: Map<string, unknown> }).rooms).size;

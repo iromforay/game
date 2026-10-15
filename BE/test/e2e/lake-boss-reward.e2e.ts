@@ -8,6 +8,7 @@ import type { Browser } from 'playwright-core';
 import { join } from 'path';
 import { Backend, Game, ROOT, freePort, launchBrowser, startVite, withDiagnosis } from './harness';
 import { seedLake } from './fixtures';
+import { ROUTE_TO_BOSS } from '../helpers/lake-route';
 
 let backend: Backend;
 let vite: { url: string; close: () => Promise<void> };
@@ -25,7 +26,7 @@ after(async () => {
 
 const SMALL = { width: 640, height: 360 };
 const MAP_READY = 's.map && s.map.ready && s.map.inRoom && s.map.positioned && s.map.story';
-const ROUTE = [{ x: 900, y: 1500 }, { x: 1265, y: 1350 }, { x: 1440, y: 1350 }, { x: 1440, y: 1100 }, { x: 1560, y: 1000 }, { x: 1900, y: 1000 }, { x: 2020, y: 1000 }, { x: 2040, y: 800 }, { x: 2400, y: 790 }, { x: 2370, y: 740 }, { x: 2370, y: 590 }, { x: 2370, y: 540 }, { x: 2600, y: 440 }, { x: 2830, y: 420 }];
+const ROUTE = ROUTE_TO_BOSS; // 10-14 C2-7B: 최종 배경의 길 경유지
 const GOAL_AFTER = '물빛 염색실을 누비에게 가져가자.';
 const FIRST_LINE = '마지막 재봉실을 끊자';
 

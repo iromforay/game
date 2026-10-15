@@ -7,6 +7,7 @@ import { join } from 'path';
 import type { Browser } from 'playwright-core';
 import { Backend, Game, ROOT, freePort, launchBrowser, startVite, withDiagnosis } from './harness';
 import { seedLake } from './fixtures';
+import { ROUTE_TO_POINT } from '../helpers/lake-route';
 
 let backend: Backend;
 let vite: { url: string; close: () => Promise<void> };
@@ -66,6 +67,7 @@ async function reachMap(g: Game, expectIntro: boolean) {
   }
 }
 async function interact(g: Game, id: string, how: 'keys' | 'joystick', beforeClick?: () => Promise<void>) {
+  for (const q of ROUTE_TO_POINT[id] ?? []) await g.walkDirect('Map', q, how, `s.map && s.map.story && s.map.story.prompt === '${id}'`, 30);
   await g.walkDirect('Map', pointOf(id), how, `s.map && s.map.story && s.map.story.prompt === '${id}'`);
   await g.until(`${id} 안내 버튼`, `s.map && s.map.story && s.map.story.prompt === '${id}' && !!s.map.story.promptText`);
   await beforeClick?.();
@@ -182,6 +184,7 @@ test('2장 C2-1 ②: 640×360 — 도입·물들이·물결북이 같은 흐름�
     assert.equal(dbOf(device).checkpoint, 'CH02_STARTED');
     await interact(g, 'lake_mulduri', 'joystick');
     // 안내 버튼·목표 패널 배치(기존 반응형 규칙): 물결북 앞에서 확인
+    for (const q of ROUTE_TO_POINT.lake_wave_drum) await g.walkDirect('Map', q, 'joystick', "s.map.story.prompt === 'lake_wave_drum'", 30);
     await g.walkDirect('Map', pointOf('lake_wave_drum'), 'joystick', "s.map.story.prompt === 'lake_wave_drum'");
     await g.until('물결북 안내', "s.map.story.prompt === 'lake_wave_drum' && !!s.map.story.promptText");
     const s = await story(g);

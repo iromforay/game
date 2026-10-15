@@ -353,6 +353,7 @@ export class MapScene extends Phaser.Scene {
   // 서버가 내려 준 막힌 곳·문·깊은 물·마른 발판·이야기 지점 반경을 반투명 선으로 그린다. 개발 모드(import.meta.env.DEV)에서만 켤 수 있고 운영 빌드에는 들어가지 않는다.
   // 판정에는 쓰이지 않는다(서버 값을 그대로 보여 줄 뿐). 켜고 끄기: window.__dev.collisionDebug(true|false)
   private collisionDebug?: Phaser.GameObjects.Graphics;
+  private collisionLegend: Phaser.GameObjects.GameObject[] = [];
   private collisionDebugOn = false;
   setCollisionDebug(on: boolean) {
     if (!import.meta.env.DEV) return;
@@ -363,6 +364,8 @@ export class MapScene extends Phaser.Scene {
     if (!import.meta.env.DEV) return;
     this.collisionDebug?.destroy();
     this.collisionDebug = undefined;
+    this.collisionLegend.forEach((o) => o.destroy());
+    this.collisionLegend = [];
     const view = this.stageView;
     if (!this.collisionDebugOn || !view) return;
     const g = (this.collisionDebug = this.add.graphics().setDepth(1500));
@@ -372,6 +375,25 @@ export class MapScene extends Phaser.Scene {
     for (const gt of view.gates) rect(gt, gt.open ? 0x40ff80 : 0xffa030, 0.22);
     for (const a of view.layout?.anchors ?? []) g.lineStyle(3, 0x30ff30, 0.9).strokeCircle(a.x, a.y, a.radius);
     for (const p of view.points) g.lineStyle(3, 0xffff30, 0.9).strokeCircle(p.x, p.y, p.radius);
+    for (const t of view.layout?.traps ?? []) g.lineStyle(3, 0xff30ff, 0.9).strokeCircle(t.x, t.y, t.radius);
+    // 물살: 자주색 영역 + 힘 방향 화살표(영역 중심에서 영역 길이의 절반만큼)
+    for (const c of view.layout?.currents ?? []) {
+      rect(c, 0xc040ff, 0.2);
+      const cx = c.x + c.width / 2;
+      const cy = c.y + c.height / 2;
+      const len = Math.min(Math.max(c.width, c.height) * 0.4, 90);
+      const ex = cx + c.dx * len;
+      const ey = cy + c.dy * len;
+      g.lineStyle(5, 0xffffff, 1).lineBetween(cx - c.dx * len, cy - c.dy * len, ex, ey);
+      g.fillStyle(0xffffff, 1).fillTriangle(ex, ey, ex - c.dx * 18 - c.dy * 10, ey - c.dy * 18 + c.dx * 10, ex - c.dx * 18 + c.dy * 10, ey - c.dy * 18 - c.dx * 10);
+    }
+    // 범례(화면 고정): 색 ↔ 의미
+    const legend: [number, string][] = [[0xff3030, 'blocker'], [0xffa030, 'gate(닫힘)'], [0x40ff80, 'gate(열림)'], [0x2040ff, 'deep water'], [0x40d0e0, 'shallow'], [0xc040ff, 'current(→힘 방향)'], [0x30ff30, 'safe anchor'], [0xffff30, 'story·rescue 반경'], [0xff30ff, 'trap 반경']];
+    legend.forEach(([color, text], i) => {
+      const y = 540 + i * 18;
+      this.collisionLegend.push(this.add.rectangle(12, y, 14, 12, color).setOrigin(0, 0).setScrollFactor(0).setDepth(1501));
+      this.collisionLegend.push(this.add.text(30, y - 2, text, { fontSize: '13px', color: '#ffffff', backgroundColor: '#00000099' }).setOrigin(0, 0).setScrollFactor(0).setDepth(1501));
+    });
   }
   // 개발 전용: 카메라를 월드 좌표에 맞춘다(플레이어는 움직이지 않는다). 캡처·정합성 측정용
   lookAt(x: number, y: number) {

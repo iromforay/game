@@ -109,7 +109,7 @@ export interface StageViewDto {
   gates: { id: string; label: string; x: number; y: number; width: number; height: number; open: boolean; closedAssetKey: string | null; openAssetKey: string | null; art: { x: number; y: number; width: number; height: number; pivot?: [number, number] } | null }[];
   // 최종 에셋 연결: 대형 배경 키와 지금 보이는 오버레이·월드 오브젝트(진행 상태별). 없으면 회색상자·임시 도형 유지. markerMode final = 에셋이 연결된 대상의 임시 표식(고리·마름모·라벨)을 없앤다
   render: { markerMode: 'fallback' | 'final'; background: { assetKey: string } | null; backgroundLocked?: string; unlockedBy?: string; backgroundUnlocked?: boolean; overlays: { id: string; assetKey: string; x: number; y: number; width: number; height: number; pivot?: [number, number]; layer: 'overlay' | 'story'; forPoints: string[]; rotation?: number; alpha?: number }[] };
-  layout: { zones: StageRect[]; paths: number[][][]; blockers: StageRect[]; water?: { id: string; kind: 'shallow' | 'deep'; x: number; y: number; width: number; height: number }[]; anchors?: { id: string; x: number; y: number; radius: number }[] } | null; // water·anchors: 표시 전용(판정은 서버)
+  layout: { zones: StageRect[]; paths: number[][][]; blockers: StageRect[]; water?: { id: string; kind: 'shallow' | 'deep'; x: number; y: number; width: number; height: number }[]; anchors?: { id: string; x: number; y: number; radius: number }[]; currents?: { id: string; x: number; y: number; width: number; height: number; dx: number; dy: number }[]; traps?: { id: string; x: number; y: number; radius: number }[] } | null; // water·anchors·currents·traps: 표시 전용(판정은 서버)
   objectives: { key: string; collected: number; required: number; active: boolean }[];
   goal: { id: string; text: string } | null; // 이야기 목표 문구(지역 데이터 goals에서 지금 진행에 맞는 첫 항목)
 }
@@ -503,7 +503,7 @@ export class StoryService {
             zones: layout.zones.filter(shown).map((z) => ({ id: z.id, label: z.label, x: z.x, y: z.y, width: z.width, height: z.height })),
             paths: layout.paths.filter(shown).map((path) => path.points),
             blockers: layout.blockers.filter(shown).map((b) => ({ id: b.id, label: b.label, x: b.x, y: b.y, width: b.width, height: b.height })),
-            ...(water ? { water: water.areas.map((a) => ({ id: a.id, kind: a.kind, x: a.x, y: a.y, width: a.width, height: a.height })), anchors: water.anchors.map((a) => ({ id: a.id, x: a.x, y: a.y, radius: a.radius })) } : {}),
+            ...(water ? { water: water.areas.map((a) => ({ id: a.id, kind: a.kind, x: a.x, y: a.y, width: a.width, height: a.height })), anchors: water.anchors.map((a) => ({ id: a.id, x: a.x, y: a.y, radius: a.radius })), currents: water.currents.map((c) => ({ id: c.id, x: c.x, y: c.y, width: c.width, height: c.height, dx: c.direction.x, dy: c.direction.y })), traps: water.traps.map((t) => ({ id: t.id, x: t.x, y: t.y, radius: t.radius })) } : {}),
           }
         : null,
       objectives: defs.map((d) => ({ key: d.key, collected: snap.objectives.get(d.key)?.size ?? 0, required: d.objectIds.length, active: checkObjective(d, snap) === null })),
