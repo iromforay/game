@@ -72,6 +72,16 @@ export interface StageGateData extends StageRect {
   closedAssetKey?: string | null;
   openAssetKey?: string | null;
   art?: { x: number; y: number; width: number; height: number; pivot?: [number, number] }; // x·y = 피벗이 놓이는 월드 좌표(피벗 생략 시 중심)
+  openPieces?: StageGatePiece[]; // 열린 문을 열림 그림의 일부(frame) 여러 조각으로 그린다(10-15 C2-7C — 세로 문의 위·아래 끝에 기둥을 두어 가운데 틈을 보인다). 없으면 art를 쓴다
+}
+// 문 그림 조각: 열림 텍스처 안의 사각형(frame = [x, y, 너비, 높이], 원본 px)을 x·y(피벗 위치)에 width×height로 그린다. 판정에는 쓰이지 않는다
+export interface StageGatePiece {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  pivot?: [number, number];
+  frame: [number, number, number, number];
 }
 export interface StagePointArt {
   width: number;
@@ -142,6 +152,15 @@ export function validateRender(data: StageStoryData, stageCode: string): void {
     if (g.openAssetKey !== undefined) key(g.openAssetKey, `${at}.openAssetKey`, true);
     if (g.closedAssetKey || g.openAssetKey) size(g.art as unknown as Record<string, unknown> | undefined, `${at}.art`);
     pivot(g.art?.pivot, `${at}.art.pivot`);
+    if (g.openPieces !== undefined) {
+      if (!Array.isArray(g.openPieces) || g.openPieces.length === 0 || !g.openAssetKey) bad.push(`${at}.openPieces: 열림 그림(openAssetKey)이 있을 때 조각 1개 이상`);
+      else
+        g.openPieces.forEach((q, i) => {
+          size(q as unknown as Record<string, unknown>, `${at}.openPieces[${i}]`);
+          pivot(q.pivot, `${at}.openPieces[${i}].pivot`);
+          if (!(Array.isArray(q.frame) && q.frame.length === 4 && q.frame.every((n) => num(n) && n >= 0) && q.frame[2] > 0 && q.frame[3] > 0)) bad.push(`${at}.openPieces[${i}].frame: [x, y, 너비, 높이] 원본 px`);
+        });
+    }
   }
   if (bad.length > 0) throw new Error(`지역 데이터(${stageCode}) render 검증 실패: ${bad.join(' / ')}`);
 }

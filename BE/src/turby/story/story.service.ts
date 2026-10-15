@@ -4,7 +4,7 @@ import { PrismaService } from '../prisma.service';
 import { RoomsService } from '../rooms/rooms.service';
 import { SettingsService } from '../rooms/settings.service';
 import { gameError } from '../turby-dto';
-import { StoryContentService, type StageRect } from './story-content.service';
+import { StoryContentService, type StageRect, type StageGatePiece } from './story-content.service';
 import { addToPlayerItem, usedBagSlots } from './bag';
 import { StageAccessService } from './stage-access.service';
 import { gateOpen } from 'turby-stage-geometry';
@@ -106,7 +106,7 @@ export interface StageViewDto {
   // 지금 활성화된 이야기 지점만(비활성·완료 지점은 내려 주지 않는다)
   points: { id: string; kind: string; x: number; y: number; radius: number; assetKey: string; label: string; prompt: string; art?: { width: number; height: number; pivot?: [number, number] } }[];
   // 문: open은 서버가 openEvent로 한 번만 정한 값 — 화면의 그림(닫힘/열림 키)과 클라이언트 충돌 예측이 모두 이 값을 쓴다
-  gates: { id: string; label: string; x: number; y: number; width: number; height: number; open: boolean; closedAssetKey: string | null; openAssetKey: string | null; art: { x: number; y: number; width: number; height: number; pivot?: [number, number] } | null }[];
+  gates: { id: string; label: string; x: number; y: number; width: number; height: number; open: boolean; closedAssetKey: string | null; openAssetKey: string | null; art: { x: number; y: number; width: number; height: number; pivot?: [number, number] } | null; openPieces?: StageGatePiece[] }[];
   // 최종 에셋 연결: 대형 배경 키와 지금 보이는 오버레이·월드 오브젝트(진행 상태별). 없으면 회색상자·임시 도형 유지. markerMode final = 에셋이 연결된 대상의 임시 표식(고리·마름모·라벨)을 없앤다
   render: { markerMode: 'fallback' | 'final'; background: { assetKey: string } | null; backgroundLocked?: string; unlockedBy?: string; backgroundUnlocked?: boolean; overlays: { id: string; assetKey: string; x: number; y: number; width: number; height: number; pivot?: [number, number]; layer: 'overlay' | 'story'; forPoints: string[]; rotation?: number; alpha?: number }[] };
   layout: { zones: StageRect[]; paths: number[][][]; blockers: StageRect[]; water?: { id: string; kind: 'shallow' | 'deep'; x: number; y: number; width: number; height: number }[]; anchors?: { id: string; x: number; y: number; radius: number }[]; currents?: { id: string; x: number; y: number; width: number; height: number; dx: number; dy: number }[]; traps?: { id: string; x: number; y: number; radius: number }[] } | null; // water·anchors·currents·traps: 표시 전용(판정은 서버)
@@ -489,7 +489,7 @@ export class StoryService {
       size,
       objects,
       points,
-      gates: (layout?.gates ?? []).filter(shown).map((g) => ({ id: g.id, label: g.label, x: g.x, y: g.y, width: g.width, height: g.height, open: gateOpen(g, snap.events), closedAssetKey: g.closedAssetKey ?? null, openAssetKey: g.openAssetKey ?? null, art: g.art ?? null })),
+      gates: (layout?.gates ?? []).filter(shown).map((g) => ({ id: g.id, label: g.label, x: g.x, y: g.y, width: g.width, height: g.height, open: gateOpen(g, snap.events), closedAssetKey: g.closedAssetKey ?? null, openAssetKey: g.openAssetKey ?? null, art: g.art ?? null, ...(g.openPieces ? { openPieces: g.openPieces } : {}) })),
       render: {
         markerMode: data.render?.markerMode ?? 'fallback',
         background: data.render?.background ? { assetKey: data.render.background.assetKey } : null,

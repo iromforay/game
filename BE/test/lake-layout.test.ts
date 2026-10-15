@@ -1,4 +1,4 @@
-// 10-14 C2-7B: 최종 호수 배경에 맞춘 이동·충돌·수역·사건 좌표 정합성 계약.
+// 10-14 C2-7B: 최종 호수 배경에 맞춘 이동·충돌·수역·사건 좌표 정합성 계약. 10-15 C2-7C: 충돌 띠 병합(개수·DTO 크기·판정 시간·누출·우회)과 문·구조 장면 표시 거리.
 // 실제 지역 데이터(story-data/stages/lake.json)로 서버 충돌 계약(collisionOf)과 같은 규칙을 8px 격자에서 따져 본다.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -28,9 +28,9 @@ const SAFE = new Set([...RESCUED, 'lake_safe_route_opened']);
 const CELL = 8;
 const GW = 3200 / CELL;
 const GH = 2400 / CELL;
-function reachable(events: Set<string>, half: number, from: { x: number; y: number }): Uint8Array {
+function reachable(events: Set<string>, half: number, from: { x: number; y: number }, coll = C): Uint8Array {
   const blocked = new Uint8Array(GW * GH);
-  for (const r of solidsFor(C, events)) {
+  for (const r of solidsFor(coll, events)) {
     const x0 = Math.max(0, Math.floor((r.x - half) / CELL));
     const x1 = Math.min(GW - 1, Math.floor((r.x + r.width + half) / CELL));
     const y0 = Math.max(0, Math.floor((r.y - half) / CELL));
@@ -203,4 +203,116 @@ test('계약 불변: 상태 ID·사건 순서·보상 정의·체크포인트와
   // 배경 이미지는 C2-7A 그대로
   const png = readFileSync(join(__dirname, '..', '..', 'save-a-turby', 'src', 'assets', 'world', 'lake', 'lake-base.png'));
   assert.equal(createHash('sha256').update(png).digest('hex').toUpperCase(), '357342612CE77CE7E0E90FCF9EF96035221B3AFF34F754CC8F8FA4E8C215FE12');
+});
+
+// ----- 10-15 C2-7C: 충돌 띠 병합 -----
+// C2-7B(127b28a)의 가는 띠 1279개(시험 고정 자료)로 만든 같은 지역의 충돌 계약 — 병합 전후 비교용
+const FINE = (JSON.parse(readFileSync(join(__dirname, 'fixtures', 'lake-blockers-c27b.json'), 'utf8')) as { blockers: number[][] }).blockers;
+const C_FINE = collisionOf({ ...LAKE, layout: { ...LAKE.layout!, blockers: FINE.map(([x, y, width, height], i) => ({ id: `edge_${i}`, x, y, width, height })) } }, 3200, 2400, 'lake');
+
+test('병합 상한: blocker 300개 이하, StageView layout.blockers 직렬화 30KB 이하, 원래 막힌 칸만 덮는다', () => {
+  const blockers = LAKE.layout!.blockers;
+  assert.ok(blockers.length <= 300, `blocker ${blockers.length}개`);
+  const bytes = Buffer.byteLength(JSON.stringify(blockers.map((b) => ({ id: b.id, label: b.label, x: b.x, y: b.y, width: b.width, height: b.height }))));
+  assert.ok(bytes <= 30 * 1024, `DTO blockers ${bytes} bytes`);
+  // 병합은 원래 막힌 칸만 덮는다 — 새 blocker는 모두 C2-7B 띠의 합집합 안이다(길을 새로 막지 않는다)
+  const fine = new Uint8Array(GW * GH);
+  for (const [x, y, w, h] of FINE) for (let gy = y / CELL; gy < (y + h) / CELL; gy++) for (let gx = x / CELL; gx < (x + w) / CELL; gx++) fine[gy * GW + gx] = 1;
+  for (const b of blockers) for (let gy = b.y / CELL; gy < (b.y + b.height) / CELL; gy++) for (let gx = b.x / CELL; gx < (b.x + b.width) / CELL; gx++) assert.equal(fine[gy * GW + gx], 1, `${b.id}가 C2-7B에서 열린 칸(${gx * CELL},${gy * CELL})을 막는다`);
+});
+
+test('병합 후 도달성·누출·우회: 반지름 8·16·28에서 세 진행 상태의 필수 목표가 C2-7B만큼 닿고, 닫힌 문 우회 0, C2-7B 도달 영역 밖으로 32px 넘게 새는 칸 0', () => {
+  const gateBlocked: [Set<string>, string[]][] = [
+    [START, ['lake_rescue_a', 'lake_rescue_b', 'lake_rescue_c', 'lake_safe_route', 'lake_nubi_crisis', 'lake_boss_entrance']],
+    [DRUM, ['lake_nubi_crisis', 'lake_boss_entrance']],
+    [SAFE, []],
+  ];
+  for (const half of [SERVER_BODY_HALF, CLIENT_HALF, 28]) {
+    for (const [events, closed] of gateBlocked) {
+      const now = reachable(events, half, SPAWN);
+      const before = reachable(events, half, SPAWN, C_FINE);
+      for (const k of KEY) {
+        if (closed.includes(k)) assert.equal(at(now, point(k)), false, `반지름 ${half}: 닫힌 문 너머 ${k}에 닿는다(우회)`);
+        else if (at(before, point(k))) assert.equal(at(now, point(k)), true, `반지름 ${half}: C2-7B에서 닿던 ${k}에 닿지 않는다`);
+      }
+      // 누출: 지금 닿는 칸은 C2-7B(서버 몸 반지름 8)에서 닿던 칸에서 32px(4칸) 안이다 — 장식·깊은 물 쪽으로 새 길이 생기지 않았다
+      const base = half === SERVER_BODY_HALF ? before : reachable(events, SERVER_BODY_HALF, SPAWN, C_FINE);
+      const near = new Uint8Array(GW * GH);
+      for (let i = 0; i < GW * GH; i++) {
+        if (!base[i]) continue;
+        const x = i % GW;
+        const y = (i - x) / GW;
+        for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) if (x + dx >= 0 && y + dy >= 0 && x + dx < GW && y + dy < GH) near[(y + dy) * GW + x + dx] = 1;
+      }
+      let leak = 0;
+      for (let i = 0; i < GW * GH; i++) if (now[i] && !near[i]) leak++;
+      assert.equal(leak, 0, `반지름 ${half}: 새는 칸 ${leak}개`);
+    }
+  }
+});
+
+test('판정 비용: 대표 이동 묶음 checkMove 10,000회가 C2-7B(띠 1279개)보다 빠르다(같은 프로세스)', (t) => {
+  // 대표 이동: 시험 경유지 전체를 4px 걸음으로 쪼갠 이동(안전 물길 열림 상태)을 10,000회가 될 때까지 되풀이
+  const chain = [SPAWN, ...ROUTE_TO_BOSS];
+  const moves: [{ x: number; y: number }, { x: number; y: number }][] = [];
+  for (let i = 0; i + 1 < chain.length; i++) {
+    const a = chain[i];
+    const b = chain[i + 1];
+    const n = Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / 4);
+    for (let k = 0; k < n; k++) moves.push([{ x: a.x + ((b.x - a.x) * k) / n, y: a.y + ((b.y - a.y) * k) / n }, { x: a.x + ((b.x - a.x) * (k + 1)) / n, y: a.y + ((b.y - a.y) * (k + 1)) / n }]);
+  }
+  const batch = Array.from({ length: 10_000 }, (_, i) => moves[i % moves.length]);
+  const run = (coll: typeof C) => {
+    const solids = solidsFor(coll, SAFE);
+    let ok = 0;
+    const t0 = performance.now();
+    for (const [a, b] of batch) if (checkMove(coll, solids, [], a, b) === 'ok') ok++;
+    return { ms: performance.now() - t0, ok };
+  };
+  run(C_FINE);
+  run(C); // 데우기(JIT)
+  const fine = run(C_FINE);
+  const merged = run(C);
+  t.diagnostic(`checkMove 10,000회: C2-7B 띠 ${FINE.length}개 ${fine.ms.toFixed(1)}ms(ok ${fine.ok}) → 병합 ${LAKE.layout!.blockers.length}개 ${merged.ms.toFixed(1)}ms(ok ${merged.ok})`);
+  assert.equal(merged.ok, fine.ok, '같은 이동 묶음의 판정 결과가 같다');
+  assert.ok(merged.ms < fine.ms, `병합 후 ${merged.ms.toFixed(1)}ms < C2-7B ${fine.ms.toFixed(1)}ms`);
+});
+
+test('문 화면 위치: 닫힌 문 그림·열린 문 조각의 화면 중심과 서버 문 사각형 중심의 차이 24px 이하, 열린 문은 가운데 틈이 있다', () => {
+  type Box = { x: number; y: number; width: number; height: number; pivot?: [number, number] };
+  const box = (r: Box) => {
+    const [px, py] = r.pivot ?? [0.5, 0.5];
+    return { x0: r.x - r.width * px, y0: r.y - r.height * py, x1: r.x - r.width * px + r.width, y1: r.y - r.height * py + r.height };
+  };
+  for (const g of LAKE.layout!.gates) {
+    const gc = { x: g.x + g.width / 2, y: g.y + g.height / 2 };
+    const closed = box(g.art!);
+    assert.ok(Math.hypot((closed.x0 + closed.x1) / 2 - gc.x, (closed.y0 + closed.y1) / 2 - gc.y) <= 24, `${g.id} 닫힌 문 그림 중심`);
+    assert.ok(closed.x1 - closed.x0 <= 64, `${g.id} 닫힌 문 그림 너비 ${closed.x1 - closed.x0}(길목보다 과도하게 크지 않다)`);
+    const pieces = (g.openPieces ?? []).map(box);
+    assert.equal(pieces.length, 2, `${g.id} 열린 문 조각 2개(위·아래 기둥)`);
+    const u = { x0: Math.min(...pieces.map((p) => p.x0)), y0: Math.min(...pieces.map((p) => p.y0)), x1: Math.max(...pieces.map((p) => p.x1)), y1: Math.max(...pieces.map((p) => p.y1)) };
+    assert.ok(Math.hypot((u.x0 + u.x1) / 2 - gc.x, (u.y0 + u.y1) / 2 - gc.y) <= 24, `${g.id} 열린 문 조각 중심`);
+    const [top, bottom] = [...pieces].sort((a, b) => a.y0 - b.y0);
+    assert.ok(bottom.y0 - top.y1 >= 24, `${g.id} 열린 문 가운데 틈 ${bottom.y0 - top.y1}px`);
+  }
+});
+
+test('구조 장면 표시: 붙잡힌 물들이와 지키는 적(젖은 꿰매기) 그림 중심이 서로 48px 이상, 적은 길로 다가오는 쪽이 아니다', () => {
+  const ov = LAKE.render!.overlays!;
+  const look = LAKE.storyPoints!.find((p) => p.id === 'lake_rescue_a')!.art!;
+  const mul = (p: { x: number; y: number }) => ({ x: p.x, y: p.y - look.height * ((look.pivot ?? [0.5, 0.7])[1] - 0.5) });
+  for (const k of ['a', 'b', 'c'] as const) {
+    const pt = point(`lake_rescue_${k}`);
+    const guards = ov.filter((o) => o.id.startsWith(`overlay_guard_${k}`)).map((o) => ({ id: o.id, x: o.x, y: o.y - o.height * ((o.pivot ?? [0.5, 0.5])[1] - 0.5) }));
+    assert.ok(guards.length >= 1);
+    const m = mul(pt);
+    const route = JUNCTION_TO[k];
+    const approach = route[route.length - 2]; // 마지막 직전 경유지 = 다가오는 쪽
+    for (const g of guards) {
+      assert.ok(Math.hypot(g.x - m.x, g.y - m.y) >= 48, `${g.id} ↔ 물들이 ${Math.hypot(g.x - m.x, g.y - m.y).toFixed(0)}px`);
+      assert.ok(Math.hypot(g.x - approach.x, g.y - approach.y) >= 48, `${g.id}가 다가오는 길목 위`);
+    }
+    for (let i = 0; i < guards.length; i++) for (let j = i + 1; j < guards.length; j++) assert.ok(Math.hypot(guards[i].x - guards[j].x, guards[i].y - guards[j].y) >= 48, '적끼리 48px 이상');
+  }
 });

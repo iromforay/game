@@ -369,9 +369,10 @@ export class MapScene extends Phaser.Scene {
     const view = this.stageView;
     if (!this.collisionDebugOn || !view) return;
     const g = (this.collisionDebug = this.add.graphics().setDepth(1500));
-    const rect = (r: { x: number; y: number; width: number; height: number }, color: number, fill: number) => g.fillStyle(color, fill).fillRect(r.x, r.y, r.width, r.height).lineStyle(3, color, 0.9).strokeRect(r.x, r.y, r.width, r.height);
+    const rect = (r: { x: number; y: number; width: number; height: number }, color: number, fill: number, line = 3) => g.fillStyle(color, fill).fillRect(r.x, r.y, r.width, r.height).lineStyle(line, color, 0.9).strokeRect(r.x, r.y, r.width, r.height);
     for (const w of view.layout?.water ?? []) rect(w, w.kind === 'deep' ? 0x2040ff : 0x40d0e0, 0.18);
-    for (const b of view.layout?.blockers ?? []) rect(b, 0xff3030, 0.22);
+    // blocker: 병합된 사각형들의 합집합을 옅은 단색 면 한 겹 + 바깥 외곽선으로(겹친 사각형 안쪽 선·겹친 면을 그리지 않는다, 10-15 C2-7C)
+    this.drawBlockerUnion(g, view.layout?.blockers ?? []);
     for (const gt of view.gates) rect(gt, gt.open ? 0x40ff80 : 0xffa030, 0.22);
     for (const a of view.layout?.anchors ?? []) g.lineStyle(3, 0x30ff30, 0.9).strokeCircle(a.x, a.y, a.radius);
     for (const p of view.points) g.lineStyle(3, 0xffff30, 0.9).strokeCircle(p.x, p.y, p.radius);
@@ -387,13 +388,59 @@ export class MapScene extends Phaser.Scene {
       g.lineStyle(5, 0xffffff, 1).lineBetween(cx - c.dx * len, cy - c.dy * len, ex, ey);
       g.fillStyle(0xffffff, 1).fillTriangle(ex, ey, ex - c.dx * 18 - c.dy * 10, ey - c.dy * 18 + c.dx * 10, ex - c.dx * 18 + c.dy * 10, ey - c.dy * 18 - c.dx * 10);
     }
-    // 범례(화면 고정): 색 ↔ 의미
+    // 범례(화면 고정): 색 ↔ 의미. 왼쪽 아래 가장자리의 작은 패널(화면을 가리지 않게 글자 11px)
     const legend: [number, string][] = [[0xff3030, 'blocker'], [0xffa030, 'gate(닫힘)'], [0x40ff80, 'gate(열림)'], [0x2040ff, 'deep water'], [0x40d0e0, 'shallow'], [0xc040ff, 'current(→힘 방향)'], [0x30ff30, 'safe anchor'], [0xffff30, 'story·rescue 반경'], [0xff30ff, 'trap 반경']];
+    const top = this.scale.height - 8 - legend.length * 13;
+    this.collisionLegend.push(this.add.rectangle(4, top - 4, 128, legend.length * 13 + 8, 0x000000, 0.55).setOrigin(0, 0).setScrollFactor(0).setDepth(1501));
     legend.forEach(([color, text], i) => {
-      const y = 540 + i * 18;
-      this.collisionLegend.push(this.add.rectangle(12, y, 14, 12, color).setOrigin(0, 0).setScrollFactor(0).setDepth(1501));
-      this.collisionLegend.push(this.add.text(30, y - 2, text, { fontSize: '13px', color: '#ffffff', backgroundColor: '#00000099' }).setOrigin(0, 0).setScrollFactor(0).setDepth(1501));
+      const y = top + i * 13;
+      this.collisionLegend.push(this.add.rectangle(8, y + 2, 10, 8, color).setOrigin(0, 0).setScrollFactor(0).setDepth(1502));
+      this.collisionLegend.push(this.add.text(22, y, text, { fontSize: '11px', color: '#ffffff' }).setOrigin(0, 0).setScrollFactor(0).setDepth(1502));
     });
+  }
+  // 개발 전용: blocker 합집합을 8px 칸으로 칠해 행마다 이어진 칸을 한 번만 채우고, 칠한 칸과 빈 칸 사이 경계만 선으로 긋는다
+  private drawBlockerUnion(g: Phaser.GameObjects.Graphics, blockers: StageRect[]) {
+    const CELL = 8;
+    const gw = Math.ceil(this.stageWidth / CELL);
+    const gh = Math.ceil(this.stageHeight / CELL);
+    const on = new Uint8Array(gw * gh);
+    for (const b of blockers)
+      for (let y = Math.max(0, Math.floor(b.y / CELL)); y < Math.min(gh, Math.ceil((b.y + b.height) / CELL)); y++)
+        for (let x = Math.max(0, Math.floor(b.x / CELL)); x < Math.min(gw, Math.ceil((b.x + b.width) / CELL)); x++) on[y * gw + x] = 1;
+    const cell = (x: number, y: number) => x >= 0 && y >= 0 && x < gw && y < gh && on[y * gw + x] === 1;
+    g.fillStyle(0xff3030, 0.16);
+    for (let y = 0; y < gh; y++)
+      for (let x = 0; x < gw; ) {
+        if (!cell(x, y)) {
+          x++;
+          continue;
+        }
+        const s = x;
+        while (cell(x, y)) x++;
+        g.fillRect(s * CELL, y * CELL, (x - s) * CELL, CELL);
+      }
+    g.lineStyle(1.5, 0xff3030, 0.9);
+    // 가로 경계(위·아래 칸이 다름)와 세로 경계(왼쪽·오른쪽 칸이 다름)를 이어진 구간으로 묶어 긋는다
+    for (let y = 0; y <= gh; y++)
+      for (let x = 0; x < gw; ) {
+        if (cell(x, y - 1) === cell(x, y)) {
+          x++;
+          continue;
+        }
+        const s = x;
+        while (x < gw && cell(x, y - 1) !== cell(x, y)) x++;
+        g.lineBetween(s * CELL, y * CELL, x * CELL, y * CELL);
+      }
+    for (let x = 0; x <= gw; x++)
+      for (let y = 0; y < gh; ) {
+        if (cell(x - 1, y) === cell(x, y)) {
+          y++;
+          continue;
+        }
+        const s = y;
+        while (y < gh && cell(x - 1, y) !== cell(x, y)) y++;
+        g.lineBetween(x * CELL, s * CELL, x * CELL, y * CELL);
+      }
   }
   // 개발 전용: 카메라를 월드 좌표에 맞춘다(플레이어는 움직이지 않는다). 캡처·정합성 측정용
   lookAt(x: number, y: number) {
@@ -432,6 +479,13 @@ export class MapScene extends Phaser.Scene {
     for (const g of plan.gates) {
       const gate = view!.gates.find((x) => x.id === g.id)!;
       if (g.art) keep(this.add.image(g.art.x, g.art.y, g.art.assetKey).setOrigin(g.art.pivot[0], g.art.pivot[1]).setDisplaySize(g.art.width, g.art.height).setDepth(DEPTH_STORY));
+      for (const q of g.pieces) {
+        // 열림 그림의 일부(원본 px 사각형)를 이름 붙은 프레임으로 한 번 등록해 그 프레임만 그린다(PNG는 그대로)
+        const tex = this.textures.get(q.assetKey);
+        const frame = `piece-${q.frame.join('-')}`;
+        if (!tex.has(frame)) tex.add(frame, 0, q.frame[0], q.frame[1], q.frame[2], q.frame[3]);
+        keep(this.add.image(q.x, q.y, q.assetKey, frame).setOrigin(q.pivot[0], q.pivot[1]).setDisplaySize(q.width, q.height).setDepth(DEPTH_STORY));
+      }
       if (!g.placeholder) continue; // 그림이 있거나 열린 문 — 임시 사각형은 닫힌 문의 그림이 없을 때만
       keep(this.add.rectangle(gate.x, gate.y, gate.width, gate.height, 0x6b5a8a, 0.95).setOrigin(0, 0).setStrokeStyle(2, 0xdcd3f4, 1).setDepth(DEPTH_STORY));
       keep(this.add.text(gate.x + gate.width / 2, gate.y - 6, gate.label, { fontSize: '13px', color: '#dcd3f4' }).setOrigin(0.5, 1).setDepth(DEPTH_STORY));

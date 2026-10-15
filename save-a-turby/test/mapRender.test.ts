@@ -433,3 +433,18 @@ test('nubi-color-drain: 1152×192(6×192 프레임) 파일, 1회 재생(repeat 0
   assert.match(scene, /'nubi-color-restore'/);
   assert.doesNotMatch(scene, /start: sheet\.frames - 1, end: 0/, '역재생 없음');
 });
+
+test('열린 문 조각(10-15 C2-7C): openPieces가 있으면 열린 문은 한 장 그림 대신 열림 그림의 조각(frame)으로 그리고, 닫힌 문·텍스처 없음·조각 없음은 기존대로다', () => {
+  const pieces = [
+    { x: 1360, y: 996, width: 42, height: 64, pivot: [0.5, 1] as [number, number], frame: [80, 0, 646, 1024] as [number, number, number, number] },
+    { x: 1360, y: 1092, width: 36, height: 64, pivot: [0.5, 1] as [number, number], frame: [903, 0, 572, 1024] as [number, number, number, number] },
+  ];
+  const gate = (open: boolean, withPieces = true) => ({ ...view(), gates: [{ id: 'gate_reed_maze', label: '물풀문', x: 1340, y: 976, width: 40, height: 108, open, closedAssetKey: 'reed-gate-closed', openAssetKey: 'reed-gate-open', art: { x: 1360, y: 1092, width: 56, height: 120, pivot: [0.5, 1] as [number, number] }, ...(withPieces ? { openPieces: pieces } : {}) }] });
+  const opened = planStageRender(gate(true), all, SIZE).gates[0];
+  assert.equal(opened.art, null);
+  assert.deepEqual(opened.pieces.map((q) => [q.assetKey, q.frame, q.y]), [['reed-gate-open', [80, 0, 646, 1024], 996], ['reed-gate-open', [903, 0, 572, 1024], 1092]]);
+  const closed = planStageRender(gate(false), all, SIZE).gates[0];
+  assert.deepEqual([closed.art?.assetKey, closed.pieces.length, closed.placeholder], ['reed-gate-closed', 0, false]);
+  assert.deepEqual(planStageRender(gate(true), none, SIZE).gates[0].pieces, []); // 텍스처가 없으면 아무것도 그리지 않는다(열린 문)
+  assert.equal(planStageRender(gate(true, false), all, SIZE).gates[0].art?.assetKey, 'reed-gate-open'); // 조각이 없으면 한 장 그림
+});

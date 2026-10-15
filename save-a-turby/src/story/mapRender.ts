@@ -37,6 +37,7 @@ export interface GatePlan {
   open: boolean;
   art: { assetKey: string; x: number; y: number; width: number; height: number; pivot: [number, number] } | null; // 이 상태의 그림(없으면 null). 닫힘·열림이 같은 캔버스·피벗이라 전환 때 위치가 튀지 않는다
   placeholder: boolean; // 그림이 없어 임시 도형(닫힌 문 사각형)을 쓴다 — 닫힌 문만. 열린 문은 아무것도 그리지 않는다
+  pieces: { assetKey: string; frame: [number, number, number, number]; x: number; y: number; width: number; height: number; pivot: [number, number] }[]; // 열린 문을 열림 그림의 조각으로 그릴 때(그때 art는 null)
 }
 export interface ActorPlan {
   id: string;
@@ -77,8 +78,10 @@ export function planStageRender(view: StageView | null, has: HasTexture, fallbac
 
   const gates: GatePlan[] = (view?.gates ?? []).map((g) => {
     const key = g.open ? g.openAssetKey : g.closedAssetKey;
-    const art = key && g.art && has(key) ? { assetKey: key, ...g.art, pivot: g.art.pivot ?? ([0.5, 0.5] as [number, number]) } : null;
-    return { id: g.id, open: g.open, art, placeholder: !g.open && !art };
+    // 열린 문에 조각 배치(openPieces)가 있으면 한 장 그림 대신 조각으로 그린다(세로 문의 가운데 틈, 10-15 C2-7C)
+    const pieces = g.open && key && g.openPieces && has(key) ? g.openPieces.map((q) => ({ assetKey: key, frame: q.frame, x: q.x, y: q.y, width: q.width, height: q.height, pivot: q.pivot ?? ([0.5, 0.5] as [number, number]) })) : [];
+    const art = key && g.art && has(key) && pieces.length === 0 ? { assetKey: key, ...g.art, pivot: g.art.pivot ?? ([0.5, 0.5] as [number, number]) } : null;
+    return { id: g.id, open: g.open, art, placeholder: !g.open && !art, pieces };
   });
 
   // 임시 표식 모드: fallback(기본) = 항상 유지 / final = 그림이 있는 대상의 임시 표식을 없앤다(Codex가 최종 에셋 연결 완료를 확인한 뒤 데이터에서 바꾼다)
