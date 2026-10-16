@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
-import type { SweetShopCafeState } from 'sweet-shop-contracts';
+import type { SweetShopCafeState, SweetShopRealtimePlayer } from 'sweet-shop-contracts';
 import {
   CAFE_FACILITIES, findPath, isWalkable, MAP_HEIGHT, MAP_WIDTH, nearestWalkable,
   TILE_SIZE, tileCenter, type CafeFacility, type TilePoint, worldToTile,
 } from './cafeMap';
-import { LocalSweetShopGateway } from './shopGateway';
-import { ShopFacilityPanel } from './ShopFacilityPanel';
+import { createSweetShopGateway } from './shopGateway';
+import { CafeStreetScreen, ShopFacilityPanel } from './ShopFacilityPanel';
 import cafeBackground from './assets/cafe-workshop-background.png';
 import cafeDoorImage from './assets/facility-cafe-door.png';
 import cookingCounterImage from './assets/facility-cooking-counter.png';
@@ -57,7 +57,7 @@ function loadScene(): SceneSave {
 }
 
 export function SweetShopGame({ onExit }: SweetShopGameProps) {
-  const gateway = useMemo(() => new LocalSweetShopGateway(), []);
+  const gateway = useMemo(() => createSweetShopGateway(), []);
   const initialScene = useMemo(loadScene, []);
   const viewportRef = useRef<HTMLDivElement>(null);
   const pointers = useRef(new Map<number, PointerPosition>());
@@ -73,7 +73,12 @@ export function SweetShopGame({ onExit }: SweetShopGameProps) {
   const [tutorialSeen, setTutorialSeen] = useState(initialScene.tutorialSeen);
   const [now, setNow] = useState(Date.now());
   const [message, setMessage] = useState<{ text: string; good: boolean } | null>(null);
+  const [streetOpen, setStreetOpen] = useState(false);
   const [npcVisit, setNpcVisit] = useState<{ saleId: string; buyerName: string; dessertName: string; totalPrice: number } | null>(null);
+  const [onlineVisitors, setOnlineVisitors] = useState<SweetShopRealtimePlayer[]>([]);
+  const [hostChatOpen, setHostChatOpen] = useState(false);
+  const [hostChatInput, setHostChatInput] = useState('');
+  const [hostChatMessages, setHostChatMessages] = useState<Array<{ profileId: string; nickname: string; message: string }>>([]);
   const knownSaleId = useRef<string | null | undefined>(undefined);
 
   const refreshCafe = useCallback(async () => { setCafe(await gateway.loadCafe()); }, [gateway]);
@@ -81,6 +86,36 @@ export function SweetShopGame({ onExit }: SweetShopGameProps) {
     setMessage({ text, good });
     window.setTimeout(() => setMessage((current) => current?.text === text ? null : current), 2600);
   }, []);
+
+  useEffect(() => {
+    if (!cafe || streetOpen) return;
+    const position = tileCenter(character);
+    void gateway.enterRealtimeCafe({ cafeProfileId: '', x: position.x, y: position.y }).then((result) => { setOnlineVisitors((result.data?.players ?? []).filter((item) => !item.isOwner)); setHostChatMessages((result.data?.chatMessages ?? []).map((item) => ({ profileId: item.profileId, nickname: item.nickname, message: item.message }))); });
+    return () => { setOnlineVisitors([]); void gateway.leaveRealtimeCafe(); };
+  }, [cafe?.profile.profileId, gateway, streetOpen]);
+
+  useEffect(() => gateway.onRealtimePresence((event) => {
+    if (event.type === 'left' && event.profileId) setOnlineVisitors((current) => current.filter((item) => item.profileId !== event.profileId));
+    else if (event.player && !event.player.isOwner) setOnlineVisitors((current) => [...current.filter((item) => item.profileId !== event.player!.profileId), event.player!]);
+  }), [gateway]);
+
+  useEffect(() => gateway.onCafePurchase((event) => {
+    if (!cafe || event.profileId !== cafe.profile.profileId) return;
+    showMessage(`${event.dessertName} 판매 완료! +${event.totalPrice}G`, true);
+    void refreshCafe();
+  }), [cafe?.profile.profileId, gateway, refreshCafe, showMessage]);
+
+  useEffect(() => gateway.onCafeChat((event) => {
+    if (!cafe || streetOpen || event.cafeProfileId !== cafe.profile.profileId) return;
+    setHostChatMessages((current) => [...current.slice(-19), { profileId: event.profileId, nickname: event.nickname, message: event.message }]);
+    showMessage(`💬 ${event.nickname}: ${event.message}`, true);
+  }), [cafe?.profile.profileId, gateway, showMessage, streetOpen]);
+
+  useEffect(() => {
+    if (!cafe || streetOpen) return;
+    const position = tileCenter(character);
+    gateway.moveRealtimeCafe(position);
+  }, [cafe?.profile.profileId, character.x, character.y, gateway, streetOpen]);
 
   const clampCamera = useCallback((next: CameraState): CameraState => {
     const viewport = viewportRef.current;
@@ -112,6 +147,10 @@ export function SweetShopGame({ onExit }: SweetShopGameProps) {
   }, [character, setCamera]);
 
   useEffect(() => { void refreshCafe(); }, [refreshCafe]);
+
+  useEffect(() => {
+    if (cafe?.tutorial.firstCookingCompleted) setTutorialSeen(true);
+  }, [cafe?.tutorial.firstCookingCompleted]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -287,17 +326,19 @@ export function SweetShopGame({ onExit }: SweetShopGameProps) {
   return (
     <main className="sweet-shop-game">
       <header className="sweet-shop-header">
-        <button type="button" onClick={onExit}>← 허브</button>
-        <div><small>GAME 04 · CAFE {cafe && !firstCookingTutorialCompleted && <em className="tutorial-label">첫 조리 안내 중</em>}</small><h1>{cafe?.profile.cafeName ?? '달콤상점'} {cafe?.buff && <em className="header-buff">✨ +{cafe.buff.qualityBonus}</em>}</h1></div>
+        <button type="button" onClick={streetOpen ? () => setStreetOpen(false) : onExit}>{streetOpen ? '← 공방' : '← 허브'}</button>
+        <div><small>GAME 04 · CAFE {cafe && !firstCookingTutorialCompleted && <em className="tutorial-label">첫 조리 안내 중</em>}</small><h1>{streetOpen ? '달콤한 카페 거리' : cafe?.profile.cafeName ?? '달콤상점'} {!streetOpen && cafe?.buff && <em className="header-buff">✨ +{cafe.buff.qualityBonus}</em>}</h1></div>
         <strong>🪙 {cafe?.profile.gold ?? 0}</strong>
       </header>
 
       <div ref={viewportRef} className="cafe-viewport" onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp}>
+        {streetOpen && cafe ? <CafeStreetScreen cafe={cafe} gateway={gateway} onRefresh={refreshCafe} onMessage={showMessage} onExit={() => setStreetOpen(false)} /> : <>
         <div className="cafe-world" style={{ width: MAP_WIDTH, height: MAP_HEIGHT, backgroundImage: `url(${cafeBackground})`, transform: `translate(${-camera.x * camera.zoom}px, ${-camera.y * camera.zoom}px) scale(${camera.zoom})` }}>
           <div className="cafe-title-rug">SWEET WORKSHOP</div>
           {CAFE_FACILITIES.map((facility) => (
             <div key={facility.id} data-facility-id={facility.id} className={`cafe-facility cafe-facility-${facility.id}`} style={{ left: facility.x * TILE_SIZE, top: facility.y * TILE_SIZE, width: facility.width * TILE_SIZE, height: facility.height * TILE_SIZE }}>
               <img src={FACILITY_IMAGES[facility.id]} alt="" aria-hidden="true" draggable={false}/><b>{facility.name}</b>
+              {facility.id === 'display-stand' && <div className="display-stock-preview" aria-hidden="true">{['🍪', '🧁', '🍰'].map((icon, index) => <span className={index < (cafe?.listings.length ?? 0) ? 'filled' : ''} key={icon}>{icon}</span>)}</div>}
               {facility.id === 'order-board' && <em>재료 주문</em>}
               {facility.id === 'cooking-counter' && <em>{activeCooking ? '조리 확인' : cookieReady ? '만들기 가능!' : '조리하기'}</em>}
               {facility.id === 'display-stand' && cafe && <em>{cafe.listings.length}/3 진열</em>}
@@ -310,6 +351,7 @@ export function SweetShopGame({ onExit }: SweetShopGameProps) {
             return <div key={`${facility.id}-access`} className="facility-access" style={{ left: point.x, top: point.y }}>◆</div>;
           })}
           <div data-character className={`cafe-character cafe-character-${direction} ${path.length ? 'is-walking' : ''}`} style={{ left: characterWorld.x, top: characterWorld.y }} aria-label="나의 캐릭터"><img src={playerChefImage} alt="나의 제빵사" draggable={false}/><i /></div>
+          {onlineVisitors.map((visitor) => <div className="cafe-online-visitor" key={visitor.profileId} style={{ left: visitor.x, top: visitor.y }}><b>{visitor.nickname}</b><img src={playerChefImage} alt={`${visitor.nickname} 손님`} draggable={false}/><i /></div>)}
           {npcVisit && (() => {
             const appearance = appearanceForBuyer(npcVisit.buyerName);
             const door = CAFE_FACILITIES.find((facility) => facility.id === 'cafe-door')!;
@@ -328,6 +370,11 @@ export function SweetShopGame({ onExit }: SweetShopGameProps) {
           <output>{Math.round(camera.zoom * 100)}%</output>
         </div>
 
+        <aside className={`host-cafe-chat ${hostChatOpen ? 'is-open' : ''}`} onPointerDown={(event) => event.stopPropagation()}>
+          <button className="host-chat-toggle" type="button" onClick={() => setHostChatOpen((current) => !current)}>💬<span>카페 채팅</span>{onlineVisitors.length > 0 && <b>{onlineVisitors.length}</b>}</button>
+          {hostChatOpen && <div className="host-chat-panel"><header><strong>내 카페 채팅</strong><small>접속 손님 {onlineVisitors.length}명</small></header><div className="host-chat-log">{hostChatMessages.map((item, index) => <p key={`${item.profileId}-${index}`}><b>{item.profileId === cafe?.profile.profileId ? '나' : item.nickname}</b><span>{item.message}</span></p>)}{!hostChatMessages.length && <small>방문객과 인사를 나눠보세요.</small>}</div><form onSubmit={(event) => { event.preventDefault(); const message = hostChatInput.trim(); if (!message) return; gateway.sendCafeChat(message); setHostChatInput(''); }}><input maxLength={80} value={hostChatInput} onChange={(event) => setHostChatInput(event.target.value)} placeholder="메시지 입력"/><button type="submit">전송</button></form></div>}
+        </aside>
+
         {tutorialSeen && !firstCookingTutorialCompleted && !openFacility && <aside className="first-quest" onPointerDown={(event) => event.stopPropagation()}><span>{guide.icon}</span><div><strong>첫 조리 · {guide.title}</strong><small>{guide.text}</small></div><button type="button" onClick={() => goToFacility(guide.facilityId)}>{guide.action} →</button></aside>}
 
         {!tutorialSeen && <aside className="cafe-tutorial"><strong>공방 조작법</strong><p>바닥이나 시설을 짧게 터치하세요.<br />드래그하면 화면 이동, 두 손가락으로 확대·축소합니다.</p><button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => setTutorialSeen(true)}>알겠어요</button></aside>}
@@ -337,10 +384,11 @@ export function SweetShopGame({ onExit }: SweetShopGameProps) {
         {openFacility && cafe && <section className={`facility-panel facility-panel-${openFacility.id}`} role="dialog" aria-modal="true" aria-label={openFacility.name} onPointerDown={(event) => event.stopPropagation()}>
           <button className="facility-close" type="button" onClick={() => setOpenFacility(null)}>×</button>
           <header className="facility-panel-title"><span>{openFacility.icon}</span><div><small>SWEET WORKSHOP</small><h2>{openFacility.name}</h2></div></header>
-          <ShopFacilityPanel facilityId={openFacility.id} cafe={cafe} gateway={gateway} now={now} onRefresh={refreshCafe} onMessage={showMessage} onNavigate={goToFacility} />
+          <ShopFacilityPanel facilityId={openFacility.id} cafe={cafe} gateway={gateway} now={now} onRefresh={refreshCafe} onMessage={showMessage} onNavigate={goToFacility} onEnterCafeStreet={() => { setOpenFacility(null); setStreetOpen(true); }} />
         </section>}
+        </>}
       </div>
-      <footer>싱글 개발 모드 · 소켓 전송 없음</footer>
+      <footer>{streetOpen ? '카페 거리 · 이웃의 달콤상점을 직접 방문해보세요' : '달콤상점 · 비동기 온라인 카페 운영 중'}</footer>
     </main>
   );
 }

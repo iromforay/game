@@ -1,12 +1,14 @@
 import {
-  INGREDIENTS, RECIPES, type BuyDessertRequest, type CreateGuestbookRequest,
+  INGREDIENTS, RECIPES, SWEET_SHOP_EVENTS, type ActivateAdvertisementRequest, type BuyDessertRequest, type CreateGuestbookRequest,
   type CompleteFirstCookingTutorialRequest, type CreateListingRequest, type DessertQuality, type EatDessertRequest,
-  type IngredientId, type OrderIngredientsRequest, type ReceiveCookingRequest,
-  type ReceiveDeliveryRequest, type RemoveListingRequest, type StartCookingRequest,
+  type IngredientId, type OrderIngredientsRequest, type ReceiveCookingRequest, type RecipeId,
+  type ProfileTargetRequest, type ReceiveDeliveryRequest, type RemoveListingRequest, type ReplyGuestbookRequest, type ReportProfileRequest, type StartCookingRequest,
   type SweetShopCafeState, type SweetShopCafeSummary,
   type SweetShopGateway, type SweetShopResult, type SweetShopVisitedCafe,
-  type UpdateListingRequest, type VisitCafeRequest,
+  type UpdateListingRequest, type VisitCafeRequest, type EnterRealtimeCafeRequest,
+  type MoveRealtimeCafeRequest, type SweetShopCafeAccessRevokedEvent, type SweetShopCafeChatEvent, type SweetShopCafeDisplayEvent, type SweetShopCafeOpenEvent, type SweetShopCafePurchaseEvent, type SweetShopRealtimeEvent, type SweetShopRealtimePlayer,
 } from 'sweet-shop-contracts';
+import { io, type Socket } from 'socket.io-client';
 import { NPC_BUYER_NAMES } from './customerNpcs';
 
 export const SWEET_SHOP_SERVER_URL: string =
@@ -25,24 +27,27 @@ export function dessertPriceRange(recipeId: string, quality: DessertQuality): [n
 
 const NPC_CAFES: SweetShopVisitedCafe[] = [
   {
-    accountId: 'npc-berry', cafeName: '딸기구름 카페', ownerName: '베리', icon: '🐰', level: 8,
+    profileId: 'npc-berry', cafeName: '딸기구름 카페', ownerName: '베리', icon: '🐰', level: 8,
     representativeDessert: '딸기 마카롱', listingCount: 2, greeting: '딸기 향이 가득한 오늘의 디저트를 맛보세요!',
+    guestbook: [],
     listings: [
       { id: 'berry-macaron', recipeId: 'strawberry-macaron', name: '딸기 마카롱', quality: 'excellent', level: 3, quantity: 8, unitPrice: 68 },
       { id: 'berry-pudding', recipeId: 'milk-pudding', name: '우유 푸딩', quality: 'good', level: 2, quantity: 10, unitPrice: 42 },
     ],
   },
   {
-    accountId: 'npc-cookie', cafeName: '노을 쿠키집', ownerName: '쿠키 할머니', icon: '🧑‍🍳', level: 5,
+    profileId: 'npc-cookie', cafeName: '노을 쿠키집', ownerName: '쿠키 할머니', icon: '🧑‍🍳', level: 5,
     representativeDessert: '버터 쿠키', listingCount: 2, greeting: '갓 구운 쿠키 하나 먹고 천천히 쉬어가렴.',
+    guestbook: [],
     listings: [
       { id: 'cookie-butter', recipeId: 'butter-cookie', name: '버터 쿠키', quality: 'good', level: 1, quantity: 20, unitPrice: 30 },
       { id: 'cookie-cupcake', recipeId: 'choco-cupcake', name: '초코 컵케이크', quality: 'excellent', level: 4, quantity: 6, unitPrice: 88 },
     ],
   },
   {
-    accountId: 'npc-moon', cafeName: '달빛 디저트 연구소', ownerName: '루나', icon: '🦊', level: 12,
+    profileId: 'npc-moon', cafeName: '달빛 디저트 연구소', ownerName: '루나', icon: '🦊', level: 12,
     representativeDessert: '허니 케이크', listingCount: 2, greeting: '한 조각에 특별한 조리 영감을 담았어요.',
+    guestbook: [],
     listings: [
       { id: 'moon-cake', recipeId: 'honey-cake', name: '허니 케이크', quality: 'premium', level: 5, quantity: 4, unitPrice: 210 },
       { id: 'moon-macaron', recipeId: 'strawberry-macaron', name: '딸기 마카롱', quality: 'premium', level: 3, quantity: 5, unitPrice: 130 },
@@ -52,7 +57,7 @@ const NPC_CAFES: SweetShopVisitedCafe[] = [
 
 function initialState(): SweetShopCafeState {
   return {
-    profile: { cafeName: '나의 달콤상점', level: 1, experience: 0, gold: 100 },
+    profile: { profileId: 'local-guest', ownerName: '게스트', cafeName: '나의 달콤상점', level: 1, experience: 0, gold: 100 },
     storage: { ingredientSlotLimit: 12, dessertSlotLimit: 12 }, ingredients: {},
     tutorial: { firstCookingCompleted: false },
     unlockedRecipes: ['butter-cookie'], deliveries: [], cookingJobs: [], desserts: [], listings: [], sales: [], buff: null,
@@ -66,9 +71,17 @@ function settle(state: SweetShopCafeState): SweetShopCafeState {
   const next: SweetShopCafeState = {
     ...state,
     deliveries: state.deliveries.map((item) => item.status === 'ORDERED' && Date.parse(item.arrivesAt) <= now ? { ...item, status: 'ARRIVED' } : item),
-    cookingJobs: state.cookingJobs.map((item) => item.status === 'COOKING' && Date.parse(item.completesAt) <= now ? { ...item, status: 'COMPLETED' } : item),
+    cookingJobs: state.cookingJobs.map((item) => {
+      if (item.status === 'RECEIVED' || item.status === 'WAITING_FOR_SPACE') return item;
+      if (Date.parse(item.completesAt) <= now) return { ...item, status: 'COMPLETED' };
+      if (Date.parse(item.startedAt) <= now) return { ...item, status: 'COOKING' };
+      return { ...item, status: 'QUEUED' };
+    }),
     updatedAt: new Date().toISOString(),
   };
+  if (!next.tutorial.firstCookingCompleted && next.cookingJobs.some((item) => item.recipeId === 'butter-cookie' && Date.parse(item.completesAt) <= now)) {
+    next.tutorial.firstCookingCompleted = true;
+  }
   if (next.buff && Date.parse(next.buff.endsAt) <= now) next.buff = null;
   for (const listing of [...next.listings]) {
     if (Date.parse(listing.nextNpcPurchaseAt) > now || listing.quantity < 1) continue;
@@ -132,12 +145,15 @@ export class LocalSweetShopGateway implements SweetShopGateway {
   async startCooking(request: StartCookingRequest): Promise<SweetShopResult<{ cookingId: string; completesAt: string }>> {
     const state = await this.loadCafe(); const recipe = RECIPES.find((item) => item.id === request.recipeId);
     if (!recipe || !state.unlockedRecipes.includes(request.recipeId)) return fail('RECIPE_LOCKED', '아직 획득하지 않은 레시피입니다.');
-    if (state.cookingJobs.some((item) => item.status !== 'RECEIVED')) return fail('COUNTER_BUSY', '진행 중인 조리를 먼저 완료해주세요.');
+    const pendingJobs = state.cookingJobs.filter((item) => item.status !== 'RECEIVED');
+    if (pendingJobs.length >= 5) return fail('COOKING_QUEUE_FULL', '조리 대기열 5칸이 모두 찼습니다. 완성된 디저트를 먼저 담아주세요.');
     for (const [id, amount] of Object.entries(recipe.ingredients)) if ((state.ingredients[id as IngredientId] ?? 0) < (amount ?? 0) * request.quantity) return fail('NOT_ENOUGH_INGREDIENTS', '필요한 재료가 부족합니다.');
     for (const [id, amount] of Object.entries(recipe.ingredients)) state.ingredients[id as IngredientId] = (state.ingredients[id as IngredientId] ?? 0) - (amount ?? 0) * request.quantity;
-    const startedAt = new Date(); const completesAt = new Date(startedAt.getTime() + recipe.cookSeconds * 1000).toISOString(); const cookingId = makeId('cooking');
-    state.cookingJobs.push({ id: cookingId, recipeId: recipe.id, quantity: request.quantity, startedAt: startedAt.toISOString(), completesAt, status: 'COOKING' });
-    this.save(state); return { ok: true, data: { cookingId, completesAt }, message: `${recipe.name} 조리를 시작했습니다.` };
+    const lastScheduledAt = pendingJobs.reduce((latest, item) => Math.max(latest, Date.parse(item.completesAt)), Date.now());
+    const startedAt = new Date(lastScheduledAt); const completesAt = new Date(startedAt.getTime() + recipe.cookSeconds * 1000).toISOString(); const cookingId = makeId('cooking');
+    const status = pendingJobs.length ? 'QUEUED' : 'COOKING';
+    state.cookingJobs.push({ id: cookingId, recipeId: recipe.id, quantity: request.quantity, startedAt: startedAt.toISOString(), completesAt, status });
+    this.save(state); return { ok: true, data: { cookingId, completesAt }, message: pendingJobs.length ? `${recipe.name}을 ${pendingJobs.length + 1}번째 대기열에 추가했습니다.` : `${recipe.name} 조리를 시작했습니다.` };
   }
 
   async receiveCooking(request: ReceiveCookingRequest): Promise<SweetShopResult<{ dessertId: string }>> {
@@ -156,8 +172,9 @@ export class LocalSweetShopGateway implements SweetShopGateway {
     const completesTutorial = job.recipeId === 'butter-cookie' && !state.tutorial.firstCookingCompleted;
     state.recipeProgress[job.recipeId] = { masteryExperience: progress.masteryExperience + 10 * job.quantity, craftCount: progress.craftCount + job.quantity, bestQuality: !progress.bestQuality || QUALITY_ORDER.indexOf(quality) > QUALITY_ORDER.indexOf(progress.bestQuality) ? quality : progress.bestQuality };
     const totalCrafts = Object.values(state.recipeProgress).reduce((sum, item) => sum + (item?.craftCount ?? 0), 0);
-    const unlocks: Array<[number, typeof recipe.id]> = [[1, 'milk-pudding'], [3, 'strawberry-macaron'], [6, 'choco-cupcake'], [10, 'honey-cake']];
+    const unlocks: Array<[number, RecipeId]> = [[1, 'milk-pudding'], [3, 'strawberry-macaron'], [6, 'choco-cupcake'], [10, 'honey-cake'], [15, 'vanilla-cream-puff'], [21, 'berry-tart'], [28, 'caramel-eclair'], [36, 'royal-choco-gateau'], [45, 'starlight-celebration-cake']];
     for (const [required, recipeId] of unlocks) if (totalCrafts >= required && !state.unlockedRecipes.includes(recipeId)) state.unlockedRecipes.push(recipeId);
+    state.profile.level = 1 + unlocks.filter(([required]) => totalCrafts >= required).length;
     if (completesTutorial) state.tutorial.firstCookingCompleted = true;
     state.profile.experience += 5 * job.quantity; job.status = 'RECEIVED'; this.save(state);
     return { ok: true, data: { dessertId }, message: completesTutorial ? '첫 버터 쿠키 완성! 첫 조리 안내를 마쳤습니다. 이제 자유롭게 카페를 운영해보세요.' : `${recipe.name}이 완성되어 디저트 상자에 보관되었습니다.` };
@@ -209,7 +226,7 @@ export class LocalSweetShopGateway implements SweetShopGateway {
   }
 
   async visitCafe(request: VisitCafeRequest): Promise<SweetShopResult<SweetShopVisitedCafe>> {
-    const cafe = NPC_CAFES.find((item) => item.accountId === request.cafeAccountId);
+    const cafe = NPC_CAFES.find((item) => item.profileId === request.cafeProfileId);
     return cafe ? { ok: true, data: cafe } : fail('CAFE_NOT_FOUND', '방문할 카페를 찾지 못했습니다.');
   }
 
@@ -233,6 +250,25 @@ export class LocalSweetShopGateway implements SweetShopGateway {
     this.save(state); return { ok: true, data: { buffEndsAt }, message: `${dessert.name} 디저트를 먹었습니다! 3분 동안 Lv.${dessert.level} 이하 조리 품질이 +${qualityBonus}등급 상승합니다.` };
   }
   createGuestbook(_r: CreateGuestbookRequest): Promise<SweetShopResult<{ guestbookId: string }>> { return this.later(); }
+  replyGuestbook(_r: ReplyGuestbookRequest): Promise<SweetShopResult<{ guestbookId: string }>> { return this.later(); }
+  listFriends(): Promise<SweetShopResult<SweetShopCafeSummary[]>> { return Promise.resolve({ ok: true, data: [] }); }
+  addFriend(_r: ProfileTargetRequest): Promise<SweetShopResult<{ profileId: string }>> { return this.later(); }
+  removeFriend(_r: ProfileTargetRequest): Promise<SweetShopResult<{ profileId: string }>> { return this.later(); }
+  blockProfile(_r: ProfileTargetRequest): Promise<SweetShopResult<{ profileId: string }>> { return this.later(); }
+  listBlockedProfiles(): Promise<SweetShopResult<SweetShopCafeSummary[]>> { return Promise.resolve({ ok: true, data: [] }); }
+  unblockProfile(_r: ProfileTargetRequest): Promise<SweetShopResult<{ profileId: string }>> { return this.later(); }
+  reportProfile(_r: ReportProfileRequest): Promise<SweetShopResult<{ reportId: string }>> { return this.later(); }
+  activateAdvertisement(_r: ActivateAdvertisementRequest): Promise<SweetShopResult<{ endsAt: string }>> { return this.later(); }
+  async enterRealtimeCafe(_r: EnterRealtimeCafeRequest): Promise<SweetShopResult<{ players: SweetShopRealtimePlayer[]; chatMessages?: SweetShopCafeChatEvent[] }>> { return { ok: true, data: { players: [], chatMessages: [] } }; }
+  async leaveRealtimeCafe(): Promise<SweetShopResult<Record<string, never>>> { return { ok: true, data: {} }; }
+  moveRealtimeCafe(_r: MoveRealtimeCafeRequest) { /* 로컬 데모에는 원격 사용자가 없다. */ }
+  onRealtimePresence(_listener: (event: SweetShopRealtimeEvent) => void) { return () => undefined; }
+  onCafeOpenState(_listener: (event: SweetShopCafeOpenEvent) => void) { return () => undefined; }
+  onCafeDisplayChanged(_listener: (event: SweetShopCafeDisplayEvent) => void) { return () => undefined; }
+  sendCafeChat(_message: string): Promise<SweetShopResult<{ cafeProfileId: string; participantCount: number }>> { return Promise.resolve({ ok: true, data: { cafeProfileId: '', participantCount: 1 } }); }
+  onCafeChat(_listener: (event: SweetShopCafeChatEvent) => void) { return () => undefined; }
+  onCafePurchase(_listener: (event: SweetShopCafePurchaseEvent) => void) { return () => undefined; }
+  onCafeAccessRevoked(_listener: (event: SweetShopCafeAccessRevokedEvent) => void) { return () => undefined; }
   private returnListingDessert(state: SweetShopCafeState, listing: SweetShopCafeState['listings'][number], quantity: number) {
     const existing = state.desserts.find((item) => item.recipeId === listing.recipeId && item.quality === listing.quality && item.source === 'crafted');
     if (existing) existing.quantity += quantity;
@@ -244,19 +280,80 @@ export class LocalSweetShopGateway implements SweetShopGateway {
 
 export class SocketSweetShopGateway implements SweetShopGateway {
   readonly serverUrl = SWEET_SHOP_SERVER_URL;
-  async loadCafe(): Promise<SweetShopCafeState> { throw new Error('달콤상점 멀티플레이는 아직 비활성화되어 있습니다.'); }
-  async orderIngredients(_r: OrderIngredientsRequest): Promise<SweetShopResult<{ deliveryId: string }>> { return this.disabled(); }
-  receiveDelivery(_r: ReceiveDeliveryRequest): Promise<SweetShopResult<SweetShopCafeState>> { return this.disabled(); }
-  startCooking(_r: StartCookingRequest): Promise<SweetShopResult<{ cookingId: string; completesAt: string }>> { return this.disabled(); }
-  receiveCooking(_r: ReceiveCookingRequest): Promise<SweetShopResult<{ dessertId: string }>> { return this.disabled(); }
-  completeFirstCookingTutorial(_r: CompleteFirstCookingTutorialRequest): Promise<SweetShopResult<SweetShopCafeState>> { return this.disabled(); }
-  createListing(_r: CreateListingRequest): Promise<SweetShopResult<{ listingId: string }>> { return this.disabled(); }
-  updateListing(_r: UpdateListingRequest): Promise<SweetShopResult<{ listingId: string }>> { return this.disabled(); }
-  removeListing(_r: RemoveListingRequest): Promise<SweetShopResult<{ listingId: string }>> { return this.disabled(); }
-  listCafeStreet(): Promise<SweetShopResult<SweetShopCafeSummary[]>> { return this.disabled(); }
-  visitCafe(_r: VisitCafeRequest): Promise<SweetShopResult<SweetShopVisitedCafe>> { return this.disabled(); }
-  buyDessert(_r: BuyDessertRequest): Promise<SweetShopResult<{ dessertId: string }>> { return this.disabled(); }
-  eatDessert(_r: EatDessertRequest): Promise<SweetShopResult<{ buffEndsAt: string }>> { return this.disabled(); }
-  createGuestbook(_r: CreateGuestbookRequest): Promise<SweetShopResult<{ guestbookId: string }>> { return this.disabled(); }
-  private async disabled<T>(): Promise<SweetShopResult<T>> { return fail('MULTIPLAYER_DISABLED', '달콤상점 멀티플레이는 아직 비활성화되어 있습니다.'); }
+  private readonly socket: Socket = io(this.serverUrl, { transports: ['websocket'], autoConnect: true });
+  private currentRealtimeCafe: EnterRealtimeCafeRequest | null = null;
+  private connectedOnce = false;
+  constructor() {
+    this.socket.on('connect', () => {
+      if (this.connectedOnce && this.currentRealtimeCafe) this.socket.emit('sweet_shop:realtime:enter', { ...this.currentRealtimeCafe, token: this.token, guestId: this.guestId });
+      this.connectedOnce = true;
+    });
+  }
+  private get token() { return localStorage.getItem('bomul_auth_token'); }
+  private get guestId() { const key = 'sweet-shop-guest-id'; let value = localStorage.getItem(key); if (!value) { value = crypto.randomUUID(); localStorage.setItem(key, value); } return value; }
+  private emit<T>(event: string, request: object = {}): Promise<SweetShopResult<T>> {
+    return new Promise((resolve) => {
+      this.socket.timeout(7000).emit(event, { ...request, token: this.token, guestId: this.guestId }, (error: Error | null, result?: SweetShopResult<T>) => {
+        if (error || !result) resolve(fail('SERVER_UNAVAILABLE', '달콤상점 서버에 연결할 수 없습니다.'));
+        else resolve(result);
+      });
+    });
+  }
+  async loadCafe(): Promise<SweetShopCafeState> {
+    const result = await this.emit<SweetShopCafeState>('sweet_shop:cafe:load');
+    if (!result.ok || !result.data) throw new Error(result.message ?? '카페 정보를 불러오지 못했습니다.');
+    return result.data;
+  }
+  orderIngredients(r: OrderIngredientsRequest) { return this.emit<{ deliveryId: string }>('sweet_shop:ingredient:order', r); }
+  receiveDelivery(r: ReceiveDeliveryRequest) { return this.emit<SweetShopCafeState>('sweet_shop:delivery:receive', r); }
+  startCooking(r: StartCookingRequest) { return this.emit<{ cookingId: string; completesAt: string }>('sweet_shop:cooking:start', r); }
+  receiveCooking(r: ReceiveCookingRequest) { return this.emit<{ dessertId: string }>('sweet_shop:cooking:receive', r); }
+  completeFirstCookingTutorial(r: CompleteFirstCookingTutorialRequest) { return this.emit<SweetShopCafeState>('sweet_shop:tutorial:first-cooking:complete', r); }
+  createListing(r: CreateListingRequest) { return this.emit<{ listingId: string }>('sweet_shop:listing:create', r); }
+  updateListing(r: UpdateListingRequest) { return this.emit<{ listingId: string }>('sweet_shop:listing:update', r); }
+  removeListing(r: RemoveListingRequest) { return this.emit<{ listingId: string }>('sweet_shop:listing:remove', r); }
+  listCafeStreet() { return this.emit<SweetShopCafeSummary[]>('sweet_shop:cafe-street:list'); }
+  async visitCafe(r: VisitCafeRequest): Promise<SweetShopResult<SweetShopVisitedCafe>> {
+    try {
+      const response = await fetch(`${this.serverUrl}/sweet-shop/cafes/${encodeURIComponent(r.cafeProfileId)}`, { headers: { ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}), 'X-Sweet-Shop-Guest-Id': this.guestId } });
+      if (!response.ok) return fail('CAFE_FETCH_FAILED', '카페 정보를 불러오지 못했습니다.');
+      return await response.json() as SweetShopResult<SweetShopVisitedCafe>;
+    } catch {
+      return fail('SERVER_UNAVAILABLE', '달콤상점 서버에 연결할 수 없습니다.');
+    }
+  }
+  buyDessert(r: BuyDessertRequest) { return this.emit<{ dessertId: string }>('sweet_shop:dessert:buy', r); }
+  eatDessert(r: EatDessertRequest) { return this.emit<{ buffEndsAt: string }>('sweet_shop:dessert:eat', r); }
+  createGuestbook(r: CreateGuestbookRequest) { return this.emit<{ guestbookId: string }>('sweet_shop:guestbook:create', r); }
+  replyGuestbook(r: ReplyGuestbookRequest) { return this.emit<{ guestbookId: string }>(SWEET_SHOP_EVENTS.replyGuestbook, r); }
+  listFriends() { return this.emit<SweetShopCafeSummary[]>(SWEET_SHOP_EVENTS.listFriends); }
+  addFriend(r: ProfileTargetRequest) { return this.emit<{ profileId: string }>(SWEET_SHOP_EVENTS.addFriend, r); }
+  removeFriend(r: ProfileTargetRequest) { return this.emit<{ profileId: string }>(SWEET_SHOP_EVENTS.removeFriend, r); }
+  blockProfile(r: ProfileTargetRequest) { return this.emit<{ profileId: string }>(SWEET_SHOP_EVENTS.blockProfile, r); }
+  listBlockedProfiles() { return this.emit<SweetShopCafeSummary[]>(SWEET_SHOP_EVENTS.listBlockedProfiles); }
+  unblockProfile(r: ProfileTargetRequest) { return this.emit<{ profileId: string }>(SWEET_SHOP_EVENTS.unblockProfile, r); }
+  reportProfile(r: ReportProfileRequest) { return this.emit<{ reportId: string }>(SWEET_SHOP_EVENTS.reportProfile, r); }
+  activateAdvertisement(r: ActivateAdvertisementRequest) { return this.emit<{ endsAt: string }>(SWEET_SHOP_EVENTS.activateAdvertisement, r); }
+  enterRealtimeCafe(r: EnterRealtimeCafeRequest) { this.currentRealtimeCafe = r; return this.emit<{ players: SweetShopRealtimePlayer[]; chatMessages?: SweetShopCafeChatEvent[] }>('sweet_shop:realtime:enter', r); }
+  leaveRealtimeCafe() { this.currentRealtimeCafe = null; return this.emit<Record<string, never>>('sweet_shop:realtime:leave'); }
+  moveRealtimeCafe(r: MoveRealtimeCafeRequest) { this.socket.emit('sweet_shop:realtime:move', { ...r, token: this.token, guestId: this.guestId }); }
+  onRealtimePresence(listener: (event: SweetShopRealtimeEvent) => void) { this.socket.on('sweet_shop:realtime:presence', listener); return () => { this.socket.off('sweet_shop:realtime:presence', listener); }; }
+  onCafeOpenState(listener: (event: SweetShopCafeOpenEvent) => void) {
+    this.socket.on('sweet_shop:cafe-street:open-state', listener);
+    const reconnect = () => listener({ profileId: '', isOpen: true });
+    this.socket.on('connect', reconnect);
+    return () => { this.socket.off('sweet_shop:cafe-street:open-state', listener); this.socket.off('connect', reconnect); };
+  }
+  onCafeDisplayChanged(listener: (event: SweetShopCafeDisplayEvent) => void) {
+    this.socket.on('sweet_shop:cafe:display-changed', listener);
+    return () => { this.socket.off('sweet_shop:cafe:display-changed', listener); };
+  }
+  sendCafeChat(message: string) { return this.emit<{ cafeProfileId: string; participantCount: number }>('sweet_shop:cafe:chat-send', { message }); }
+  onCafeChat(listener: (event: SweetShopCafeChatEvent) => void) { this.socket.on('sweet_shop:cafe:chat-message', listener); return () => { this.socket.off('sweet_shop:cafe:chat-message', listener); }; }
+  onCafePurchase(listener: (event: SweetShopCafePurchaseEvent) => void) { this.socket.on('sweet_shop:cafe:purchase-notice', listener); return () => { this.socket.off('sweet_shop:cafe:purchase-notice', listener); }; }
+  onCafeAccessRevoked(listener: (event: SweetShopCafeAccessRevokedEvent) => void) { this.socket.on(SWEET_SHOP_EVENTS.cafeAccessRevoked, listener); return () => { this.socket.off(SWEET_SHOP_EVENTS.cafeAccessRevoked, listener); }; }
+}
+
+export function createSweetShopGateway(): SweetShopGateway {
+  return new SocketSweetShopGateway();
 }
