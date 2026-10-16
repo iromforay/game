@@ -16,6 +16,10 @@ export const SWEET_SHOP_SERVER_URL: string =
 
 const STORAGE_KEY = 'sweet-shop-local-state-v1';
 const QUALITY_ORDER: DessertQuality[] = ['normal', 'good', 'excellent', 'premium'];
+const INGREDIENT_QUALITY_BONUS = [0, 0.15, 0.35, 0.6];
+const normalRandom = () => { const u = Math.max(Number.EPSILON, Math.random()); const v = Math.max(Number.EPSILON, Math.random()); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
+const qualityIndexFromScore = (score: number) => score >= 1.881 ? 3 : score >= 1.282 ? 2 : score >= 0.674 ? 1 : 0;
+const masteryQualityBonus = (experience: number) => experience >= 1000 ? 0.6 : experience >= 500 ? 0.45 : experience >= 200 ? 0.3 : experience >= 50 ? 0.15 : 0;
 const QUALITY_PRICE: Record<DessertQuality, [number, number]> = {
   normal: [0.8, 1.2], good: [1, 1.6], excellent: [1.3, 2.1], premium: [1.8, 3],
 };
@@ -58,7 +62,7 @@ const NPC_CAFES: SweetShopVisitedCafe[] = [
 function initialState(): SweetShopCafeState {
   return {
     profile: { profileId: 'local-guest', ownerName: '게스트', cafeName: '나의 달콤상점', level: 1, experience: 0, gold: 100 },
-    storage: { ingredientSlotLimit: 12, dessertSlotLimit: 12 }, ingredients: {},
+    storage: { ingredientSlotLimit: 12, dessertSlotLimit: 12 }, ingredients: {}, ingredientQualities: {},
     tutorial: { firstCookingCompleted: false },
     unlockedRecipes: ['butter-cookie'], deliveries: [], cookingJobs: [], desserts: [], listings: [], sales: [], buff: null,
     recipeProgress: { 'butter-cookie': { masteryExperience: 0, craftCount: 0, bestQuality: null } },
@@ -84,7 +88,7 @@ function settle(state: SweetShopCafeState): SweetShopCafeState {
   }
   if (next.buff && Date.parse(next.buff.endsAt) <= now) next.buff = null;
   for (const listing of [...next.listings]) {
-    if (Date.parse(listing.nextNpcPurchaseAt) > now || listing.quantity < 1) continue;
+    if (listing.audience !== 'everyone' || Date.parse(listing.nextNpcPurchaseAt) > now || listing.quantity < 1) continue;
     listing.quantity -= 1;
     next.profile.gold += listing.unitPrice;
     next.sales.unshift({ id: makeId('sale'), listingId: listing.id, dessertName: listing.name, quantity: 1, totalPrice: listing.unitPrice, buyerName: NPC_BUYER_NAMES[Math.floor(Math.random() * NPC_BUYER_NAMES.length)], soldAt: new Date().toISOString() });
@@ -99,11 +103,11 @@ function normalize(value: Partial<SweetShopCafeState>): SweetShopCafeState {
   const base = initialState();
   return settle({
     ...base, ...value, profile: { ...base.profile, ...value.profile }, storage: { ...base.storage, ...value.storage }, tutorial: { ...base.tutorial, ...value.tutorial },
-    ingredients: value.ingredients ?? {}, unlockedRecipes: value.unlockedRecipes?.length ? value.unlockedRecipes : base.unlockedRecipes,
-    deliveries: value.deliveries ?? [], cookingJobs: value.cookingJobs ?? [],
+    ingredients: value.ingredients ?? {}, ingredientQualities: value.ingredientQualities ?? Object.fromEntries(Object.entries(value.ingredients ?? {}).map(([ingredientId, quantity]) => [ingredientId, { normal: quantity }])), unlockedRecipes: value.unlockedRecipes?.length ? value.unlockedRecipes : base.unlockedRecipes,
+    deliveries: (value.deliveries ?? []).map((delivery) => ({ ...delivery, quality: delivery.quality ?? 'normal' })), cookingJobs: value.cookingJobs ?? [],
     desserts: (value.desserts ?? []).map((item) => ({ ...item, level: item.level ?? RECIPES.find((recipe) => recipe.id === item.recipeId)?.level ?? 1, makerName: item.makerName ?? base.profile.cafeName, source: item.source ?? 'crafted' })),
     recipeProgress: value.recipeProgress ?? base.recipeProgress,
-    listings: value.listings ?? [], sales: value.sales ?? [], buff: value.buff ?? null,
+    listings: (value.listings ?? []).map((listing) => ({ ...listing, audience: listing.audience ?? 'everyone' })), sales: value.sales ?? [], buff: value.buff ?? null,
   });
 }
 
@@ -124,10 +128,10 @@ export class LocalSweetShopGateway implements SweetShopGateway {
     if (!ingredient || quantity < 1 || quantity > 99) return fail('INVALID_ORDER', '주문 수량은 1~99개까지 가능합니다.');
     const totalPrice = ingredient.unitPrice * quantity;
     if (state.profile.gold < totalPrice) return fail('NOT_ENOUGH_GOLD', '골드가 부족합니다.');
-    const orderedAt = new Date(); const deliveryId = makeId('delivery');
+    const orderedAt = new Date(); const deliveryId = makeId('delivery'); const quality = QUALITY_ORDER[qualityIndexFromScore(normalRandom())];
     state.profile.gold -= totalPrice;
-    state.deliveries.push({ id: deliveryId, ingredientId: ingredient.id, quantity, totalPrice, orderedAt: orderedAt.toISOString(), arrivesAt: new Date(orderedAt.getTime() + ingredient.deliverySeconds * 1000).toISOString(), status: 'ORDERED' });
-    this.save(state); return { ok: true, data: { deliveryId }, message: `${ingredient.name} ${quantity}개를 주문했습니다.` };
+    state.deliveries.push({ id: deliveryId, ingredientId: ingredient.id, quantity, quality, totalPrice, orderedAt: orderedAt.toISOString(), arrivesAt: new Date(orderedAt.getTime() + ingredient.deliverySeconds * 1000).toISOString(), status: 'ORDERED' });
+    this.save(state); return { ok: true, data: { deliveryId }, message: `${ingredient.name} ${quantity}개를 주문했습니다. 도착 품질은 ${quality}입니다.` };
   }
 
   async receiveDelivery(request: ReceiveDeliveryRequest): Promise<SweetShopResult<SweetShopCafeState>> {
@@ -139,6 +143,7 @@ export class LocalSweetShopGateway implements SweetShopGateway {
       delivery.status = 'WAITING_FOR_SPACE'; this.save(state); return fail('INGREDIENT_STORAGE_FULL', '재료 보관함에 빈칸이 없습니다.');
     }
     state.ingredients[delivery.ingredientId] = (state.ingredients[delivery.ingredientId] ?? 0) + delivery.quantity;
+    const qualityStock = state.ingredientQualities[delivery.ingredientId] ?? {}; qualityStock[delivery.quality] = (qualityStock[delivery.quality] ?? 0) + delivery.quantity; state.ingredientQualities[delivery.ingredientId] = qualityStock;
     delivery.status = 'RECEIVED'; this.save(state); return { ok: true, data: state, message: '재료를 보관함에 넣었습니다.' };
   }
 
@@ -148,11 +153,13 @@ export class LocalSweetShopGateway implements SweetShopGateway {
     const pendingJobs = state.cookingJobs.filter((item) => item.status !== 'RECEIVED');
     if (pendingJobs.length >= 5) return fail('COOKING_QUEUE_FULL', '조리 대기열 5칸이 모두 찼습니다. 완성된 디저트를 먼저 담아주세요.');
     for (const [id, amount] of Object.entries(recipe.ingredients)) if ((state.ingredients[id as IngredientId] ?? 0) < (amount ?? 0) * request.quantity) return fail('NOT_ENOUGH_INGREDIENTS', '필요한 재료가 부족합니다.');
-    for (const [id, amount] of Object.entries(recipe.ingredients)) state.ingredients[id as IngredientId] = (state.ingredients[id as IngredientId] ?? 0) - (amount ?? 0) * request.quantity;
     const lastScheduledAt = pendingJobs.reduce((latest, item) => Math.max(latest, Date.parse(item.completesAt)), Date.now());
     const startedAt = new Date(lastScheduledAt); const completesAt = new Date(startedAt.getTime() + recipe.cookSeconds * 1000).toISOString(); const cookingId = makeId('cooking');
     const status = pendingJobs.length ? 'QUEUED' : 'COOKING';
-    state.cookingJobs.push({ id: cookingId, recipeId: recipe.id, quantity: request.quantity, startedAt: startedAt.toISOString(), completesAt, status });
+    let qualityWeight = 0; let consumedUnits = 0;
+    for (const [id, amount] of Object.entries(recipe.ingredients)) { let needed = (amount ?? 0) * request.quantity; const qualityStock = state.ingredientQualities[id as IngredientId] ?? {}; for (let index = QUALITY_ORDER.length - 1; index >= 0 && needed > 0; index -= 1) { const quality = QUALITY_ORDER[index]; const available = qualityStock[quality] ?? 0; const used = Math.min(available, needed); if (!used) continue; qualityStock[quality] = available - used; qualityWeight += INGREDIENT_QUALITY_BONUS[index] * used; consumedUnits += used; needed -= used; } state.ingredientQualities[id as IngredientId] = qualityStock; state.ingredients[id as IngredientId] = (state.ingredients[id as IngredientId] ?? 0) - (amount ?? 0) * request.quantity; }
+    const progress = state.recipeProgress[recipe.id] ?? { masteryExperience: 0, craftCount: 0, bestQuality: null }; const buffQualityBonus = state.buff && Date.parse(state.buff.endsAt) > startedAt.getTime() && recipe.level <= state.buff.eligibleRecipeLevel ? state.buff.qualityBonus : 0;
+    state.cookingJobs.push({ id: cookingId, recipeId: recipe.id, quantity: request.quantity, startedAt: startedAt.toISOString(), completesAt, status, ingredientQualityBonus: consumedUnits ? qualityWeight / consumedUnits : 0, masteryQualityBonus: masteryQualityBonus(progress.masteryExperience), buffQualityBonus });
     this.save(state); return { ok: true, data: { cookingId, completesAt }, message: pendingJobs.length ? `${recipe.name}을 ${pendingJobs.length + 1}번째 대기열에 추가했습니다.` : `${recipe.name} 조리를 시작했습니다.` };
   }
 
@@ -163,10 +170,8 @@ export class LocalSweetShopGateway implements SweetShopGateway {
     if (state.desserts.length >= state.storage.dessertSlotLimit) { job.status = 'WAITING_FOR_SPACE'; this.save(state); return fail('DESSERT_STORAGE_FULL', '디저트 상자에 빈칸이 없습니다.'); }
     const recipe = RECIPES.find((item) => item.id === job.recipeId)!;
     const progress = state.recipeProgress[job.recipeId] ?? { masteryExperience: 0, craftCount: 0, bestQuality: null };
-    const masteryTier = progress.masteryExperience >= 200 ? 2 : progress.masteryExperience >= 50 ? 1 : 0;
-    const roll = Math.random() * 100;
-    let qualityIndex = roll < 5 + masteryTier * 5 ? 2 : roll < 25 + masteryTier * 15 ? 1 : 0;
-    if (state.buff && Date.parse(state.buff.endsAt) > Date.now() && recipe.level <= state.buff.eligibleRecipeLevel) qualityIndex += state.buff.qualityBonus;
+    let qualityIndex = qualityIndexFromScore(normalRandom() + (job.ingredientQualityBonus ?? 0) + (job.masteryQualityBonus ?? 0));
+    qualityIndex += job.buffQualityBonus ?? 0;
     const quality = QUALITY_ORDER[Math.min(QUALITY_ORDER.length - 1, qualityIndex)]; const dessertId = makeId('dessert');
     state.desserts.push({ id: dessertId, recipeId: job.recipeId, name: recipe.name, quantity: job.quantity, quality, createdAt: new Date().toISOString(), level: recipe.level, makerName: state.profile.cafeName, source: 'crafted' });
     const completesTutorial = job.recipeId === 'butter-cookie' && !state.tutorial.firstCookingCompleted;
@@ -196,7 +201,7 @@ export class LocalSweetShopGateway implements SweetShopGateway {
     const [min, max] = dessertPriceRange(dessert.recipeId, dessert.quality);
     if (unitPrice < min || unitPrice > max) return fail('INVALID_PRICE', `판매가격은 ${min}~${max}G로 정해주세요.`);
     const listingId = makeId('listing');
-    state.listings.push({ id: listingId, dessertId: dessert.id, recipeId: dessert.recipeId, name: dessert.name, quality: dessert.quality, quantity, unitPrice, listedAt: new Date().toISOString(), nextNpcPurchaseAt: new Date(Date.now() + 12000).toISOString() });
+    state.listings.push({ id: listingId, dessertId: dessert.id, recipeId: dessert.recipeId, name: dessert.name, quality: dessert.quality, quantity, unitPrice, listedAt: new Date().toISOString(), nextNpcPurchaseAt: new Date(Date.now() + 12000).toISOString(), audience: request.audience });
     dessert.quantity -= quantity; if (dessert.quantity === 0) state.desserts = state.desserts.filter((item) => item.id !== dessert.id);
     this.save(state); return { ok: true, data: { listingId }, message: `${dessert.name}을 판매대에 진열했습니다. 곧 손님이 찾아옵니다!` };
   }
@@ -209,7 +214,7 @@ export class LocalSweetShopGateway implements SweetShopGateway {
     if (unitPrice < min || unitPrice > max) return fail('INVALID_PRICE', `판매가격은 ${min}~${max}G로 정해주세요.`);
     if (quantity < 1 || quantity > listing.quantity) return fail('INVALID_QUANTITY', '현재 진열 수량보다 적은 수량으로만 조정할 수 있습니다.');
     if (quantity < listing.quantity) this.returnListingDessert(state, listing, listing.quantity - quantity);
-    listing.quantity = quantity; listing.unitPrice = unitPrice; listing.nextNpcPurchaseAt = new Date(Date.now() + 12000).toISOString();
+    listing.quantity = quantity; listing.unitPrice = unitPrice; listing.audience = request.audience; listing.nextNpcPurchaseAt = new Date(Date.now() + 12000).toISOString();
     this.save(state); return { ok: true, data: { listingId: listing.id }, message: '진열 상품의 가격과 수량을 수정했습니다.' };
   }
 

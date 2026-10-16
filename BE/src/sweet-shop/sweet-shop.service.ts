@@ -1,16 +1,49 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
-import { INGREDIENTS, RECIPES, type DessertQuality, type IngredientId, type RecipeId, type SweetShopCafeState, type SweetShopResult } from 'sweet-shop-contracts';
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit, UnauthorizedException } from '@nestjs/common';
+import { INGREDIENTS, RECIPES, SWEET_SHOP_NPC_BUYER_NAMES, type DessertQuality, type IngredientId, type RecipeId, type SweetShopCafePurchaseEvent, type SweetShopCafeState, type SweetShopResult } from 'sweet-shop-contracts';
 import { AccountService } from '../account/account.service';
 import { PrismaService } from '../scoreboard/prisma.service';
 
 const qualities: DessertQuality[] = ['normal', 'good', 'excellent', 'premium'];
+const ingredientQualityBonus = [0, 0, 0.15, 0.35, 0.6];
+const normalRandom = () => {
+  const u = Math.max(Number.EPSILON, Math.random());
+  const v = Math.max(Number.EPSILON, Math.random());
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+};
+const qualityFromScore = (score: number) => score >= 1.881 ? 4 : score >= 1.282 ? 3 : score >= 0.674 ? 2 : 1;
+const randomIngredientQuality = () => qualityFromScore(normalRandom());
+const masteryBonus = (experience: number) => experience >= 1000 ? 0.6 : experience >= 500 ? 0.45 : experience >= 200 ? 0.3 : experience >= 50 ? 0.15 : 0;
 const recipe = (id: string) => RECIPES.find((x) => x.id === id);
 const good = <T>(data: T, message?: string): SweetShopResult<T> => ({ ok: true, data, message });
 const bad = <T>(code: string, message: string): SweetShopResult<T> => ({ ok: false, code, message });
 
 @Injectable()
-export class SweetShopService {
+export class SweetShopService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(SweetShopService.name);
+  private readonly npcPurchaseListeners = new Set<(event: SweetShopCafePurchaseEvent & { cafeClosed: boolean }) => void>();
+  private npcPurchaseTimer?: NodeJS.Timeout;
+  private npcPurchaseRunning = false;
   constructor(private readonly prisma: PrismaService, private readonly accounts: AccountService) {}
+
+  onModuleInit() {
+    if (process.env.SWEET_SHOP_NPC_PURCHASE_ENABLED === 'false') return;
+    const intervalMs = Math.max(1000, Number(process.env.SWEET_SHOP_NPC_PURCHASE_INTERVAL_MS) || 5000);
+    this.npcPurchaseTimer = setInterval(() => void this.processNpcPurchases(), intervalMs);
+    this.npcPurchaseTimer.unref();
+  }
+
+  onModuleDestroy() { if (this.npcPurchaseTimer) clearInterval(this.npcPurchaseTimer); }
+
+  onNpcPurchase(listener: (event: SweetShopCafePurchaseEvent & { cafeClosed: boolean }) => void) {
+    this.npcPurchaseListeners.add(listener);
+    return () => this.npcPurchaseListeners.delete(listener);
+  }
+
+  private nextNpcPurchaseAt(from = Date.now()) {
+    const minimum = Math.max(5, Number(process.env.SWEET_SHOP_NPC_PURCHASE_MIN_SECONDS) || 45);
+    const maximum = Math.max(minimum, Number(process.env.SWEET_SHOP_NPC_PURCHASE_MAX_SECONDS) || 120);
+    return new Date(from + (minimum + Math.floor(Math.random() * (maximum - minimum + 1))) * 1000);
+  }
 
   private async profile(token: unknown, guestId: unknown) {
     // 비회원 요청은 공통 계정 인증 로직을 통과시키지 않는다.
@@ -125,16 +158,23 @@ export class SweetShopService {
     const ownDesserts = new Map([...desserts, ...listedDesserts].map((x) => [x.id.toString(), x]));
     const tradeDesserts = await this.prisma.sweet_shop_dessert.findMany({ where: { id: { in: trades.map((x) => x.dessert_id) } } });
     const sold = new Map(tradeDesserts.map((x) => [x.id.toString(), x]));
+    const ingredientTotals: Partial<Record<IngredientId, number>> = {};
+    const ingredientQualities: SweetShopCafeState['ingredientQualities'] = {};
+    for (const item of ingredients) {
+      const ingredientId = item.ingredient_id as IngredientId; const quality = qualities[item.quality - 1] ?? 'normal';
+      ingredientTotals[ingredientId] = (ingredientTotals[ingredientId] ?? 0) + item.quantity;
+      ingredientQualities[ingredientId] = { ...(ingredientQualities[ingredientId] ?? {}), [quality]: item.quantity };
+    }
     return {
       profile: { profileId: p.profile_id.toString(), ownerName: identity.nickname, cafeName: p.cafe_name, level: p.level, experience: p.experience, gold: p.gold },
       storage: { ingredientSlotLimit: s.ingredient_slot_limit, dessertSlotLimit: s.dessert_slot_limit }, tutorial: { firstCookingCompleted: p.first_cooking_tutorial_completed },
-      ingredients: Object.fromEntries(ingredients.map((x) => [x.ingredient_id, x.quantity])), unlockedRecipes: progress.map((x) => x.recipe_id) as RecipeId[],
-      deliveries: deliveries.map((x) => ({ id: x.id.toString(), ingredientId: x.ingredient_id as IngredientId, quantity: x.quantity, totalPrice: x.total_price, orderedAt: x.ordered_at.toISOString(), arrivesAt: x.arrives_at.toISOString(), status: x.status.toUpperCase() as any })),
-      cookingJobs: jobs.map((x) => ({ id: x.id.toString(), recipeId: x.recipe_id as RecipeId, quantity: x.quantity, startedAt: x.started_at.toISOString(), completesAt: x.completes_at.toISOString(), status: x.status.toUpperCase() as any })),
+      ingredients: ingredientTotals, ingredientQualities, unlockedRecipes: progress.map((x) => x.recipe_id) as RecipeId[],
+      deliveries: deliveries.map((x) => ({ id: x.id.toString(), ingredientId: x.ingredient_id as IngredientId, quantity: x.quantity, quality: qualities[x.quality - 1] ?? 'normal', totalPrice: x.total_price, orderedAt: x.ordered_at.toISOString(), arrivesAt: x.arrives_at.toISOString(), status: x.status.toUpperCase() as any })),
+      cookingJobs: jobs.map((x) => ({ id: x.id.toString(), recipeId: x.recipe_id as RecipeId, quantity: x.quantity, startedAt: x.started_at.toISOString(), completesAt: x.completes_at.toISOString(), status: x.status.toUpperCase() as any, ingredientQualityBonus: x.ingredient_quality_bonus, masteryQualityBonus: x.mastery_quality_bonus, buffQualityBonus: x.buff_quality_bonus })),
       desserts: desserts.map((x) => ({ id: x.id.toString(), recipeId: x.recipe_id as RecipeId, name: recipe(x.recipe_id)?.name ?? x.recipe_id, quantity: x.quantity, quality: qualities[x.quality - 1] ?? 'normal', createdAt: x.created_at.toISOString(), level: x.dessert_level, makerName: x.creator_profile_id === id ? identity.nickname : '이웃 파티시에', source: x.creator_profile_id === id ? 'crafted' : 'npc-cafe' })),
       recipeProgress: Object.fromEntries(progress.map((x) => [x.recipe_id, { masteryExperience: x.mastery_experience, craftCount: x.total_cooked, bestQuality: qualities[x.highest_quality - 1] ?? null }])),
-      listings: listings.map((x) => { const d = ownDesserts.get(x.dessert_id.toString()); return { id: x.id.toString(), dessertId: x.dessert_id.toString(), recipeId: (d?.recipe_id ?? 'butter-cookie') as RecipeId, name: recipe(d?.recipe_id ?? '')?.name ?? '디저트', quality: qualities[(d?.quality ?? 1) - 1] ?? 'normal', quantity: x.quantity, unitPrice: x.unit_price, listedAt: x.listed_at.toISOString(), nextNpcPurchaseAt: '2099-01-01T00:00:00.000Z' }; }),
-      sales: trades.map((x) => ({ id: x.id.toString(), listingId: x.listing_id.toString(), dessertName: recipe(sold.get(x.dessert_id.toString())?.recipe_id ?? '')?.name ?? '디저트', quantity: x.quantity, totalPrice: x.total_price, buyerName: '이웃 손님', soldAt: x.created_at.toISOString() })),
+      listings: listings.map((x) => { const d = ownDesserts.get(x.dessert_id.toString()); return { id: x.id.toString(), dessertId: x.dessert_id.toString(), recipeId: (d?.recipe_id ?? 'butter-cookie') as RecipeId, name: recipe(d?.recipe_id ?? '')?.name ?? '디저트', quality: qualities[(d?.quality ?? 1) - 1] ?? 'normal', quantity: x.quantity, unitPrice: x.unit_price, listedAt: x.listed_at.toISOString(), nextNpcPurchaseAt: x.next_npc_purchase_at.toISOString(), audience: x.audience }; }),
+      sales: trades.map((x) => ({ id: x.id.toString(), listingId: x.listing_id.toString(), dessertName: recipe(sold.get(x.dessert_id.toString())?.recipe_id ?? '')?.name ?? '디저트', quantity: x.quantity, totalPrice: x.total_price, buyerName: x.buyer_name ?? (x.buyer_kind === 'npc' ? '달콤 손님' : '이웃 손님'), soldAt: x.created_at.toISOString() })),
       buff: p.buff_ends_at && p.buff_ends_at > new Date() ? { sourceDessertName: p.buff_source_dessert_name ?? '디저트', qualityBonus: p.buff_quality_bonus === 2 ? 2 : 1, eligibleRecipeLevel: p.buff_eligible_recipe_level ?? 1, endsAt: p.buff_ends_at.toISOString() } : null,
       updatedAt: p.updated_at.toISOString(),
     };
@@ -146,8 +186,8 @@ export class SweetShopService {
     const old = await this.prisma.sweet_shop_delivery.findUnique({ where: { request_id: r.requestId } }); if (old) return good({ deliveryId: old.id.toString() });
     const price = item.unitPrice * qty; const paid = await this.prisma.sweet_shop_profile.updateMany({ where: { profile_id: id, gold: { gte: price } }, data: { gold: { decrement: price } } });
     if (!paid.count) return bad('NOT_ENOUGH_GOLD', '골드가 부족합니다.');
-    const now = new Date(); const d = await this.prisma.sweet_shop_delivery.create({ data: { request_id: r.requestId, profile_id: id, ingredient_id: item.id, quantity: qty, total_price: price, ordered_at: now, arrives_at: new Date(now.getTime() + item.deliverySeconds * 1000) } });
-    return good({ deliveryId: d.id.toString() }, `${item.name} ${qty}개를 주문했습니다.`);
+    const quality = randomIngredientQuality(); const now = new Date(); const d = await this.prisma.sweet_shop_delivery.create({ data: { request_id: r.requestId, profile_id: id, ingredient_id: item.id, quality, quantity: qty, total_price: price, ordered_at: now, arrives_at: new Date(now.getTime() + item.deliverySeconds * 1000) } });
+    return good({ deliveryId: d.id.toString() }, `${item.name} ${qty}개를 주문했습니다. 도착 품질은 ${qualities[quality - 1]}입니다.`);
   }
 
   async receiveDelivery(token: unknown, r: any) {
@@ -162,20 +202,27 @@ export class SweetShopService {
     if (!item || qty < 1) return bad('INVALID_RECIPE', '조리할 레시피를 확인해주세요.');
     if (!await this.prisma.sweet_shop_recipe_progress.findUnique({ where: { profile_id_recipe_id: { profile_id: id, recipe_id: item.id } } })) return bad('RECIPE_LOCKED', '아직 획득하지 않은 레시피입니다.');
     const queue = await this.prisma.sweet_shop_cooking_job.findMany({ where: { profile_id: id, status: { not: 'received' } }, orderBy: { completes_at: 'desc' } }); if (queue.length >= 5) return bad('COOKING_QUEUE_FULL', '조리 대기열 5칸이 모두 찼습니다.');
-    const stock = await this.prisma.sweet_shop_ingredient.findMany({ where: { profile_id: id, quality: 1 } });
-    for (const [key, amount] of Object.entries(item.ingredients)) if ((stock.find((x) => x.ingredient_id === key)?.quantity ?? 0) < (amount ?? 0) * qty) return bad('NOT_ENOUGH_INGREDIENTS', '필요한 재료가 부족합니다.');
+    const stock = await this.prisma.sweet_shop_ingredient.findMany({ where: { profile_id: id, quantity: { gt: 0 } } });
+    const consumption: Array<{ ingredientId: string; quality: number; quantity: number }> = []; let weightedQuality = 0; let consumedUnits = 0;
+    for (const [key, amount] of Object.entries(item.ingredients)) {
+      let needed = (amount ?? 0) * qty; const candidates = stock.filter((x) => x.ingredient_id === key).sort((a, b) => b.quality - a.quality);
+      if (candidates.reduce((sum, x) => sum + x.quantity, 0) < needed) return bad('NOT_ENOUGH_INGREDIENTS', '필요한 재료가 부족합니다.');
+      for (const candidate of candidates) { if (!needed) break; const used = Math.min(needed, candidate.quantity); consumption.push({ ingredientId: key, quality: candidate.quality, quantity: used }); weightedQuality += ingredientQualityBonus[candidate.quality] * used; consumedUnits += used; needed -= used; }
+    }
     const starts = new Date(Math.max(Date.now(), queue[0]?.completes_at.getTime() ?? 0)); const completes = new Date(starts.getTime() + item.cookSeconds * qty * 1000);
-    const job = await this.prisma.$transaction(async (tx) => { for (const [key, amount] of Object.entries(item.ingredients)) await tx.sweet_shop_ingredient.update({ where: { profile_id_ingredient_id_quality: { profile_id: id, ingredient_id: key, quality: 1 } }, data: { quantity: { decrement: (amount ?? 0) * qty } } }); return tx.sweet_shop_cooking_job.create({ data: { request_id: r.requestId, profile_id: id, recipe_id: item.id, quantity: qty, status: queue.length ? 'queued' : 'cooking', started_at: starts, completes_at: completes } }); });
+    const [progress, profile] = await Promise.all([this.prisma.sweet_shop_recipe_progress.findUniqueOrThrow({ where: { profile_id_recipe_id: { profile_id: id, recipe_id: item.id } } }), this.prisma.sweet_shop_profile.findUniqueOrThrow({ where: { profile_id: id } })]);
+    const appliedIngredientBonus = consumedUnits ? weightedQuality / consumedUnits : 0; const appliedMasteryBonus = masteryBonus(progress.mastery_experience); const appliedBuffBonus = profile.buff_ends_at && profile.buff_ends_at > starts && (profile.buff_eligible_recipe_level ?? 0) >= item.level ? Math.min(2, profile.buff_quality_bonus ?? 0) : 0;
+    const job = await this.prisma.$transaction(async (tx) => { for (const used of consumption) await tx.sweet_shop_ingredient.update({ where: { profile_id_ingredient_id_quality: { profile_id: id, ingredient_id: used.ingredientId, quality: used.quality } }, data: { quantity: { decrement: used.quantity } } }); return tx.sweet_shop_cooking_job.create({ data: { request_id: r.requestId, profile_id: id, recipe_id: item.id, quantity: qty, ingredient_quality_bonus: appliedIngredientBonus, mastery_quality_bonus: appliedMasteryBonus, buff_quality_bonus: appliedBuffBonus, status: queue.length ? 'queued' : 'cooking', started_at: starts, completes_at: completes } }); });
     return good({ cookingId: job.id.toString(), completesAt: completes.toISOString() }, `${item.name} 조리를 대기열에 추가했습니다.`);
   }
 
   async receiveCooking(token: unknown, r: any) {
     const id = (await this.profile(token, r.guestId)).profileId; await this.prepare(id); const job = await this.prisma.sweet_shop_cooking_job.findFirst({ where: { id: BigInt(r.cookingId), profile_id: id } });
     if (!job || job.status === 'received') return bad('COOKING_NOT_FOUND', '받을 디저트가 없습니다.'); if (job.completes_at > new Date()) return bad('COOKING_NOT_READY', '아직 조리 중입니다.');
-    const p = await this.prisma.sweet_shop_recipe_progress.findUniqueOrThrow({ where: { profile_id_recipe_id: { profile_id: id, recipe_id: job.recipe_id } } }); const roll = Math.random() * 100; const q = roll < 5 ? 3 : roll < 25 ? 2 : 1; const item = recipe(job.recipe_id)!;
+    const p = await this.prisma.sweet_shop_recipe_progress.findUniqueOrThrow({ where: { profile_id_recipe_id: { profile_id: id, recipe_id: job.recipe_id } } }); const baseQuality = qualityFromScore(normalRandom() + job.ingredient_quality_bonus + job.mastery_quality_bonus); const q = Math.min(4, baseQuality + job.buff_quality_bonus); const item = recipe(job.recipe_id)!;
     const d = await this.prisma.$transaction(async (tx) => { const made = await tx.sweet_shop_dessert.create({ data: { owner_profile_id: id, creator_profile_id: id, recipe_id: job.recipe_id, dessert_level: item.level, quality: q, quantity: job.quantity } }); await tx.sweet_shop_cooking_job.update({ where: { id: job.id }, data: { status: 'received', received_at: new Date() } }); await tx.sweet_shop_recipe_progress.update({ where: { profile_id_recipe_id: { profile_id: id, recipe_id: job.recipe_id } }, data: { mastery_experience: { increment: 10 * job.quantity }, total_cooked: { increment: job.quantity }, highest_quality: Math.max(p.highest_quality, q) } }); await tx.sweet_shop_profile.update({ where: { profile_id: id }, data: { experience: { increment: 5 * job.quantity }, ...(job.recipe_id === 'butter-cookie' ? { first_cooking_tutorial_completed: true } : {}) } }); return made; });
     const total = (await this.prisma.sweet_shop_recipe_progress.aggregate({ where: { profile_id: id }, _sum: { total_cooked: true } }))._sum.total_cooked ?? 0; const unlocks = [[1, 'milk-pudding'], [3, 'strawberry-macaron'], [6, 'choco-cupcake'], [10, 'honey-cake'], [15, 'vanilla-cream-puff'], [21, 'berry-tart'], [28, 'caramel-eclair'], [36, 'royal-choco-gateau'], [45, 'starlight-celebration-cake']] as const; for (const [count, rid] of unlocks) if (total >= count) await this.prisma.sweet_shop_recipe_progress.upsert({ where: { profile_id_recipe_id: { profile_id: id, recipe_id: rid } }, create: { profile_id: id, recipe_id: rid }, update: {} }); const nextLevel = 1 + unlocks.filter(([count]) => total >= count).length; await this.prisma.sweet_shop_profile.updateMany({ where: { profile_id: id, level: { lt: nextLevel } }, data: { level: nextLevel } });
-    return good({ dessertId: d.id.toString() }, `${item.name}이 완성되었습니다.`);
+    return good({ dessertId: d.id.toString() }, `${item.name}이 ${qualities[q - 1]} 품질로 완성되었습니다.${job.buff_quality_bonus ? ` 섭취 버프 +${job.buff_quality_bonus}등급이 적용됐습니다.` : ''}`);
   }
 
   async completeFirstCookingTutorial(token: unknown, r?: any) { const id = (await this.profile(token, r?.guestId)).profileId; await this.prisma.sweet_shop_profile.update({ where: { profile_id: id }, data: { first_cooking_tutorial_completed: true } }); return this.loadCafe(token, r); }
@@ -184,10 +231,10 @@ export class SweetShopService {
     const id = (await this.profile(token, r.guestId)).profileId; const dessertId = BigInt(r.dessertId); const qty = Math.floor(r.quantity); const price = Math.floor(r.unitPrice); const old = await this.prisma.sweet_shop_listing.findUnique({ where: { request_id: r.requestId } }); if (old) return good({ listingId: old.id.toString() });
     const activeCount = await this.prisma.sweet_shop_listing.count({ where: { seller_profile_id: id, status: 'active', quantity: { gt: 0 } } });
     if (activeCount >= 3) return bad('DISPLAY_FULL', '판매대 3칸이 모두 사용 중입니다.'); const d = await this.prisma.sweet_shop_dessert.findFirst({ where: { id: dessertId, owner_profile_id: id, creator_profile_id: id } }); if (!d || qty < 1 || d.quantity < qty || price < 1) return bad('INVALID_LISTING', '진열할 상품을 확인해주세요.');
-    const listing = await this.prisma.$transaction(async (tx) => { await tx.sweet_shop_dessert.update({ where: { id: dessertId }, data: { quantity: { decrement: qty } } }); return tx.sweet_shop_listing.create({ data: { request_id: r.requestId, seller_profile_id: id, dessert_id: dessertId, quantity: qty, unit_price: price } }); }); return good({ listingId: listing.id.toString(), profileId: id.toString(), cafeOpened: activeCount === 0 }, '판매대에 진열했습니다.');
+    const audience = r.audience === 'friends' ? 'friends' : 'everyone'; const listing = await this.prisma.$transaction(async (tx) => { await tx.sweet_shop_dessert.update({ where: { id: dessertId }, data: { quantity: { decrement: qty } } }); return tx.sweet_shop_listing.create({ data: { request_id: r.requestId, seller_profile_id: id, dessert_id: dessertId, quantity: qty, unit_price: price, audience, next_npc_purchase_at: this.nextNpcPurchaseAt() } }); }); return good({ listingId: listing.id.toString(), profileId: id.toString(), cafeOpened: activeCount === 0 }, audience === 'friends' ? '친구 전용 진열대에 올렸습니다.' : '모두에게 파는 진열대에 올렸습니다.');
   }
 
-  async updateListing(token: unknown, r: any) { const id = (await this.profile(token, r.guestId)).profileId; const listing = await this.prisma.sweet_shop_listing.findFirst({ where: { id: BigInt(r.listingId), seller_profile_id: id, status: 'active' } }); if (!listing) return bad('LISTING_NOT_FOUND', '진열 상품을 찾지 못했습니다.'); await this.prisma.sweet_shop_listing.update({ where: { id: listing.id }, data: { unit_price: Math.max(1, Math.floor(r.unitPrice)) } }); return good({ listingId: listing.id.toString(), profileId: id.toString() }); }
+  async updateListing(token: unknown, r: any) { const id = (await this.profile(token, r.guestId)).profileId; const listing = await this.prisma.sweet_shop_listing.findFirst({ where: { id: BigInt(r.listingId), seller_profile_id: id, status: 'active' } }); if (!listing) return bad('LISTING_NOT_FOUND', '진열 상품을 찾지 못했습니다.'); const audience = r.audience === 'friends' ? 'friends' : 'everyone'; await this.prisma.sweet_shop_listing.update({ where: { id: listing.id }, data: { unit_price: Math.max(1, Math.floor(r.unitPrice)), audience, ...(audience === 'everyone' && listing.audience !== 'everyone' ? { next_npc_purchase_at: this.nextNpcPurchaseAt() } : {}) } }); return good({ listingId: listing.id.toString(), profileId: id.toString() }); }
   async removeListing(token: unknown, r: any) { const id = (await this.profile(token, r.guestId)).profileId; const x = await this.prisma.sweet_shop_listing.findFirst({ where: { id: BigInt(r.listingId), seller_profile_id: id, status: 'active' } }); if (!x) return bad('LISTING_NOT_FOUND', '진열 상품을 찾지 못했습니다.'); await this.prisma.$transaction([this.prisma.sweet_shop_dessert.update({ where: { id: x.dessert_id }, data: { quantity: { increment: x.quantity } } }), this.prisma.sweet_shop_listing.update({ where: { id: x.id }, data: { status: 'removed' } })]); const remaining = await this.prisma.sweet_shop_listing.count({ where: { seller_profile_id: id, status: 'active', quantity: { gt: 0 } } }); return good({ listingId: x.id.toString(), profileId: id.toString(), cafeClosed: remaining === 0 }); }
 
   async listCafeStreet(token: unknown, r: any) { const me = (await this.profile(token, r.guestId)).profileId; const rows = await this.prisma.sweet_shop_listing.findMany({ where: { seller_profile_id: { not: me }, status: 'active', quantity: { gt: 0 } }, distinct: ['seller_profile_id'] }); let ads: Array<{ profile_id: bigint }> = []; try { ads = await this.prisma.$queryRawUnsafe<Array<{ profile_id: bigint }>>('SELECT profile_id FROM sweet_shop_advertisement WHERE ends_at > CURRENT_TIMESTAMP'); } catch { /* 광고 마이그레이션 전에도 기본 카페 목록은 제공한다. */ } let blocked = new Set<string>(); try { const blocks = await this.prisma.$queryRawUnsafe<Array<{ profile_id: bigint }>>('SELECT blocked_profile_id AS profile_id FROM sweet_shop_block WHERE profile_id = ? UNION SELECT profile_id FROM sweet_shop_block WHERE blocked_profile_id = ?', me, me); blocked = new Set(blocks.map((x) => x.profile_id.toString())); } catch { /* 소셜 관계 마이그레이션 전에는 차단 필터를 생략한다. */ } const advertised = new Set(ads.map((x) => x.profile_id.toString())); const visibleRows = rows.filter((x) => !blocked.has(x.seller_profile_id.toString())); const data = await Promise.all(visibleRows.map(async (x) => { const [p, d, count] = await Promise.all([this.prisma.sweet_shop_profile.findUniqueOrThrow({ where: { profile_id: x.seller_profile_id } }), this.prisma.sweet_shop_dessert.findUnique({ where: { id: x.dessert_id } }), this.prisma.sweet_shop_listing.count({ where: { seller_profile_id: x.seller_profile_id, status: 'active' } })]); const u = p.account_id ? await this.prisma.account.findUnique({ where: { id: p.account_id } }) : null; return { profileId: p.profile_id.toString(), cafeName: p.cafe_name, ownerName: u?.nickname ?? `손님${p.profile_id.toString().padStart(4, '0')}`, icon: '🏠', level: p.level, representativeDessert: recipe(d?.recipe_id ?? '')?.name ?? '오늘의 디저트', listingCount: count, advertised: advertised.has(p.profile_id.toString()) }; })); data.sort((a, b) => Number(b.advertised) - Number(a.advertised)); return good(data); }
@@ -203,7 +250,7 @@ export class SweetShopService {
   }
 
   async buyDessert(token: unknown, r: any) {
-    const buyer = (await this.profile(token, r.guestId)).profileId; const listingId = BigInt(r.listingId); const qty = Math.floor(r.quantity); const old = await this.prisma.sweet_shop_trade.findUnique({ where: { request_id: r.requestId } }); if (old) return good({ dessertId: old.dessert_id.toString() });
+    const buyerIdentity = await this.profile(token, r.guestId); const buyer = buyerIdentity.profileId; const listingId = BigInt(r.listingId); const qty = Math.floor(r.quantity); const old = await this.prisma.sweet_shop_trade.findUnique({ where: { request_id: r.requestId } }); if (old) return good({ dessertId: old.dessert_id.toString() });
     const targetListing = await this.prisma.sweet_shop_listing.findUnique({ where: { id: listingId } }); if (targetListing && await this.isInteractionBlocked(buyer, targetListing.seller_profile_id)) return bad('PROFILE_BLOCKED', '차단 관계에서는 상품을 구매할 수 없습니다.');
     try { const bought = await this.prisma.$transaction(async (tx) => {
       const x = await tx.sweet_shop_listing.findFirst({ where: { id: listingId, status: 'active' } }); if (!x || qty < 1 || x.quantity < qty || x.seller_profile_id === buyer) throw new Error('INVALID_PURCHASE');
@@ -213,7 +260,7 @@ export class SweetShopService {
       const total = x.unit_price * qty; if (!(await tx.sweet_shop_profile.updateMany({ where: { profile_id: buyer, gold: { gte: total } }, data: { gold: { decrement: total } } })).count) throw new Error('NOT_ENOUGH_GOLD'); if (!(await tx.sweet_shop_listing.updateMany({ where: { id: x.id, status: 'active', quantity: { gte: qty } }, data: { quantity: { decrement: qty } } })).count) throw new Error('SOLD_OUT');
       await tx.sweet_shop_profile.update({ where: { profile_id: x.seller_profile_id }, data: { gold: { increment: total } } });
       const d = stack ? await tx.sweet_shop_dessert.update({ where: { id: stack.id }, data: { quantity: { increment: qty } } }) : await tx.sweet_shop_dessert.create({ data: { owner_profile_id: buyer, creator_profile_id: source.creator_profile_id, recipe_id: source.recipe_id, dessert_level: source.dessert_level, quality: source.quality, quantity: qty } });
-      await tx.sweet_shop_trade.create({ data: { request_id: r.requestId, listing_id: x.id, seller_profile_id: x.seller_profile_id, buyer_profile_id: buyer, dessert_id: d.id, quantity: qty, unit_price: x.unit_price, total_price: total } });
+      await tx.sweet_shop_trade.create({ data: { request_id: r.requestId, listing_id: x.id, seller_profile_id: x.seller_profile_id, buyer_profile_id: buyer, buyer_kind: 'player', buyer_name: buyerIdentity.nickname.slice(0, 40), dessert_id: d.id, quantity: qty, unit_price: x.unit_price, total_price: total } });
       const cafeClosed = x.quantity === qty; if (cafeClosed) await tx.sweet_shop_listing.update({ where: { id: x.id }, data: { status: 'sold_out', sold_out_at: new Date() } });
       const remaining = cafeClosed ? await tx.sweet_shop_listing.count({ where: { seller_profile_id: x.seller_profile_id, status: 'active', quantity: { gt: 0 }, id: { not: x.id } } }) : 1;
       return { dessert: d, sellerProfileId: x.seller_profile_id, cafeClosed: cafeClosed && remaining === 0, dessertName: recipe(source.recipe_id)?.name ?? '디저트', totalPrice: total };
@@ -224,6 +271,53 @@ export class SweetShopService {
   async createGuestbook(token: unknown, r: any) { const id = (await this.profile(token, r.guestId)).profileId; const owner = BigInt(r.cafeProfileId); if (owner === id) return bad('OWN_GUESTBOOK', '내 카페에는 방명록을 남길 수 없습니다.'); if (await this.isInteractionBlocked(id, owner)) return bad('PROFILE_BLOCKED', '차단 관계에서는 방명록을 남길 수 없습니다.'); const messages = new Set(['맛있어 보여요!', '또 놀러 올게요!', '멋진 카페예요!']); const stickers = new Set(['🧁', '💖', '✨']); const messageCode = String(r.messageCode ?? ''); const stickerCode = String(r.stickerCode ?? ''); if (!messages.has(messageCode) || !stickers.has(stickerCode)) return bad('INVALID_GUESTBOOK_MESSAGE', '사용할 수 없는 방명록 메시지입니다.'); const recent = await this.prisma.sweet_shop_guestbook.findFirst({ where: { cafe_owner_profile_id: owner, visitor_profile_id: id, created_at: { gte: new Date(Date.now() - 60000) } } }); if (recent) return bad('GUESTBOOK_COOLDOWN', '방명록은 1분 뒤에 다시 남길 수 있습니다.'); const x = await this.prisma.sweet_shop_guestbook.create({ data: { cafe_owner_profile_id: owner, visitor_profile_id: id, message_code: messageCode, sticker_code: stickerCode } }); return good({ guestbookId: x.id.toString(), profileId: owner.toString() }, '방명록을 남겼습니다.'); }
   async replyGuestbook(token: unknown, r: any) { const owner = (await this.profile(token, r.guestId)).profileId; const guestbookId = BigInt(r.guestbookId); const sticker = String(r.replyStickerCode ?? '').trim(); if (!new Set(['💖', '🍪', '✨']).has(sticker)) return bad('INVALID_REPLY_STICKER', '사용할 수 없는 답장 스티커입니다.'); const updated = await this.prisma.sweet_shop_guestbook.updateMany({ where: { id: guestbookId, cafe_owner_profile_id: owner }, data: { reply_sticker_code: sticker } }); if (!updated.count) return bad('GUESTBOOK_NOT_FOUND', '답장할 방명록을 찾지 못했습니다.'); return good({ guestbookId: guestbookId.toString(), profileId: owner.toString() }, '답장 스티커를 남겼습니다.'); }
   async isInteractionBlocked(a: bigint, b: bigint) { try { const rows = await this.prisma.$queryRawUnsafe<Array<{ found: number }>>('SELECT 1 AS found FROM sweet_shop_block WHERE (profile_id = ? AND blocked_profile_id = ?) OR (profile_id = ? AND blocked_profile_id = ?) LIMIT 1', a, b, b, a); return rows.length > 0; } catch { return false; } }
+  async processNpcPurchases(now = new Date()) {
+    if (this.npcPurchaseRunning) return 0;
+    this.npcPurchaseRunning = true;
+    try {
+      const due = await this.prisma.sweet_shop_listing.findMany({
+        where: { status: 'active', audience: 'everyone', quantity: { gt: 0 }, next_npc_purchase_at: { lte: now } },
+        orderBy: { next_npc_purchase_at: 'asc' }, take: 20,
+      });
+      let purchased = 0;
+      for (const candidate of due) {
+        const buyerName = SWEET_SHOP_NPC_BUYER_NAMES[Math.floor(Math.random() * SWEET_SHOP_NPC_BUYER_NAMES.length)];
+        try {
+          const sale = await this.prisma.$transaction(async (tx) => {
+            const claimed = await tx.sweet_shop_listing.updateMany({
+              where: { id: candidate.id, status: 'active', audience: 'everyone', quantity: { gt: 0 }, next_npc_purchase_at: { lte: now } },
+              data: { quantity: { decrement: 1 }, next_npc_purchase_at: this.nextNpcPurchaseAt(now.getTime()) },
+            });
+            if (!claimed.count) return null;
+            const listing = await tx.sweet_shop_listing.findUniqueOrThrow({ where: { id: candidate.id } });
+            const dessert = await tx.sweet_shop_dessert.findUniqueOrThrow({ where: { id: listing.dessert_id } });
+            const totalPrice = listing.unit_price;
+            await tx.sweet_shop_profile.update({ where: { profile_id: listing.seller_profile_id }, data: { gold: { increment: totalPrice } } });
+            const trade = await tx.sweet_shop_trade.create({ data: {
+              request_id: `npc:${listing.id}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`,
+              listing_id: listing.id, seller_profile_id: listing.seller_profile_id, buyer_profile_id: null,
+              buyer_kind: 'npc', buyer_name: buyerName, dessert_id: dessert.id,
+              quantity: 1, unit_price: listing.unit_price, total_price: totalPrice,
+            } });
+            if (listing.quantity === 0) await tx.sweet_shop_listing.update({ where: { id: listing.id }, data: { status: 'sold_out', sold_out_at: now } });
+            const remaining = listing.quantity === 0 ? await tx.sweet_shop_listing.count({ where: { seller_profile_id: listing.seller_profile_id, status: 'active', quantity: { gt: 0 }, id: { not: listing.id } } }) : 1;
+            return { saleId: trade.id.toString(), profileId: listing.seller_profile_id.toString(), buyerName, dessertName: recipe(dessert.recipe_id)?.name ?? '디저트', totalPrice, cafeClosed: listing.quantity === 0 && remaining === 0 };
+          }, { isolationLevel: 'Serializable' });
+          if (!sale) continue;
+          purchased += 1;
+          for (const listener of this.npcPurchaseListeners) { try { listener(sale); } catch { /* 알림 실패가 거래를 되돌리면 안 된다. */ } }
+        } catch (error) {
+          this.logger.warn(`NPC purchase skipped for listing ${candidate.id}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+      return purchased;
+    } catch (error) {
+      this.logger.error(`NPC purchase sweep failed: ${error instanceof Error ? error.message : String(error)}`);
+      return 0;
+    } finally {
+      this.npcPurchaseRunning = false;
+    }
+  }
   async saveChatMessage(cafeProfileId: bigint, senderProfileId: bigint, senderName: string, message: string) { try { await this.prisma.$executeRawUnsafe('INSERT INTO sweet_shop_chat_message (cafe_profile_id, sender_profile_id, sender_name, message) VALUES (?, ?, ?, ?)', cafeProfileId, senderProfileId, senderName.slice(0, 40), message.slice(0, 80)); } catch { /* 채팅 기록 마이그레이션 전에도 실시간 채팅은 유지한다. */ } }
   async listChatMessages(cafeProfileId: bigint) { try { const rows = await this.prisma.$queryRawUnsafe<Array<{ sender_profile_id: bigint; sender_name: string; message: string; created_at: Date }>>('SELECT sender_profile_id, sender_name, message, created_at FROM sweet_shop_chat_message WHERE cafe_profile_id = ? ORDER BY id DESC LIMIT 30', cafeProfileId); return rows.reverse().map((row) => ({ profileId: row.sender_profile_id.toString(), cafeProfileId: cafeProfileId.toString(), nickname: row.sender_name, message: row.message, sentAt: row.created_at.toISOString() })); } catch { return []; } }
   async listFriends(token: unknown, r: any) { const me = (await this.profile(token, r.guestId)).profileId; const rows = await this.prisma.$queryRawUnsafe<Array<{ friend_profile_id: bigint }>>('SELECT friend_profile_id FROM sweet_shop_friend WHERE profile_id = ? ORDER BY created_at DESC', me); const data = await Promise.all(rows.map(async ({ friend_profile_id }) => { const p = await this.prisma.sweet_shop_profile.findUniqueOrThrow({ where: { profile_id: friend_profile_id } }); const u = p.account_id ? await this.prisma.account.findUnique({ where: { id: p.account_id } }) : null; const listing = await this.prisma.sweet_shop_listing.findFirst({ where: { seller_profile_id: friend_profile_id, status: 'active', quantity: { gt: 0 } } }); const dessert = listing ? await this.prisma.sweet_shop_dessert.findUnique({ where: { id: listing.dessert_id } }) : null; const count = await this.prisma.sweet_shop_listing.count({ where: { seller_profile_id: friend_profile_id, status: 'active', quantity: { gt: 0 } } }); return { profileId: p.profile_id.toString(), cafeName: p.cafe_name, ownerName: u?.nickname ?? `손님${p.profile_id.toString().padStart(4, '0')}`, icon: '🏠', level: p.level, representativeDessert: recipe(dessert?.recipe_id ?? '')?.name ?? '오늘의 디저트', listingCount: count }; })); return good(data); }

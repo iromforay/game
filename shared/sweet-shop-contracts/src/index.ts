@@ -38,8 +38,14 @@ export type SweetShopEvent = (typeof SWEET_SHOP_EVENTS)[keyof typeof SWEET_SHOP_
 export type IngredientId = 'flour' | 'sugar' | 'egg' | 'milk' | 'butter' | 'strawberry' | 'cocoa' | 'honey' | 'cream' | 'vanilla' | 'caramel';
 export type RecipeId = 'butter-cookie' | 'milk-pudding' | 'strawberry-macaron' | 'choco-cupcake' | 'honey-cake' | 'vanilla-cream-puff' | 'berry-tart' | 'caramel-eclair' | 'royal-choco-gateau' | 'starlight-celebration-cake';
 export type DessertQuality = 'normal' | 'good' | 'excellent' | 'premium';
+export type ListingAudience = 'friends' | 'everyone';
 export type DeliveryStatus = 'ORDERED' | 'ARRIVED' | 'WAITING_FOR_SPACE' | 'RECEIVED';
 export type CookingStatus = 'QUEUED' | 'COOKING' | 'COMPLETED' | 'WAITING_FOR_SPACE' | 'RECEIVED';
+
+export const SWEET_SHOP_NPC_BUYER_NAMES = [
+  '쿠키몽', '한입만', '버터링', '냠냠박사',
+  '당충전중', '오븐앞대기', '크림한스푼', '마지막한입',
+] as const;
 
 export interface IngredientDefinition {
   id: IngredientId;
@@ -101,6 +107,7 @@ export interface SweetShopCafeState {
     firstCookingCompleted: boolean;
   };
   ingredients: Partial<Record<IngredientId, number>>;
+  ingredientQualities: Partial<Record<IngredientId, Partial<Record<DessertQuality, number>>>>;
   unlockedRecipes: RecipeId[];
   deliveries: SweetShopDelivery[];
   cookingJobs: SweetShopCookingJob[];
@@ -116,6 +123,7 @@ export interface SweetShopDelivery {
   id: string;
   ingredientId: IngredientId;
   quantity: number;
+  quality: DessertQuality;
   totalPrice: number;
   orderedAt: string;
   arrivesAt: string;
@@ -129,6 +137,9 @@ export interface SweetShopCookingJob {
   startedAt: string;
   completesAt: string;
   status: CookingStatus;
+  ingredientQualityBonus?: number;
+  masteryQualityBonus?: number;
+  buffQualityBonus?: number;
 }
 
 export interface SweetShopDessert {
@@ -153,6 +164,7 @@ export interface SweetShopListing {
   unitPrice: number;
   listedAt: string;
   nextNpcPurchaseAt: string;
+  audience: ListingAudience;
 }
 
 export interface SweetShopSale {
@@ -193,6 +205,7 @@ export interface SweetShopVisitedCafe extends SweetShopCafeSummary {
     level: number;
     quantity: number;
     unitPrice: number;
+    audience?: ListingAudience;
   }>;
   guestbook: Array<{ id: string; visitorName: string; messageCode: string; stickerCode?: string; replyStickerCode?: string; createdAt: string }>;
 }
@@ -213,8 +226,8 @@ export interface ReceiveDeliveryRequest { requestId: string; deliveryId: string;
 export interface StartCookingRequest { requestId: string; recipeId: RecipeId; quantity: number; }
 export interface ReceiveCookingRequest { requestId: string; cookingId: string; }
 export interface CompleteFirstCookingTutorialRequest { requestId: string; }
-export interface CreateListingRequest { requestId: string; dessertId: string; quantity: number; unitPrice: number; }
-export interface UpdateListingRequest { requestId: string; listingId: string; quantity: number; unitPrice: number; }
+export interface CreateListingRequest { requestId: string; dessertId: string; quantity: number; unitPrice: number; audience: ListingAudience; }
+export interface UpdateListingRequest { requestId: string; listingId: string; quantity: number; unitPrice: number; audience: ListingAudience; }
 export interface RemoveListingRequest { requestId: string; listingId: string; }
 export interface VisitCafeRequest { cafeProfileId: string; }
 export interface BuyDessertRequest { requestId: string; listingId: string; quantity: number; }
@@ -231,7 +244,7 @@ export interface SweetShopRealtimeEvent { type: 'snapshot' | 'joined' | 'moved' 
 export interface SweetShopCafeOpenEvent { profileId: string; isOpen: boolean; }
 export interface SweetShopCafeDisplayEvent { profileId: string; }
 export interface SweetShopCafeChatEvent { profileId: string; cafeProfileId: string; nickname: string; message: string; sentAt: string; }
-export interface SweetShopCafePurchaseEvent { profileId: string; dessertName: string; totalPrice: number; }
+export interface SweetShopCafePurchaseEvent { profileId: string; dessertName: string; totalPrice: number; buyerName?: string; saleId?: string; }
 export interface SweetShopCafeAccessRevokedEvent { profileId: string; message: string; }
 
 export interface SweetShopResult<T> {
