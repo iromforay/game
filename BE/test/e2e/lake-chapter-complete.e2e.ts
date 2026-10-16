@@ -149,10 +149,11 @@ test('2장 C2-6 ①(1280×720): 유물 상세 → 장착 → 동시 장착 요�
     const cards = ((await g.state()) as unknown as { stageSelect: { cards: { code: string; enterable: boolean }[] } }).stageSelect.cards;
     assert.deepEqual(cards.filter((c) => c.code === 'underground').map((c) => c.enterable), [true], '3장 입장 권한 개방');
     assert.ok((await texts(g)).some((x) => x.includes('3장 — 마루바닥 밑')));
+    // 10-16 C3-1부터 3장 이야기가 열려 있다 — 카드를 누르면 '준비 중' 안내 대신 3장 지도(마루바닥 밑)로 들어간다
     await g.clickLabel('3장 — 마루바닥 밑', { exact: true });
-    await g.until('준비 문구', "true", 5_000);
-    assert.ok((await texts(g)).some((x) => x.includes('이야기를 준비하고 있어요')));
-    assert.equal((await g.state()).scenes.includes('Map'), false);
+    await g.waitScene('Map');
+    assert.equal((await texts(g)).some((x) => x.includes('이야기를 준비하고 있어요')), false);
+    assert.equal((await g.page.evaluate(() => (window as any).__game.scene.getScene('Map').stageCode)) as string, 'underground'); // eslint-disable-line @typescript-eslint/no-explicit-any
   }, backend, device);
   await g.close();
 });
