@@ -25,7 +25,7 @@ function setup(checkpoint: string = 'CH01_COMPLETE', events: string[] = CH01_DON
   db.seed('player', { id: P1, device_uuid: 'dev-test-lake', nickname: '하늘', session_token: 'token-lake-aaaaaa' });
   const nubi = db.seed('turby_character', { code: 'nubi', name: '누비' });
   db.seed('story_chapter', { chapter_order: 1, stage_code: 'forest', clear_character_code: 'nubi', title: '1장 — 숲', map_width: 3200, map_height: 2400 });
-  db.seed('story_chapter', { chapter_order: 2, stage_code: 'lake', clear_character_code: 'muldeuli', title: '2장 — 호수', map_width: 4000, map_height: 3000 });
+  db.seed('story_chapter', { chapter_order: 2, stage_code: 'lake', clear_character_code: 'muldeuli', title: '2장 — 호수', map_width: 3200, map_height: 2400 });
   const inst = db.seed('turby_instance', { owner_player_id: P1, character_id: nubi.id, acquired_via: 'starter', is_story_companion: true });
   db.seed('player_story_progress', { player_id: P1, checkpoint, nubi_growth_stage: growth, story_nubi_turby_instance_id: inst.id });
   for (const e of events) db.seed('player_story_event', { player_id: P1, event_id: e });

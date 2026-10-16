@@ -105,7 +105,7 @@ function setup(events: string[] = BASE, checkpoint = 'CH01_BOPUL_RESCUED', extra
   const db = new FakeDb();
   db.seed('player', { id: 1n, device_uuid: 'dev-test-position', nickname: '하늘' });
   db.seed('story_chapter', { chapter_order: 1, stage_code: 'forest', clear_character_code: 'nubi', title: '1장 — 숲', map_width: 3200, map_height: 2400 });
-  db.seed('story_chapter', { chapter_order: 2, stage_code: 'lake', clear_character_code: 'muldeuli', title: '2장 — 호수', map_width: 4000, map_height: 3000 });
+  db.seed('story_chapter', { chapter_order: 2, stage_code: 'lake', clear_character_code: 'muldeuli', title: '2장 — 호수', map_width: 3200, map_height: 2400 });
   const nubi = db.seed('turby_character', { code: 'nubi', name: '누비' });
   const inst = db.seed('turby_instance', { owner_player_id: 1n, character_id: nubi.id, acquired_via: 'starter', is_story_companion: true });
   db.seed('item_definition', { code: 'glowing_yarn_dust', name: '빛나는 실가루', category: 'mission', max_stack: 99 });
@@ -302,12 +302,12 @@ test('위치 증거: 거부된 이동의 좌표는 쓰지 않는다 — 수집�
 test('지역 데이터가 없는 지역(지하 등)은 한가운데에서 시작하고 충돌 판정 없이 경계만 지킨다', async () => {
   // 10-13: 호수는 2장 기능 맵 데이터가 생겨 이 시험의 "데이터 없는 지역" 예시를 지하로 바꿨다(역할은 같다)
   const s = setup([...COMPASS, 'lake_unlocked', 'underfloor_unlocked', 'legacy_access_underground'], 'CH01_COMPLETE');
-  s.db.seed('story_chapter', { chapter_order: 3, stage_code: 'underground', clear_character_code: 'pokshini', title: '3장 — 지하', map_width: 4000, map_height: 3000 });
+  s.db.seed('story_chapter', { chapter_order: 3, stage_code: 'underground', clear_character_code: 'pokshini', title: '3장 — 지하', map_width: 3200, map_height: 2400 }); // 10-16: 모든 장 3200×2400
   // 구 판정(기본): 이전 장의 대표 터비(누비·물들이)를 모두 포획한 계정은 지하에 들어갈 수 있다
   s.db.seed('turby_instance', { owner_player_id: 1n, character_id: s.db.rows('turby_character', { code: 'nubi' })[0].id, acquired_via: 'wild_capture' });
   s.db.seed('turby_instance', { owner_player_id: 1n, character_id: s.db.seed('turby_character', { code: 'muldeuli', name: '물들이' }).id, acquired_via: 'wild_capture' });
   const r = await s.enter('underground');
-  assert.deepEqual([r.self.x, r.self.y], [2000, 1500]);
-  assert.equal(s.walk({ x: 2100, y: 1500 }), 'ok');
-  assert.equal((s.jump({ x: 2100, y: 3001 }, 60_000) as { reason: string }).reason, 'out_of_bounds');
+  assert.deepEqual([r.self.x, r.self.y], [1600, 1200]);
+  assert.equal(s.walk({ x: 1700, y: 1200 }), 'ok');
+  assert.equal((s.jump({ x: 1700, y: 2401 }, 60_000) as { reason: string }).reason, 'out_of_bounds');
 });

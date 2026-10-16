@@ -140,7 +140,7 @@ export function seedLake(device: string, stage: 'entry' | 'maze' | 'cleared' | '
         const dye = (db.rows('item_definition', { code: 'water_dye_yarn' })[0] as { id: number }).id;
         const at = new Date();
         db.seed('player_item', { player_id: player.id, item_definition_id: dye, quantity: 1, is_new: true, is_locked: true, first_acquired_at: at, last_acquired_at: at });
-        if (db.rows('story_chapter', { stage_code: 'underground' }).length === 0) db.seed('story_chapter', { chapter_order: 3, stage_code: 'underground', clear_character_code: 'nubi', title: '3장 — 마루바닥 밑', map_width: 4800, map_height: 3600 });
+        if (db.rows('story_chapter', { stage_code: 'underground' }).length === 0) db.seed('story_chapter', { chapter_order: 3, stage_code: 'underground', clear_character_code: 'nubi', title: '3장 — 마루바닥 밑', map_width: 3200, map_height: 2400 });
       }
     }
     if (stage === 'maze') {
