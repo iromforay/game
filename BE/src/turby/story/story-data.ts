@@ -194,11 +194,29 @@ export const STORY_EVENTS: StoryEventDef[] = [
   // '돌아온 색' 장면(ch02.chapter_complete)을 끝까지 본 뒤 클라이언트가 완료를 요청한다(대화 구간 completesWith). 체크포인트·보상·성장은 다시 바꾸지 않는다
   ev({ id: 'lake_chapter_complete_seen', chapter: 2, allowedAt: ['CH02_COMPLETE'], requires: ['lake_dye_thread_equipped', 'underfloor_unlocked'], evidence: { kind: 'none' } }),
   ev({ id: 'lake_boss_aftermath_seen', chapter: 2, allowedAt: ['CH02_BOSS_DEFEATED'], requires: ['lake_boss_defeated', 'lake_dye_thread_granted'], evidence: { kind: 'none' } }),
+  // ---- 3장 마루바닥 밑(C3-1) ----
+  // 낯익은 어둠: 지역에 들어서면 도입 대화를 끝까지 본 뒤 클라이언트가 완료를 요청한다(대화 구간 completesWith). 3장 개방(underfloor_unlocked)은 2장 장착 때 이미 기록됐다
+  ev({ id: 'underfloor_entry_seen', chapter: 3, allowedAt: ['CH02_COMPLETE'], requires: ['underfloor_unlocked'], evidence: { kind: 'stage', stageCode: 'underground' }, to: 'CH03_STARTED' }),
+  // 오래된 폭신이: 지점에서 정본 장면을 끝까지 본 뒤 클라이언트가 완료를 요청한다(completesWith)
+  ev({ id: 'underfloor_elder_met', chapter: 3, allowedAt: ['CH03_STARTED'], requires: ['underfloor_entry_seen'], evidence: { kind: 'point', stageCode: 'underground', pointId: 'underfloor_elder' }, to: 'CH03_ELDER_MET' }),
+  // 사라진 기억실: 물건 더미 3곳(순서 없음). 지점에 닿으면 서버가 한 번 기록한다(서버 전용, 좌표 증거). 체크포인트는 바꾸지 않는다
+  ev({ id: 'underfloor_glove_inspected', chapter: 3, allowedAt: ['CH03_ELDER_MET'], requires: ['underfloor_elder_met'], serverOnly: true, evidence: { kind: 'point', stageCode: 'underground', pointId: 'underfloor_glove' } }),
+  ev({ id: 'underfloor_blanket_inspected', chapter: 3, allowedAt: ['CH03_ELDER_MET'], requires: ['underfloor_elder_met'], serverOnly: true, evidence: { kind: 'point', stageCode: 'underground', pointId: 'underfloor_blanket' } }),
+  ev({ id: 'underfloor_doll_inspected', chapter: 3, allowedAt: ['CH03_ELDER_MET'], requires: ['underfloor_elder_met'], serverOnly: true, evidence: { kind: 'point', stageCode: 'underground', pointId: 'underfloor_doll' } }),
+  // 3곳을 모두 살펴보면 집계 사건이 함께 기록된다(EVENT_AGGREGATES). 매복 지점(기계음 장면)의 선행 조건
+  ev({ id: 'underfloor_items_inspected', chapter: 3, allowedAt: ['CH03_ELDER_MET'], requires: ['underfloor_glove_inspected', 'underfloor_blanket_inspected', 'underfloor_doll_inspected'], serverOnly: true, evidence: { kind: 'none' } }),
+  // 매복 전투(C3-3) 승리 정산: 박음이 처치 + 기억실 방향 복구(실패 자국 길 개방 = 먼지 실타래 문 열림) + CH03_MEMORY_TRAIL_FOUND를 한 트랜잭션으로 기록한다.
+  //   C3-1에서는 사건 자리만 둔다(전투 정의는 C3-3). 서버 전용 — 클라이언트가 직접 요청할 수 없다
+  ev({ id: 'underfloor_ambush_won', chapter: 3, allowedAt: ['CH03_ELDER_MET'], requires: ['underfloor_items_inspected'], serverOnly: true, evidence: { kind: 'none' }, alsoComplete: ['underfloor_memory_trail_found'], to: 'CH03_MEMORY_TRAIL_FOUND' }),
+  ev({ id: 'underfloor_memory_trail_found', chapter: 3, allowedAt: ['CH03_ELDER_MET'], requires: ['underfloor_items_inspected'], serverOnly: true, evidence: { kind: 'none' } }),
+  // 내 것이 아닌 기억: 실패 자국 끝 지점에서 정본 장면을 끝까지 본 뒤 클라이언트가 완료를 요청한다(completesWith)
+  ev({ id: 'underfloor_memory_fragment_seen', chapter: 3, allowedAt: ['CH03_MEMORY_TRAIL_FOUND'], requires: ['underfloor_memory_trail_found'], evidence: { kind: 'point', stageCode: 'underground', pointId: 'underfloor_fragment' }, to: 'CH03_MEMORY_FRAGMENT_SEEN' }),
 ];
 
 // 부분 사건이 모두 기록되면 같은 트랜잭션에서 함께 기록하는 집계 사건(C2-3). 이미 기록돼 있으면 다시 만들지 않는다
 export const EVENT_AGGREGATES: { id: string; parts: string[] }[] = [
   { id: 'lake_trapped_turbies_rescued', parts: ['lake_trapped_mulduri_a_rescued', 'lake_trapped_mulduri_b_rescued', 'lake_trapped_mulduri_c_rescued'] },
+  { id: 'underfloor_items_inspected', parts: ['underfloor_glove_inspected', 'underfloor_blanket_inspected', 'underfloor_doll_inspected'] },
 ];
 
 export const STORY_OBJECTIVES: StoryObjectiveDef[] = [
@@ -354,6 +372,24 @@ export const STORY_TRIGGERS: StoryTriggerDef[] = [
   // 7) 염색 샘 보스 입장(C2-5A) — 위기 장면 뒤에만 보인다. 대화 구간의 storyBattle이 서버 스토리 전투를 연다(지점 반경 증거).
   //    C2-5B: 승리하면 서버가 lake_boss_defeated를 정산하고, 같은 재생 범위가 정본 승리 장면(ch02.boss_victory)으로 이어진다. 정산 뒤에는 입장 지점이 닫힌다
   { id: 'lake_boss_entrance', stageCode: 'lake', evidence: { kind: 'point', stageCode: 'lake', pointId: 'lake_boss_entrance' }, activeAt: ['CH02_NUBI_CRISIS_SEEN'], requires: ['lake_nubi_crisis_seen'], unless: ['lake_boss_defeated'], encounterKey: 'lake_boss_sewn_doll', repeatable: true, play: { segmentId: 'ch02.boss_intro', endAfter: 'ch02.boss_victory' } },
+  // ---- 3장 마루바닥 밑(C3-1) ----
+  // 1) 마루 틈새 입구 — 지역에 들어서면 서버가 실행. 도입(낯익은 어둠)을 끝까지 본 뒤 클라이언트가 underfloor_entry_seen을 요청한다(대화 구간 completesWith)
+  { id: 'underfloor_entry', stageCode: 'underground', evidence: { kind: 'stage', stageCode: 'underground' }, auto: true, repeatable: true, play: 'resume' },
+  // 2) 오래된 폭신이 — 장면을 끝까지 보면 underfloor_elder_met + CH03_ELDER_MET(대화 구간 completesWith). 중간에 끊기면 같은 지점에서 처음부터
+  { id: 'underfloor_elder', stageCode: 'underground', evidence: { kind: 'point', stageCode: 'underground', pointId: 'underfloor_elder' }, activeAt: ['CH03_STARTED'], requires: ['underfloor_entry_seen'], unless: ['underfloor_elder_met'], repeatable: true, play: { segmentId: 'ch03.elder', endAfter: 'ch03.elder' } },
+  // 3) 물건 더미 조사 3곳(순서 없음) — 닿으면 서버가 조사를 한 번 기록하고 짧은 기억 비침을 재생한다
+  ...(['glove', 'blanket', 'doll'] as const).map((k): StoryTriggerDef => ({
+    id: `underfloor_${k}`,
+    stageCode: 'underground',
+    evidence: { kind: 'point', stageCode: 'underground', pointId: `underfloor_${k}` },
+    event: `underfloor_${k}_inspected`,
+    repeatable: false,
+    play: { segmentId: `ch03.memory_${k}`, endAfter: `ch03.memory_${k}` },
+  })),
+  // 4) 기계음과 눌린 박음이 매복 — 세 곳을 모두 살펴본 뒤 열린다. C3-1은 지점과 기계음 장면까지, 전투(storyBattle)와 승리 정산은 C3-3
+  { id: 'underfloor_ambush', stageCode: 'underground', evidence: { kind: 'point', stageCode: 'underground', pointId: 'underfloor_ambush' }, activeAt: ['CH03_ELDER_MET'], requires: ['underfloor_items_inspected'], unless: ['underfloor_memory_trail_found'], repeatable: true, play: { segmentId: 'ch03.machine_sound', endAfter: 'ch03.machine_sound' } },
+  // 5) 실패 자국 끝의 기억 조각 — 먼지 실타래 문이 열린 뒤에만 닿는다. 장면을 끝까지 보면 underfloor_memory_fragment_seen + CH03_MEMORY_FRAGMENT_SEEN(completesWith)
+  { id: 'underfloor_fragment', stageCode: 'underground', evidence: { kind: 'point', stageCode: 'underground', pointId: 'underfloor_fragment' }, activeAt: ['CH03_MEMORY_TRAIL_FOUND'], requires: ['underfloor_memory_trail_found'], unless: ['underfloor_memory_fragment_seen'], repeatable: true, play: { segmentId: 'ch03.fragment', endAfter: 'ch03.fragment' } },
 ];
 export const TRIGGER_BY_ID = new Map(STORY_TRIGGERS.map((t) => [t.id, t]));
 

@@ -185,3 +185,7 @@ test('ch02(C2-1): 스키마 규칙을 지키고, 물빛 입구·색을 잃은 �
   assert.equal(crisis.entries[0].cameraCue, 'nubi-color-drain');
   assert.equal(crisis.entries.filter((e) => e.cameraCue).length, 2, '색 빠짐·채도 안정화 두 cue뿐(섬광·흔들림 없음)');
 });
+
+test('ch03(C3-1): 스키마 규칙 통과(오래된 폭신이 화자 포함)', () => {
+  checkSchema(load('ch03'));
+});

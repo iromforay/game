@@ -151,3 +151,21 @@ export function seedLake(device: string, stage: 'entry' | 'maze' | 'cleared' | '
     }
   };
 }
+
+// 10-16 C3-1: 2장을 마치고 3장 마루바닥 밑 입구에 서기 직전(CH02_COMPLETE, 성장 2) — 장착·장 완료 장면·3장 개방까지 기록된 계정.
+// stage = 'entry'(도입 직전) | 'started'(도입을 본 뒤 CH03_STARTED, 폭신이를 아직 못 만남)
+export function seedUnderfloor(device: string, stage: 'entry' | 'started' = 'entry') {
+  const base = seedLake(device, 'defeated');
+  return (db: FakeDb) => {
+    base(db);
+    const player = db.rows('player', { device_uuid: `dev-device-${device}-account` })[0] as { id: bigint };
+    for (const e of ['lake_dye_thread_equipped', 'underfloor_unlocked', 'lake_chapter_complete_seen']) db.seed('player_story_event', { player_id: player.id, event_id: e });
+    const progress = db.rows('player_story_progress', { player_id: player.id })[0] as { checkpoint: string; nubi_growth_stage: number };
+    progress.checkpoint = 'CH02_COMPLETE';
+    progress.nubi_growth_stage = 2;
+    if (stage === 'started') {
+      db.seed('player_story_event', { player_id: player.id, event_id: 'underfloor_entry_seen' });
+      progress.checkpoint = 'CH03_STARTED';
+    }
+  };
+}

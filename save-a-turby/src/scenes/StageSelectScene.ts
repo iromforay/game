@@ -31,8 +31,8 @@ const STATE_STYLE = {
 
 // 마을 출구에서 들어오는 지역 선택. 개방·진행 상태는 서버가 판정하고(M2, story.stageAccessV2) 이 화면은 결과만 그린다.
 // 서버 상태를 받지 못하면 모든 지역을 잠그고 다시 시도 버튼을 보여 준다(추측으로 열지 않음).
-// 장 이야기·지도가 아직 없는 지역(10-14 C2-6: 3장은 열리지만 콘텐츠는 이후 단계). 입장 대신 준비 문구를 보여 준다
-const STORY_PREPARING = new Set(['underground', 'ice', 'desert']);
+// 장 이야기·지도가 아직 없는 지역(10-16 C3-1: 3장 개방). 입장 대신 준비 문구를 보여 준다
+const STORY_PREPARING = new Set(['ice', 'desert']);
 const PREPARING_HINT = '이야기를 준비하고 있어요. 곧 만나요!';
 
 export class StageSelectScene extends Phaser.Scene {
