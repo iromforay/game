@@ -377,6 +377,40 @@ test('재접속 복원 + 영구 진행 불변: 페이즈·재봉실·구역·예
   assert.notEqual(await codeOf(s.battles.startStory('1', 'lake_boss_sewn_doll')), 'NO_ERROR');
 });
 
+test('패배(C2-8 증거): 보스에게 지면 사건·체크포인트·아이템·성장이 그대로이고, 입장 지점이 남아 다시 도전할 수 있다', async () => {
+  const s = setupService();
+  await enter(s);
+  standAt(s);
+  const before = snapshotDb(s);
+  const snap = await s.battles.startStory('1', 'lake_boss_sewn_doll');
+  let cur = (await s.battles.party('1', snap.battleId, [])).snapshot;
+  let seq = 0;
+  const act = async (body: object) => {
+    cur = (await s.battles.action('1', { battleId: cur.battleId, actionId: `l${++seq}`, expectedVersion: cur.version, ...body } as never)).snapshot;
+  };
+  // 결박 중의 보스·재봉실은 공격하지 않는다(가만히 있으면 지지 않는다) — 재봉실 셋을 끊어 약점을 노출시킨 뒤에는 보스를 공격하지 않고 차례만 넘긴다
+  for (let i = 0; i < 60 && cur.units.some((x) => x.partOf && !x.stunned); i++) {
+    const me = cur.units.find((x) => x.side === 'party')!;
+    const tgt = cur.units.find((x) => x.partOf && !x.stunned)!;
+    const d = Math.abs(tgt.col - me.col) + Math.abs(tgt.row - me.row);
+    if (me.ap < 1) await act({ type: 'end' });
+    else if (d === 1) await act({ type: 'attack', unitId: me.unitId, targetUnitId: tgt.unitId });
+    else await act({ type: 'move', unitId: me.unitId, targetCol: me.col + Math.sign(tgt.col - me.col) || me.col, targetRow: tgt.col === me.col ? me.row + Math.sign(tgt.row - me.row) : me.row });
+  }
+  assert.equal(cur.units.find((x) => x.unitId === 'waterlogged_sewn_doll')!.phase, 'exposed');
+  for (let i = 0; i < 400 && cur.phase !== 'resolved'; i++) await act({ type: 'end' });
+  assert.equal(cur.outcome, 'lose');
+  const ended = (await s.battles.snapshot('1', cur.battleId)).ended!;
+  assert.deepEqual([ended.outcome, ended.rewards.length], ['lose', 0]);
+  // 영구 진행 불변: 사건(lake_boss_defeated 없음)·체크포인트(CH02_NUBI_CRISIS_SEEN)·물빛 염색실·누비 성장 그대로
+  assert.equal(snapshotDb(s), before);
+  // 입장 지점은 그대로 열려 있고 같은 전투를 다시 시작할 수 있다
+  assert.equal((await s.story.stageData(P, 'lake')).points.some((p) => p.id === 'lake_boss_entrance'), true);
+  standAt(s);
+  const again = await s.battles.startStory('1', 'lake_boss_sewn_doll');
+  assert.deepEqual([again.phase, again.story?.encounterKey], ['party_select', 'lake_boss_sewn_doll']);
+});
+
 // ---------- 에셋 계약 ----------
 
 test('에셋: 네 키·파일·프레임·표시 수치 계약, water-dye-yarn은 복사·등록·지급 없음, 영구 사건 없음', () => {
