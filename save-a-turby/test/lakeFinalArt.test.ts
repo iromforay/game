@@ -71,12 +71,12 @@ test('충돌 디버그 오버레이: 개발 모드(import.meta.env.DEV)에서만
   assert.equal(/collisionDebug|setCollisionDebug/.test(readFileSync(here('../src/main.ts'), 'utf8')), false);
 });
 
-test('기능 좌표 고정(C2-7D): 최종 배경에 맞춘 spawn·story point·구조·문·물·물살·앵커·덫·blocker 값이 의도치 않게 바뀌지 않는다(C2-7C 88cb84b 값에서 표식 모드·구조 장면 표시 위치·닫힌 문 그림·열린 문 아래 기둥 x만 바뀌었다)', () => {
+test('기능 좌표 고정(C2-8): 최종 배경에 맞춘 spawn·story point·구조·문·물·물살·앵커·덫·blocker 값이 의도치 않게 바뀌지 않는다(C2-7D 33d5716 값에서 구조 C 물들이 그림 피벗만 바뀌었다)', () => {
   const keys = ['size', 'spawnPoint', 'points', 'regions', 'objects', 'storyPoints', 'layout', 'waterAreas', 'currentFields', 'safeAnchors', 'blackThreadTraps'];
   const canon = (v: unknown): unknown => (Array.isArray(v) ? v.map(canon) : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, canon((v as Record<string, unknown>)[k])])) : v);
   const sub = Object.fromEntries(keys.map((k) => [k, (LAKE_JSON as Record<string, unknown>)[k] ?? null]));
   const digest = createHash('sha256').update(JSON.stringify(canon(sub))).digest('hex');
-  assert.equal(digest, '4b352ced35206b08dc49471b7e3172ffda1eb2336f8ffc5a94c77b8876e11b4b');
+  assert.equal(digest, '8fdbcca55f7867b0bb2338a0cd2eb0cebfa60bd35f09a07a3c5b0d73d794e222');
 });
 
 test('최종 표식 모드(C2-7D): 호수는 final — 그림·상태 오버레이가 연결된 지점은 임시 표식이 사라지고, 그림이 없는 필수 지점(안전 물길·누비 위기·보스 입구)은 작은 식별 고리만 남는다', () => {

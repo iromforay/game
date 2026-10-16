@@ -27,11 +27,12 @@ const SMALL = { width: 640, height: 360 };
 const MAP_READY = 's.map && s.map.ready && s.map.inRoom && s.map.positioned && s.map.story';
 const RESCUED_ALL = ['lake_trapped_mulduri_a_rescued', 'lake_trapped_mulduri_b_rescued', 'lake_trapped_mulduri_c_rescued', 'lake_trapped_turbies_rescued'];
 const GATE_SAFE = { x: 2270, y: 452, width: 40, height: 100 };
-// 구조 지점마다: 접근 시작 위치(시드) → 길을 따라 안내가 뜰 때까지 걷는 경유지
-const APPROACH: Record<'a' | 'b' | 'c', { start: Pt; walk: Pt[] }> = {
-  a: { start: { x: 1788, y: 972 }, walk: [{ x: 1828, y: 1012 }, { x: 1868, y: 1036 }, { x: 1908, y: 1076 }, { x: 1932, y: 1084 }] },
-  b: { start: { x: 1556, y: 1012 }, walk: [{ x: 1596, y: 972 }, { x: 1620, y: 924 }, { x: 1636, y: 884 }] },
-  c: { start: { x: 1564, y: 1300 }, walk: [{ x: 1556, y: 1348 }, { x: 1556, y: 1396 }, { x: 1580, y: 1436 }, { x: 1604, y: 1468 }] },
+// 구조 지점마다: 접근 시작 위치(시드) → 길 경유지 → 안내 반경(90px) 안쪽 80px 자리(±10px, 길을 따라 다가오는 방향 위)
+// 멈춤 위치를 안내 감지 시점에 맡기면 병렬 부하에서 더 들어가 멈춘다(C2-8 전체 E2E에서 구조 C 4.9px) — 안내가 뜨는 자리에 정확히 선다
+const APPROACH: Record<'a' | 'b' | 'c', { start: Pt; walk: Pt[]; stop: Pt }> = {
+  a: { start: { x: 1788, y: 972 }, walk: [{ x: 1828, y: 1012 }], stop: { x: 1867, y: 1038 } },
+  b: { start: { x: 1556, y: 1012 }, walk: [{ x: 1596, y: 972 }], stop: { x: 1604, y: 956 } },
+  c: { start: { x: 1564, y: 1300 }, walk: [{ x: 1556, y: 1348 }], stop: { x: 1572, y: 1390 } },
 };
 
 type MapState = { avatar: Pt; story: { prompt: string | null; promptText: string | null; gates: Record<string, boolean> } };
@@ -167,7 +168,8 @@ const results: Record<string, Measure> = {};
 
 async function rescueScene(g: Game, device: string, k: 'a' | 'b' | 'c', label: string) {
   await startAt(g, device, APPROACH[k].start);
-  await via(g, APPROACH[k].walk, promptIs(`lake_rescue_${k}`)); // 안내가 뜨는 자리에서 멈춘다
+  await via(g, APPROACH[k].walk);
+  await g.walkDirect('Map', APPROACH[k].stop, 'joystick', 'false', 10); // 안내 반경 안쪽 80px 자리(±10px)
   await g.until(`구조 ${k} 안내`, `${promptIs(`lake_rescue_${k}`)} && !!s.map.story.promptText`, 20_000);
   const me = (results[`${label}-rescue-${k}`] = await measure(g, `lake_rescue_${k}`, null));
   console.log(`[C2-7D] ${label}-rescue-${k} ${JSON.stringify(me)}`);
