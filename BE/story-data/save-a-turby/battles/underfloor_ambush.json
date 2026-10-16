@@ -1,0 +1,89 @@
+{
+  "key": "underfloor_ambush",
+  "_note": "임시 전투 정의(기능 검증용 수치, 밸런스 정본 아님 — C3-3). 눌린 박음이 3(납작: 첫 피격은 피해 절반, 맞으면 재봉선 노출) + 작은 실패굴이 1(공격하지 않고 아군에게서 달아난다. 3라운드 안에 못 잡으면 박음이 전원 공격 +2 후 사라진다). 운반 실을 끊으면 실패굴이가 아군 쪽으로 굴러와 잡을 수 있다. 포획·보상 없음 — 승리하면 매복 승리 사건(실패 자국 길 개방)만 기록된다.",
+  "cornerEscape": false,
+  "objectives": {
+    "win": [
+      {
+        "kind": "defeat_units",
+        "unitIds": [
+          "pressed_doll_a",
+          "pressed_doll_b",
+          "pressed_doll_c",
+          "small_spool"
+        ]
+      }
+    ]
+  },
+  "units": [
+    {
+      "unitId": "pressed_doll_a",
+      "side": "wild",
+      "characterCode": "pressed_sewn_doll",
+      "name": "눌린 박음이",
+      "col": 8,
+      "row": 2,
+      "attack": 4,
+      "defense": 1,
+      "actionPower": 2,
+      "maxHp": 10,
+      "flat": true
+    },
+    {
+      "unitId": "pressed_doll_b",
+      "side": "wild",
+      "characterCode": "pressed_sewn_doll",
+      "name": "눌린 박음이",
+      "col": 8,
+      "row": 5,
+      "attack": 4,
+      "defense": 1,
+      "actionPower": 2,
+      "maxHp": 10,
+      "flat": true
+    },
+    {
+      "unitId": "pressed_doll_c",
+      "side": "wild",
+      "characterCode": "pressed_sewn_doll",
+      "name": "눌린 박음이",
+      "col": 10,
+      "row": 6,
+      "attack": 4,
+      "defense": 1,
+      "actionPower": 2,
+      "maxHp": 10,
+      "flat": true
+    },
+    {
+      "unitId": "small_spool",
+      "side": "wild",
+      "characterCode": "small_spool",
+      "name": "작은 실패굴이",
+      "col": 10,
+      "row": 3,
+      "attack": 0,
+      "defense": 0,
+      "actionPower": 2,
+      "maxHp": 6,
+      "flee": {
+        "empowerAfterRound": 3,
+        "empowerAttack": 2
+      }
+    },
+    {
+      "unitId": "carrier_thread",
+      "side": "wild",
+      "characterCode": "carrier_thread",
+      "name": "운반 실",
+      "col": 9,
+      "row": 3,
+      "attack": 0,
+      "defense": 0,
+      "actionPower": 0,
+      "maxHp": 1,
+      "canAct": false,
+      "carrierOf": "small_spool"
+    }
+  ]
+}

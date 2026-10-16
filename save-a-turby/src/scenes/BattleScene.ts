@@ -878,6 +878,24 @@ export class BattleScene extends Phaser.Scene {
       // 예고된 물살 적용: 서버가 정한 이동만 그린다(스냅샷으로 곧 같은 위치가 확정된다)
       showToast(this, `물살이 ${ev.direction === 'east' ? '→' : '←'} 방향으로 밀었어요`, { y: 660 });
       await wait(this, 350);
+    } else if (ev.type === 'wrong_thread') {
+      showToast(this, '이 실이 아니에요! 혼란에 빠졌어요', { y: 660, error: true });
+      await wait(this, 350);
+    } else if (ev.type === 'confused_action') {
+      showToast(this, '혼란 때문에 엉뚱하게 움직였어요', { y: 660 });
+      await wait(this, 250);
+    } else if (ev.type === 'carrier_cut') {
+      showToast(this, '운반 실이 끊겼어요! 실패굴이가 이쪽으로 굴러와요', { y: 660 });
+      await wait(this, 300);
+    } else if (ev.type === 'empower') {
+      showToast(this, '작은 실패굴이가 기억실을 전달했어요! 박음이가 강해졌어요', { y: 660, error: true });
+      await wait(this, 450);
+    } else if (ev.type === 'hint' && ev.code === 'thread_hint') {
+      showToast(this, ev.text, { y: 660 });
+      await wait(this, 200);
+    } else if (ev.type === 'phase' && this.unit(ev.unitId)?.flat !== undefined) {
+      showToast(this, '재봉선이 드러났어요', { y: 660 });
+      await wait(this, 200);
     } else if (ev.type === 'subturn' && ev.phase === 'wild_turn') {
       this.statusText.setText('야생 터비 차례...');
       await wait(this, 500);

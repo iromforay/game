@@ -74,20 +74,22 @@ test('이벤트·지점 정의: 이름·체크포인트 전이·서버 전용 �
   for (const k of ['glove', 'blanket', 'doll']) assert.deepEqual([e(`underfloor_${k}_inspected`).serverOnly, e(`underfloor_${k}_inspected`).to ?? null], [true, null]);
   assert.deepEqual([e('underfloor_ambush_won').serverOnly, e('underfloor_ambush_won').to, e('underfloor_ambush_won').alsoComplete], [true, 'CH03_MEMORY_TRAIL_FOUND', ['underfloor_memory_trail_found']]);
   assert.deepEqual(EVENT_AGGREGATES.find((a) => a.id === 'underfloor_items_inspected')!.parts, ['glove', 'blanket', 'doll'].map((k) => `underfloor_${k}_inspected`));
-  for (const d of STORY_EVENTS.filter((x) => x.id.startsWith('underfloor_') && x.id !== 'underfloor_unlocked')) {
+  // 보상·장착은 보스 정산(grant)과 장착 사건(equipRelic) 둘뿐이다(10-16 C3-3). 나머지 3장 사건에는 아이템·통화·성장이 없다
+  const REWARD = ['underfloor_boss_defeated', 'underfloor_cotton_core_equipped'];
+  for (const d of STORY_EVENTS.filter((x) => x.id.startsWith('underfloor_') && x.id !== 'underfloor_unlocked' && !REWARD.includes(x.id))) {
     assert.equal(d.chapter, 3, d.id);
-    assert.deepEqual([d.grant, d.consume, d.equipRelic, d.grantStoryNubi], [undefined, undefined, undefined, undefined], `${d.id}: 아이템·통화·성장 없음(C3-1)`);
+    assert.deepEqual([d.grant, d.consume, d.equipRelic, d.grantStoryNubi], [undefined, undefined, undefined, undefined], `${d.id}: 아이템·통화·성장 없음`);
   }
   assert.deepEqual(
     STORY_TRIGGERS.filter((t) => t.stageCode === 'underground').map((t) => t.id),
-    ['underfloor_entry', 'underfloor_elder', 'underfloor_glove', 'underfloor_blanket', 'underfloor_doll', 'underfloor_ambush', 'underfloor_fragment'],
+    ['underfloor_entry', 'underfloor_elder', 'underfloor_glove', 'underfloor_blanket', 'underfloor_doll', 'underfloor_ambush', 'underfloor_fragment', 'underfloor_boss_entrance'],
   );
   for (const t of STORY_TRIGGERS.filter((x) => x.stageCode === 'underground' && x.evidence.kind === 'point')) assert.ok(pointOf((t.evidence as { pointId: string }).pointId), `${t.id}의 지점이 지역 데이터에 있다`);
   const idx = (c: string) => (CHECKPOINTS as readonly string[]).indexOf(c);
   assert.ok(idx('CH03_STARTED') < idx('CH03_ELDER_MET') && idx('CH03_ELDER_MET') < idx('CH03_MEMORY_TRAIL_FOUND') && idx('CH03_MEMORY_TRAIL_FOUND') < idx('CH03_MEMORY_FRAGMENT_SEEN'));
 });
 
-test('대화 데이터: 구간 7개의 시작 체크포인트·완료 이벤트와 재생 범위가 서버 전이표·트리거와 같고, 화자는 정본 라벨이다', () => {
+test('대화 데이터: 구간 10개의 시작 체크포인트·완료 이벤트와 재생 범위가 서버 전이표·트리거와 같고, 화자는 정본 라벨이다', () => {
   assert.deepEqual(
     CH03.segments.map((s) => [s.segmentId, s.resumeFrom, s.completesWith]),
     [
@@ -98,10 +100,17 @@ test('대화 데이터: 구간 7개의 시작 체크포인트·완료 이벤트�
       ['ch03.memory_doll', 'CH03_ELDER_MET', null],
       ['ch03.machine_sound', 'CH03_ELDER_MET', null],
       ['ch03.fragment', 'CH03_MEMORY_TRAIL_FOUND', 'underfloor_memory_fragment_seen'],
+      ['ch03.boss_intro', 'CH03_MEMORY_FRAGMENT_SEEN', null],
+      ['ch03.boss_victory', 'CH03_BOSS_DEFEATED', 'underfloor_boss_aftermath_seen'],
+      ['ch03.chapter_complete', 'CH03_COMPLETE', 'underfloor_chapter_complete_seen'],
     ],
   );
   const ids = new Set(CH03.segments.map((s) => s.segmentId));
   for (const t of STORY_TRIGGERS.filter((x) => x.stageCode === 'underground' && typeof x.play === 'object')) assert.ok(ids.has((t.play as { segmentId: string }).segmentId), `${t.id} 재생 구간`);
+  // 전투 항목은 서버 스토리 전투 키와 같고 해당 트리거가 같은 키를 연다
+  const battles = CH03.segments.flatMap((x) => x.entries.filter((e) => e.kind === 'storyBattle').map((e) => [x.segmentId, (e as { encounterKey?: string }).encounterKey]));
+  assert.deepEqual(battles, [['ch03.machine_sound', 'underfloor_ambush'], ['ch03.boss_intro', 'underfloor_boss_memory_spool']]);
+  for (const [, key] of battles) assert.ok(STORY_TRIGGERS.some((t) => t.encounterKey === key), `${key} 트리거`);
   for (const s of CH03.segments) if (s.completesWith) assert.ok(EVENT_BY_ID.get(s.completesWith), `${s.segmentId} 완료 이벤트`);
   const elder = CH03.segments[1].entries.filter((x) => x.kind === 'line' && x.speaker === 'old_pokshini');
   assert.ok(elder.length >= 3 && elder.every((x) => x.speakerLabel === '오래된 폭신이' && x.portrait === null));
@@ -217,7 +226,7 @@ test('ch03 대화(C3-1 구간): 장면 문서와 서술·대사가 같은 순서
   const { EXCLUDED, PARTIAL, sentences } = require(join(ROOT, 'BE/story-data/save-a-turby/tools/build-ch03.js')) as { EXCLUDED: Record<number, string>; PARTIAL: Record<number, { keep: number[] }>; sentences: (s: string) => string[] };
   const raw = readFileSync(join(DOCS, 'docs/scene/3장.md'), 'utf8').split(/\r?\n/);
   const from = raw.findIndex((l) => l.trim() === '## 낯익은 어둠');
-  const to = raw.findIndex((l) => l.trim() === '## 기억 실패굴이'); // 3장 후반(보스·돌아온 중심)은 C3-3에서 대조 범위에 넣는다
+  const to = raw.length; // 3장 전체(낯익은 어둠 ~ 돌아온 중심)
   assert.ok(from >= 0 && to > from);
   const md: { who: string | null; text: string }[] = [];
   let speaker: string | null = null;

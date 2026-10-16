@@ -63,8 +63,8 @@ export type TargetState = 'ok' | 'not_target' | 'part_order' | 'protected' | 'ze
 
 export function targetState(snap: BattleSnapshot, target: BattleUnit): TargetState {
   if (target.side !== 'wild' || !isLive(target) || target.targetable === false) return 'not_target';
-  if (target.partOf) {
-    // 살아 있는 부위 중 가장 작은 순서만 공격할 수 있다(엔진 attack()과 같은 판정)
+  if (target.partOf && !target.thread) {
+    // (기억실은 순서가 아닌 실을 눌러도 서버가 받는다 — 혼란 규칙) 살아 있는 부위 중 가장 작은 순서만 공격할 수 있다(엔진 attack()과 같은 판정)
     const first = Math.min(...snap.units.filter((p) => p.partOf === target.partOf && !p.stunned).map((p) => p.breakOrder ?? 0));
     if ((target.breakOrder ?? 0) !== first) return 'part_order';
   }
@@ -106,12 +106,17 @@ export function unitTags(u: BattleUnit): string[] {
   if (u.stunned) tags.push('기절');
   if (u.inactive) tags.push('이탈');
   if (u.side === 'neutral') tags.push('보호 대상');
+  if (u.thread) return u.hinted ? ['다음 실'] : [];
+  if (u.flat === true) tags.push('납작');
+  else if (u.flat === false) tags.push('재봉선 노출');
+  if (u.reversed) tags.push('운반 실 끊김');
   if (u.phase === 'bound') tags.push('결박');
   else if (u.phase === 'exposed') tags.push('약점 노출');
   else if (u.invulnerable) tags.push('부위 먼저');
   for (const s of u.statuses ?? []) {
     if (s.kind === 'bind') tags.push(`속박 ${s.turnsLeft}`);
     else if (s.kind === 'wet_bind') tags.push('젖은 속박');
+    else if (s.kind === 'confused') tags.push('혼란');
   }
   return tags;
 }
@@ -252,6 +257,7 @@ export function resultLayout(scale: number, rowCount: number, framed = false): R
 const SHORT_TAG: Record<string, string> = { '보호 대상': '보호', '부위 먼저': '부위 먼저' };
 export function unitLabel(u: BattleUnit, compact: boolean): string {
   // 10-14 v1a: 검은 재봉실은 A/B/C 글자로 구분하고 모바일에서는 "검은 실 A" 한 줄(HP 1/1은 생략)
+  if (u.thread) return compact ? `${u.name} ${threadNumber(u)}${u.hinted ? ' ▶' : ''}` : `${u.name} ${threadNumber(u)}${u.hinted ? ' (다음 실)' : ''}`;
   if (isSeam(u)) return compact ? `검은 실 ${seamLetter(u)}` : `${u.name} ${seamLetter(u)} HP ${u.hp}/${u.maxHp}`;
   const tags = unitTags(u);
   if (!compact) return `${u.name} HP ${u.hp}/${u.maxHp}${tags.length > 0 ? ` (${tags.join(' · ')})` : ''}`;
@@ -264,7 +270,10 @@ export function unitLabel(u: BattleUnit, compact: boolean): string {
 export const isSeam = (u: BattleUnit) => u.characterCode === 'black_seam';
 export const seamLetter = (u: BattleUnit) => u.unitId.slice(-1).toUpperCase();
 export const isRemovedSeam = (u: BattleUnit) => isSeam(u) && (u.stunned || u.inactive);
-export const isHiddenUnit = (u: BattleUnit) => !!u.fled || isRemovedSeam(u);
+// 10-16 C3-3: 끊어진 기억실·운반 실도 같은 방식으로 숨긴다
+export const isCutThread = (u: BattleUnit) => (!!u.thread || u.characterCode === 'carrier_thread') && (u.stunned || u.inactive);
+export const isHiddenUnit = (u: BattleUnit) => !!u.fled || isRemovedSeam(u) || isCutThread(u);
+export const threadNumber = (u: BattleUnit) => u.unitId.slice(-1);
 
 // 색 구역 공용 발자국: 세 구역을 겹치지 않는 영역으로 나눠 한 장 크기(720×480) 안에서 표현한다. 알파는 격자 선이 읽히는 0.32~0.48
 export const ZONE_FOOTPRINT = { w: 720, h: 480 } as const;

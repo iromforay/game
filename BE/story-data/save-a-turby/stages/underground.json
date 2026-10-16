@@ -240,6 +240,26 @@
       "text": "넓은 빈 공간으로 가자.",
       "requires": [
         "underfloor_memory_fragment_seen"
+      ],
+      "unless": [
+        "underfloor_boss_defeated"
+      ]
+    },
+    {
+      "id": "bring_core",
+      "text": "오래된 솜심을 누비에게 가져가자.",
+      "requires": [
+        "underfloor_boss_aftermath_seen"
+      ],
+      "unless": [
+        "underfloor_cotton_core_equipped"
+      ]
+    },
+    {
+      "id": "follow_silver",
+      "text": "은빛 실이 가리키는 북쪽으로 가자.",
+      "requires": [
+        "underfloor_cotton_core_equipped"
       ]
     }
   ],

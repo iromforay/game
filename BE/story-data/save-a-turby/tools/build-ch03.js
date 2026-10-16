@@ -1,7 +1,6 @@
 // docs/scene/3장.md → BE/story-data/save-a-turby/dialogue/ch03.json 변환(문구는 MD 줄에서 그대로 가져온다 — 손으로 옮기지 않음).
 // 실행: node BE/story-data/save-a-turby/tools/build-ch03.js
-// C3-1 범위: 낯익은 어둠 · 오래된 폭신이 · 사라진 기억실(조사 3곳, 기계음) · 내 것이 아닌 기억.
-// 기억 실패굴이(보스)와 돌아온 중심은 C3-3에서 같은 방식으로 추가한다.
+// 범위: 낯익은 어둠 · 오래된 폭신이 · 사라진 기억실(조사 3곳, 기계음, 매복 전투) · 내 것이 아닌 기억 · 기억 실패굴이(보스 입장·승리) · 돌아온 중심.
 // 연출 지시문(발동 조건·저장점 안내·전투 진행 설명)은 대사가 아니라 트리거·전이표가 대신하므로 옮기지 않는다 — EXCLUDED에 근거와 함께 둔다.
 const fs = require('fs');
 const path = require('path');
@@ -39,6 +38,11 @@ const EXCLUDED = {
   103: '중간 저장점 안내(CH03_MEMORY_TRAIL_FOUND — 전이표)',
   122: '중간 저장점 안내(CH03_MEMORY_FRAGMENT_SEEN — 전이표)',
   123: '중간 저장점 안내(CH03_MEMORY_FRAGMENT_SEEN — 전이표)',
+  134: '보스 전투 진행 설명 → storyBattle underfloor_boss_memory_spool와 전투 정의(기억실 순서·혼란)',
+  146: '중간 저장점 안내(CH03_BOSS_DEFEATED — 전이표)',
+  147: '중간 저장점 안내(CH03_BOSS_DEFEATED — 전이표)',
+  164: '중간 저장점 안내(CH03_COMPLETE — 전이표)',
+  165: '중간 저장점 안내(CH03_COMPLETE — 전이표)',
 };
 
 // 한 줄에 서술과 전투 진행 설명이 섞인 줄: 서술 문장만 원문 그대로 옮긴다(문장 번호는 0부터)
@@ -62,6 +66,8 @@ function l(seg, labelLine, textLine, expression) {
   if (!speaker) throw new Error(`알 수 없는 화자 ${label} (${labelLine})`);
   return { kind: 'line', dialogueId: id(seg), speaker, speakerLabel: label, text: unquote(L(textLine)), portrait: PORTRAIT[speaker], expression, cameraCue: null, soundCue: null };
 }
+
+const battle = (seg, encounterKey) => ({ kind: 'storyBattle', dialogueId: id(seg), encounterKey });
 
 function segment(segmentId, resumeFrom, replayOnResume, completesWith, build) {
   return { segmentId, resumeFrom, replayOnResume, completesWith, entries: build(segmentId) };
@@ -105,6 +111,7 @@ const file = {
       n(s, 95),
       l(s, 97, 98, 'worried'),
       ns(s, 100, 0),
+      battle(s, 'underfloor_ambush'), // 승리 시 서버가 underfloor_ambush_won(+ underfloor_memory_trail_found, CH03_MEMORY_TRAIL_FOUND) 기록
     ]),
     // 실패 자국 끝의 기억 조각 → underfloor_memory_fragment_seen + CH03_MEMORY_FRAGMENT_SEEN
     segment('ch03.fragment', 'CH03_MEMORY_TRAIL_FOUND', true, 'underfloor_memory_fragment_seen', (s) => [
@@ -115,6 +122,30 @@ const file = {
       l(s, 114, 115, 'worried'),
       l(s, 117, 118, 'weak'),
       n(s, 120),
+    ]),
+    // 넓은 빈 공간 입구: 보스 도입 → 전투 → (이기면 이어서) 승리 장면. 한 재생 범위로 이어진다
+    segment('ch03.boss_intro', 'CH03_MEMORY_FRAGMENT_SEEN', false, null, (s) => [
+      t(s, 125),
+      n(s, 127),
+      n(s, 129),
+      l(s, 131, 132, 'neutral'),
+      battle(s, 'underfloor_boss_memory_spool'), // 승리 시 서버가 underfloor_boss_defeated(솜심 지급 사건·오래된 솜심·CH03_BOSS_DEFEATED) 기록
+    ]),
+    // 승리 장면을 끝까지 보면 underfloor_boss_aftermath_seen(체크포인트·보상·성장 변화 없음). 재접속하면 이 장면부터
+    segment('ch03.boss_victory', 'CH03_BOSS_DEFEATED', true, 'underfloor_boss_aftermath_seen', (s) => [
+      n(s, 136),
+      n(s, 138),
+      l(s, 140, 141, 'worried'),
+      l(s, 143, 144, 'neutral'),
+    ]),
+    // 인벤토리에서 "누비에게 장착"(underfloor_cotton_core_equipped) 성공 직후 — 장면을 끝까지 보면 underfloor_chapter_complete_seen
+    segment('ch03.chapter_complete', 'CH03_COMPLETE', true, 'underfloor_chapter_complete_seen', (s) => [
+      t(s, 149),
+      n(s, 151),
+      l(s, 153, 154, 'neutral'),
+      l(s, 156, 157, 'neutral'),
+      n(s, 159),
+      l(s, 161, 162, 'neutral'),
     ]),
   ],
 };

@@ -144,7 +144,9 @@ const goals = [
   { id: 'inspect_2', text: '오래된 물건을 살펴보자. 2/3', requires: ['underfloor_elder_met'], count: { of: ['underfloor_glove_inspected', 'underfloor_blanket_inspected', 'underfloor_doll_inspected'], is: 2 } },
   { id: 'find_sound', text: '기계음이 나는 쪽을 확인하자.', requires: ['underfloor_items_inspected'], unless: ['underfloor_memory_trail_found'] },
   { id: 'follow_trail', text: '굴러간 실패 자국을 따라가자.', requires: ['underfloor_memory_trail_found'], unless: ['underfloor_memory_fragment_seen'] },
-  { id: 'reach_arena', text: '넓은 빈 공간으로 가자.', requires: ['underfloor_memory_fragment_seen'] },
+  { id: 'reach_arena', text: '넓은 빈 공간으로 가자.', requires: ['underfloor_memory_fragment_seen'], unless: ['underfloor_boss_defeated'] },
+  { id: 'bring_core', text: '오래된 솜심을 누비에게 가져가자.', requires: ['underfloor_boss_aftermath_seen'], unless: ['underfloor_cotton_core_equipped'] },
+  { id: 'follow_silver', text: '은빛 실이 가리키는 북쪽으로 가자.', requires: ['underfloor_cotton_core_equipped'] },
 ];
 const zones = [
   { id: 'zone_crack', label: '마루 틈새', x: 120, y: 1750, width: 800, height: 500 },

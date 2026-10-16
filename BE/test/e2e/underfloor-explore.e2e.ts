@@ -7,7 +7,7 @@ import { join } from 'path';
 import type { Browser } from 'playwright-core';
 import { Backend, Game, ROOT, freePort, launchBrowser, startVite, withDiagnosis } from './harness';
 import { seedUnderfloor } from './fixtures';
-import { SPAWN_TO_ELDER, ELDER_TO_GLOVE, GLOVE_TO_BLANKET, BLANKET_TO_DOLL, DOLL_TO_AMBUSH, type Pt } from '../helpers/underfloor-route';
+import { SPAWN_TO_ELDER, ELDER_TO_GLOVE, GLOVE_TO_BLANKET, BLANKET_TO_DOLL, type Pt } from '../helpers/underfloor-route';
 
 let backend: Backend;
 let vite: { url: string; close: () => Promise<void> };
@@ -151,13 +151,10 @@ test('3장 C3-1 ①: 마루 밑 입장 → 도입 → 새로고침(반복 없음
     assert.deepEqual(s.points, ['underfloor_ambush'], '조사 뒤 매복 지점만 표시됨');
     await g.capture('underfloor_04_items_done');
 
-    // 5) 기계음 장면 — C3-1은 장면까지(전투와 정산은 C3-3). 체크포인트·문은 그대로
-    await interact(g, 'underfloor_ambush', DOLL_TO_AMBUSH, 'keys');
-    db = dbOf(device);
-    assert.equal(db.checkpoint, 'CH03_ELDER_MET');
-    assert.equal(db.events.includes('underfloor_memory_trail_found'), false);
+    // 5) 기계음 장면 뒤 매복 전투는 underfloor-battle.e2e.ts가 본다. 여기서는 전투 전 상태(문 닫힘·체크포인트)만 확인한다
     assert.equal((await story(g)).gates.gate_dust_yarn, false, '전투 승리 전에는 먼지 실타래 문이 닫혀 있다');
-    await g.capture('underfloor_05_machine_sound_seen');
+    assert.equal(db.events.includes('underfloor_memory_trail_found'), false);
+    await g.capture('underfloor_05_before_ambush');
     assert.deepEqual(db.events.filter((e) => e.startsWith('underfloor_')).sort(), ['underfloor_blanket_inspected', 'underfloor_doll_inspected', 'underfloor_elder_met', 'underfloor_entry_seen', 'underfloor_glove_inspected', 'underfloor_items_inspected', 'underfloor_unlocked']);
   }, backend, device);
   await g.close();

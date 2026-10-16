@@ -153,8 +153,8 @@ export function seedLake(device: string, stage: 'entry' | 'maze' | 'cleared' | '
 }
 
 // 10-16 C3-1: 2장을 마치고 3장 마루바닥 밑 입구에 서기 직전(CH02_COMPLETE, 성장 2) — 장착·장 완료 장면·3장 개방까지 기록된 계정.
-// stage = 'entry'(도입 직전) | 'started'(도입을 본 뒤 CH03_STARTED, 폭신이를 아직 못 만남) | 'trail'(C3-2: 매복 승리 뒤 CH03_MEMORY_TRAIL_FOUND — 먼지 실타래 문 열림·실패 자국 표시)
-export function seedUnderfloor(device: string, stage: 'entry' | 'started' | 'trail' = 'entry') {
+// stage = 'entry'(도입 직전) | 'started'(도입을 본 뒤 CH03_STARTED, 폭신이를 아직 못 만남) | 'items'(C3-3: 폭신이·조사 3곳을 마친 CH03_ELDER_MET — 매복 직전) | 'trail'(C3-2: 매복 승리 뒤 CH03_MEMORY_TRAIL_FOUND — 먼지 실타래 문 열림·실패 자국 표시) | 'fragment'(기억 조각 장면까지 끝낸 CH03_MEMORY_FRAGMENT_SEEN — 보스 직전) | 'aftermath'(보스 승리 장면까지 끝난 CH03_BOSS_DEFEATED, 솜심 보유·미장착 — 장착 직전)
+export function seedUnderfloor(device: string, stage: 'entry' | 'started' | 'items' | 'trail' | 'fragment' | 'aftermath' = 'entry') {
   const base = seedLake(device, 'defeated');
   return (db: FakeDb) => {
     base(db);
@@ -163,9 +163,23 @@ export function seedUnderfloor(device: string, stage: 'entry' | 'started' | 'tra
     const progress = db.rows('player_story_progress', { player_id: player.id })[0] as { checkpoint: string; nubi_growth_stage: number };
     progress.checkpoint = 'CH02_COMPLETE';
     progress.nubi_growth_stage = 2;
-    if (stage === 'trail') {
-      for (const e of ['underfloor_entry_seen', 'underfloor_elder_met', 'underfloor_glove_inspected', 'underfloor_blanket_inspected', 'underfloor_doll_inspected', 'underfloor_items_inspected', 'underfloor_ambush_won', 'underfloor_memory_trail_found']) db.seed('player_story_event', { player_id: player.id, event_id: e });
-      progress.checkpoint = 'CH03_MEMORY_TRAIL_FOUND';
+    const ELDER = ['underfloor_entry_seen', 'underfloor_elder_met'];
+    const ITEMS = [...ELDER, 'underfloor_glove_inspected', 'underfloor_blanket_inspected', 'underfloor_doll_inspected', 'underfloor_items_inspected'];
+    const TRAIL = [...ITEMS, 'underfloor_ambush_won', 'underfloor_memory_trail_found'];
+    const seedEvents = (list: string[], checkpoint: string) => {
+      for (const e of list) db.seed('player_story_event', { player_id: player.id, event_id: e });
+      progress.checkpoint = checkpoint;
+    };
+    if (stage === 'items') seedEvents(ITEMS, 'CH03_ELDER_MET');
+    if (stage === 'trail') seedEvents(TRAIL, 'CH03_MEMORY_TRAIL_FOUND');
+    if (stage === 'fragment') seedEvents([...TRAIL, 'underfloor_memory_fragment_seen'], 'CH03_MEMORY_FRAGMENT_SEEN');
+    if (stage === 'aftermath') {
+      seedEvents([...TRAIL, 'underfloor_memory_fragment_seen', 'underfloor_boss_defeated', 'underfloor_cotton_core_granted', 'underfloor_boss_aftermath_seen'], 'CH03_BOSS_DEFEATED');
+      const def = (code: string) => (db.rows('item_definition', { code })[0] as { id: number }).id;
+      const at = new Date();
+      db.seed('player_item', { player_id: player.id, item_definition_id: def('old_cotton_core'), quantity: 1, is_new: true, is_locked: true, first_acquired_at: at, last_acquired_at: at });
+      const nubi = db.rows('turby_instance', { owner_player_id: player.id, is_story_companion: true })[0] as { id: bigint };
+      if (db.rows('turby_equipment', { turby_instance_id: nubi.id, slot_key: 'story_2' }).length === 0) db.seed('turby_equipment', { turby_instance_id: nubi.id, slot_key: 'story_2', item_definition_id: def('water_dye_yarn') });
     }
     if (stage === 'started') {
       db.seed('player_story_event', { player_id: player.id, event_id: 'underfloor_entry_seen' });
