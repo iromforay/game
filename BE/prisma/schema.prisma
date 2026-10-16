@@ -564,12 +564,18 @@ model my_room_dungeon_profile {
 
 // 달콤상점 0단계 — account 기반 비동기 카페/거래 데이터
 model sweet_shop_profile {
-  account_id                 BigInt   @id @db.UnsignedBigInt
+  profile_id                 BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  account_id                 BigInt?  @unique(map: "uq_sweet_profile_account") @db.UnsignedBigInt
+  guest_id                   String?  @unique(map: "uq_sweet_profile_guest") @db.VarChar(64)
   cafe_name                  String   @default("나의 달콤상점") @db.VarChar(30)
   level                      Int      @default(1) @db.UnsignedInt
   experience                 Int      @default(0) @db.UnsignedInt
   gold                       Int      @default(100) @db.UnsignedInt
   first_cooking_tutorial_completed Boolean @default(false)
+  buff_source_dessert_name   String?  @db.VarChar(60)
+  buff_quality_bonus         Int?     @db.UnsignedTinyInt
+  buff_eligible_recipe_level Int?     @db.UnsignedInt
+  buff_ends_at               DateTime? @db.Timestamp(0)
   representative_dessert_id  BigInt?  @db.UnsignedBigInt
   last_played_at             DateTime @default(now()) @db.Timestamp(0)
   created_at                 DateTime @default(now()) @db.Timestamp(0)
@@ -577,24 +583,24 @@ model sweet_shop_profile {
 }
 
 model sweet_shop_storage {
-  account_id             BigInt @id @db.UnsignedBigInt
+  profile_id             BigInt @id @db.UnsignedBigInt
   ingredient_slot_limit  Int    @default(12) @db.UnsignedSmallInt
   dessert_slot_limit     Int    @default(12) @db.UnsignedSmallInt
 }
 
 model sweet_shop_ingredient {
-  account_id     BigInt @db.UnsignedBigInt
+  profile_id     BigInt @db.UnsignedBigInt
   ingredient_id String @db.VarChar(40)
   quality        Int    @default(1) @db.UnsignedTinyInt
   quantity       Int    @default(0) @db.UnsignedInt
 
-  @@id([account_id, ingredient_id, quality])
+  @@id([profile_id, ingredient_id, quality])
 }
 
 model sweet_shop_delivery {
   id            BigInt                     @id @default(autoincrement()) @db.UnsignedBigInt
   request_id    String                     @unique(map: "uq_sweet_delivery_request") @db.VarChar(64)
-  account_id    BigInt                     @db.UnsignedBigInt
+  profile_id    BigInt                     @db.UnsignedBigInt
   ingredient_id String                     @db.VarChar(40)
   quality       Int                        @default(1) @db.UnsignedTinyInt
   quantity      Int                        @db.UnsignedInt
@@ -604,7 +610,7 @@ model sweet_shop_delivery {
   arrives_at    DateTime                   @db.Timestamp(0)
   received_at   DateTime?                  @db.Timestamp(0)
 
-  @@index([account_id, status, arrives_at], map: "idx_sweet_delivery_account")
+  @@index([profile_id, status, arrives_at], map: "idx_sweet_delivery_profile")
 }
 
 enum sweet_shop_delivery_status {
@@ -615,7 +621,7 @@ enum sweet_shop_delivery_status {
 }
 
 model sweet_shop_recipe_progress {
-  account_id          BigInt   @db.UnsignedBigInt
+  profile_id          BigInt   @db.UnsignedBigInt
   recipe_id           String   @db.VarChar(40)
   mastery_level       Int      @default(1) @db.UnsignedInt
   mastery_experience  Int      @default(0) @db.UnsignedInt
@@ -623,13 +629,13 @@ model sweet_shop_recipe_progress {
   highest_quality     Int      @default(0) @db.UnsignedTinyInt
   unlocked_at         DateTime @default(now()) @db.Timestamp(0)
 
-  @@id([account_id, recipe_id])
+  @@id([profile_id, recipe_id])
 }
 
 model sweet_shop_cooking_job {
   id             BigInt                    @id @default(autoincrement()) @db.UnsignedBigInt
   request_id     String                    @unique(map: "uq_sweet_cooking_request") @db.VarChar(64)
-  account_id     BigInt                    @db.UnsignedBigInt
+  profile_id     BigInt                    @db.UnsignedBigInt
   recipe_id      String                    @db.VarChar(40)
   quantity       Int                       @default(1) @db.UnsignedInt
   status         sweet_shop_cooking_status @default(cooking)
@@ -637,19 +643,21 @@ model sweet_shop_cooking_job {
   completes_at   DateTime                  @db.Timestamp(0)
   received_at    DateTime?                 @db.Timestamp(0)
 
-  @@index([account_id, status], map: "idx_sweet_cooking_account")
+  @@index([profile_id, status], map: "idx_sweet_cooking_profile")
 }
 
 enum sweet_shop_cooking_status {
+  queued
   cooking
+  completed
   waiting_for_space
   received
 }
 
 model sweet_shop_dessert {
   id             BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
-  owner_id       BigInt   @db.UnsignedBigInt
-  creator_id     BigInt   @db.UnsignedBigInt
+  owner_profile_id   BigInt   @db.UnsignedBigInt
+  creator_profile_id BigInt   @db.UnsignedBigInt
   recipe_id      String   @db.VarChar(40)
   dessert_level  Int      @default(1) @db.UnsignedInt
   quality        Int      @default(1) @db.UnsignedTinyInt
@@ -658,14 +666,14 @@ model sweet_shop_dessert {
   buff_value     Int      @default(0)
   created_at     DateTime @default(now()) @db.Timestamp(0)
 
-  @@index([owner_id], map: "idx_sweet_dessert_owner")
-  @@index([creator_id], map: "idx_sweet_dessert_creator")
+  @@index([owner_profile_id], map: "idx_sweet_dessert_owner")
+  @@index([creator_profile_id], map: "idx_sweet_dessert_creator")
 }
 
 model sweet_shop_listing {
   id          BigInt                    @id @default(autoincrement()) @db.UnsignedBigInt
   request_id  String                    @unique(map: "uq_sweet_listing_request") @db.VarChar(64)
-  seller_id   BigInt                    @db.UnsignedBigInt
+  seller_profile_id BigInt              @db.UnsignedBigInt
   dessert_id  BigInt                    @db.UnsignedBigInt
   quantity    Int                       @db.UnsignedInt
   unit_price  Int                       @db.UnsignedInt
@@ -673,7 +681,7 @@ model sweet_shop_listing {
   listed_at   DateTime                  @default(now()) @db.Timestamp(0)
   sold_out_at DateTime?                 @db.Timestamp(0)
 
-  @@index([seller_id, status], map: "idx_sweet_listing_seller")
+  @@index([seller_profile_id, status], map: "idx_sweet_listing_seller")
   @@index([status, listed_at], map: "idx_sweet_listing_browse")
 }
 
@@ -687,26 +695,70 @@ model sweet_shop_trade {
   id          BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
   request_id  String   @unique(map: "uq_sweet_trade_request") @db.VarChar(64)
   listing_id  BigInt   @db.UnsignedBigInt
-  seller_id   BigInt   @db.UnsignedBigInt
-  buyer_id    BigInt   @db.UnsignedBigInt
+  seller_profile_id BigInt @db.UnsignedBigInt
+  buyer_profile_id  BigInt @db.UnsignedBigInt
   dessert_id  BigInt   @db.UnsignedBigInt
   quantity    Int      @db.UnsignedInt
   unit_price  Int      @db.UnsignedInt
   total_price Int      @db.UnsignedInt
   created_at  DateTime @default(now()) @db.Timestamp(0)
 
-  @@index([seller_id, created_at], map: "idx_sweet_trade_seller")
-  @@index([buyer_id, created_at], map: "idx_sweet_trade_buyer")
+  @@index([seller_profile_id, created_at], map: "idx_sweet_trade_seller")
+  @@index([buyer_profile_id, created_at], map: "idx_sweet_trade_buyer")
 }
 
 model sweet_shop_guestbook {
   id                 BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
-  cafe_owner_id      BigInt   @db.UnsignedBigInt
-  visitor_id         BigInt   @db.UnsignedBigInt
+  cafe_owner_profile_id BigInt @db.UnsignedBigInt
+  visitor_profile_id    BigInt @db.UnsignedBigInt
   message_code       String   @db.VarChar(40)
   sticker_code       String?  @db.VarChar(40)
   reply_sticker_code String?  @db.VarChar(40)
   created_at         DateTime @default(now()) @db.Timestamp(0)
 
-  @@index([cafe_owner_id, created_at], map: "idx_sweet_guestbook_cafe")
+  @@index([cafe_owner_profile_id, created_at], map: "idx_sweet_guestbook_cafe")
+}
+
+model sweet_shop_advertisement {
+  profile_id BigInt   @id @db.UnsignedBigInt
+  ends_at    DateTime @db.Timestamp(0)
+  updated_at DateTime @default(now()) @updatedAt @db.Timestamp(0)
+}
+
+model sweet_shop_friend {
+  profile_id        BigInt   @db.UnsignedBigInt
+  friend_profile_id BigInt   @db.UnsignedBigInt
+  created_at        DateTime @default(now()) @db.Timestamp(0)
+  @@id([profile_id, friend_profile_id])
+  @@index([friend_profile_id], map: "idx_sweet_friend_target")
+}
+
+model sweet_shop_block {
+  profile_id         BigInt   @db.UnsignedBigInt
+  blocked_profile_id BigInt   @db.UnsignedBigInt
+  created_at         DateTime @default(now()) @db.Timestamp(0)
+  @@id([profile_id, blocked_profile_id])
+  @@index([blocked_profile_id], map: "idx_sweet_block_target")
+}
+
+model sweet_shop_report {
+  id                  BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  reporter_profile_id BigInt   @db.UnsignedBigInt
+  target_profile_id   BigInt   @db.UnsignedBigInt
+  reason_code          String   @db.VarChar(30)
+  detail               String?  @db.VarChar(200)
+  status               String   @default("pending") @db.VarChar(20)
+  created_at           DateTime @default(now()) @db.Timestamp(0)
+  @@index([target_profile_id, status], map: "idx_sweet_report_target")
+  @@index([reporter_profile_id, created_at], map: "idx_sweet_report_reporter")
+}
+
+model sweet_shop_chat_message {
+  id                BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  cafe_profile_id   BigInt   @db.UnsignedBigInt
+  sender_profile_id BigInt   @db.UnsignedBigInt
+  sender_name       String   @db.VarChar(40)
+  message           String   @db.VarChar(80)
+  created_at        DateTime @default(now()) @db.Timestamp(0)
+  @@index([cafe_profile_id, created_at], map: "idx_sweet_chat_cafe")
 }
