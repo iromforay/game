@@ -105,7 +105,8 @@ async function assertDyeDetail(g: Game) {
   const t = await texts(g);
   for (const needle of ['물빛 염색실', '분류: 이야기 유물', '수량: 1']) assert.ok(t.some((x) => x.includes(needle)), `상세 문구 ${needle}`);
   assert.ok(t.some((x) => x.includes('이야기 동료 전용')), '잠금 표시');
-  for (const label of ['판매', '판매하기', '버리기', '분해', '사용', '사용하기', '누비에게 장착']) assert.equal(t.includes(label), false, `활성 버튼 없음: ${label}`);
+  for (const label of ['판매', '판매하기', '버리기', '분해', '사용', '사용하기']) assert.equal(t.includes(label), false, `활성 버튼 없음: ${label}`);
+  assert.equal(t.includes('누비에게 장착'), true, 'C2-6: 보스 승리 뒤(CH02_BOSS_DEFEATED) 누비에게 장착 버튼');
   const icon = (await inv(g)).detailIcon!;
   assert.deepEqual([icon.key, icon.size], ['water-dye-yarn', 80], '80×80 아이콘');
 }

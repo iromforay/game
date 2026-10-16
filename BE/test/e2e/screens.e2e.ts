@@ -303,7 +303,12 @@ test('화면 ⑦: 인벤토리 상세 — 첫 매듭·실가루·일반 장비·
     db.seed('player_item', { player_id: p.id, item_definition_id: def('glowing_yarn_dust').id, quantity: 3, is_new: false, is_locked: true, first_acquired_at: new Date(), last_acquired_at: new Date(Date.now() - 30_000) });
   });
   const g = await Game.open(browser, `${vite.url}/?device=${device}`, device, BIG);
-  const select = (letter: string, code: string) => g.clickLabel(letter, { exact: true, expect: `s.inventory.selected === '${code}'` });
+  // 칸 고르기: 아이콘이 있는 칸은 글자 대신 그림이 보이므로(C2-5B) 진단용 칸 좌표로 누른다. 글자 칸도 같은 방법으로 고른다
+  const select = async (_letter: string, code: string) => {
+    const cell = ((await g.state()).inventory.cells as { code: string; x: number; y: number; w: number; h: number }[]).find((c) => c.code === code);
+    assert.ok(cell, `인벤토리 칸 ${code}`);
+    await g.clickAt(cell.x + cell.w / 2, cell.y + cell.h / 2, `s.inventory.selected === '${code}'`);
+  };
   await withDiagnosis(g, 'screens-inventory-detail', async () => {
     await villageReady(g);
     await g.clickLabel('인벤토리', { exact: true, expect: "s.inventory && s.inventory.state === 'ready'" });

@@ -75,7 +75,10 @@ test('2장 C2-2 ①(1280×720 키보드): 열린 물풀문 → 약한 물살 →
     await walkVia(g, TO_GATE, 'keys');
     m = await map(g);
     const gate = m.render.gates.find((x) => x.id === 'gate_reed_maze')!;
-    assert.deepEqual([gate.open, gate.art, gate.placeholder], [true, 'reed-gate-open', false]);
+    assert.deepEqual([gate.open, gate.placeholder], [true, false]);
+    // C2-7C: 열린 세로 문은 열림 그림(reed-gate-open)의 기둥 조각 2개로 그린다(한 장 그림 art는 없음)
+    const pieces = (await g.page.evaluate(() => (window as any).__game.scene.getScene('Map').lastPlan.gates.find((x: any) => x.id === 'gate_reed_maze').pieces.map((q: any) => q.assetKey))) as string[]; // eslint-disable-line @typescript-eslint/no-explicit-any
+    assert.deepEqual([gate.art, pieces], [null, ['reed-gate-open', 'reed-gate-open']]);
     await g.capture('reed_gate_open');
     // 문 통과 → 미로 안
     await walkVia(g, THROUGH_GATE, 'keys');
@@ -85,7 +88,7 @@ test('2장 C2-2 ①(1280×720 키보드): 열린 물풀문 → 약한 물살 →
     assert.ok(m.render.overlays.includes('current-flow'), '물살 방향 그림');
     await g.capture('current_before_push');
     // 약한 물살: 키를 계속 누른 채 들어가면 한 번 밀리고, 입력은 이어진다
-    await g.walkDirect('Map', THROUGH_GATE_ROUTE[0], 'keys', 's.map.currentPushes >= 1', 20); // 문을 지나면 바로 약한 물살
+    for (const q of THROUGH_GATE_ROUTE) await g.walkDirect('Map', q, 'keys', 's.map.currentPushes >= 1', 20); // 문을 지나 약한 물살 구역(x 1420~)에 들어서면 밀린다
     await g.until('물살 적용', 's.map.currentPushes >= 1');
     await g.capture('current_after_push');
     m = await map(g);
@@ -103,7 +106,8 @@ test('2장 C2-2 ①(1280×720 키보드): 열린 물풀문 → 약한 물살 →
     await g.until('호수 지도', MAP_READY, 30_000);
     m = await map(g);
     assert.equal(m.story.gates.gate_reed_maze, true);
-    assert.equal(m.render.gates.find((x) => x.id === 'gate_reed_maze')!.art, 'reed-gate-open');
+    assert.equal(m.render.gates.find((x) => x.id === 'gate_reed_maze')!.placeholder, false);
+    assert.deepEqual((await g.page.evaluate(() => (window as any).__game.scene.getScene('Map').lastPlan.gates.find((x: any) => x.id === 'gate_reed_maze').pieces.length)) as number, 2, '열린 문 조각 그림(C2-7C)'); // eslint-disable-line @typescript-eslint/no-explicit-any
     assert.ok(near(m.avatar, stamp, 80), `복원 위치 ${JSON.stringify(m.avatar)} / 이전 ${JSON.stringify(stamp)}`);
     assert.equal(m.story.goalShown, GOAL_MAZE);
   }, backend, device);
@@ -156,7 +160,7 @@ test('2장 C2-2 ③: 두 플레이어가 같은 물살·깊은 물에서 서로 
   const gb = await Game.open(browser, `${vite.url}/?device=${b}`, b);
   try {
     await Promise.all([enterMaze(ga), enterMaze(gb)]);
-    await Promise.all([walkVia(ga, [...TO_GATE, ...THROUGH_GATE], 'keys'), walkVia(gb, [...TO_GATE, ...THROUGH_GATE], 'keys')]);
+    await Promise.all([walkVia(ga, [...TO_GATE, ...THROUGH_GATE_ROUTE], 'keys'), walkVia(gb, [...TO_GATE, ...THROUGH_GATE_ROUTE], 'keys')]); // 문 뒤 약한 물살 구역을 실제로 지난다
     // 같은 물살을 동시에 지난다 — 각자 한 번씩 밀린다
     await Promise.all([ga.walkDirect('Map', DRY_1, 'keys', 'false', 30), gb.walkDirect('Map', DRY_1, 'keys', 'false', 30)]);
     const [ma, mb] = [await map(ga), await map(gb)];
@@ -164,7 +168,7 @@ test('2장 C2-2 ③: 두 플레이어가 같은 물살·깊은 물에서 서로 
     assert.ok(near(ma.avatar, DRY_1, 60) && near(mb.avatar, DRY_1, 60));
     // A만 깊은 물에 들어간다 — B의 위치·상태는 그대로
     const before = await map(gb);
-    for (const q of DEEP_SOUTH) await ga.walkDirect('Map', q, 'keys', 's.map.deepReturns >= 1', 20);
+    for (const q of DEEP_SOUTH) await ga.walkDirect('Map', q, 'joystick', 's.map.deepReturns >= 1', 20); // 연못 접근 경유지는 조이스틱 기준(C2-7B)
     await ga.until('A 깊은 물 복귀', 's.map.deepReturns >= 1');
     const after = await map(gb);
     assert.equal(after.deepReturns, 0);
