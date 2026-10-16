@@ -1,7 +1,7 @@
 {
   "stageCode": "underground",
-  "greybox": true,
-  "note": "3장 마루바닥 밑 길 골격 v1(10-16 C3-1). 좌표는 BE/scripts/data/underfloor-skeleton.json에서 BE/scripts/turby-build-underfloor-stage.mjs로 만든다(blockers는 생성물 — 손으로 고치지 않는다). 사건·지점 ID는 바뀌지 않는다. 지점 좌표·반경은 골격 명세 그대로이며 에셋 키는 임시 이름이다(Codex 에셋 도착 후 C3-2에서 연결).",
+  "greybox": false,
+  "note": "3장 마루바닥 밑 길 골격 v1(10-16 C3-1). 좌표는 BE/scripts/data/underfloor-skeleton.json에서 BE/scripts/turby-build-underfloor-stage.mjs로 만든다(blockers는 생성물 — 손으로 고치지 않는다). 사건·지점 ID는 바뀌지 않는다. 지점 좌표·반경은 골격 명세 그대로다. C3-2: 1차 에셋(배경·폭신이·조사 3종·문·실패 자국) 연결, 매복·기억 조각·보스 입구 지점은 그림 없이 안내 버튼만 쓴다(2차 에셋 C3-4).",
   "size": {
     "width": 3200,
     "height": 2400
@@ -56,12 +56,12 @@
     {
       "id": "underfloor_elder",
       "kind": "npc",
-      "assetKey": "old-pokshini",
+      "assetKey": "elder-pokshini",
       "label": "오래된 폭신이",
       "prompt": "오래된 폭신이에게 다가가기",
       "art": {
-        "width": 112,
-        "height": 112,
+        "width": 96,
+        "height": 96,
         "pivot": [
           0.5,
           0.7
@@ -71,45 +71,45 @@
     {
       "id": "underfloor_glove",
       "kind": "inspect",
-      "assetKey": "junk-glove",
+      "assetKey": "inspect-glove",
       "label": "낡은 장갑",
       "prompt": "낡은 장갑을 살펴보기",
       "art": {
-        "width": 88,
-        "height": 88,
+        "width": 104,
+        "height": 104,
         "pivot": [
           0.5,
-          0.7
+          0.75
         ]
       }
     },
     {
       "id": "underfloor_blanket",
       "kind": "inspect",
-      "assetKey": "junk-blanket",
+      "assetKey": "inspect-blanket",
       "label": "작은 담요",
       "prompt": "작은 담요를 살펴보기",
       "art": {
-        "width": 96,
-        "height": 96,
+        "width": 104,
+        "height": 104,
         "pivot": [
           0.5,
-          0.7
+          0.75
         ]
       }
     },
     {
       "id": "underfloor_doll",
       "kind": "inspect",
-      "assetKey": "junk-doll",
+      "assetKey": "inspect-doll",
       "label": "찢어진 인형",
       "prompt": "찢어진 인형을 살펴보기",
       "art": {
-        "width": 96,
-        "height": 96,
+        "width": 104,
+        "height": 104,
         "pivot": [
           0.5,
-          0.7
+          0.75
         ]
       }
     },
@@ -522,12 +522,12 @@
         "openAssetKey": "dust-yarn-gate-open",
         "art": {
           "x": 2000,
-          "y": 1100,
-          "width": 200,
-          "height": 96,
+          "y": 1080,
+          "width": 220,
+          "height": 140,
           "pivot": [
             0.5,
-            1
+            0.85
           ]
         }
       }
@@ -538,7 +538,26 @@
     "y": 2080
   },
   "render": {
-    "markerMode": "fallback",
-    "overlays": []
+    "markerMode": "final",
+    "background": {
+      "assetKey": "underfloor-base"
+    },
+    "overlays": [
+      {
+        "id": "overlay_memory_trail",
+        "assetKey": "memory-trail",
+        "x": 1900,
+        "y": 600,
+        "width": 720,
+        "height": 680,
+        "pivot": [
+          0,
+          0
+        ],
+        "layer": "overlay",
+        "alpha": 0.7,
+        "visibleAfter": "underfloor_memory_trail_found"
+      }
+    ]
   }
 }

@@ -62,7 +62,7 @@ const OPEN = new Set<string>([EVENT_BY_ID.get('underfloor_memory_trail_found')!.
 test('지역 데이터: 3200×2400, 시작 지점·지점 좌표가 골격 명세 그대로이고 표시 정보가 있다', () => {
   assert.deepEqual(UG.size, { width: 3200, height: 2400 });
   assert.deepEqual(UG.spawnPoint, { x: 330, y: 2080 });
-  assert.equal(UG.greybox, true, 'C3-2에서 배경을 연결하기 전까지 회색상자');
+  assert.equal(UG.greybox, false, 'C3-2: 최종 배경(underfloor-base) 연결');
   for (const p of SKEL.points.filter((x) => x.id.startsWith('underfloor_'))) {
     const mine = point(p.id);
     assert.deepEqual([mine.x, mine.y, mine.radius], [p.x, p.y, p.radius], `${p.id} 좌표·반경`);

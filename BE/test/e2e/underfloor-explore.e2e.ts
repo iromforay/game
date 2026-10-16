@@ -47,6 +47,19 @@ function dbOf(device: string) {
 }
 const once = (events: string[], id: string) => events.filter((e) => e === id).length;
 
+// C3-2: 일반 화면은 최종 배경·최종 표식만 쓴다(회색상자·임시 글자·충돌 오버레이 없음)
+type RenderState = { background: string; tileSprites: number; greyboxNotices: number; collisionDebug: boolean; overlays: string[]; pointArts: { id: string; assetKey: string | null }[] };
+const render = async (g: Game) => (await g.state()).map.render as RenderState;
+async function assertFinalRender(g: Game) {
+  const r = await render(g);
+  assert.equal(r.background, 'final', '최종 배경 모드');
+  assert.equal(r.tileSprites, 0, '반복 타일 없음');
+  assert.equal(r.greyboxNotices, 0);
+  assert.equal(r.collisionDebug, false, '일반 화면에는 충돌 오버레이 없음');
+  const key = await g.page.evaluate(() => (window as any).__game.scene.getScene('Map').bgImage.texture.key); // eslint-disable-line @typescript-eslint/no-explicit-any
+  assert.equal(key, 'underfloor-base');
+}
+
 async function enterUnderfloor(g: Game) {
   await g.waitScene('Village');
   await g.until('마을 준비', 's.village && s.village.ready');
@@ -117,6 +130,10 @@ test('3장 C3-1 ①: 마루 밑 입장 → 도입 → 새로고침(반복 없음
     assert.equal(s.goalShown, GOAL_INSPECT_0);
     assert.deepEqual([...s.points].sort(), ['underfloor_blanket', 'underfloor_doll', 'underfloor_glove'], '조사 3곳');
     await g.capture('underfloor_03_after_elder');
+    await assertFinalRender(g);
+    const arts = (await render(g)).pointArts;
+    assert.deepEqual(['underfloor_glove', 'underfloor_blanket', 'underfloor_doll'].map((id) => arts.find((p) => p.id === id)?.assetKey), ['inspect-glove', 'inspect-blanket', 'inspect-doll'], '조사 소품 그림');
+    assert.equal((await render(g)).overlays.includes('memory-trail'), false, '실패 자국은 길이 열리기 전에는 없다');
 
     // 4) 조사 3곳(순서 있게 걷지만 규칙상 순서 없음) — 각자 기억 비침, 마지막에 기계음 지점
     await interact(g, 'underfloor_glove', ELDER_TO_GLOVE, 'keys');
@@ -179,6 +196,34 @@ test('3장 C3-1 ②: 640×360 — 폭신이 만남이 같은 흐름으로 동작
     assert.equal(after.goalShown, GOAL_INSPECT_0);
     assert.deepEqual([...after.points].sort(), ['underfloor_blanket', 'underfloor_doll', 'underfloor_glove']);
     await g.capture('underfloor_s02_restored');
+  }, backend, device);
+  await g.close();
+});
+
+test('3장 C3-2: 실패 자국 길이 열린 상태 — 먼지 실타래 문 열림·실패 자국 오버레이가 최종 그림으로 표시되고 새로고침 뒤에도 같다', async () => {
+  const device = 'e2e-underfloor-trail';
+  await backend.start(seedUnderfloor(device, 'trail'), { 'story.stageAccessV2': true });
+  const g = await Game.open(browser, `${vite.url}/?device=${device}`, device);
+  await withDiagnosis(g, 'underfloor-c3-2-trail', async () => {
+    assert.equal(dbOf(device).checkpoint, 'CH03_MEMORY_TRAIL_FOUND');
+    await enterUnderfloor(g);
+    await reachMap(g, false);
+    await assertFinalRender(g);
+    let s = await story(g);
+    assert.equal(s.gates.gate_dust_yarn, true, '매복 승리 뒤 먼지 실타래 문이 열려 있다');
+    assert.deepEqual(s.points, ['underfloor_fragment']);
+    assert.equal(s.goalShown, '굴러간 실패 자국을 따라가자.');
+    assert.equal((await render(g)).overlays.includes('memory-trail'), true, '실패 자국 오버레이');
+    const look = (x: number, y: number) => g.page.evaluate(({ x, y }) => (window as any).__dev.lookAt(x, y), { x, y }); // eslint-disable-line @typescript-eslint/no-explicit-any
+    await look(2000, 1060);
+    await g.capture('underfloor_t01_gate_open');
+    await look(2200, 800);
+    await g.capture('underfloor_t02_memory_trail');
+    await g.reload();
+    await reachMap(g, false);
+    s = await story(g);
+    assert.equal(s.gates.gate_dust_yarn, true, '새로고침 뒤에도 열린 문');
+    assert.equal((await render(g)).overlays.includes('memory-trail'), true);
   }, backend, device);
   await g.close();
 });

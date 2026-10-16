@@ -129,10 +129,10 @@ const pt = (id) => ({ id, x: P[id].x, y: P[id].y, radius: P[id].radius });
 const POINT_IDS = ['underfloor_elder', 'underfloor_glove', 'underfloor_blanket', 'underfloor_doll', 'underfloor_ambush', 'underfloor_fragment', 'underfloor_boss_entrance'];
 const art = (w, h, pivot = [0.5, 0.7]) => ({ width: w, height: h, pivot });
 const storyPoints = [
-  { id: 'underfloor_elder', kind: 'npc', assetKey: 'old-pokshini', label: '오래된 폭신이', prompt: '오래된 폭신이에게 다가가기', art: art(112, 112) },
-  { id: 'underfloor_glove', kind: 'inspect', assetKey: 'junk-glove', label: '낡은 장갑', prompt: '낡은 장갑을 살펴보기', art: art(88, 88) },
-  { id: 'underfloor_blanket', kind: 'inspect', assetKey: 'junk-blanket', label: '작은 담요', prompt: '작은 담요를 살펴보기', art: art(96, 96) },
-  { id: 'underfloor_doll', kind: 'inspect', assetKey: 'junk-doll', label: '찢어진 인형', prompt: '찢어진 인형을 살펴보기', art: art(96, 96) },
+  { id: 'underfloor_elder', kind: 'npc', assetKey: 'elder-pokshini', label: '오래된 폭신이', prompt: '오래된 폭신이에게 다가가기', art: art(96, 96, [0.5, 0.7]) },
+  { id: 'underfloor_glove', kind: 'inspect', assetKey: 'inspect-glove', label: '낡은 장갑', prompt: '낡은 장갑을 살펴보기', art: art(104, 104, [0.5, 0.75]) },
+  { id: 'underfloor_blanket', kind: 'inspect', assetKey: 'inspect-blanket', label: '작은 담요', prompt: '작은 담요를 살펴보기', art: art(104, 104, [0.5, 0.75]) },
+  { id: 'underfloor_doll', kind: 'inspect', assetKey: 'inspect-doll', label: '찢어진 인형', prompt: '찢어진 인형을 살펴보기', art: art(104, 104, [0.5, 0.75]) },
   { id: 'underfloor_ambush', kind: 'inspect', assetKey: 'pressed-stitchling-hidden', label: '수상한 물건 더미', prompt: '소리가 나는 쪽으로 다가가기', art: art(120, 80) },
   { id: 'underfloor_fragment', kind: 'inspect', assetKey: 'memory-trail-mark', label: '굴러간 실패 자국', prompt: '자국을 따라가기', art: art(96, 96) },
   { id: 'underfloor_boss_entrance', kind: 'inspect', assetKey: 'memory-spool-gate', label: '넓은 빈 공간 입구', prompt: '넓은 빈 공간으로 들어가기', art: art(120, 120) },
@@ -165,15 +165,15 @@ const gates = [
     openEvent: gate.openEvent,
     closedAssetKey: 'dust-yarn-gate-closed',
     openAssetKey: 'dust-yarn-gate-open',
-    art: { x: gate.x + gate.width / 2, y: gate.y + gate.height + 20, width: gate.width + 20, height: 96, pivot: [0.5, 1] },
+    art: { x: gate.x + gate.width / 2, y: gate.y + gate.height, width: 220, height: 140, pivot: [0.5, 0.85] },
   },
 ];
 const paths = [{ points: [[330, 2080], ...SKEL.corridors[0].points.slice(1), [1130, 1650], [1600, 1500], [2000, 1240], ...SKEL.corridors[3].points.slice(1)] }];
 
 const doc = {
   stageCode: 'underground',
-  greybox: true,
-  note: '3장 마루바닥 밑 길 골격 v1(10-16 C3-1). 좌표는 BE/scripts/data/underfloor-skeleton.json에서 BE/scripts/turby-build-underfloor-stage.mjs로 만든다(blockers는 생성물 — 손으로 고치지 않는다). 사건·지점 ID는 바뀌지 않는다. 지점 좌표·반경은 골격 명세 그대로이며 에셋 키는 임시 이름이다(Codex 에셋 도착 후 C3-2에서 연결).',
+  greybox: false,
+  note: '3장 마루바닥 밑 길 골격 v1(10-16 C3-1). 좌표는 BE/scripts/data/underfloor-skeleton.json에서 BE/scripts/turby-build-underfloor-stage.mjs로 만든다(blockers는 생성물 — 손으로 고치지 않는다). 사건·지점 ID는 바뀌지 않는다. 지점 좌표·반경은 골격 명세 그대로다. C3-2: 1차 에셋(배경·폭신이·조사 3종·문·실패 자국) 연결, 매복·기억 조각·보스 입구 지점은 그림 없이 안내 버튼만 쓴다(2차 에셋 C3-4).',
   size: SKEL.size,
   regions: [],
   points: POINT_IDS.map(pt),
@@ -182,7 +182,11 @@ const doc = {
   goals,
   layout: { zones, paths, blockers: rects.map((r, i) => ({ id: `wall_${String(i).padStart(3, '0')}`, ...r })), gates },
   spawnPoint: { x: P.spawn.x, y: P.spawn.y },
-  render: { markerMode: 'fallback', overlays: [] },
+  render: {
+    markerMode: 'final',
+    background: { assetKey: 'underfloor-base' },
+    overlays: [{ id: 'overlay_memory_trail', assetKey: 'memory-trail', x: SKEL.overlay_regions[0].x, y: SKEL.overlay_regions[0].y, width: SKEL.overlay_regions[0].width, height: SKEL.overlay_regions[0].height, pivot: [0, 0], layer: 'overlay', alpha: 0.7, visibleAfter: 'underfloor_memory_trail_found' }],
+  },
 };
 
 const text = JSON.stringify(doc, (k, v) => (k === 'blockers' ? '@@B' : v), 2).replace('"@@B"', () => `[\n${doc.layout.blockers.map((b) => `      ${JSON.stringify(b)}`).join(',\n')}\n    ]`);

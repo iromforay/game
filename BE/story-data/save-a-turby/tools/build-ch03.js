@@ -95,9 +95,9 @@ const file = {
       l(s, 77, 78, 'neutral'),
     ]),
     // 사라진 기억실: 조사 지점마다 짧은 기억 비침(순서 없음). 지점 이벤트는 서버가 기록한다
-    segment('ch03.memory_glove', 'CH03_ELDER_MET', false, null, (s) => [n(s, 87)]),
-    segment('ch03.memory_blanket', 'CH03_ELDER_MET', false, null, (s) => [n(s, 88)]),
-    segment('ch03.memory_doll', 'CH03_ELDER_MET', false, null, (s) => [n(s, 89)]),
+    segment('ch03.memory_glove', 'CH03_ELDER_MET', false, null, (s) => [n(s, 87, { cameraCue: 'memory-glove' })]),
+    segment('ch03.memory_blanket', 'CH03_ELDER_MET', false, null, (s) => [n(s, 88, { cameraCue: 'memory-blanket' })]),
+    segment('ch03.memory_doll', 'CH03_ELDER_MET', false, null, (s) => [n(s, 89, { cameraCue: 'memory-doll' })]),
     // 세 곳을 모두 살펴본 뒤 매복 지점: 잘린 실, 기계음, 박음이 등장. 전투(storyBattle)는 C3-3에서 이 구간 끝에 붙는다
     segment('ch03.machine_sound', 'CH03_ELDER_MET', false, null, (s) => [
       n(s, 91),

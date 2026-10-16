@@ -24,14 +24,14 @@ test('실제 manifest: shard 정확히 2개, 모든(28개) 파일이 정확히 �
   assert.equal(listed.some((f) => /[*?]/.test(f)), false);
 });
 
-test('실제 manifest: 예상 시험 수 = 파일의 test() 선언 수, 합계 95, 예상 시간 균형(차이 10% 이내)', () => {
+test('실제 manifest: 예상 시험 수 = 파일의 test() 선언 수, 합계 96, 예상 시간 균형(차이 10% 이내)', () => {
   let total = 0;
   for (const [id, s] of Object.entries(real.shards)) {
     const n = s.files.reduce((a, f) => a + testCount(f), 0);
     assert.equal(s.expectedTests, n, `shard ${id}`);
     total += n;
   }
-  assert.equal(total, 95); // 10-16 C3-1 마루 밑 탐험 2개 포함. 기존 68 + 2장 호수 2개(C2-1) + 물풀 미로 3개(C2-2) + 구조 4개(C2-3) + 위기 3개(C2-4) + 보스 2개(C2-5A) + 보상 2개(C2-5B) + 장 완료 2개(C2-6) + 최종 배경 2개(C2-7A) + 좌표 정합 3개(C2-7B) + 최종 표식 2개(C2-7D)
+  assert.equal(total, 96); // 10-16 C3-1 마루 밑 탐험 2개 포함. 기존 68 + 2장 호수 2개(C2-1) + 물풀 미로 3개(C2-2) + 구조 4개(C2-3) + 위기 3개(C2-4) + 보스 2개(C2-5A) + 보상 2개(C2-5B) + 장 완료 2개(C2-6) + 최종 배경 2개(C2-7A) + 좌표 정합 3개(C2-7B) + 최종 표식 2개(C2-7D)
   const [a, b] = Object.values(real.shards).map((s) => s.estimatedSeconds);
   assert.ok(Math.abs(a - b) / Math.max(a, b) <= 0.1, `예상 시간 ${a}초 vs ${b}초`);
 });
@@ -39,9 +39,9 @@ test('실제 manifest: 예상 시험 수 = 파일의 test() 선언 수, 합계 9
 test('--dry-run: 파일 28개·누락 0·중복 0을 출력하고 아무것도 실행하지 않는다', () => {
   const r = run('--dry-run');
   assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /shard 2개 · 파일 28개\(누락 0·중복 0\) · 예상 시험 95개/);
+  assert.match(r.stdout, /shard 2개 · 파일 28개\(누락 0·중복 0\) · 예상 시험 96개/);
   assert.match(r.stdout, /shard 1: 파일 13개 · 시험 45개/);
-  assert.match(r.stdout, /shard 2: 파일 15개 · 시험 50개/);
+  assert.match(r.stdout, /shard 2: 파일 15개 · 시험 51개/);
 });
 
 test('--workers는 2만 허용한다(1·3·8은 실행 전 종료 코드 2)', () => {

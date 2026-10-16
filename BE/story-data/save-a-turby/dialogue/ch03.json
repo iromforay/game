@@ -169,7 +169,7 @@
           "kind": "narration",
           "dialogueId": "ch03.memory_glove.001",
           "text": "낡은 장갑에서는 누군가의 따뜻한 손이 보인다.",
-          "cameraCue": null,
+          "cameraCue": "memory-glove",
           "soundCue": null
         }
       ]
@@ -184,7 +184,7 @@
           "kind": "narration",
           "dialogueId": "ch03.memory_blanket.001",
           "text": "작은 담요에서는 잠든 아이의 숨소리가 들린다.",
-          "cameraCue": null,
+          "cameraCue": "memory-blanket",
           "soundCue": null
         }
       ]
@@ -199,7 +199,7 @@
           "kind": "narration",
           "dialogueId": "ch03.memory_doll.001",
           "text": "찢어진 인형에서는 가위날 같은 그림자가 스쳐 지나간다.",
-          "cameraCue": null,
+          "cameraCue": "memory-doll",
           "soundCue": null
         }
       ]
