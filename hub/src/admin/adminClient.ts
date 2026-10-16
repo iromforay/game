@@ -139,3 +139,34 @@ export const updateMergeDefenseProfile = (accountId: string, profile: AdminMerge
   request<AdminMergeDefenseProfile>(`/admin/ad-games/merge-defense/accounts/${encodeURIComponent(accountId)}`, {
     method: 'PUT', body: JSON.stringify(profile),
   });
+
+export interface AdminMyRoomDungeonProfile {
+  accountId: string;
+  loginId: string;
+  nickname: string;
+  profileExists: boolean;
+  inventory: Record<string, number>;
+  discovered: string[];
+  craftedBots: number;
+  craftedSwords: number;
+  clearedZones: string[];
+  robotAssignments: Record<string, unknown>;
+  updatedAt: string | null;
+}
+
+export type AdminMyRoomDungeonUpdate = Pick<AdminMyRoomDungeonProfile,
+  'inventory' | 'discovered' | 'craftedBots' | 'craftedSwords' | 'clearedZones' | 'robotAssignments'>;
+
+export const searchMyRoomDungeonAccounts = (q: string) =>
+  request<AdminMyRoomDungeonProfile[]>(`/admin/ad-games/my-room-dungeon/accounts?${new URLSearchParams({ q })}`);
+
+export const getMyRoomDungeonProfile = (accountId: string) =>
+  request<AdminMyRoomDungeonProfile>(`/admin/ad-games/my-room-dungeon/accounts/${encodeURIComponent(accountId)}`);
+
+export const updateMyRoomDungeonProfile = (accountId: string, profile: AdminMyRoomDungeonUpdate) =>
+  request<AdminMyRoomDungeonProfile>(`/admin/ad-games/my-room-dungeon/accounts/${encodeURIComponent(accountId)}`, {
+    method: 'PUT', body: JSON.stringify(profile),
+  });
+
+export const deleteMyRoomDungeonProfile = (accountId: string) =>
+  request<{ deleted: true; accountId: string }>(`/admin/ad-games/my-room-dungeon/accounts/${encodeURIComponent(accountId)}`, { method: 'DELETE' });

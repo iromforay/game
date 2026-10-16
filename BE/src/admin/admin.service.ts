@@ -12,6 +12,7 @@ const GOLD_MAX = 4_294_967_295; // kirby_player.gold UNSIGNED INT
 const LOG_LIMIT_MAX = 200;
 const WEIGHT_MAX = 1_000_000;
 const UNSIGNED_INT_MAX = 4_294_967_295;
+const DUNGEON_JSON_MAX_BYTES = 64 * 1024;
 
 export interface SpawnChange {
   characterId: unknown;
@@ -52,6 +53,37 @@ function parseRangedInt(raw: unknown, label: string, min: number, max: number): 
 function parseBoolean(raw: unknown, label: string): boolean {
   if (typeof raw !== 'boolean') throw new BadRequestException({ message: `${label} 값이 올바르지 않습니다`, code: 'INVALID_BOOLEAN' });
   return raw;
+}
+
+function parseStringList(raw: unknown, label: string): string[] {
+  if (!Array.isArray(raw) || raw.length > 100) throw new BadRequestException({ message: `${label} 형식이 올바르지 않습니다`, code: 'INVALID_LIST' });
+  const values = raw.map((value) => typeof value === 'string' ? value.trim() : '');
+  if (values.some((value) => !value || value.length > 60)) throw new BadRequestException({ message: `${label} 항목이 올바르지 않습니다`, code: 'INVALID_LIST_ITEM' });
+  return [...new Set(values)];
+}
+
+function parseInventory(raw: unknown): Record<string, number> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new BadRequestException({ message: '자원 목록 형식이 올바르지 않습니다', code: 'INVALID_INVENTORY' });
+  const entries = Object.entries(raw as Record<string, unknown>);
+  if (entries.length > 100) throw new BadRequestException({ message: '자원 종류는 최대 100개입니다', code: 'INVENTORY_TOO_LARGE' });
+  const inventory: Record<string, number> = {};
+  for (const [keyRaw, value] of entries) {
+    const key = keyRaw.trim();
+    if (!/^[a-z0-9_-]{1,40}$/i.test(key)) throw new BadRequestException({ message: `자원 코드가 올바르지 않습니다: ${keyRaw}`, code: 'INVALID_RESOURCE_CODE' });
+    inventory[key] = parseRangedInt(value, `${key} 수량`, 0, UNSIGNED_INT_MAX);
+  }
+  return inventory;
+}
+
+function parseAssignments(raw: unknown): Record<string, unknown> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new BadRequestException({ message: '자동수집 배치 형식이 올바르지 않습니다', code: 'INVALID_ASSIGNMENTS' });
+  const json = JSON.stringify(raw);
+  if (Buffer.byteLength(json, 'utf8') > DUNGEON_JSON_MAX_BYTES) throw new BadRequestException({ message: '자동수집 배치 데이터가 너무 큽니다', code: 'ASSIGNMENTS_TOO_LARGE' });
+  return raw as Record<string, unknown>;
+}
+
+function safeJson<T>(raw: string, fallback: T): T {
+  try { return JSON.parse(raw) as T; } catch { return fallback; }
 }
 
 @Injectable()
@@ -330,6 +362,81 @@ export class AdminService {
     return this.getMergeDefenseProfile(accountId.toString());
   }
 
+  async searchMyRoomDungeonAccounts(qRaw: unknown) {
+    const q = typeof qRaw === 'string' ? qRaw.trim() : '';
+    const like = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+    const idMatch = /^\d{1,19}$/.test(q) ? BigInt(q) : null;
+    const rows = await this.prisma.$queryRaw<{
+      id: bigint; login_id: string; nickname: string; inventory_json: string | null; discovered_json: string | null;
+      crafted_bots: number | null; crafted_swords: number | null; cleared_zones_json: string | null;
+      robot_assignments_json: string | null; updated_at: Date | null;
+    }[]>`
+      SELECT a.id, a.login_id, a.nickname, p.inventory_json, p.discovered_json,
+             p.crafted_bots, p.crafted_swords, p.cleared_zones_json, p.robot_assignments_json, p.updated_at
+      FROM account a
+      LEFT JOIN my_room_dungeon_profile p ON p.account_id = a.id
+      WHERE ${q === ''}
+         OR a.id = ${idMatch ?? -1}
+         OR a.login_id LIKE ${like}
+         OR a.nickname LIKE ${like}
+      ORDER BY COALESCE(p.updated_at, a.updated_at) DESC
+      LIMIT ${SEARCH_LIMIT}`;
+    return rows.map((row) => this.myRoomDungeonAdminSummary(row));
+  }
+
+  async getMyRoomDungeonProfile(accountIdRaw: unknown) {
+    const accountId = parseId(accountIdRaw, '계정 id');
+    const account = await this.prisma.account.findUnique({ where: { id: accountId } });
+    if (!account) throw new NotFoundException({ message: '계정을 찾을 수 없습니다', code: 'ACCOUNT_NOT_FOUND' });
+    const profile = await this.prisma.my_room_dungeon_profile.findUnique({ where: { account_id: accountId } });
+    return this.myRoomDungeonAdminSummary({
+      id: account.id, login_id: account.login_id, nickname: account.nickname,
+      inventory_json: profile?.inventory_json ?? null, discovered_json: profile?.discovered_json ?? null,
+      crafted_bots: profile?.crafted_bots ?? null, crafted_swords: profile?.crafted_swords ?? null,
+      cleared_zones_json: profile?.cleared_zones_json ?? null, robot_assignments_json: profile?.robot_assignments_json ?? null,
+      updated_at: profile?.updated_at ?? null,
+    });
+  }
+
+  async updateMyRoomDungeonProfile(adminId: bigint, accountIdRaw: unknown, bodyRaw: unknown) {
+    const accountId = parseId(accountIdRaw, '계정 id');
+    const body = bodyRaw && typeof bodyRaw === 'object' ? bodyRaw as Record<string, unknown> : {};
+    const account = await this.prisma.account.findUnique({ where: { id: accountId } });
+    if (!account) throw new NotFoundException({ message: '계정을 찾을 수 없습니다', code: 'ACCOUNT_NOT_FOUND' });
+    const inventory = parseInventory(body.inventory);
+    const discovered = parseStringList(body.discovered, '발견 자원');
+    const clearedZones = parseStringList(body.clearedZones, '클리어 구역');
+    const robotAssignments = parseAssignments(body.robotAssignments);
+    const data = {
+      inventory_json: JSON.stringify(inventory),
+      discovered_json: JSON.stringify(discovered),
+      crafted_bots: parseRangedInt(body.craftedBots, '제작 봇', 0, UNSIGNED_INT_MAX),
+      crafted_swords: parseRangedInt(body.craftedSwords, '제작 무기', 0, UNSIGNED_INT_MAX),
+      cleared_zones_json: JSON.stringify(clearedZones),
+      robot_assignments_json: JSON.stringify(robotAssignments),
+    };
+    await this.prisma.$transaction(async (tx) => {
+      const before = await tx.my_room_dungeon_profile.findUnique({ where: { account_id: accountId } });
+      const after = await tx.my_room_dungeon_profile.upsert({ where: { account_id: accountId }, create: { account_id: accountId, ...data }, update: data });
+      await this.log(tx, adminId, before ? 'my_room_dungeon.profile.update' : 'my_room_dungeon.profile.create', 'account', accountId,
+        before ? this.myRoomDungeonValues(before) : null, this.myRoomDungeonValues(after));
+    }, TX_OPTIONS);
+    return this.getMyRoomDungeonProfile(accountId.toString());
+  }
+
+  async deleteMyRoomDungeonProfile(adminId: bigint, accountIdRaw: unknown) {
+    const accountId = parseId(accountIdRaw, '계정 id');
+    const account = await this.prisma.account.findUnique({ where: { id: accountId } });
+    if (!account) throw new NotFoundException({ message: '계정을 찾을 수 없습니다', code: 'ACCOUNT_NOT_FOUND' });
+    await this.prisma.$transaction(async (tx) => {
+      const before = await tx.my_room_dungeon_profile.findUnique({ where: { account_id: accountId } });
+      if (!before) throw new NotFoundException({ message: '내방이 던전 진행 데이터가 없습니다', code: 'PROFILE_NOT_FOUND' });
+      await tx.my_room_dungeon_profile.delete({ where: { account_id: accountId } });
+      await this.log(tx, adminId, 'my_room_dungeon.profile.delete', 'account', accountId, this.myRoomDungeonValues(before), null);
+    }, TX_OPTIONS);
+    return { deleted: true, accountId: accountId.toString() };
+  }
+
   async listLogs(limitRaw: unknown, targetIdRaw: unknown) {
     const limit = Math.min(LOG_LIMIT_MAX, Math.max(1, Number(limitRaw) || 50));
     const targetId = typeof targetIdRaw === 'string' && targetIdRaw.trim() ? targetIdRaw.trim() : undefined;
@@ -388,6 +495,34 @@ export class AdminService {
       highestClearedChapterStage: highestClearedStage === 0 ? 0 : ((highestClearedStage - 1) % 10) + 1,
       updatedAt: row.updated_at,
     };
+  }
+
+  private myRoomDungeonValues(profile: {
+    inventory_json: string; discovered_json: string; crafted_bots: number; crafted_swords: number;
+    cleared_zones_json: string; robot_assignments_json: string;
+  }) {
+    return {
+      inventory: safeJson<Record<string, number>>(profile.inventory_json, {}),
+      discovered: safeJson<string[]>(profile.discovered_json, []),
+      craftedBots: profile.crafted_bots,
+      craftedSwords: profile.crafted_swords,
+      clearedZones: safeJson<string[]>(profile.cleared_zones_json, []),
+      robotAssignments: safeJson<Record<string, unknown>>(profile.robot_assignments_json, {}),
+    };
+  }
+
+  private myRoomDungeonAdminSummary(row: {
+    id: bigint; login_id: string; nickname: string; inventory_json: string | null; discovered_json: string | null;
+    crafted_bots: number | null; crafted_swords: number | null; cleared_zones_json: string | null;
+    robot_assignments_json: string | null; updated_at: Date | null;
+  }) {
+    const profileExists = row.inventory_json !== null;
+    const values = this.myRoomDungeonValues({
+      inventory_json: row.inventory_json ?? '{}', discovered_json: row.discovered_json ?? '[]',
+      crafted_bots: Number(row.crafted_bots ?? 0), crafted_swords: Number(row.crafted_swords ?? 1),
+      cleared_zones_json: row.cleared_zones_json ?? '[]', robot_assignments_json: row.robot_assignments_json ?? '{}',
+    });
+    return { accountId: row.id.toString(), loginId: row.login_id, nickname: row.nickname, profileExists, ...values, updatedAt: row.updated_at };
   }
 
   private async log(tx: Tx, adminId: bigint, action: string, targetType: string, targetId: bigint, before: unknown, after: unknown) {

@@ -68,6 +68,26 @@ export class AdminController {
     return this.admin.updateMergeDefenseProfile(req.adminAccountId!, accountId, body);
   }
 
+  @Get('ad-games/my-room-dungeon/accounts')
+  searchMyRoomDungeonAccounts(@Query('q') q: unknown) {
+    return this.admin.searchMyRoomDungeonAccounts(q);
+  }
+
+  @Get('ad-games/my-room-dungeon/accounts/:accountId')
+  getMyRoomDungeonProfile(@Param('accountId') accountId: string) {
+    return this.admin.getMyRoomDungeonProfile(accountId);
+  }
+
+  @Put('ad-games/my-room-dungeon/accounts/:accountId')
+  updateMyRoomDungeonProfile(@Req() req: AdminRequest, @Param('accountId') accountId: string, @Body() body: unknown) {
+    return this.admin.updateMyRoomDungeonProfile(req.adminAccountId!, accountId, body);
+  }
+
+  @Delete('ad-games/my-room-dungeon/accounts/:accountId')
+  deleteMyRoomDungeonProfile(@Req() req: AdminRequest, @Param('accountId') accountId: string) {
+    return this.admin.deleteMyRoomDungeonProfile(req.adminAccountId!, accountId);
+  }
+
   // ?limit=50&targetId=
   @Get('logs')
   listLogs(@Query('limit') limit: unknown, @Query('targetId') targetId: unknown) {

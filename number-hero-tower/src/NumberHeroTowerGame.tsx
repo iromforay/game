@@ -116,7 +116,7 @@ export function NumberHeroTowerGame({ onExit }: Props) {
 function HouseMap({ chapterOneCleared, onOpenChapter, onExit }: { chapterOneCleared: boolean; onOpenChapter: (chapter: 1 | 2) => void; onExit?: () => void }) {
   const clearedCount = STAGES.filter((stage) => Number(localStorage.getItem(`number-hero-tower:stage-${stage.id}:best`) ?? 0) > 0).length;
   return (
-    <main className="house-map-screen">
+    <main className="number-hero-tower house-map-screen">
       <header className="map-header"><div><p>NUMBER HERO · HOME MAP</p><h1>집안 세계지도</h1><span>방을 되찾으면 집 안의 새로운 길이 열립니다.</span></div>{onExit && <button onClick={onExit}>광고게임 목록</button>}</header>
       <section className="house-map-board" style={{ backgroundImage: `linear-gradient(#07101b20,#07101b55),url(${houseChapterMap})` }}>
         <button className={`chapter-marker playroom ${chapterOneCleared ? 'complete' : ''}`} onClick={() => onOpenChapter(1)}><small>CHAPTER 1</small><strong>놀이방</strong><span>{chapterOneCleared ? '정리 완료' : `${clearedCount} / 10`}</span><b>{chapterOneCleared ? '다시 보기' : '입장'}</b></button>
@@ -131,7 +131,7 @@ function PlayroomCleanup({ onMap, onKitchen }: { onMap: () => void; onKitchen: (
   const [cleaned, setCleaned] = useState(false);
   useEffect(() => { const timer = window.setTimeout(() => setCleaned(true), 2700); return () => window.clearTimeout(timer); }, []);
   return (
-    <main className={`cleanup-screen ${cleaned ? 'cleaned' : 'cleaning'}`}>
+    <main className={`number-hero-tower cleanup-screen ${cleaned ? 'cleaned' : 'cleaning'}`}>
       <img className="cleanup-before" src={playroomMessy} alt="장난감이 어지럽게 흩어진 놀이방" />
       <img className="cleanup-after" src={playroomClean} alt="깨끗하게 정리된 놀이방" />
       {!cleaned && <div className="cleanup-vortex" aria-hidden="true"><i/><i/><i/><span>◆</span></div>}
@@ -143,14 +143,14 @@ function PlayroomCleanup({ onMap, onKitchen }: { onMap: () => void; onKitchen: (
 
 function StageSelect({ chapter, unlockedStage, chapterOneCleared, onSelect, onMap }: { chapter: 1 | 2; unlockedStage: number; chapterOneCleared: boolean; onSelect: (stageId: number) => void; onMap: () => void }) {
   if (chapter === 2) return (
-    <main className="stage-select-screen kitchen-stage-screen">
+    <main className="number-hero-tower stage-select-screen kitchen-stage-screen">
       <header className="stage-select-header"><div><p>CHAPTER 2 · KITCHEN</p><h1>주방</h1><span>다음 모험에서 도전할 스테이지를 고르세요</span></div><button type="button" onClick={onMap}>집안 세계지도</button></header>
       <section className="kitchen-stage-grid" aria-label="2장 주방 스테이지 선택">{KITCHEN_STAGES.map(([number,title,boss,icon],index)=><button key={number} className={index===0&&chapterOneCleared?'preview-open':'preview-locked'} disabled><span>{number}</span><i>{icon}</i><strong>{title}</strong><small>{boss}</small><b>{index===0?'다음 개발: 전투 준비':'LOCKED'}</b></button>)}</section>
       <footer className="stage-select-footer">2장 주방이 열렸습니다 · 현재는 스테이지 선택 지점까지 진행할 수 있습니다.</footer>
     </main>
   );
   return (
-    <main className="stage-select-screen">
+    <main className="number-hero-tower stage-select-screen">
       <header className="stage-select-header">
         <div><p>CHAPTER 1 · PLAYROOM</p><h1>놀이방</h1><span>도전할 장난감 탑을 선택하세요</span></div>
         <button type="button" onClick={onMap}>집안 세계지도</button>
@@ -303,7 +303,7 @@ function StageRun({ stage, onExit, onRestart, onSelectStage, onNextStage, onFini
   const progress = floor > stage.floorCount || phase === 'dragon' || phase === 'cleared' ? stage.floorCount + 1 : floor;
 
   return (
-    <main className={`hero-tower-game stage-theme-${stage.id}`} style={{ '--stage-accent': stage.accent } as CSSProperties}>
+    <main className={`number-hero-tower hero-tower-game stage-theme-${stage.id}`} style={{ '--stage-accent': stage.accent } as CSSProperties}>
       <header className="game-header">
         <div>
           <p className="eyebrow">CHAPTER 1 · STAGE 1-{stage.id}</p>

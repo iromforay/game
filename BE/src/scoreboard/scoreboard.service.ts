@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { AccountService } from '../account/account.service';
 import { PrismaService } from './prisma.service';
 
@@ -202,7 +203,7 @@ export class ScoreboardService {
   async saveMyRoomDungeonProfile(token: string | undefined, body: Record<string, unknown>) {
     const accountId = await this.accounts.resolveAccountId(token);
     if (!accountId) throw new UnauthorizedException({ message: '로그인이 필요합니다', code: 'NOT_LOGGED_IN' });
-    const resourceIds = ['paper', 'tape', 'screw', 'battery'] as const;
+    const resourceIds = ['paper', 'tape', 'screw', 'battery', 'plastic', 'clockwork', 'motor', 'cloth', 'metal', 'wire', 'circuit', 'dust', 'mystery', 'room-core'] as const;
     const inventoryRaw = body.inventory && typeof body.inventory === 'object' ? body.inventory as Record<string, unknown> : {};
     const inventory: Record<string, number> = {};
     for (const resourceId of resourceIds) {
@@ -227,7 +228,7 @@ export class ScoreboardService {
   async collectMyRoomDungeonResource(token: string | undefined, body: Record<string, unknown>) {
     const accountId = await this.accounts.resolveAccountId(token);
     if (!accountId) throw new UnauthorizedException({ message: '로그인이 필요합니다', code: 'NOT_LOGGED_IN' });
-    const resourceIds = ['paper', 'tape', 'screw', 'battery'] as const;
+    const resourceIds = ['paper', 'tape', 'screw', 'battery', 'plastic', 'clockwork', 'motor', 'cloth', 'metal', 'wire', 'circuit', 'dust', 'mystery', 'room-core'] as const;
     const resource = typeof body.resource === 'string' ? body.resource : '';
     if (!resourceIds.includes(resource as typeof resourceIds[number])) {
       throw new BadRequestException({ message: '알 수 없는 자원', code: 'INVALID_RESOURCE' });
@@ -259,9 +260,15 @@ export class ScoreboardService {
     const accountId = await this.accounts.resolveAccountId(token);
     if (!accountId) throw new UnauthorizedException({ message: '로그인이 필요합니다', code: 'NOT_LOGGED_IN' });
     const zoneId = String(zoneIdRaw ?? '');
-    if (zoneId !== '1-1') throw new BadRequestException({ message: '알 수 없는 채집 구역', code: 'INVALID_ZONE' });
+    const zoneOrder = ['1-1', '1-2', '1-3', '1-4', '1-5'];
+    if (!zoneOrder.includes(zoneId)) throw new BadRequestException({ message: '알 수 없는 채집 구역', code: 'INVALID_ZONE' });
     const current = await this.prisma.my_room_dungeon_profile.upsert({ where: { account_id: accountId }, create: { account_id: accountId }, update: {} });
     const clearedZones = new Set(JSON.parse(current.cleared_zones_json) as string[]);
+    const zoneIndex = zoneOrder.indexOf(zoneId);
+    const previousZone = zoneIndex > 0 ? zoneOrder[zoneIndex - 1] : null;
+    if (previousZone && !clearedZones.has(previousZone)) {
+      throw new BadRequestException({ message: `${previousZone}을 먼저 클리어해야 합니다`, code: 'PREVIOUS_ZONE_NOT_CLEARED' });
+    }
     clearedZones.add(zoneId);
     const profile = await this.prisma.my_room_dungeon_profile.update({
       where: { account_id: accountId },
@@ -282,13 +289,73 @@ export class ScoreboardService {
       if (current.crafted_bots < 1) throw new BadRequestException({ message: '배치할 채집봇이 없습니다', code: 'NO_ROBOT' });
       const assignments = JSON.parse(current.robot_assignments_json) as Record<string, unknown>;
       if (assignments[zoneId]) throw new BadRequestException({ message: '이미 채집봇이 작업 중입니다', code: 'ROBOT_ALREADY_WORKING' });
-      assignments[zoneId] = { robotId: 'paper-box', status: 'working', remainingUses: 5, startedAt: new Date().toISOString() };
+      const startedAt = new Date();
+      assignments[zoneId] = {
+        robotId: 'paper-box', status: 'working', remainingUses: 5,
+        startedAt: startedAt.toISOString(), lastSettledAt: startedAt.toISOString(),
+        nextCollectAt: new Date(startedAt.getTime() + 60_000).toISOString(),
+      };
       return tx.my_room_dungeon_profile.update({
         where: { account_id: accountId },
         data: { crafted_bots: { decrement: 1 }, robot_assignments_json: JSON.stringify(assignments) },
       });
     });
     return this.myRoomDungeonResponse(profile);
+  }
+
+  async settleMyRoomDungeonRobots(token: string | undefined) {
+    const accountId = await this.accounts.resolveAccountId(token);
+    if (!accountId) throw new UnauthorizedException({ message: '로그인이 필요합니다', code: 'NOT_LOGGED_IN' });
+    const now = new Date();
+    const settlement = await this.prisma.$transaction(async (tx) => {
+      await tx.my_room_dungeon_profile.upsert({ where: { account_id: accountId }, create: { account_id: accountId }, update: {} });
+      const [current] = await tx.$queryRaw<Array<{
+        inventory_json: string; discovered_json: string; crafted_bots: number; crafted_swords: number;
+        cleared_zones_json: string; robot_assignments_json: string;
+      }>>`SELECT inventory_json, discovered_json, crafted_bots, crafted_swords, cleared_zones_json, robot_assignments_json
+          FROM my_room_dungeon_profile WHERE account_id = ${accountId} FOR UPDATE`;
+      const assignments = JSON.parse(current.robot_assignments_json) as Record<string, {
+        robotId: string; status: string; remainingUses: number; startedAt: string; lastSettledAt?: string; nextCollectAt?: string;
+      }>;
+      const inventory = JSON.parse(current.inventory_json) as Record<string, number>;
+      const discovered = new Set(JSON.parse(current.discovered_json) as string[]);
+      let cycles = 0;
+      let robotExpired = false;
+      for (const [zoneId, assignment] of Object.entries(assignments)) {
+        if (assignment.status !== 'working' || assignment.remainingUses <= 0) continue;
+        const cursorMs = Date.parse(assignment.lastSettledAt ?? assignment.startedAt);
+        if (!Number.isFinite(cursorMs)) continue;
+        const completed = Math.floor((now.getTime() - cursorMs) / 60_000);
+        const applied = Math.min(Math.max(0, completed), assignment.remainingUses);
+        if (applied === 0) continue;
+        cycles += applied;
+        assignment.remainingUses -= applied;
+        const settledMs = cursorMs + applied * 60_000;
+        if (assignment.remainingUses === 0) {
+          delete assignments[zoneId];
+          robotExpired = true;
+        } else {
+          assignment.lastSettledAt = new Date(settledMs).toISOString();
+          assignment.nextCollectAt = new Date(settledMs + 60_000).toISOString();
+        }
+      }
+      const rewards = { paper: cycles * 4, tape: cycles * 2 };
+      if (cycles > 0) {
+        inventory.paper = Math.min(1_000_000, Number(inventory.paper ?? 0) + rewards.paper);
+        inventory.tape = Math.min(1_000_000, Number(inventory.tape ?? 0) + rewards.tape);
+        discovered.add('paper'); discovered.add('tape');
+        await tx.my_room_dungeon_profile.update({
+          where: { account_id: accountId },
+          data: {
+            inventory_json: JSON.stringify(inventory), discovered_json: JSON.stringify([...discovered]),
+            robot_assignments_json: JSON.stringify(assignments),
+          },
+        });
+      }
+      return { cycles, rewards, robotExpired };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
+    const profile = await this.prisma.my_room_dungeon_profile.findUniqueOrThrow({ where: { account_id: accountId } });
+    return { ...this.myRoomDungeonResponse(profile), settlement: { ...settlement, serverNow: now.toISOString() } };
   }
 
   // ----- 점수 공식(docs/dev/scoreboard.md 2절) -----
