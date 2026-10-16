@@ -1,3 +1,4 @@
+import { OnModuleDestroy } from '@nestjs/common';
 import { ConnectedSocket, MessageBody, OnGatewayDisconnect, SubscribeMessage, WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
 import { SWEET_SHOP_EVENTS, type SweetShopRealtimePlayer } from 'sweet-shop-contracts';
 import { Server, Socket } from 'socket.io';
@@ -6,11 +7,21 @@ import { SweetShopService } from './sweet-shop.service';
 const disabled = () => ({ ok: false, code: 'MULTIPLAYER_DISABLED', message: '달콤상점 멀티플레이는 아직 비활성화되어 있습니다.' });
 
 @WebSocketGateway({ cors: { origin: '*' } })
-export class SweetShopGateway implements OnGatewayDisconnect {
+export class SweetShopGateway implements OnGatewayDisconnect, OnModuleDestroy {
   @WebSocketServer() private server!: Server;
   private readonly realtime = new Map<string, SweetShopRealtimePlayer>();
   private readonly chatWindows = new Map<string, number[]>();
-  constructor(private readonly sweetShop: SweetShopService) {}
+  private readonly stopNpcPurchaseListener: () => void;
+  constructor(private readonly sweetShop: SweetShopService) {
+    this.stopNpcPurchaseListener = this.sweetShop.onNpcPurchase((event) => {
+      if (!this.server) return;
+      this.server.to(this.room(event.profileId)).emit(SWEET_SHOP_EVENTS.cafePurchaseNotice, event);
+      this.server.to(this.room(event.profileId)).emit(SWEET_SHOP_EVENTS.cafeDisplayChanged, { profileId: event.profileId });
+      if (event.cafeClosed) this.server.emit(SWEET_SHOP_EVENTS.cafeOpenState, { profileId: event.profileId, isOpen: false });
+    });
+  }
+
+  onModuleDestroy() { this.stopNpcPurchaseListener(); }
 
   private enabled() { return process.env.SWEET_SHOP_MULTIPLAYER_ENABLED === 'true'; }
 

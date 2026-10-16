@@ -638,6 +638,9 @@ model sweet_shop_cooking_job {
   profile_id     BigInt                    @db.UnsignedBigInt
   recipe_id      String                    @db.VarChar(40)
   quantity       Int                       @default(1) @db.UnsignedInt
+  ingredient_quality_bonus Float           @default(0)
+  mastery_quality_bonus    Float           @default(0)
+  buff_quality_bonus       Int             @default(0) @db.UnsignedTinyInt
   status         sweet_shop_cooking_status @default(cooking)
   started_at     DateTime                  @default(now()) @db.Timestamp(0)
   completes_at   DateTime                  @db.Timestamp(0)
@@ -677,12 +680,15 @@ model sweet_shop_listing {
   dessert_id  BigInt                    @db.UnsignedBigInt
   quantity    Int                       @db.UnsignedInt
   unit_price  Int                       @db.UnsignedInt
+  audience    sweet_shop_listing_audience @default(everyone)
+  next_npc_purchase_at DateTime           @default(now()) @db.Timestamp(0)
   status      sweet_shop_listing_status @default(active)
   listed_at   DateTime                  @default(now()) @db.Timestamp(0)
   sold_out_at DateTime?                 @db.Timestamp(0)
 
   @@index([seller_profile_id, status], map: "idx_sweet_listing_seller")
   @@index([status, listed_at], map: "idx_sweet_listing_browse")
+  @@index([status, audience, next_npc_purchase_at], map: "idx_sweet_listing_npc_due")
 }
 
 enum sweet_shop_listing_status {
@@ -691,20 +697,33 @@ enum sweet_shop_listing_status {
   removed
 }
 
+enum sweet_shop_listing_audience {
+  friends
+  everyone
+}
+
 model sweet_shop_trade {
   id          BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
   request_id  String   @unique(map: "uq_sweet_trade_request") @db.VarChar(64)
   listing_id  BigInt   @db.UnsignedBigInt
   seller_profile_id BigInt @db.UnsignedBigInt
-  buyer_profile_id  BigInt @db.UnsignedBigInt
+  buyer_profile_id  BigInt? @db.UnsignedBigInt
+  buyer_kind sweet_shop_buyer_kind @default(player)
+  buyer_name String? @db.VarChar(40)
   dessert_id  BigInt   @db.UnsignedBigInt
   quantity    Int      @db.UnsignedInt
   unit_price  Int      @db.UnsignedInt
   total_price Int      @db.UnsignedInt
+  notification_read_at DateTime? @db.Timestamp(0)
   created_at  DateTime @default(now()) @db.Timestamp(0)
 
   @@index([seller_profile_id, created_at], map: "idx_sweet_trade_seller")
   @@index([buyer_profile_id, created_at], map: "idx_sweet_trade_buyer")
+}
+
+enum sweet_shop_buyer_kind {
+  player
+  npc
 }
 
 model sweet_shop_guestbook {

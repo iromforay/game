@@ -31,6 +31,7 @@ const DEFAULT_CHARACTER = { x: 9, y: 14 };
 const DEFAULT_CAMERA = { x: 260, y: 700, zoom: 1 };
 const MIN_ZOOM = 0.8;
 const MAX_ZOOM = 1.5;
+const COOKING_BUFF_DURATION_MS = 3 * 60 * 1000;
 const FACILITY_IMAGES: Record<string, string> = {
   'order-board': orderBoardImage,
   'ingredient-storage': ingredientStorageImage,
@@ -310,6 +311,10 @@ export function SweetShopGame({ onExit }: SweetShopGameProps) {
   };
 
   const characterWorld = tileCenter(character);
+  const buffRemainingMs = cafe?.buff ? Math.max(0, Date.parse(cafe.buff.endsAt) - now) : 0;
+  const buffRemainingSeconds = Math.ceil(buffRemainingMs / 1000);
+  const buffProgress = Math.max(0, Math.min(100, (buffRemainingMs / COOKING_BUFF_DURATION_MS) * 100));
+  const buffTimeLabel = `${Math.floor(buffRemainingSeconds / 60)}:${String(buffRemainingSeconds % 60).padStart(2, '0')}`;
   const activeDeliveries = cafe?.deliveries.filter((item) => item.status !== 'RECEIVED') ?? [];
   const activeCooking = cafe?.cookingJobs.find((item) => item.status !== 'RECEIVED');
   const firstCookingTutorialCompleted = cafe?.tutorial.firstCookingCompleted === true;
@@ -327,7 +332,7 @@ export function SweetShopGame({ onExit }: SweetShopGameProps) {
     <main className="sweet-shop-game">
       <header className="sweet-shop-header">
         <button type="button" onClick={streetOpen ? () => setStreetOpen(false) : onExit}>{streetOpen ? '← 공방' : '← 허브'}</button>
-        <div><small>GAME 04 · CAFE {cafe && !firstCookingTutorialCompleted && <em className="tutorial-label">첫 조리 안내 중</em>}</small><h1>{streetOpen ? '달콤한 카페 거리' : cafe?.profile.cafeName ?? '달콤상점'} {!streetOpen && cafe?.buff && <em className="header-buff">✨ +{cafe.buff.qualityBonus}</em>}</h1></div>
+        <div className="sweet-shop-heading"><small>GAME 04 · CAFE {cafe && !firstCookingTutorialCompleted && <em className="tutorial-label">첫 조리 안내 중</em>}</small><h1>{streetOpen ? '달콤한 카페 거리' : cafe?.profile.cafeName ?? '달콤상점'}</h1>{cafe?.buff && buffRemainingMs > 0 && <div className="header-buff-timer" aria-label={`조리 품질 ${cafe.buff.qualityBonus}등급 상승 버프 ${buffTimeLabel} 남음`}><div><span>✨ 조리 품질 +{cafe.buff.qualityBonus}</span><b>{buffTimeLabel}</b></div><i><span style={{ width: `${buffProgress}%` }} /></i></div>}</div>
         <strong>🪙 {cafe?.profile.gold ?? 0}</strong>
       </header>
 

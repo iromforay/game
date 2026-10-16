@@ -2,6 +2,7 @@ import coralCustomer from './assets/npc-customer-coral.png';
 import greenCustomer from './assets/npc-customer-green.png';
 import lavenderCustomer from './assets/npc-customer-lavender.png';
 import mintCustomer from './assets/npc-customer-mint.png';
+import { SWEET_SHOP_NPC_BUYER_NAMES } from 'sweet-shop-contracts';
 
 export interface SweetShopNpcAppearance {
   id: string;
@@ -10,10 +11,7 @@ export interface SweetShopNpcAppearance {
   preferredJob?: 'procurement' | 'baking' | 'display';
 }
 
-export const NPC_BUYER_NAMES = [
-  '쿠키몽', '한입만', '버터링', '냠냠박사',
-  '당충전중', '오븐앞대기', '크림한스푼', '마지막한입',
-] as const;
+export const NPC_BUYER_NAMES = SWEET_SHOP_NPC_BUYER_NAMES;
 
 export const NPC_APPEARANCES: readonly SweetShopNpcAppearance[] = [
   { id: 'mint', image: mintCustomer, staffEligible: true, preferredJob: 'display' },
