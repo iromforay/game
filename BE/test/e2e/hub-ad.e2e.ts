@@ -39,13 +39,13 @@ test('허브 통합: 게임 목록에 터비 구하기와 광고게임이 함께
   await page.getByRole('button', { name: /광고게임/ }).waitFor();
   await shot('1280x800_01_hub_game_list.png');
 
-  // 2) 광고게임 목록: 출시 3개와 기획 중 2개를 표시하고, 출시 게임만 시작 가능
+  // 2) 광고게임 목록: 5개 모두 출시(hub/src/adGames.ts status 'available' — main 1acb04e에서 머지 디펜스·달콤상점·내 방이 던전 출시)되어 모두 시작 가능
   await page.getByRole('button', { name: /광고게임/ }).click();
   const cards = page.locator('.ad-game-card');
   assert.equal(await cards.count(), 5);
   assert.deepEqual(await page.locator('.ad-game-title').allTextContents(), ['숫자 게이트 러너', '숫자 용사 탑', '머지 디펜스', '달콤상점', '내 방이 던전']);
-  assert.equal(await page.locator('.ad-game-card:not(:disabled)').count(), 3, '출시 게임 세 개는 시작 가능');
-  assert.equal(await page.locator('.ad-game-card:disabled').count(), 2, '기획 중 게임 두 개는 비활성');
+  assert.equal(await page.locator('.ad-game-card:not(:disabled)').count(), 5, '출시 게임 다섯 개는 시작 가능');
+  assert.equal(await page.locator('.ad-game-card:disabled').count(), 0, '기획 중(비활성) 게임 없음');
   await shot('1280x800_02_ad_game_catalog.png');
 
   // 3) 숫자 용사 탑: 집안 지도 → 놀이방 → 스테이지 목록
