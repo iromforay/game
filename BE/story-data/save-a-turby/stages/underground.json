@@ -116,12 +116,12 @@
     {
       "id": "underfloor_ambush",
       "kind": "inspect",
-      "assetKey": "pressed-stitchling-hidden",
+      "assetKey": "ambush-pile",
       "label": "수상한 물건 더미",
       "prompt": "소리가 나는 쪽으로 다가가기",
       "art": {
         "width": 120,
-        "height": 80,
+        "height": 120,
         "pivot": [
           0.5,
           0.7
@@ -146,7 +146,7 @@
     {
       "id": "underfloor_boss_entrance",
       "kind": "inspect",
-      "assetKey": "memory-spool-gate",
+      "assetKey": "boss-entrance-mark",
       "label": "넓은 빈 공간 입구",
       "prompt": "넓은 빈 공간으로 들어가기",
       "art": {
@@ -577,6 +577,20 @@
         "layer": "overlay",
         "alpha": 0.7,
         "visibleAfter": "underfloor_memory_trail_found"
+      },
+      {
+        "id": "overlay_boss_arena",
+        "assetKey": "boss-arena-overlay",
+        "x": 2450,
+        "y": 140,
+        "width": 700,
+        "height": 600,
+        "pivot": [
+          0,
+          0
+        ],
+        "layer": "overlay",
+        "alpha": 0.8
       }
     ]
   }

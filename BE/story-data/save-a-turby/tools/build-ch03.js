@@ -116,7 +116,7 @@ const file = {
     // 실패 자국 끝의 기억 조각 → underfloor_memory_fragment_seen + CH03_MEMORY_FRAGMENT_SEEN
     segment('ch03.fragment', 'CH03_MEMORY_TRAIL_FOUND', true, 'underfloor_memory_fragment_seen', (s) => [
       t(s, 105),
-      n(s, 107),
+      n(s, 107, { cameraCue: 'memory-fragment' }), // 2차 에셋: 수많은 실이 하나의 타래로(추상적인 실·빛만)
       n(s, 109),
       l(s, 111, 112, 'weak'),
       l(s, 114, 115, 'worried'),
@@ -144,7 +144,7 @@ const file = {
       n(s, 151),
       l(s, 153, 154, 'neutral'),
       l(s, 156, 157, 'neutral'),
-      n(s, 159),
+      n(s, 159, { cameraCue: 'silver-thread' }), // 2차 에셋: 솜심 안쪽의 차가운 은빛 실·서리(4장 단서)
       l(s, 161, 162, 'neutral'),
     ]),
   ],

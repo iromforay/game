@@ -78,10 +78,14 @@ test('렌더 계획: 최종 배경(underfloor-base, 3200×2400, 월드 원점), 
   assert.equal(planStageRender(view, () => false, { width: 3200, height: 2400 }).background.mode, 'greybox');
 });
 
-test('기억 비침: cameraCue 세 종이 fx 에셋 키와 같고 장면 코드가 알고 있다', () => {
-  const dialogue = JSON.parse(readFileSync(here('../../BE/story-data/save-a-turby/dialogue/ch03.json'), 'utf8')) as { segments: { entries: { cameraCue?: string | null }[] }[] };
+test('기억 비침: cameraCue 다섯 종(1차 3 + 2차 기억 조각·은빛 실)이 fx 에셋 키와 같고 장면 코드가 알고 있다', () => {
+  const dialogue = JSON.parse(readFileSync(here('../../BE/story-data/save-a-turby/dialogue/ch03.json'), 'utf8')) as { segments: { segmentId: string; entries: { cameraCue?: string | null }[] }[] };
   const cues = dialogue.segments.flatMap((s) => s.entries.map((e) => e.cameraCue).filter(Boolean));
-  assert.deepEqual(cues, ['memory-glove', 'memory-blanket', 'memory-doll']);
+  assert.deepEqual(cues, ['memory-glove', 'memory-blanket', 'memory-doll', 'memory-fragment', 'silver-thread']);
+  // 기억 조각은 '내 것이 아닌 기억' 구간, 은빛 실은 '돌아온 중심' 구간에만
+  const seg = (cue: string) => dialogue.segments.find((s) => s.entries.some((e) => e.cameraCue === cue))!.segmentId;
+  assert.deepEqual([seg('memory-fragment'), seg('silver-thread')], ['ch03.fragment', 'ch03.chapter_complete']);
   const scene = readFileSync(here('../src/scenes/OpeningScene.ts'), 'utf8');
-  assert.match(scene, /MEMORY_GLIMPSE_KEYS = \['memory-glove', 'memory-blanket', 'memory-doll'\]/);
+  assert.match(scene, /MEMORY_GLIMPSE_KEYS = \['memory-glove', 'memory-blanket', 'memory-doll', 'memory-fragment', 'silver-thread'\]/);
+  for (const k of ['memory-glove', 'memory-blanket', 'memory-doll', 'memory-fragment', 'silver-thread']) assert.ok(existsSync(here(`../src/assets/fx/story/${k}.png`)), `${k} 파일`);
 });

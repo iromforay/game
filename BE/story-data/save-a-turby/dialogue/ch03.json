@@ -271,7 +271,7 @@
           "kind": "narration",
           "dialogueId": "ch03.fragment.002",
           "text": "실패 자국을 따라갈수록 누비에게 기억 조각이 밀려온다. 수많은 실이 하나의 거대한 타래로 감겨 있고, 집 안의 모든 장소가 동시에 느껴진다.",
-          "cameraCue": null,
+          "cameraCue": "memory-fragment",
           "soundCue": null
         },
         {
@@ -454,7 +454,7 @@
           "kind": "narration",
           "dialogueId": "ch03.chapter_complete.005",
           "text": "솜심 안쪽에서 차가운 은빛 실 한 가닥이 북쪽을 가리킨다. 주변의 먼지가 얇은 서리로 변한다.",
-          "cameraCue": null,
+          "cameraCue": "silver-thread",
           "soundCue": null
         },
         {

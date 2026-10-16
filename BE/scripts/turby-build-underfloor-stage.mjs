@@ -133,9 +133,9 @@ const storyPoints = [
   { id: 'underfloor_glove', kind: 'inspect', assetKey: 'inspect-glove', label: '낡은 장갑', prompt: '낡은 장갑을 살펴보기', art: art(104, 104, [0.5, 0.75]) },
   { id: 'underfloor_blanket', kind: 'inspect', assetKey: 'inspect-blanket', label: '작은 담요', prompt: '작은 담요를 살펴보기', art: art(104, 104, [0.5, 0.75]) },
   { id: 'underfloor_doll', kind: 'inspect', assetKey: 'inspect-doll', label: '찢어진 인형', prompt: '찢어진 인형을 살펴보기', art: art(104, 104, [0.5, 0.75]) },
-  { id: 'underfloor_ambush', kind: 'inspect', assetKey: 'pressed-stitchling-hidden', label: '수상한 물건 더미', prompt: '소리가 나는 쪽으로 다가가기', art: art(120, 80) },
+  { id: 'underfloor_ambush', kind: 'inspect', assetKey: 'ambush-pile', label: '수상한 물건 더미', prompt: '소리가 나는 쪽으로 다가가기', art: art(120, 120, [0.5, 0.7]) }, // 10-16 2차 에셋 W03-MAP-04
   { id: 'underfloor_fragment', kind: 'inspect', assetKey: 'memory-trail-mark', label: '굴러간 실패 자국', prompt: '자국을 따라가기', art: art(96, 96) },
-  { id: 'underfloor_boss_entrance', kind: 'inspect', assetKey: 'memory-spool-gate', label: '넓은 빈 공간 입구', prompt: '넓은 빈 공간으로 들어가기', art: art(120, 120) },
+  { id: 'underfloor_boss_entrance', kind: 'inspect', assetKey: 'boss-entrance-mark', label: '넓은 빈 공간 입구', prompt: '넓은 빈 공간으로 들어가기', art: art(120, 120, [0.5, 0.7]) }, // 10-16 2차 에셋 W03-MAP-05
 ];
 const goals = [
   { id: 'meet_elder', text: '오래된 흔적을 따라 물건 더미 쪽으로 가자.', requires: ['underfloor_entry_seen'], unless: ['underfloor_elder_met'] },
@@ -187,7 +187,10 @@ const doc = {
   render: {
     markerMode: 'final',
     background: { assetKey: 'underfloor-base' },
-    overlays: [{ id: 'overlay_memory_trail', assetKey: 'memory-trail', x: SKEL.overlay_regions[0].x, y: SKEL.overlay_regions[0].y, width: SKEL.overlay_regions[0].width, height: SKEL.overlay_regions[0].height, pivot: [0, 0], layer: 'overlay', alpha: 0.7, visibleAfter: 'underfloor_memory_trail_found' }],
+    overlays: [{ id: 'overlay_memory_trail', assetKey: 'memory-trail', x: SKEL.overlay_regions[0].x, y: SKEL.overlay_regions[0].y, width: SKEL.overlay_regions[0].width, height: SKEL.overlay_regions[0].height, pivot: [0, 0], layer: 'overlay', alpha: 0.7, visibleAfter: 'underfloor_memory_trail_found' },
+      // 10-16 2차 에셋 W03-OVL-02: 넓은 빈 공간 바닥 장식(가운데 타원·좌하단 입구는 비어 있다). 판정에 쓰지 않는다
+      { id: 'overlay_boss_arena', assetKey: 'boss-arena-overlay', x: 2450, y: 140, width: 700, height: 600, pivot: [0, 0], layer: 'overlay', alpha: 0.8 },
+    ],
   },
 };
 

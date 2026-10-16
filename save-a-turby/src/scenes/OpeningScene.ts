@@ -25,8 +25,8 @@ const WORLD_SATURATION_DRAINED = 0.35; // 색 빠짐: 월드 채도(1 = 원래)
 const WORLD_SATURATION_STEADY = 0.65; // 이름을 기억한 뒤 일부만 안정화(완전한 회복 아님)
 
 // 대사 표시·입력은 1장 대화 화면(StoryDialogueScene)도 그대로 쓴다(상속) — 재생 범위와 전투 연결만 다르다
-// 3장 기억 비침 cameraCue = 에셋 키(fx/story/<키>.png)
-const MEMORY_GLIMPSE_KEYS = ['memory-glove', 'memory-blanket', 'memory-doll'];
+// 3장 기억 비침 cameraCue = 에셋 키(fx/story/<키>.png). 10-16 2차: 기억 조각(내 것이 아닌 기억)·은빛 실(장 마무리)도 같은 원형 연출
+const MEMORY_GLIMPSE_KEYS = ['memory-glove', 'memory-blanket', 'memory-doll', 'memory-fragment', 'silver-thread'];
 
 export class OpeningScene extends Phaser.Scene {
   protected opts!: OpeningSceneData;

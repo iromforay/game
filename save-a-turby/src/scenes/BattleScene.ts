@@ -10,7 +10,7 @@ import { showToast, feltPanel, pillButton, TEXT } from '../ui/kit';
 import { loadWorldImages } from '../assets/loader';
 import { ENEMY_SHEET_OF, SPRITESHEET_FRAMES } from '../assets/registry';
 import coopSlots from '../data/coop-slots.json';
-import { actionHint, battleHudLayout, goalSummary, isHiddenUnit, resolveLabels, resultLayout, unitLabel, zoneFootprintOrigin, zoneRegion, ZONE_ALPHA, ZONE_FOOTPRINT, type BattleHudLayout, type LabelBox } from '../battle/battleView';
+import { actionHint, battleHudLayout, goalSummary, isHiddenUnit, resolveLabels, resultLayout, threadNumber, unitLabel, zoneFootprintOrigin, zoneRegion, ZONE_ALPHA, ZONE_FOOTPRINT, type BattleHudLayout, type LabelBox } from '../battle/battleView';
 import { watchLayout } from '../ui/relayout';
 import { displayScaleOf } from '../ui/responsive';
 import { ackFailureAllowsExit, RESULT_ACK_RETRY_TEXT } from '../state/restoreAttempt';
@@ -42,8 +42,26 @@ const wait = (scene: Phaser.Scene, ms: number) => new Promise<void>((resolve) =>
 // 4-B: 서버 권위 전투의 렌더러 겸 입력기. 규칙(이동·공격·AI·승패)은 전부 서버가 계산하고,
 // 이 씬은 서버 snapshot을 그리고 이동/공격/턴 종료 "의도"만 보낸다. 임시 도형 UI(디자인 확정 전)는 그대로 유지한다.
 // 10-14 C2-5A 보스 시트(결박/약점 노출)와 표시 크기, 색 구역 표시 크기(자산 계약: 보스 220~280px, 구역 620~760x410~510px)
-const BOSS_SHEETS: Record<string, { idle: string; exposed: string }> = { waterlogged_sewn_doll: { idle: 'waterlogged-sewn-doll-idle', exposed: 'waterlogged-sewn-doll-exposed' } };
+const BOSS_SHEETS: Record<string, { idle: string; exposed: string }> = {
+  waterlogged_sewn_doll: { idle: 'waterlogged-sewn-doll-idle', exposed: 'waterlogged-sewn-doll-exposed' },
+  memory_spool: { idle: 'memory-spool-idle', exposed: 'memory-spool-exposed' }, // 10-16 3장 기억 실패굴이(결박 → 약점 노출)
+};
 const BOSS_DISPLAY_PX = 240;
+// 10-16 3장: 일반 적 시트의 표시 크기(기본 64). 보이는 몸이 전투 칸(80) 안에 들어오게 원본 투명 여백을 감안했다
+const SHEET_DISPLAY_PX: Record<string, number> = { 'pressed-sewn-doll-idle': 88, 'pressed-sewn-doll-exposed': 88, 'small-spool-idle': 80 };
+// 눌린 박음이: 납작(flat=true) → 재봉선 노출(flat=false). 같은 프레임 인덱스·같은 중심에서 텍스처만 바꾼다(서버 스냅샷 상태 — 화면이 정하지 않는다)
+const FLAT_SHEETS: Record<string, { flat: string; exposed: string }> = { pressed_sewn_doll: { flat: 'pressed-sewn-doll-idle', exposed: 'pressed-sewn-doll-exposed' } };
+// 보스 부위·표적 그림: 운반 실(한 장), 기억실(5가닥 시트의 프레임 = 가닥 번호), 폭신이가 가리키는 다음 실 표시(기억실 위에 중첩)
+const CARRIER_KEY = 'carrier-thread';
+const THREAD_SHEET = 'memory-thread';
+const THREAD_HINT_KEY = 'memory-thread-hint';
+const TARGET_DISPLAY_PX = 64;
+const THREAD_DISPLAY_PX = 72;
+const HINT_DISPLAY_PX = 80;
+const sheetForState = (u: BattleUnit, sheetKey: string) => {
+  const flat = FLAT_SHEETS[u.characterCode];
+  return flat && u.flat === false ? flat.exposed : sheetKey;
+};
 
 export class BattleScene extends Phaser.Scene {
   private initData!: BattleInitData;
@@ -88,6 +106,7 @@ export class BattleScene extends Phaser.Scene {
     this.initData = data;
     this.snap = data.snapshot;
     this.views = new Map();
+    this.hintMarks = new Map();
     this.selectedUnitId = null;
     this.doneUnits = new Set();
     this.lastRound = 0;
@@ -328,10 +347,11 @@ export class BattleScene extends Phaser.Scene {
     const fill = u.side === 'party' ? 0xffd27f : u.side === 'neutral' ? 0x9fe58a : 0x7fc8ff;
     let body: Phaser.GameObjects.Image | Phaser.GameObjects.Arc | Phaser.GameObjects.Sprite;
     if (sheetKey && this.textures.exists(sheetKey)) {
-      // 호수 일반 적: 4프레임 idle 시트(알파는 판정에 쓰지 않는다 — 클릭 영역은 아래 setInteractive가 정한 표시 상자)
+      // 호수·마루 밑 일반 적: 4프레임 idle 시트(알파는 판정에 쓰지 않는다 — 클릭 영역은 아래 setInteractive가 정한 표시 상자)
       const boss = !!BOSS_SHEETS[u.characterCode];
-      const key = boss ? (u.phase === 'exposed' ? BOSS_SHEETS[u.characterCode].exposed : BOSS_SHEETS[u.characterCode].idle) : sheetKey;
-      const sprite = this.add.sprite(0, 0, key).setDisplaySize(boss ? BOSS_DISPLAY_PX : 64, boss ? BOSS_DISPLAY_PX : 64).play(this.sheetAnim(key));
+      const key = boss ? (u.phase === 'exposed' ? BOSS_SHEETS[u.characterCode].exposed : BOSS_SHEETS[u.characterCode].idle) : sheetForState(u, sheetKey);
+      const px = boss ? BOSS_DISPLAY_PX : (SHEET_DISPLAY_PX[key] ?? 64);
+      const sprite = this.add.sprite(0, 0, key).setDisplaySize(px, px).play(this.sheetAnim(key));
       if (boss) {
         // 보스 그림은 220~280px로 커서 이웃 칸의 누름을 가리지 않게 누름 영역을 한 칸 크기로 제한한다(알파는 판정에 쓰지 않는다)
         const edge = SPRITESHEET_FRAMES[key].size;
@@ -339,6 +359,11 @@ export class BattleScene extends Phaser.Scene {
         sprite.setInteractive(new Phaser.Geom.Rectangle(edge / 2 - half, edge / 2 - half, half * 2, half * 2), Phaser.Geom.Rectangle.Contains);
       }
       body = sprite;
+    } else if (u.thread && this.textures.exists(THREAD_SHEET)) {
+      // 기억실: 시트의 프레임 = 가닥 번호(thread_1~5). 진짜·가짜는 그림으로 알리지 않는다
+      body = this.add.sprite(0, 0, THREAD_SHEET, Math.max(0, Math.min(4, Number(threadNumber(u)) - 1))).setDisplaySize(THREAD_DISPLAY_PX, THREAD_DISPLAY_PX);
+    } else if (u.characterCode === 'carrier_thread' && this.textures.exists(CARRIER_KEY)) {
+      body = this.add.image(0, 0, CARRIER_KEY).setDisplaySize(TARGET_DISPLAY_PX, TARGET_DISPLAY_PX);
     } else {
       body = hasImage ? this.add.image(0, 0, `turby-${u.characterCode}`).setDisplaySize(52, 52) : this.add.circle(0, 0, u.partOf ? 16 : 24, fill);
     }
@@ -376,6 +401,7 @@ export class BattleScene extends Phaser.Scene {
     this.layoutLabels();
     this.drawBlocked(this.snap.blocked ?? []);
     this.syncBoss();
+    this.syncStates();
     this.syncZones();
     this.syncCurrent();
     this.syncHints();
@@ -566,6 +592,38 @@ export class BattleScene extends Phaser.Scene {
       const edge = SPRITESHEET_FRAMES[want].size;
       const half = BATTLE_TILE_SIZE / 2 / (BOSS_DISPLAY_PX / edge);
       sprite.setInteractive(new Phaser.Geom.Rectangle(edge / 2 - half, edge / 2 - half, half * 2, half * 2), Phaser.Geom.Rectangle.Contains);
+    }
+  }
+
+  // 10-16 3장: 눌린 박음이 납작 → 재봉선 노출(같은 프레임 인덱스·같은 중심), 폭신이가 가리키는 다음 기억실 위 빛무리(서버 hinted 값 그대로)
+  private hintMarks = new Map<string, Phaser.GameObjects.Image>();
+  private syncStates() {
+    for (const u of this.snap.units) {
+      const view = this.views.get(u.unitId);
+      if (!view) continue;
+      const sheets = FLAT_SHEETS[u.characterCode];
+      if (sheets && u.flat !== undefined) {
+        const sprite = view.container.list.find((o) => o.type === 'Sprite') as Phaser.GameObjects.Sprite | undefined;
+        const want = u.flat === false ? sheets.exposed : sheets.flat;
+        if (sprite && sprite.texture.key !== want && this.textures.exists(want)) {
+          const frame = Math.max(0, (sprite.anims.currentFrame?.index ?? 1) - 1);
+          const px = SHEET_DISPLAY_PX[want] ?? 64;
+          sprite.setTexture(want).setDisplaySize(px, px);
+          sprite.play({ key: this.sheetAnim(want), startFrame: frame });
+        }
+      }
+      if (!u.thread) continue;
+      const show = !!u.hinted && !isHiddenUnit(u) && this.textures.exists(THREAD_HINT_KEY);
+      let mark = this.hintMarks.get(u.unitId);
+      if (show && !mark) {
+        // 기억실 그림 아래에 깔아 실 색을 가리지 않는다(컨테이너 안 첫 자리)
+        mark = this.add.image(0, 0, THREAD_HINT_KEY).setDisplaySize(HINT_DISPLAY_PX, HINT_DISPLAY_PX);
+        view.container.addAt(mark, 0);
+        this.hintMarks.set(u.unitId, mark);
+      } else if (!show && mark) {
+        mark.destroy();
+        this.hintMarks.delete(u.unitId);
+      }
     }
   }
 
