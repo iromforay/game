@@ -1,0 +1,1 @@
+export { SpinGatherKingGame } from './SpinGatherKingGame';
