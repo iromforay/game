@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
 import { clearSave, createInitialSave, loadSave, parseSaveJson, saveGame, SAVE_KEY, type BladeId, type GameSave, type ResourceType } from './save';
+import { fetchSpinGatherSave, saveSpinGatherProgress } from './saveClient';
 import './styles.css';
 
 interface SpinGatherKingGameProps { onExit?: () => void }
@@ -219,6 +220,8 @@ export function SpinGatherKingGame({ onExit }: SpinGatherKingGameProps) {
   const lastTurretShotRef = useRef<Record<1 | 2 | 3, number>>({ 1: 0, 2: 0, 3: 0 });
   const saveRef = useRef<GameSave>(loadSave());
   const loadedRef = useRef(false);
+  const remoteReadyRef = useRef(false);
+  const remoteRevisionRef = useRef(0);
   const [save, setSave] = useState(saveRef.current);
   const [position, setPosition] = useState(positionRef.current);
   const [viewportSize, setViewportSize] = useState({ width: 1450, height: 590 });
@@ -266,6 +269,22 @@ export function SpinGatherKingGame({ onExit }: SpinGatherKingGameProps) {
 
   useEffect(() => { saveRef.current = save; }, [save]);
   useEffect(() => {
+    let active = true;
+    fetchSpinGatherSave().then(async (remote) => {
+      if (!active) return;
+      remoteRevisionRef.current = remote.revision;
+      if (remote.profile) {
+        const restored = parseSaveJson(JSON.stringify(remote.profile));
+        saveRef.current = restored; setSave(restored); setNotice('서버 저장 데이터를 불러왔습니다.');
+      } else {
+        const result = await saveSpinGatherProgress(saveRef.current, 0);
+        remoteRevisionRef.current = result.revision;
+      }
+      remoteReadyRef.current = true;
+    }).catch(() => { if (active) { remoteReadyRef.current = true; setNotice('서버 연결 실패 · 로컬 임시 저장으로 진행합니다.'); } });
+    return () => { active = false; };
+  }, []);
+  useEffect(() => {
     const element = worldRef.current;
     if (!element) return;
     const updateViewport = () => setViewportSize({ width: element.clientWidth, height: element.clientHeight });
@@ -277,6 +296,15 @@ export function SpinGatherKingGame({ onExit }: SpinGatherKingGameProps) {
   useEffect(() => {
     if (!loadedRef.current) { loadedRef.current = true; return; }
     const timer = window.setTimeout(() => { saveRef.current = saveGame(saveRef.current); }, 350);
+    return () => window.clearTimeout(timer);
+  }, [save]);
+  useEffect(() => {
+    if (!remoteReadyRef.current) return;
+    const timer = window.setTimeout(() => {
+      saveSpinGatherProgress(saveRef.current, remoteRevisionRef.current)
+        .then((result) => { remoteRevisionRef.current = result.revision; })
+        .catch(() => setNotice('서버 저장 대기 중 · 진행 데이터는 기기에 보관했습니다.'));
+    }, 1200);
     return () => window.clearTimeout(timer);
   }, [save]);
   useEffect(() => {

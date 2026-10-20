@@ -60,5 +60,17 @@ module.exports = {
         SWEET_SHOP_MULTIPLAYER_ENABLED: process.env.SWEET_SHOP_MULTIPLAYER_ENABLED || 'true',
       },
     },
+    {
+      // 빙글 채집왕 전용 영구 진행 저장 API 프로세스
+      name: 'spin-gather-be',
+      cwd: __dirname,
+      script: 'dist/spin-gather-main.js',
+      instances: 1,
+      exec_mode: 'fork',
+      env: {
+        NODE_ENV: 'production',
+        SPIN_GATHER_PORT: process.env.SPIN_GATHER_PORT || 3006,
+      },
+    },
   ],
 };

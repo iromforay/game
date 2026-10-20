@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 
 // https://vite.dev/config/
 export default defineConfig({
+  envPrefix: ['VITE_', 'SPIN_GATHER_'],
   plugins: [react()],
   resolve: {
     // 브라우저에서는 CommonJS dist가 아닌 ESM TypeScript 원본을 변환한다.
