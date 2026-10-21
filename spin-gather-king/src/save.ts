@@ -1,12 +1,12 @@
-export type ResourceType = 'wood' | 'log' | 'stone' | 'iron' | 'ice' | 'crystal' | 'meat' | 'shell';
-export type BladeId = 'basic' | 'moonseong' | 'seongun';
+export type ResourceType = 'wood' | 'log' | 'stone' | 'iron' | 'ice' | 'crystal' | 'oil' | 'lightning' | 'meat' | 'shell';
+export type BladeId = 'basic' | 'moonseong' | 'hwarak' | 'seongun' | 'noegwang' | 'seolhwa';
 
 export interface GameSave {
   schemaVersion: 1;
   revision: number;
   savedAt: string;
   resources: Record<ResourceType, number>;
-  bladeCount: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+  bladeCount: 1 | 2 | 3 | 4 | 5;
   baseLevel: 0 | 1 | 2 | 3;
   baseHp: number;
   equippedBladeId: BladeId;
@@ -39,6 +39,12 @@ export interface GameSave {
   desertTurretIron: number;
   snowTurretIce: number;
   snowTurretCrystal: number;
+  turretLevel: 1 | 2 | 3;
+  turretOilProgress: number;
+  turretLightningProgress: number;
+  stormUnlocked: boolean;
+  stormUnlockCrystal: number;
+  stormUnlockOil: number;
   eastUnlocked: boolean;
   eastUnlockWood: number;
   eastUnlockStone: number;
@@ -49,6 +55,9 @@ export interface GameSave {
   bladeShellProgress: number;
   moonseongProgress: number;
   seongunProgress: number;
+  hwarakProgress: number;
+  noegwangProgress: number;
+  seolhwaProgress: number;
 }
 
 export const SAVE_KEY = 'spin-gather-king:save:v1';
@@ -57,7 +66,7 @@ export const createInitialSave = (): GameSave => ({
   schemaVersion: 1,
   revision: 0,
   savedAt: new Date(0).toISOString(),
-  resources: { wood: 0, log: 0, stone: 0, iron: 0, ice: 0, crystal: 0, meat: 0, shell: 0 },
+  resources: { wood: 0, log: 0, stone: 0, iron: 0, ice: 0, crystal: 0, oil: 0, lightning: 0, meat: 0, shell: 0 },
   bladeCount: 1,
   baseLevel: 0,
   baseHp: 100,
@@ -91,6 +100,12 @@ export const createInitialSave = (): GameSave => ({
   desertTurretIron: 0,
   snowTurretIce: 0,
   snowTurretCrystal: 0,
+  turretLevel: 1,
+  turretOilProgress: 0,
+  turretLightningProgress: 0,
+  stormUnlocked: false,
+  stormUnlockCrystal: 0,
+  stormUnlockOil: 0,
   eastUnlocked: false,
   eastUnlockWood: 0,
   eastUnlockStone: 0,
@@ -101,6 +116,9 @@ export const createInitialSave = (): GameSave => ({
   bladeShellProgress: 0,
   moonseongProgress: 0,
   seongunProgress: 0,
+  hwarakProgress: 0,
+  noegwangProgress: 0,
+  seolhwaProgress: 0,
 });
 
 const asCount = (value: unknown, maximum = Number.MAX_SAFE_INTEGER) => {
@@ -110,14 +128,14 @@ const asCount = (value: unknown, maximum = Number.MAX_SAFE_INTEGER) => {
 };
 
 const isBladeId = (value: unknown): value is BladeId => (
-  value === 'basic' || value === 'moonseong' || value === 'seongun'
+  value === 'basic' || value === 'moonseong' || value === 'hwarak' || value === 'seongun' || value === 'noegwang' || value === 'seolhwa'
 );
 
 export const normalizeSave = (value: unknown): GameSave => {
   if (!value || typeof value !== 'object') throw new Error('저장 데이터가 객체 형식이 아닙니다.');
   const source = value as Partial<GameSave>;
   const resources = source.resources && typeof source.resources === 'object' ? source.resources : { wood: 0, stone: 0 };
-  const bladeCount = asCount(source.bladeCount, 8) || 1;
+  const bladeCount = asCount(source.bladeCount, 5) || 1;
   const fenceWood = asCount(source.fenceWood, 12);
   const baseLevel = source.baseLevel === undefined ? (fenceWood >= 12 ? 1 : 0) : asCount(source.baseLevel, 3);
   const eastUnlockWood = asCount(source.eastUnlockWood, 200);
@@ -150,6 +168,8 @@ export const normalizeSave = (value: unknown): GameSave => {
       iron: asCount((resources as Record<string, unknown>).iron),
       ice: asCount((resources as Record<string, unknown>).ice),
       crystal: asCount((resources as Record<string, unknown>).crystal),
+      oil: asCount((resources as Record<string, unknown>).oil),
+      lightning: asCount((resources as Record<string, unknown>).lightning),
       meat: asCount((resources as Record<string, unknown>).meat),
       shell: asCount((resources as Record<string, unknown>).shell),
     },
@@ -186,6 +206,12 @@ export const normalizeSave = (value: unknown): GameSave => {
     desertTurretIron: asCount(source.desertTurretIron, 20),
     snowTurretIce: asCount(source.snowTurretIce, 50),
     snowTurretCrystal: asCount(source.snowTurretCrystal, 20),
+    turretLevel: Math.max(1, asCount(source.turretLevel, 3)) as GameSave['turretLevel'],
+    turretOilProgress: asCount(source.turretOilProgress, 30),
+    turretLightningProgress: asCount(source.turretLightningProgress, 30),
+    stormUnlocked: source.stormUnlocked === true || (asCount(source.stormUnlockCrystal, 200) >= 200 && asCount(source.stormUnlockOil, 100) >= 100),
+    stormUnlockCrystal: asCount(source.stormUnlockCrystal, 200),
+    stormUnlockOil: asCount(source.stormUnlockOil, 100),
     eastUnlocked: source.eastUnlocked === true || (eastUnlockWood >= 200 && eastUnlockLog >= 100),
     eastUnlockWood,
     eastUnlockStone,
@@ -196,6 +222,9 @@ export const normalizeSave = (value: unknown): GameSave => {
     bladeShellProgress: asCount(source.bladeShellProgress, 35),
     moonseongProgress: asCount(source.moonseongProgress, 70),
     seongunProgress: asCount(source.seongunProgress, 50),
+    hwarakProgress: asCount(source.hwarakProgress, 50),
+    noegwangProgress: asCount(source.noegwangProgress, 60),
+    seolhwaProgress: asCount(source.seolhwaProgress, 50),
   };
 };
 
