@@ -9,6 +9,9 @@ import { portraitCandidates, runDialogue, type Advance, type DialogueEntry, type
 import { NAME_RULE_TEXT, nameReasonMessage, precheckName } from '../story/nameRules';
 import type { OpeningStoryState, StoryClient } from '../story/storyClient';
 
+// 장 전용 대화 배경(한 장 그림, 화면 크기). 없으면 bg-<code> 타일(1·2장 숲·집)
+const DIALOGUE_BACKDROPS: Record<string, { key: string; alpha: number }> = { underfloor: { key: 'chapter03-dialogue-bg', alpha: 0.8 } };
+
 // M3 오프닝 — 서버 체크포인트가 지정한 구간부터 공용 대사 재생기(story/dialogueRunner.ts)로 재생한다.
 // 이 씬은 그리기와 입력만 맡는다. 진행·보상·체크포인트는 전부 서버가 판정한다.
 export interface OpeningSceneData {
@@ -32,7 +35,7 @@ export class OpeningScene extends Phaser.Scene {
   protected opts!: OpeningSceneData;
   protected state!: OpeningStoryState;
   protected seen = new Set<string>();
-  private bg?: Phaser.GameObjects.TileSprite;
+  private bg?: Phaser.GameObjects.TileSprite | Phaser.GameObjects.Image;
   private layer!: Phaser.GameObjects.Container;
   private advanceResolver: ((a: Advance) => void) | null = null;
   private typing: Phaser.Time.TimerEvent | null = null;
@@ -119,6 +122,13 @@ export class OpeningScene extends Phaser.Scene {
 
   protected setBackdrop(code: string) {
     this.bg?.destroy();
+    this.bg = undefined;
+    // 장 전용 한 장 배경(타일 아님)이 있으면 그것을 화면 크기로(10-22 C3-6 R1-04: 3장 마루 밑)
+    const full = DIALOGUE_BACKDROPS[code];
+    if (full && this.textures.exists(full.key)) {
+      this.bg = this.add.image(0, 0, full.key).setOrigin(0, 0).setDisplaySize(CANVAS_WIDTH, CANVAS_HEIGHT).setDepth(0).setAlpha(full.alpha);
+      return;
+    }
     if (this.textures.exists(`bg-${code}`)) this.bg = this.add.tileSprite(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT, `bg-${code}`).setOrigin(0, 0).setDepth(0).setAlpha(0.55);
   }
 

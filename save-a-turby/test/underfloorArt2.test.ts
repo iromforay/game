@@ -22,7 +22,7 @@ const ASSETS: [string, string, number, number, string][] = [
   ['boss-entrance-mark', 'world/underfloor/props/boss-entrance-mark.png', 512, 512, '3B5A4CFBCD938F639EAC9353A873A70AB5680CDB867872B7ABF282DB0A680E3D'],
   ['boss-arena-overlay', 'world/underfloor/overlays/boss-arena-overlay.png', 1400, 1200, '42D2AF04830B4D792D990F10F24134C2AEC96E6E621CEAEEDAFCFDBF2E9EBE05'],
   ['memory-fragment', 'fx/story/memory-fragment.png', 768, 768, '89D1B4E1AF96D5D3D998C458E955A175A822CE1894DBDF9431BF8ADDA5885EDF'],
-  ['silver-thread', 'fx/story/silver-thread.png', 768, 768, '416BC908A79C2BDAF86CCD5F5A01C8D74E3E91C5AC79F5FFCA8D389B360956E3'],
+  ['silver-thread', 'fx/story/silver-thread.png', 768, 768, '4FF79B86983C5207C9FC5564C542602B75424DBA3EF0756011186B456C84E3CA'], // 10-22 delivery-v3 교체(C3-6 R1-05: 바닥 덩어리 제거)
 ];
 
 test('2차 에셋 14종: 파일·키(파일명)·크기·투명·해시가 Codex delivery-v2 manifest와 같다', () => {
@@ -105,4 +105,12 @@ test('지도 소품·오버레이 계약: 매복 더미·보스 입구 표식 12
   const arena = UG.render.overlays.find((o) => o.assetKey === 'boss-arena-overlay')!;
   assert.deepEqual([arena.x, arena.y, arena.width, arena.height, arena.pivot, arena.alpha], [2450, 140, 700, 600, [0, 0], 0.8]);
   assert.ok((arena.x as number) + (arena.width as number) <= UG.size.width && (arena.y as number) + (arena.height as number) <= UG.size.height, '지도 안');
+});
+
+test('C3-6 R1-04: 3장 대화 배경(delivery-v3 1280×720 불투명) — 3장 구간에서만 한 장 배경, 1·2장은 기존 타일', () => {
+  const bytes = readFileSync(here('../src/assets/world/underfloor/chapter03-dialogue-bg.png'));
+  assert.deepEqual([bytes.readUInt32BE(16), bytes.readUInt32BE(20)], [1280, 720]);
+  assert.equal(createHash('sha256').update(bytes).digest('hex').toUpperCase(), '9BF315C88CCE38D6D3A58950EFF8CB159A333F740F9C7EBC698E78EB226A4F6F');
+  assert.match(readFileSync(here('../src/scenes/OpeningScene.ts'), 'utf8'), /underfloor: \{ key: 'chapter03-dialogue-bg', alpha: 0\.8 \}/);
+  assert.match(readFileSync(here('../src/scenes/StoryDialogueScene.ts'), 'utf8'), /chapterOfSegment\(id\) === 'ch03' \? 'underfloor' : 'forest'/);
 });

@@ -196,7 +196,8 @@ export function battleHudLayout(scale: number, tile = 80): BattleHudLayout {
   const goalPanel = compact ? { x: 1280 - 8 - 620, y: endTurn.y + endTurn.h + 8, w: 620, h: 260 } : null;
   const closeW = Math.round(font.button * 4);
   const goalClose = goalPanel ? { x: goalPanel.x + goalPanel.w - 8 - closeW, y: goalPanel.y + 8, w: closeW, h: btnH } : null;
-  return { mode: compact ? 'compact' : 'regular', font, objectivesCollapsible: compact, labelWrap: tile * 2 - 12, rects: { endTurn, goalButton, goalPanel, goalClose, turn, leave, hint } };
+  // 라벨 줄바꿈 폭: 작은 화면은 글자가 커서(약 24px) 두 칸 폭이면 "기억 실패굴이"도 쪼개진다 — 이름 한 줄이 들어가게 2.5칸(10-22 C3-6 R1-01·03)
+  return { mode: compact ? 'compact' : 'regular', font, objectivesCollapsible: compact, labelWrap: compact ? tile * 2.5 : tile * 2 - 12, rects: { endTurn, goalButton, goalPanel, goalClose, turn, leave, hint } };
 }
 
 // 하단 행동 안내(UI 문구). 작은 화면에서는 한 줄에 들어가게 짧게
@@ -253,7 +254,7 @@ export function resultLayout(scale: number, rowCount: number, framed = false): R
   return { mode: compact ? 'compact' : 'regular', panel, font, titleY, image, subY, rows, button };
 }
 
-// 작은 화면의 유닛 라벨: "이름 HP/최대" 한 줄 + 상태 표식은 짧은 UI 표기로 둘째 줄(대본 문구가 아님)
+// 작은 화면의 유닛 라벨: 이름 한 줄 + "HP/최대 · 상태" 한 줄(상태는 짧은 UI 표기 — 대본 문구가 아님). 10-22 C3-6 R1-01: 이름과 HP가 한 줄에서 쪼개지지 않게 두 줄 고정
 const SHORT_TAG: Record<string, string> = { '보호 대상': '보호', '부위 먼저': '부위 먼저' };
 export function unitLabel(u: BattleUnit, compact: boolean): string {
   // 10-14 v1a: 검은 재봉실은 A/B/C 글자로 구분하고 모바일에서는 "검은 실 A" 한 줄(HP 1/1은 생략)
@@ -262,7 +263,7 @@ export function unitLabel(u: BattleUnit, compact: boolean): string {
   const tags = unitTags(u);
   if (!compact) return `${u.name} HP ${u.hp}/${u.maxHp}${tags.length > 0 ? ` (${tags.join(' · ')})` : ''}`;
   const short = tags.map((t) => SHORT_TAG[t] ?? t);
-  return `${u.name} ${u.hp}/${u.maxHp}${short.length > 0 ? `\n${short.join(' · ')}` : ''}`;
+  return `${u.name}\n${[`${u.hp}/${u.maxHp}`, ...short].join(' · ')}`;
 }
 
 // ---------- 10-14 C2-5A 시각 보완(v1a) ----------

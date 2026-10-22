@@ -33,7 +33,6 @@ interface UnitView {
 
 const RETRY_LIMIT = 3;
 const LABEL_GAP = 30; // 유닛 중심에서 라벨까지
-const LABEL_WRAP = BATTLE_TILE_SIZE * 2 - 12; // 이웃 라벨은 반대편에 있으므로 두 칸 폭까지 쓸 수 있다
 const asDepth = (o: Phaser.GameObjects.GameObject, depth: number) => (o as unknown as Phaser.GameObjects.Components.Depth).setDepth(depth);
 const slotHex = (slot: number) => coopSlots.find((c) => c.slot === slot)?.main ?? '#888888';
 const slotNum = (slot: number) => Phaser.Display.Color.HexStringToColor(slotHex(slot)).color;
@@ -377,7 +376,7 @@ export class BattleScene extends Phaser.Scene {
     container.add([selectRing, ring, body]);
     container.setDepth(10);
     // 라벨은 줄이지 않고 두 칸 폭 안에서 줄바꿈(이웃 라벨은 위·아래로 엇갈려 겹치지 않음 — labelPlacement)
-    const hpText = this.add.text(x, y + LABEL_GAP, this.hpLabel(u), { fontSize: `${this.hud.font.label}px`, color: '#ffffff', align: 'center', wordWrap: { width: LABEL_WRAP, useAdvancedWrap: true }, backgroundColor: u.side === 'party' ? slotHex(u.participantSlot) : '#00000090', padding: { x: 4, y: 2 } }).setOrigin(0.5, 0).setDepth(11);
+    const hpText = this.add.text(x, y + LABEL_GAP, this.hpLabel(u), { fontSize: `${this.hud.font.label}px`, color: '#ffffff', align: 'center', wordWrap: { width: this.hud.labelWrap, useAdvancedWrap: true }, backgroundColor: u.side === 'party' ? slotHex(u.participantSlot) : '#00000090', padding: { x: 4, y: 2 } }).setOrigin(0.5, 0).setDepth(11);
 
     if (!body.input) body.setInteractive({ useHandCursor: true });
     body.on('pointerdown', () => {
@@ -548,10 +547,12 @@ export class BattleScene extends Phaser.Scene {
       const p = this.tileToWorld(f.col, f.row);
       this.moveHighlights.push(this.add.rectangle(p.x, p.y, BATTLE_TILE_SIZE - 4, BATTLE_TILE_SIZE - 4).setStrokeStyle(3, 0xff9fb0, 1).setDepth(4));
     }
+    // 쓰러진 유닛이 남아 보이는 칸(반투명)은 채우지 않고 윤곽만 — 채운 칸이 흐린 유닛 그림을 덮어 보이지 않게(10-22 C3-6 R1-02)
+    const downed = new Set(this.snap.units.filter((o) => (o.stunned || o.inactive) && !isHiddenUnit(o)).map((o) => `${o.col},${o.row}`));
     for (const { col, row } of reachableCells(this.snap, unit)) {
       const { x, y } = this.tileToWorld(col, row);
       const rect = this.add
-        .rectangle(x, y, BATTLE_TILE_SIZE - 6, BATTLE_TILE_SIZE - 6, 0x9fe58a, 0.22)
+        .rectangle(x, y, BATTLE_TILE_SIZE - 6, BATTLE_TILE_SIZE - 6, 0x9fe58a, downed.has(`${col},${row}`) ? 0 : 0.22)
         .setStrokeStyle(2, 0x9fe58a, 0.6)
         .setDepth(4)
         .setInteractive({ useHandCursor: true })

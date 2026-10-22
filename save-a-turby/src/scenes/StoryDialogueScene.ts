@@ -57,7 +57,7 @@ export class StoryDialogueScene extends OpeningScene {
   protected ports(): RunnerPorts {
     return {
       ...super.ports(),
-      onSegment: () => this.setBackdrop('forest'),
+      onSegment: (id) => this.setBackdrop(chapterOfSegment(id) === 'ch03' ? 'underfloor' : 'forest'), // 3장은 마루 밑 대화 배경(C3-6 R1-04)
       startBattle: (key) => this.startBattle(key),
     };
   }

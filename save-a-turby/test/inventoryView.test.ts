@@ -103,7 +103,8 @@ test('640×360 전투 HUD: 턴 > 안내 > 목표 크기 순, 목표는 접기, �
   for (const px of [H.font.label, H.font.panel, H.font.hint]) assert.ok(finalPx(px, 0.5) >= MIN_BODY_PX);
   assert.ok(finalPx(H.font.button, 0.5) >= MIN_BUTTON_PX);
   const u = { name: '보풀이', hp: 20, maxHp: 20, side: 'neutral', stunned: false, inactive: false, statuses: [] } as unknown as BattleUnit;
-  assert.equal(unitLabel(u, true), '보풀이 20/20\n보호');
+  assert.equal(unitLabel(u, true), '보풀이\n20/20 · 보호', '이름 한 줄 + HP·상태 한 줄(10-22 C3-6 R1-01)');
+  assert.ok(H.labelWrap >= 200, '작은 화면 라벨 폭: 이름 한 줄(약 24px 글자 7자)이 쪼개지지 않는다');
   assert.equal(unitLabel(u, false), '보풀이 HP 20/20 (보호 대상)');
   const grid = { x: 160, y: 40, w: 960, h: 640 };
   assert.deepEqual(clampLabel(170, 10, 120, 40, grid), { cx: 220, top: 40 }, '왼쪽·위 경계 안으로');
