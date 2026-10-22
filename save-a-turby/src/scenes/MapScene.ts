@@ -40,6 +40,7 @@ const WILD_RECHECK_MS = 1500; // 서버가 "닿지 않는다"고 한 야생을 �
 const AVATAR_HALF = CLIENT_BODY_HALF; // 막힌 곳 판정에 쓰는 아바타 몸 반지름(px) — 서버와 같은 geometry 계약의 값
 const DEPTH_GROUND = MAP_DEPTH.greybox;
 const TRAP_SLOW_MS = 1200; // 서버 덫 지속 시간(lake.json blackThreadTraps.slowMs)과 같은 값 — 연출 길이용이며 판정은 서버
+const MAP_TARGET_GLOW = 0xf6dfa8; // 임무 대상 외곽광 색(크림)
 const DEPTH_STORY = MAP_DEPTH.story; // 이야기 지점·오브젝트 표식·문(아바타·야생 터비보다 아래)
 
 interface WildMarker {
@@ -514,6 +515,11 @@ export class MapScene extends Phaser.Scene {
         const sized = ap!.art; // 서버 지역 데이터의 표시 크기 — 원본 PNG 크기(예: 1254px)를 그대로 쓰지 않는다
         const img = this.add.image(0, 0, art).setOrigin(sized?.pivot[0] ?? 0.5, sized?.pivot[1] ?? 0.7);
         c.add(sized ? img.setDisplaySize(sized.width, sized.height) : img.setScale(1));
+        // 임무 대상 외곽광(10-16 C3-6 QA-01): 배경과 맞는 크림색, 불투명도 약 0.5. WebGL에서만(캔버스는 그림만)
+        if (sized?.glow && img.preFX) {
+          img.preFX.setPadding(12);
+          img.preFX.addGlow(MAP_TARGET_GLOW, 3, 0, false, 0.1, 12);
+        }
       }
       // 임시 표식(고리·글자): 지금(fallback)은 그림이 있어도 눈에 띄는 고리를 함께 둔다 — 목표를 놓치지 않게. 최종 모드(final)에서는 그림이 있는 대상에서 없앤다
       if (ap?.marker ?? true) {

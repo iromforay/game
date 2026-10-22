@@ -29,10 +29,15 @@ export interface BattleUnit {
   fled?: boolean; // 도주 연출로 전장에서 빠짐
   phase?: 'bound' | 'exposed'; // 부위를 가진 중심부(보스)의 서버 판정 상태
   zeroDamage?: boolean; // 결박 중에도 공격은 되지만 피해 0
+  // 10-16 C3-3(3장)
+  flat?: boolean; // 눌린 박음이: 납작(첫 피격 전). false면 재봉선이 드러난 상태
+  reversed?: boolean; // 작은 실패굴이: 운반 실이 끊겨 아군 쪽으로 굴러온다
+  thread?: boolean; // 보스의 기억실(진짜·가짜는 알리지 않는다)
+  hinted?: boolean; // 오래된 폭신이가 지금 가리키는 다음 기억실
 }
 
 export interface StatusEffect {
-  kind: 'bind' | 'wet_bind'; // wet_bind = 젖은 속박(다음 이동 한 번의 이동 거리 1칸 감소, 최소 1칸, 한 번 쓰면 해제)
+  kind: 'bind' | 'wet_bind' | 'confused'; // confused = 혼란(이동·공격 대상이 서버가 정한 다른 칸·대상으로 바뀐다). wet_bind = 젖은 속박(다음 이동 한 번의 이동 거리 1칸 감소, 최소 1칸, 한 번 쓰면 해제)
   turnsLeft: number;
   movePenalty: number;
   sourceUnitId: string | null;
@@ -98,7 +103,11 @@ export type BattleEvent =
   | { version: number; type: 'phase'; unitId: string; phase: 'exposed' }
   | { version: number; type: 'hint'; code: string; text: string }
   | { version: number; type: 'telegraph'; direction: 'east' | 'west'; round: number }
-  | { version: number; type: 'current'; direction: 'east' | 'west'; round: number; moved: string[]; skipped: string[] };
+  | { version: number; type: 'current'; direction: 'east' | 'west'; round: number; moved: string[]; skipped: string[] }
+  | { version: number; type: 'wrong_thread'; unitId: string; targetId: string }
+  | { version: number; type: 'confused_action'; unitId: string; action: 'move' | 'attack' }
+  | { version: number; type: 'carrier_cut'; unitId: string; spoolId: string }
+  | { version: number; type: 'empower'; unitId: string; targets: string[]; attack: number };
 
 export interface BattleReward {
   playerId: string;

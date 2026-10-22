@@ -203,7 +203,7 @@ test('보스 표시 계약: 시트 키 연결, 구역 상태 교체(같은 객�
   const scene = readFileSync(root + 'src/scenes/BattleScene.ts', 'utf8');
   const reg = readFileSync(root + 'src/assets/registry.ts', 'utf8');
   assert.match(reg, /waterlogged_sewn_doll: 'waterlogged-sewn-doll-idle'/);
-  assert.match(scene, /BOSS_SHEETS: Record<string, \{ idle: string; exposed: string \}>/);
+  assert.match(scene, /BOSS_SHEETS: Record<string, \{ idle: string; exposed: string; labelBelow\?: number \}>/);
   assert.match(scene, /sprite\.play\(\{ key: this\.sheetAnim\(want\), startFrame: frame \}\)/); // 같은 프레임 인덱스로 교체
   assert.match(scene, /다음 물살: \$\{east \? '→' : '←'\}/); // 방향을 글자(화살표)로도 표시 — 색에만 의존하지 않는다
   assert.match(scene, /this\.hintsSeen = new Set\(shown\.map/); // 복원 때 이미 낸 안내는 반복하지 않는다
@@ -280,7 +280,7 @@ test('640×360 이름표: 가까이 붙은 누비·재봉실·보스 라벨이 �
 });
 
 test('깊이: 격자 선(3)·이동 칸·현재 유닛 윤곽(4)은 구역 오버레이(2) 위, 유닛(10)·HUD(2000) 아래이고 보스 표시 크기는 220~280px', () => {
-  const scene = readFileSync(fileURLToPath(new URL('../src/scenes/BattleScene.ts', import.meta.url)), 'utf8');
+  const scene = readFileSync(fileURLToPath(new URL('../src/scenes/BattleScene.ts', import.meta.url)), 'utf8').replace(/\r\n/g, '\n'); // CRLF 체크아웃에서도 같은 정규식(c4dbd46과 같은 이유)
   assert.match(scene, /const lines = this\.add\.graphics\(\)\.setDepth\(3\)/);
   assert.match(scene, /\.setDepth\(2\)\.setAlpha\(ZONE_ALPHA\)/);
   assert.match(scene, /setStrokeStyle\(3, 0xffe9a8, 1\)\.setDepth\(4\)/);

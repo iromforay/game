@@ -168,7 +168,7 @@ function battleStep(): { x: number; y: number; kind: 'attack' | 'move' | 'end' }
   if (snap.phase !== 'player_subturn' || snap.currentPlayerId !== b.myId) return null;
   const u = snap.units.find((x) => x.unitId === b.selectedUnitId) as BattleUnit | undefined;
   const d = (a: { col: number; row: number }, c: { col: number; row: number }) => Math.abs(a.col - c.col) + Math.abs(a.row - c.row);
-  const foes = snap.units.filter((x) => x.side === 'wild' && !x.stunned && !x.inactive && !x.fled && targetState(snap, x) === 'ok' && !x.invulnerable);
+  const foes = snap.units.filter((x) => x.side === 'wild' && !x.stunned && !x.inactive && !x.fled && targetState(snap, x) === 'ok' && !x.invulnerable && (!x.thread || !!x.hinted)); // 기억실은 폭신이가 가리키는 다음 실만 노린다(순서가 아니면 혼란)
   const end = find('턴 종료');
   if (!u || u.ap <= 0 || u.stunned) return end && { ...end, kind: 'end' };
   const adj = foes.find((f) => d(u, f) === 1);
