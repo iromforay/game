@@ -3,7 +3,8 @@ export type AdGameId =
   | 'number-hero-tower'
   | 'merge-defense'
   | 'sweet-shop'
-  | 'my-room-dungeon';
+  | 'my-room-dungeon'
+  | 'spin-gather-king';
 
 export interface AdGameMeta {
   id: AdGameId;
@@ -47,6 +48,13 @@ export const AD_GAMES: AdGameMeta[] = [
     number: 5,
     title: '내 방이 던전',
     description: '방 안의 사물을 분해해 자원을 모으고 무기와 채집 로봇을 성장시키세요.',
+    status: 'available',
+  },
+  {
+    id: 'spin-gather-king',
+    number: 7,
+    title: '빙글 채집왕',
+    description: '회전 도구로 나무와 돌을 모아 새로운 채집 구역을 건설하세요.',
     status: 'available',
   },
 ];

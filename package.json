@@ -4,6 +4,22 @@
   "version": "0.0.0",
   "scripts": {
     "build:shared": "npm run build -w turby-stage-geometry && npm run build -w sweet-shop-contracts",
+    "test:spin-gather-king": "node --experimental-strip-types --no-warnings --test test/spin-gather-king/*.test.ts",
+    "verify:spin-gather-king": "npm run test:spin-gather-king && npm run build -w spin-gather-king",
+    "test:my-room-dungeon": "node --experimental-strip-types --no-warnings --test test/my-room-dungeon/*.test.ts",
+    "test:sweet-shop": "node --experimental-strip-types --no-warnings --test test/sweet-shop/*.test.ts",
+    "test:merge-defense": "node --experimental-strip-types --no-warnings --test test/merge-defense/*.test.ts",
+    "test:number-hero-tower": "node --experimental-strip-types --no-warnings --test test/number-hero-tower/*.test.ts",
+    "test:number-gate-runner": "node --experimental-strip-types --no-warnings --test test/number-gate-runner/*.test.ts",
+    "test:tower-defense": "node --experimental-strip-types --no-warnings --test test/tower-defense/*.test.ts",
+    "test:offense-tower": "node --experimental-strip-types --no-warnings --test test/offense-tower/*.test.ts",
+    "test:strategy-marbles": "node --experimental-strip-types --no-warnings --test test/strategy-marbles/*.test.ts",
+    "test:save-a-turby": "node --experimental-strip-types --no-warnings --test test/save-a-turby/*.test.ts",
+    "test:steal-a-kirby": "node --experimental-strip-types --no-warnings --test test/steal_a_kirby/*.test.ts",
+    "test:all": "node scripts/run-all-game-tests.mjs",
+    "tet:all": "npm run test:all",
+    "test:release-games": "npm run test:my-room-dungeon && npm run test:sweet-shop && npm run test:merge-defense && npm run test:number-hero-tower && npm run test:number-gate-runner",
+    "verify:release-games": "npm run test:release-games && npm run build -w my-room-dungeon && npm run build -w sweet-shop && npm run build -w hub && npm run build -w number-hero-tower && npm run build --prefix number-gate-runner",
     "postinstall": "npm run build:shared"
   },
   "workspaces": [
@@ -16,6 +32,7 @@
     "number-hero-tower",
     "my-room-dungeon",
     "sweet-shop",
+    "spin-gather-king",
     "save-a-turby",
     "steal_a_kirby",
     "BE"

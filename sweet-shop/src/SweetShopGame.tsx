@@ -259,11 +259,13 @@ export function SweetShopGame({ onExit }: SweetShopGameProps) {
     const target = event.target as HTMLElement;
     const tapFacilityId = target.closest<HTMLElement>('[data-facility-id]')?.dataset.facilityId ?? null;
     const tapCharacter = target.closest('[data-character]') !== null;
-    event.currentTarget.setPointerCapture(event.pointerId);
     pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (pointers.current.size === 1) {
       gesture.current = { ...gesture.current, mode: 'tap', startX: event.clientX, startY: event.clientY, lastX: event.clientX, lastY: event.clientY, tapFacilityId, tapCharacter };
     } else if (pointers.current.size === 2) {
+      for (const pointerId of pointers.current.keys()) {
+        if (!event.currentTarget.hasPointerCapture(pointerId)) event.currentTarget.setPointerCapture(pointerId);
+      }
       const [a, b] = [...pointers.current.values()];
       const rect = viewportRef.current!.getBoundingClientRect();
       const midX = (a.x + b.x) / 2 - rect.left;
@@ -293,7 +295,10 @@ export function SweetShopGame({ onExit }: SweetShopGameProps) {
       setCamera({ zoom: nextZoom, x: gesture.current.anchorWorldX - midX / nextZoom, y: gesture.current.anchorWorldY - midY / nextZoom });
       return;
     }
-    if (gesture.current.mode === 'tap' && Math.hypot(event.clientX - gesture.current.startX, event.clientY - gesture.current.startY) > 10) gesture.current.mode = 'pan';
+    if (gesture.current.mode === 'tap' && Math.hypot(event.clientX - gesture.current.startX, event.clientY - gesture.current.startY) > 10) {
+      gesture.current.mode = 'pan';
+      if (!event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.setPointerCapture(event.pointerId);
+    }
     if (gesture.current.mode === 'pan') {
       const current = cameraRef.current;
       setCamera({ ...current, x: current.x - (event.clientX - gesture.current.lastX) / current.zoom, y: current.y - (event.clientY - gesture.current.lastY) / current.zoom });
@@ -306,8 +311,16 @@ export function SweetShopGame({ onExit }: SweetShopGameProps) {
     const wasTap = pointers.current.size === 1 && gesture.current.mode === 'tap';
     pointers.current.delete(event.pointerId);
     if (wasTap) handleTap(event);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
     if (pointers.current.size === 0) gesture.current.mode = 'idle';
     else gesture.current.mode = 'blocked';
+  };
+
+  const pointerCancel = (event: ReactPointerEvent<HTMLDivElement>) => {
+    pointers.current.delete(event.pointerId);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    setPendingFacility(null);
+    gesture.current.mode = pointers.current.size ? 'blocked' : 'idle';
   };
 
   const characterWorld = tileCenter(character);
@@ -336,12 +349,12 @@ export function SweetShopGame({ onExit }: SweetShopGameProps) {
         <strong>🪙 {cafe?.profile.gold ?? 0}</strong>
       </header>
 
-      <div ref={viewportRef} className="cafe-viewport" onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp}>
+      <div ref={viewportRef} className="cafe-viewport" onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerCancel}>
         {streetOpen && cafe ? <CafeStreetScreen cafe={cafe} gateway={gateway} onRefresh={refreshCafe} onMessage={showMessage} onExit={() => setStreetOpen(false)} /> : <>
         <div className="cafe-world" style={{ width: MAP_WIDTH, height: MAP_HEIGHT, backgroundImage: `url(${cafeBackground})`, transform: `translate(${-camera.x * camera.zoom}px, ${-camera.y * camera.zoom}px) scale(${camera.zoom})` }}>
           <div className="cafe-title-rug">SWEET WORKSHOP</div>
           {CAFE_FACILITIES.map((facility) => (
-            <div key={facility.id} data-facility-id={facility.id} className={`cafe-facility cafe-facility-${facility.id}`} style={{ left: facility.x * TILE_SIZE, top: facility.y * TILE_SIZE, width: facility.width * TILE_SIZE, height: facility.height * TILE_SIZE }}>
+            <button key={facility.id} type="button" data-facility-id={facility.id} aria-label={`${facility.name}로 이동`} onClick={(event) => { if (event.detail === 0) goToFacility(facility.id); }} className={`cafe-facility cafe-facility-${facility.id}`} style={{ left: facility.x * TILE_SIZE, top: facility.y * TILE_SIZE, width: facility.width * TILE_SIZE, height: facility.height * TILE_SIZE }}>
               <img src={FACILITY_IMAGES[facility.id]} alt="" aria-hidden="true" draggable={false}/><b>{facility.name}</b>
               {facility.id === 'display-stand' && <div className="display-stock-preview" aria-hidden="true">{['🍪', '🧁', '🍰'].map((icon, index) => <span className={index < (cafe?.listings.length ?? 0) ? 'filled' : ''} key={icon}>{icon}</span>)}</div>}
               {facility.id === 'order-board' && <em>재료 주문</em>}
@@ -349,7 +362,7 @@ export function SweetShopGame({ onExit }: SweetShopGameProps) {
               {facility.id === 'display-stand' && cafe && <em>{cafe.listings.length}/3 진열</em>}
               {facility.id === 'notice-board' && cafe && cafe.sales.length > 0 && <em>판매 {cafe.sales.length}건</em>}
               {facility.id === 'cafe-door' && <em>카페 거리</em>}
-            </div>
+            </button>
           ))}
           {CAFE_FACILITIES.map((facility) => {
             const point = tileCenter(facility.access);
