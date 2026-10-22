@@ -45,6 +45,7 @@ export function seedBase(db: FakeDb, settings: Record<string, unknown> = {}) {
   db.seed('item_definition', { code: 'yarn_tremor_compass', name: '실의 떨림을 찾는 나침판', category: 'mission' });
   db.seed('item_definition', { code: 'first_knot', name: '첫 매듭', category: 'relic', story_slot: 'story_1' });
   db.seed('item_definition', { code: 'water_dye_yarn', name: '물빛 염색실', category: 'relic', story_slot: 'story_2', max_stack: 1 });
+  db.seed('item_definition', { code: 'old_cotton_core', name: '오래된 솜심', category: 'relic', story_slot: 'story_3', max_stack: 1 });
   db.seed('item_definition', { code: 'knit_needle', name: '뜨개바늘', category: 'equipment', equip_slot: 'weapon', atk_bonus: 2 });
 }
 

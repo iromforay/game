@@ -1,0 +1,249 @@
+{
+  "version": "underfloor-layout-v1",
+  "size": {
+    "width": 3200,
+    "height": 2400
+  },
+  "corridors": [
+    {
+      "id": "entry_path",
+      "width": 160,
+      "points": [
+        [
+          330,
+          2050
+        ],
+        [
+          560,
+          1880
+        ],
+        [
+          860,
+          1760
+        ]
+      ]
+    },
+    {
+      "id": "deadend_branch",
+      "width": 140,
+      "points": [
+        [
+          860,
+          1760
+        ],
+        [
+          720,
+          1480
+        ],
+        [
+          560,
+          1330
+        ]
+      ]
+    },
+    {
+      "id": "to_hall",
+      "width": 160,
+      "points": [
+        [
+          860,
+          1760
+        ],
+        [
+          1130,
+          1650
+        ]
+      ]
+    },
+    {
+      "id": "memory_trail",
+      "width": 150,
+      "points": [
+        [
+          2000,
+          1240
+        ],
+        [
+          2000,
+          900
+        ],
+        [
+          2180,
+          770
+        ],
+        [
+          2460,
+          700
+        ],
+        [
+          2560,
+          640
+        ]
+      ]
+    }
+  ],
+  "areas": [
+    {
+      "id": "entrance_crack",
+      "kind": "ellipse",
+      "cx": 330,
+      "cy": 2070,
+      "rx": 190,
+      "ry": 150
+    },
+    {
+      "id": "deadend_pocket",
+      "kind": "ellipse",
+      "cx": 530,
+      "cy": 1300,
+      "rx": 130,
+      "ry": 110
+    },
+    {
+      "id": "junk_hall",
+      "kind": "polygon",
+      "points": [
+        [
+          1100,
+          1560
+        ],
+        [
+          1180,
+          1250
+        ],
+        [
+          1450,
+          1150
+        ],
+        [
+          1900,
+          1170
+        ],
+        [
+          2060,
+          1330
+        ],
+        [
+          2050,
+          1760
+        ],
+        [
+          1850,
+          1900
+        ],
+        [
+          1350,
+          1900
+        ],
+        [
+          1120,
+          1780
+        ]
+      ]
+    },
+    {
+      "id": "boss_arena",
+      "kind": "ellipse",
+      "cx": 2800,
+      "cy": 440,
+      "rx": 300,
+      "ry": 250
+    }
+  ],
+  "islands": [
+    {
+      "id": "pile_a",
+      "kind": "ellipse",
+      "cx": 1380,
+      "cy": 1450,
+      "rx": 110,
+      "ry": 80
+    },
+    {
+      "id": "pile_b",
+      "kind": "ellipse",
+      "cx": 1830,
+      "cy": 1580,
+      "rx": 95,
+      "ry": 120
+    }
+  ],
+  "gates": [
+    {
+      "id": "gate_dust_yarn",
+      "x": 1910,
+      "y": 1040,
+      "width": 180,
+      "height": 40,
+      "orientation": "horizontal",
+      "openEvent": "underfloor_memory_trail_found",
+      "note": "남북 통로를 가로로 막는 문 — 정면에서 본 울타리 그림이 그대로 맞는 방향"
+    }
+  ],
+  "points": [
+    {
+      "id": "spawn",
+      "x": 330,
+      "y": 2080
+    },
+    {
+      "id": "underfloor_elder",
+      "x": 1230,
+      "y": 1660,
+      "radius": 80,
+      "what": "오래된 폭신이"
+    },
+    {
+      "id": "underfloor_glove",
+      "x": 1300,
+      "y": 1270,
+      "radius": 72,
+      "what": "낡은 장갑"
+    },
+    {
+      "id": "underfloor_blanket",
+      "x": 1880,
+      "y": 1300,
+      "radius": 72,
+      "what": "작은 담요"
+    },
+    {
+      "id": "underfloor_doll",
+      "x": 1680,
+      "y": 1760,
+      "radius": 72,
+      "what": "찢어진 인형"
+    },
+    {
+      "id": "underfloor_ambush",
+      "x": 1600,
+      "y": 1500,
+      "radius": 110,
+      "what": "눌린 박음이 매복"
+    },
+    {
+      "id": "underfloor_fragment",
+      "x": 2200,
+      "y": 760,
+      "radius": 80,
+      "what": "기억 조각"
+    },
+    {
+      "id": "underfloor_boss_entrance",
+      "x": 2580,
+      "y": 610,
+      "radius": 90,
+      "what": "기억 실패굴이 입구"
+    }
+  ],
+  "overlay_regions": [
+    {
+      "id": "memory_trail_overlay",
+      "x": 1900,
+      "y": 600,
+      "width": 720,
+      "height": 680,
+      "note": "실패 자국 오버레이 캔버스(월드 좌표). 이 사각형과 같은 비율의 투명 PNG로 그린다"
+    }
+  ]
+}

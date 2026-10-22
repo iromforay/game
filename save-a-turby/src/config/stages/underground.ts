@@ -4,6 +4,6 @@ import type { StageDef } from './types';
 export const STAGE_UNDERGROUND: StageDef = {
   code: 'underground',
   name: '지하 (마루바닥 밑)',
-  width: 4800,
-  height: 3600,
+  width: 3200,
+  height: 2400,
 };

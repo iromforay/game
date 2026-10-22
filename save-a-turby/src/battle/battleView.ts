@@ -63,8 +63,8 @@ export type TargetState = 'ok' | 'not_target' | 'part_order' | 'protected' | 'ze
 
 export function targetState(snap: BattleSnapshot, target: BattleUnit): TargetState {
   if (target.side !== 'wild' || !isLive(target) || target.targetable === false) return 'not_target';
-  if (target.partOf) {
-    // 살아 있는 부위 중 가장 작은 순서만 공격할 수 있다(엔진 attack()과 같은 판정)
+  if (target.partOf && !target.thread) {
+    // (기억실은 순서가 아닌 실을 눌러도 서버가 받는다 — 혼란 규칙) 살아 있는 부위 중 가장 작은 순서만 공격할 수 있다(엔진 attack()과 같은 판정)
     const first = Math.min(...snap.units.filter((p) => p.partOf === target.partOf && !p.stunned).map((p) => p.breakOrder ?? 0));
     if ((target.breakOrder ?? 0) !== first) return 'part_order';
   }
@@ -106,12 +106,17 @@ export function unitTags(u: BattleUnit): string[] {
   if (u.stunned) tags.push('기절');
   if (u.inactive) tags.push('이탈');
   if (u.side === 'neutral') tags.push('보호 대상');
+  if (u.thread) return u.hinted ? ['다음 실'] : [];
+  if (u.flat === true) tags.push('납작');
+  else if (u.flat === false) tags.push('재봉선 노출');
+  if (u.reversed) tags.push('운반 실 끊김');
   if (u.phase === 'bound') tags.push('결박');
   else if (u.phase === 'exposed') tags.push('약점 노출');
   else if (u.invulnerable) tags.push('부위 먼저');
   for (const s of u.statuses ?? []) {
     if (s.kind === 'bind') tags.push(`속박 ${s.turnsLeft}`);
     else if (s.kind === 'wet_bind') tags.push('젖은 속박');
+    else if (s.kind === 'confused') tags.push('혼란');
   }
   return tags;
 }
@@ -191,7 +196,8 @@ export function battleHudLayout(scale: number, tile = 80): BattleHudLayout {
   const goalPanel = compact ? { x: 1280 - 8 - 620, y: endTurn.y + endTurn.h + 8, w: 620, h: 260 } : null;
   const closeW = Math.round(font.button * 4);
   const goalClose = goalPanel ? { x: goalPanel.x + goalPanel.w - 8 - closeW, y: goalPanel.y + 8, w: closeW, h: btnH } : null;
-  return { mode: compact ? 'compact' : 'regular', font, objectivesCollapsible: compact, labelWrap: tile * 2 - 12, rects: { endTurn, goalButton, goalPanel, goalClose, turn, leave, hint } };
+  // 라벨 줄바꿈 폭: 작은 화면은 글자가 커서(약 24px) 두 칸 폭이면 "기억 실패굴이"도 쪼개진다 — 이름 한 줄이 들어가게 2.5칸(10-22 C3-6 R1-01·03)
+  return { mode: compact ? 'compact' : 'regular', font, objectivesCollapsible: compact, labelWrap: compact ? tile * 2.5 : tile * 2 - 12, rects: { endTurn, goalButton, goalPanel, goalClose, turn, leave, hint } };
 }
 
 // 하단 행동 안내(UI 문구). 작은 화면에서는 한 줄에 들어가게 짧게
@@ -248,15 +254,16 @@ export function resultLayout(scale: number, rowCount: number, framed = false): R
   return { mode: compact ? 'compact' : 'regular', panel, font, titleY, image, subY, rows, button };
 }
 
-// 작은 화면의 유닛 라벨: "이름 HP/최대" 한 줄 + 상태 표식은 짧은 UI 표기로 둘째 줄(대본 문구가 아님)
+// 작은 화면의 유닛 라벨: 이름 한 줄 + "HP/최대 · 상태" 한 줄(상태는 짧은 UI 표기 — 대본 문구가 아님). 10-22 C3-6 R1-01: 이름과 HP가 한 줄에서 쪼개지지 않게 두 줄 고정
 const SHORT_TAG: Record<string, string> = { '보호 대상': '보호', '부위 먼저': '부위 먼저' };
 export function unitLabel(u: BattleUnit, compact: boolean): string {
   // 10-14 v1a: 검은 재봉실은 A/B/C 글자로 구분하고 모바일에서는 "검은 실 A" 한 줄(HP 1/1은 생략)
+  if (u.thread) return compact ? `${u.name} ${threadNumber(u)}${u.hinted ? ' ▶' : ''}` : `${u.name} ${threadNumber(u)}${u.hinted ? ' (다음 실)' : ''}`;
   if (isSeam(u)) return compact ? `검은 실 ${seamLetter(u)}` : `${u.name} ${seamLetter(u)} HP ${u.hp}/${u.maxHp}`;
   const tags = unitTags(u);
   if (!compact) return `${u.name} HP ${u.hp}/${u.maxHp}${tags.length > 0 ? ` (${tags.join(' · ')})` : ''}`;
   const short = tags.map((t) => SHORT_TAG[t] ?? t);
-  return `${u.name} ${u.hp}/${u.maxHp}${short.length > 0 ? `\n${short.join(' · ')}` : ''}`;
+  return `${u.name}\n${[`${u.hp}/${u.maxHp}`, ...short].join(' · ')}`;
 }
 
 // ---------- 10-14 C2-5A 시각 보완(v1a) ----------
@@ -264,7 +271,10 @@ export function unitLabel(u: BattleUnit, compact: boolean): string {
 export const isSeam = (u: BattleUnit) => u.characterCode === 'black_seam';
 export const seamLetter = (u: BattleUnit) => u.unitId.slice(-1).toUpperCase();
 export const isRemovedSeam = (u: BattleUnit) => isSeam(u) && (u.stunned || u.inactive);
-export const isHiddenUnit = (u: BattleUnit) => !!u.fled || isRemovedSeam(u);
+// 10-16 C3-3: 끊어진 기억실·운반 실도 같은 방식으로 숨긴다
+export const isCutThread = (u: BattleUnit) => (!!u.thread || u.characterCode === 'carrier_thread') && (u.stunned || u.inactive);
+export const isHiddenUnit = (u: BattleUnit) => !!u.fled || isRemovedSeam(u) || isCutThread(u);
+export const threadNumber = (u: BattleUnit) => u.unitId.slice(-1);
 
 // 색 구역 공용 발자국: 세 구역을 겹치지 않는 영역으로 나눠 한 장 크기(720×480) 안에서 표현한다. 알파는 격자 선이 읽히는 0.32~0.48
 export const ZONE_FOOTPRINT = { w: 720, h: 480 } as const;

@@ -125,7 +125,8 @@ test('2장 C2-2 ②(640×360 조이스틱): 방향 단서 → 물살 뒤에도 �
     assert.ok(m.render.overlays.includes('current-flow'));
     assert.equal(m.currentPushes, 0);
     await g.capture('current_clue');
-    // 입력을 유지한 채 물살을 지난다 — 한 번 밀린 뒤에도 마른 발판까지 계속 간다
+    // 입력을 유지한 채 물살을 지난다 — 문 통과 경로(약한 물살 구역 한가운데)를 따라가 한 번 밀린 뒤에도 마른 발판까지 계속 간다
+    for (const q of THROUGH_GATE_ROUTE) await g.walkDirect('Map', q, 'joystick', 'false', 30);
     await g.walkDirect('Map', DRY_1, 'joystick', 'false', 30);
     m = await map(g);
     assert.ok(m.currentPushes >= 1 && m.currentPushes <= 2, `물살 적용 ${m.currentPushes}회`);

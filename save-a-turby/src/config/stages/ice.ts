@@ -4,6 +4,6 @@ import type { StageDef } from './types';
 export const STAGE_ICE: StageDef = {
   code: 'ice',
   name: '얼음 (냉장고 속)',
-  width: 5600,
-  height: 4200,
+  width: 3200,
+  height: 2400,
 };

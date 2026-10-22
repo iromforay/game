@@ -1,0 +1,122 @@
+{
+  "key": "underfloor_boss_memory_spool",
+  "_note": "임시 전투 정의(기능 검증용 수치, 밸런스 정본 아님 — C3-3). 기억 실패굴이: 감긴 기억실 5가닥 중 누비의 이름을 부르는 진짜 실 3가닥을 정해진 순서로 끊어야 약점(오래된 솜심)이 드러난다. 오래된 폭신이가 다음 실을 가리킨다(스냅샷 hinted). 가짜 실이나 순서가 아닌 실을 끊으면 행동만 쓰고 공격한 유닛이 혼란(1라운드)에 걸린다. 포획·보상 없음 — 승리하면 보스 승리 사건(오래된 솜심 1회 지급)만 기록된다. C3-6 QA-08: 240px 보스 그림과 겹치지 않게 기억실 5가닥을 보스에서 한 칸 더 띄웠다(8·9열 → 7·8열). 보스는 감긴 실을 두고 걷지 않는다(anchored — 이동 없이 인접한 아군만 공격).",
+  "cornerEscape": false,
+  "objectives": {
+    "win": [
+      {
+        "kind": "defeat_units",
+        "unitIds": [
+          "memory_spool"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "zeroDamage": "기억실을 먼저 끊어야 해요",
+    "threadHint": "오래된 폭신이가 다음 기억실을 가리켜요"
+  },
+  "units": [
+    {
+      "unitId": "memory_spool",
+      "side": "wild",
+      "characterCode": "memory_spool",
+      "name": "기억 실패굴이",
+      "col": 10,
+      "row": 4,
+      "attack": 6,
+      "defense": 1,
+      "actionPower": 1,
+      "maxHp": 12,
+      "protectMode": "zero",
+      "maxHitPercent": 15,
+      "anchored": true
+    },
+    {
+      "unitId": "thread_1",
+      "side": "wild",
+      "characterCode": "memory_thread",
+      "name": "기억실",
+      "col": 7,
+      "row": 1,
+      "attack": 0,
+      "defense": 0,
+      "actionPower": 0,
+      "maxHp": 1,
+      "canAct": false,
+      "thread": {
+        "order": null
+      }
+    },
+    {
+      "unitId": "thread_2",
+      "side": "wild",
+      "characterCode": "memory_thread",
+      "name": "기억실",
+      "col": 8,
+      "row": 2,
+      "attack": 0,
+      "defense": 0,
+      "actionPower": 0,
+      "maxHp": 1,
+      "canAct": false,
+      "thread": {
+        "order": 2
+      },
+      "partOf": "memory_spool",
+      "breakOrder": 2
+    },
+    {
+      "unitId": "thread_3",
+      "side": "wild",
+      "characterCode": "memory_thread",
+      "name": "기억실",
+      "col": 7,
+      "row": 4,
+      "attack": 0,
+      "defense": 0,
+      "actionPower": 0,
+      "maxHp": 1,
+      "canAct": false,
+      "thread": {
+        "order": null
+      }
+    },
+    {
+      "unitId": "thread_4",
+      "side": "wild",
+      "characterCode": "memory_thread",
+      "name": "기억실",
+      "col": 8,
+      "row": 6,
+      "attack": 0,
+      "defense": 0,
+      "actionPower": 0,
+      "maxHp": 1,
+      "canAct": false,
+      "thread": {
+        "order": 1
+      },
+      "partOf": "memory_spool",
+      "breakOrder": 1
+    },
+    {
+      "unitId": "thread_5",
+      "side": "wild",
+      "characterCode": "memory_thread",
+      "name": "기억실",
+      "col": 7,
+      "row": 7,
+      "attack": 0,
+      "defense": 0,
+      "actionPower": 0,
+      "maxHp": 1,
+      "canAct": false,
+      "thread": {
+        "order": 3
+      },
+      "partOf": "memory_spool",
+      "breakOrder": 3
+    }
+  ]
+}

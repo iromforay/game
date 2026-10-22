@@ -128,8 +128,8 @@ export class RoomsService {
       code: this.newCode(),
       name: '혼자 탐험',
       stageCode: stage.stage_code,
-      mapWidth: stage.map_width,
-      mapHeight: stage.map_height,
+      mapWidth: collision.width, // 지역 데이터의 size, 없으면 지역 표 값 — 충돌 계약·화면(StageView.size)과 같은 기준(10-16: 모든 장 3200×2400)
+      mapHeight: collision.height,
       maxPlayers: MAX_PLAYERS,
       visibility: 'private',
       phase: 'lobby',

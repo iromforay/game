@@ -193,6 +193,7 @@ function startBattle(state: BattleState, ctx: Ctx) {
   state.subturnIndex = roundStartIndex(state);
   emit(state, ctx, { type: 'started' });
   emit(state, ctx, { type: 'subturn', phase: state.phase, round: state.round, currentPlayerId: currentPlayerId(state) });
+  emitThreadHint(state, ctx);
 }
 
 // 기존 야생 전투: 야생 1마리(참전 인원별 HP 배율)
@@ -255,6 +256,11 @@ function addDefinitionUnits(state: BattleState, def: BattleDefinition) {
       fled: false,
       protectMode: d.protectMode ?? 'reject',
       ...(d.maxHitPercent !== undefined ? { maxHitPercent: d.maxHitPercent } : {}),
+      ...(d.flat ? { flat: true } : {}),
+      ...(d.anchored ? { anchored: true } : {}),
+      ...(d.flee ? { flee: { ...d.flee }, reversed: false } : {}),
+      ...(d.carrierOf ? { carrierOf: d.carrierOf } : {}),
+      ...(d.thread ? { thread: { order: d.thread.order } } : {}),
     });
   }
   state.blocked = (def.blocked ?? []).map((c) => cellKey(c.col, c.row));
@@ -316,6 +322,20 @@ function pathCost(state: BattleState, from: { col: number; row: number }, to: { 
 // 부위(partOf)가 하나라도 남아 있으면 중심부는 피해를 받지 않는다
 const hasLiveParts = (state: BattleState, core: BattleUnit) => state.units.some((p) => p.partOf === core.unitId && !p.stunned);
 const hasParts = (state: BattleState, core: BattleUnit) => state.units.some((p) => p.partOf === core.unitId);
+
+// ---------- 10-16 C3-3: 3장 규칙(모두 전투 정의 데이터가 켠 경우만) ----------
+const isConfused = (u: BattleUnit) => (u.statuses ?? []).some((s) => s.kind === 'confused');
+// 보스의 기억실: 진짜 실 중 아직 끊지 않은 가장 앞 순서(오래된 폭신이가 가리키는 실). 없으면 null
+function nextThread(state: BattleState): BattleUnit | null {
+  const live = state.units.filter((u) => u.thread && u.thread.order !== null && !u.stunned && !u.inactive);
+  if (live.length === 0) return null;
+  return live.reduce((a, b) => (a.thread!.order! <= b.thread!.order! ? a : b));
+}
+function emitThreadHint(state: BattleState, ctx: Ctx) {
+  const text = state.definition?.hints?.threadHint;
+  if (text && nextThread(state)) emit(state, ctx, { type: 'hint', code: 'thread_hint', text });
+}
+const clampTo = (v: number, max: number) => Math.min(Math.max(v, 0), max);
 
 function corners(rules: BattleRules) {
   const c = rules.gridCols - 1;
@@ -390,11 +410,28 @@ function move(state: BattleState, unit: BattleUnit, colRaw: unknown, rowRaw: unk
   if (col < 0 || row < 0 || col >= state.rules.gridCols || row >= state.rules.gridRows) throw new BattleError('INVALID_TARGET', '격자 밖입니다.');
   if (col === unit.col && row === unit.row) throw new BattleError('INVALID_TARGET', '같은 칸으로는 이동할 수 없습니다.');
   if (isBlockedCell(state, col, row)) throw new BattleError('TILE_BLOCKED', '지나갈 수 없는 칸입니다.');
-  const cost = pathCost(state, unit, { col, row });
   if (unit.ap < 1) throw new BattleError('NO_ACTION_POWER', '행동력이 없습니다.');
+  if (isConfused(unit)) {
+    // 혼란: 누른 칸의 반대쪽(내 위치를 기준으로 점대칭, 격자 안으로 맞춤)으로 간다. 갈 수 없으면 행동력 1만 헛돈다(서버가 정한 결정적 규칙)
+    const mc = clampTo(2 * unit.col - col, state.rules.gridCols - 1);
+    const mr = clampTo(2 * unit.row - row, state.rules.gridRows - 1);
+    emit(state, ctx, { type: 'confused_action', unitId: unit.unitId, action: 'move' });
+    const mcost = pathCost(state, unit, { col: mc, row: mr });
+    const ok = !(mc === unit.col && mr === unit.row) && !isBlockedCell(state, mc, mr) && mcost <= moveAllowance(unit) && !isOccupied(state, mc, mr, unit);
+    if (!ok) {
+      unit.ap -= 1;
+      return;
+    }
+    moveTo(state, unit, mc, mr, mcost, ctx);
+    return;
+  }
+  const cost = pathCost(state, unit, { col, row });
   if (cost > moveAllowance(unit)) throw new BattleError('OUT_OF_RANGE', '행동력이 모자라 갈 수 없는 칸입니다.');
   if (isOccupied(state, col, row, unit)) throw new BattleError('TILE_OCCUPIED', '이미 다른 유닛이 있는 칸입니다.');
+  moveTo(state, unit, col, row, cost, ctx);
+}
 
+function moveTo(state: BattleState, unit: BattleUnit, col: number, row: number, cost: number, ctx: Ctx) {
   const fromCol = unit.col;
   const fromRow = unit.row;
   unit.col = col;
@@ -414,7 +451,8 @@ function atCorner(state: BattleState, unit: BattleUnit) {
 }
 
 function damageOf(state: BattleState, attacker: BattleUnit, defender: BattleUnit) {
-  const raw = Math.max(state.rules.minDamage, attacker.attack - Math.floor(defender.defense / state.rules.defenseDivisor));
+  let raw = Math.max(state.rules.minDamage, attacker.attack - Math.floor(defender.defense / state.rules.defenseDivisor));
+  if (defender.flat) raw = Math.max(state.rules.minDamage, Math.floor(raw / 2)); // 납작한 박음이: 첫 피격은 절반
   // 10-14 C2-5A: 공격 한 번이 대상 최대 HP의 일정 비율을 넘지 못한다(보스 15% — 연속으로 맞아도 즉시 패배하지 않는다)
   if (attacker.maxHitPercent === undefined) return raw;
   return Math.min(raw, Math.max(1, Math.floor((defender.maxHp * attacker.maxHitPercent) / 100)));
@@ -425,6 +463,17 @@ function strike(state: BattleState, attacker: BattleUnit, defender: BattleUnit, 
   defender.hp = Math.max(0, defender.hp - damage);
   if (defender.hp <= 0) defender.stunned = true;
   emit(state, ctx, { type: 'attack', attackerId: attacker.unitId, targetId: defender.unitId, damage, targetHp: defender.hp, targetStunned: defender.stunned });
+  if (defender.flat) {
+    defender.flat = false; // 첫 피격: 재봉선이 드러난다(한 번만)
+    if (!defender.stunned) emit(state, ctx, { type: 'phase', unitId: defender.unitId, phase: 'exposed' });
+  }
+  if (defender.stunned && defender.carrierOf) {
+    const spool = state.units.find((x) => x.unitId === defender.carrierOf);
+    if (spool && isLive(spool) && !spool.reversed) {
+      spool.reversed = true;
+      emit(state, ctx, { type: 'carrier_cut', unitId: defender.unitId, spoolId: spool.unitId });
+    }
+  }
   if (defender.stunned) {
     if (defender.exitOnDefeat === 'flee') {
       defender.fled = true; // 연출 표시만 — 승패는 "쓰러짐"으로 이미 판정된다
@@ -492,8 +541,37 @@ function evaluateOutcome(state: BattleState, ctx: Ctx) {
 }
 
 function attack(state: BattleState, unit: BattleUnit, targetRaw: unknown, ctx: Ctx) {
-  const target = typeof targetRaw === 'string' ? state.units.find((u) => u.unitId === targetRaw) : undefined;
+  let target = typeof targetRaw === 'string' ? state.units.find((u) => u.unitId === targetRaw) : undefined;
   if (!target || target.side !== 'wild' || !isLive(target) || target.targetable === false) throw new BattleError('INVALID_TARGET', '공격할 수 없는 대상입니다.');
+  if (isConfused(unit)) {
+    // 혼란: 누른 대상이 사정거리 안이면 행동력을 쓰고, 인접한 다른 적(unitId 순 첫째)을 대신 친다. 없으면 헛손질(피해 0)
+    if (unit.ap < 1) throw new BattleError('NO_ACTION_POWER', '행동력이 없습니다.');
+    if (dist(unit, target) !== 1) throw new BattleError('OUT_OF_RANGE', '인접한 대상만 공격할 수 있습니다.');
+    const picked = target;
+    const alt = state.units.filter((o) => o.side === 'wild' && isLive(o) && o.targetable !== false && o.unitId !== picked.unitId && dist(unit, o) === 1).sort((a, b) => (a.unitId < b.unitId ? -1 : 1))[0];
+    emit(state, ctx, { type: 'confused_action', unitId: unit.unitId, action: 'attack' });
+    if (!alt) {
+      unit.ap -= 1;
+      emit(state, ctx, { type: 'attack', attackerId: unit.unitId, targetId: picked.unitId, damage: 0, targetHp: picked.hp, targetStunned: false });
+      return;
+    }
+    target = alt;
+  }
+  if (target.thread) {
+    // 보스의 기억실: 모두 공격할 수 있지만 정해진 순서의 진짜 실만 끊긴다(아니면 행동만 쓰고 혼란)
+    if (unit.ap < 1) throw new BattleError('NO_ACTION_POWER', '행동력이 없습니다.');
+    if (dist(unit, target) !== 1) throw new BattleError('OUT_OF_RANGE', '인접한 대상만 공격할 수 있습니다.');
+    unit.ap -= 1;
+    const next = nextThread(state);
+    if (next && next.unitId === target.unitId) {
+      strike(state, unit, target, ctx);
+      if (state.phase !== 'resolved') emitThreadHint(state, ctx);
+    } else {
+      emit(state, ctx, { type: 'wrong_thread', unitId: unit.unitId, targetId: target.unitId });
+      if (!isConfused(unit)) applyStatus(state, unit, { kind: 'confused', turns: 1, movePenalty: 0 }, target.unitId, ctx);
+    }
+    return;
+  }
   if (target.partOf) {
     const firstOrder = Math.min(...state.units.filter((p) => p.partOf === target.partOf && !p.stunned).map((p) => p.breakOrder ?? 0));
     if ((target.breakOrder ?? 0) !== firstOrder) throw new BattleError('PART_ORDER', '먼저 끊어야 할 부위가 남아 있습니다.');
@@ -559,6 +637,10 @@ function runWildTurn(state: BattleState, ctx: Ctx) {
 // 적 한 마리의 행동. 전투가 끝났으면 false
 function runOneEnemy(state: BattleState, wild: BattleUnit, ctx: Ctx): boolean {
   wild.ap = wild.maxAp;
+  if (wild.flee) {
+    runSpool(state, wild, ctx);
+    return true;
+  }
   while (wild.ap > 0 && !wild.stunned) {
     const target = nearestTarget(state, wild);
     if (!target) return state.phase === 'wild_turn'; // 아군이 없으면 이미 lose/cancelled로 끝났어야 함
@@ -567,6 +649,11 @@ function runOneEnemy(state: BattleState, wild: BattleUnit, ctx: Ctx): boolean {
       strike(state, wild, target, ctx);
       if (state.phase !== 'wild_turn') return false;
       continue;
+    }
+    // 제자리 적: 인접한 아군이 없으면 남은 행동력을 쓰고 차례를 마친다
+    if (wild.anchored) {
+      wild.ap = 0;
+      break;
     }
     // 가장 가까운 아군 쪽으로 1칸(가로 우선). 막혀 있으면 이동 없이 AP만 소모한다(로컬 규칙과 동일)
     const dCol = Math.sign(target.col - wild.col);
@@ -590,10 +677,56 @@ function runOneEnemy(state: BattleState, wild: BattleUnit, ctx: Ctx): boolean {
   return true;
 }
 
+// 작은 실패굴이: 공격하지 않는다. 가장 가까운 아군에게서 멀어지는 쪽(운반 실이 끊겼으면 가까워지는 쪽)으로 한 칸씩 굴러간다.
+// 후보 칸 순서(동·서·남·북)와 거리 비교만 쓰는 결정적 규칙이다. 더 나은 칸이 없으면(구석) 제자리에서 행동력만 쓴다
+function runSpool(state: BattleState, spool: BattleUnit, ctx: Ctx) {
+  while (spool.ap > 0 && !spool.stunned) {
+    spool.ap -= 1;
+    const foes = partyUnits(state).filter(isLive);
+    if (foes.length === 0) return;
+    const gap = (c: { col: number; row: number }) => Math.min(...foes.map((f) => dist(f, c)));
+    const here = gap(spool);
+    let best: { col: number; row: number } | null = null;
+    let bestGap = here;
+    for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const col = spool.col + dc;
+      const row = spool.row + dr;
+      if (col < 0 || row < 0 || col >= state.rules.gridCols || row >= state.rules.gridRows || isBlockedCell(state, col, row) || isOccupied(state, col, row, spool)) continue;
+      const g = gap({ col, row });
+      if (spool.reversed ? g < bestGap && g >= 1 : g > bestGap) {
+        best = { col, row };
+        bestGap = g;
+      }
+    }
+    if (!best) continue;
+    const fromCol = spool.col;
+    const fromRow = spool.row;
+    spool.col = best.col;
+    spool.row = best.row;
+    emit(state, ctx, { type: 'move', unitId: spool.unitId, fromCol, fromRow, toCol: best.col, toRow: best.row, apLeft: spool.ap });
+  }
+}
+
+// 작은 실패굴이를 N라운드 안에 잡지 못하면 기억실을 전달해 살아 있는 납작 병사(눌린 박음이) 전원의 공격이 오르고, 실패굴이는 사라진다(도주 연출 — 승패에서는 쓰러진 것으로 센다)
+function applyEmpower(state: BattleState, ctx: Ctx) {
+  for (const spool of state.units) {
+    if (!spool.flee || !isLive(spool) || spool.fled || state.round <= spool.flee.empowerAfterRound) continue;
+    const targets = enemyUnits(state).filter((u) => u.flat !== undefined && isLive(u));
+    for (const t of targets) t.attack += spool.flee.empowerAttack;
+    spool.stunned = true;
+    spool.fled = true;
+    emit(state, ctx, { type: 'unit_exit', unitId: spool.unitId, mode: 'flee' });
+    emit(state, ctx, { type: 'empower', unitId: spool.unitId, targets: targets.map((t) => t.unitId), attack: spool.flee.empowerAttack });
+  }
+}
+
 function startNextRound(state: BattleState, ctx: Ctx) {
   const endedRound = state.round;
   state.round += 1;
   tickStatuses(state, endedRound, ctx);
+  applyEmpower(state, ctx);
+  evaluateOutcome(state, ctx);
+  if (state.phase === 'resolved') return;
   applyTerrainRules(state, ctx);
   applyCurrent(state, ctx);
   telegraphCurrent(state, ctx);
@@ -601,6 +734,7 @@ function startNextRound(state: BattleState, ctx: Ctx) {
   state.phase = 'player_subturn';
   state.subturnIndex = roundStartIndex(state);
   emit(state, ctx, { type: 'subturn', phase: state.phase, round: state.round, currentPlayerId: currentPlayerId(state) });
+  emitThreadHint(state, ctx);
 }
 
 // 지난 라운드보다 먼저 걸린 상태 이상만 1 줄인다(적 차례에 걸린 속박은 다음 아군 차례에 온전히 적용)
@@ -786,6 +920,9 @@ export function toSnapshot(state: BattleState): BattleSnapshotDto {
             breakOrder: u.breakOrder ?? null,
             fled: u.fled ?? false,
             ...(hasParts(state, u) ? { phase: hasLiveParts(state, u) ? ('bound' as const) : ('exposed' as const), zeroDamage: u.protectMode === 'zero' } : {}),
+            ...(u.flat !== undefined ? { flat: u.flat } : {}),
+            ...(u.flee ? { reversed: !!u.reversed } : {}),
+            ...(u.thread ? { thread: true, hinted: nextThread(state)?.unitId === u.unitId } : {}),
           }
         : {}),
     })),

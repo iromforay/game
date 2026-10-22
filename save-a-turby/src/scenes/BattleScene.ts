@@ -10,7 +10,7 @@ import { showToast, feltPanel, pillButton, TEXT } from '../ui/kit';
 import { loadWorldImages } from '../assets/loader';
 import { ENEMY_SHEET_OF, SPRITESHEET_FRAMES } from '../assets/registry';
 import coopSlots from '../data/coop-slots.json';
-import { actionHint, battleHudLayout, goalSummary, isHiddenUnit, resolveLabels, resultLayout, unitLabel, zoneFootprintOrigin, zoneRegion, ZONE_ALPHA, ZONE_FOOTPRINT, type BattleHudLayout, type LabelBox } from '../battle/battleView';
+import { actionHint, battleHudLayout, goalSummary, isHiddenUnit, resolveLabels, resultLayout, threadNumber, unitLabel, zoneFootprintOrigin, zoneRegion, ZONE_ALPHA, ZONE_FOOTPRINT, type BattleHudLayout, type LabelBox } from '../battle/battleView';
 import { watchLayout } from '../ui/relayout';
 import { displayScaleOf } from '../ui/responsive';
 import { ackFailureAllowsExit, RESULT_ACK_RETRY_TEXT } from '../state/restoreAttempt';
@@ -33,7 +33,6 @@ interface UnitView {
 
 const RETRY_LIMIT = 3;
 const LABEL_GAP = 30; // 유닛 중심에서 라벨까지
-const LABEL_WRAP = BATTLE_TILE_SIZE * 2 - 12; // 이웃 라벨은 반대편에 있으므로 두 칸 폭까지 쓸 수 있다
 const asDepth = (o: Phaser.GameObjects.GameObject, depth: number) => (o as unknown as Phaser.GameObjects.Components.Depth).setDepth(depth);
 const slotHex = (slot: number) => coopSlots.find((c) => c.slot === slot)?.main ?? '#888888';
 const slotNum = (slot: number) => Phaser.Display.Color.HexStringToColor(slotHex(slot)).color;
@@ -42,8 +41,28 @@ const wait = (scene: Phaser.Scene, ms: number) => new Promise<void>((resolve) =>
 // 4-B: 서버 권위 전투의 렌더러 겸 입력기. 규칙(이동·공격·AI·승패)은 전부 서버가 계산하고,
 // 이 씬은 서버 snapshot을 그리고 이동/공격/턴 종료 "의도"만 보낸다. 임시 도형 UI(디자인 확정 전)는 그대로 유지한다.
 // 10-14 C2-5A 보스 시트(결박/약점 노출)와 표시 크기, 색 구역 표시 크기(자산 계약: 보스 220~280px, 구역 620~760x410~510px)
-const BOSS_SHEETS: Record<string, { idle: string; exposed: string }> = { waterlogged_sewn_doll: { idle: 'waterlogged-sewn-doll-idle', exposed: 'waterlogged-sewn-doll-exposed' } };
+// labelBelow: 라벨을 보스 그림 아래 빈 칸에 둔다(보스 중심에서 라벨 위끝까지 px). 없으면 일반 유닛처럼 중심 근처(2장 기준 유지)
+const BOSS_SHEETS: Record<string, { idle: string; exposed: string; labelBelow?: number }> = {
+  waterlogged_sewn_doll: { idle: 'waterlogged-sewn-doll-idle', exposed: 'waterlogged-sewn-doll-exposed' },
+  memory_spool: { idle: 'memory-spool-idle', exposed: 'memory-spool-exposed', labelBelow: 118 }, // 10-16 3장 기억 실패굴이(결박 → 약점 노출). C3-6 QA-08: 라벨이 솜심 약점을 가리지 않게 그림 아래로
+};
 const BOSS_DISPLAY_PX = 240;
+// 10-16 3장: 일반 적 시트의 표시 크기(기본 64). 원본 투명 여백을 감안했다. C3-6 QA-06: 전투판 대비 작아 박음이 88→104, 실패굴이 80→88
+const SHEET_DISPLAY_PX: Record<string, number> = { 'pressed-sewn-doll-idle': 104, 'pressed-sewn-doll-exposed': 104, 'small-spool-idle': 88 };
+// 눌린 박음이: 납작(flat=true) → 재봉선 노출(flat=false). 같은 프레임 인덱스·같은 중심에서 텍스처만 바꾼다(서버 스냅샷 상태 — 화면이 정하지 않는다)
+const FLAT_SHEETS: Record<string, { flat: string; exposed: string }> = { pressed_sewn_doll: { flat: 'pressed-sewn-doll-idle', exposed: 'pressed-sewn-doll-exposed' } };
+// 보스 부위·표적 그림: 운반 실(한 장), 기억실(5가닥 시트의 프레임 = 가닥 번호), 폭신이가 가리키는 다음 실 표시(기억실 위에 중첩)
+const CARRIER_KEY = 'carrier-thread';
+const THREAD_SHEET = 'memory-thread';
+const THREAD_HINT_KEY = 'memory-thread-hint';
+// C3-6 QA-06·07: 운반 실 64→72, 기억실 72→80, 다음 실 빛무리 80→88(기억실보다 커야 둘레가 보인다)
+const TARGET_DISPLAY_PX = 72;
+const THREAD_DISPLAY_PX = 80;
+const HINT_DISPLAY_PX = 88;
+const sheetForState = (u: BattleUnit, sheetKey: string) => {
+  const flat = FLAT_SHEETS[u.characterCode];
+  return flat && u.flat === false ? flat.exposed : sheetKey;
+};
 
 export class BattleScene extends Phaser.Scene {
   private initData!: BattleInitData;
@@ -88,6 +107,7 @@ export class BattleScene extends Phaser.Scene {
     this.initData = data;
     this.snap = data.snapshot;
     this.views = new Map();
+    this.hintMarks = new Map();
     this.selectedUnitId = null;
     this.doneUnits = new Set();
     this.lastRound = 0;
@@ -246,7 +266,10 @@ export class BattleScene extends Phaser.Scene {
       let pref = labelPlacement(this.snap, u);
       if (u.row === 0) pref = 'below';
       if (u.row === this.snap.grid.rows - 1) pref = 'above';
-      boxes.push({ id: u.unitId, cx: x, anchorY: y, w: v.hpText.width, h: v.hpText.height, pref });
+      const below = BOSS_SHEETS[u.characterCode]?.labelBelow;
+      // 그림 아래 라벨: 위끝이 중심 + labelBelow가 되도록 기준점을 내린다(아래가 모자라면 resolveLabels가 위로 비킨다)
+      if (below) boxes.push({ id: u.unitId, cx: x, anchorY: y + below - LABEL_GAP, w: v.hpText.width, h: v.hpText.height, pref: 'below' });
+      else boxes.push({ id: u.unitId, cx: x, anchorY: y, w: v.hpText.width, h: v.hpText.height, pref });
     }
     const spots = resolveLabels(boxes, { x: this.offsetX, y: this.offsetY, w: this.gridW, h: this.gridH }, LABEL_GAP);
     for (const [id, p] of spots) this.views.get(id)!.hpText.setOrigin(0.5, 0).setPosition(p.cx, p.top);
@@ -328,10 +351,11 @@ export class BattleScene extends Phaser.Scene {
     const fill = u.side === 'party' ? 0xffd27f : u.side === 'neutral' ? 0x9fe58a : 0x7fc8ff;
     let body: Phaser.GameObjects.Image | Phaser.GameObjects.Arc | Phaser.GameObjects.Sprite;
     if (sheetKey && this.textures.exists(sheetKey)) {
-      // 호수 일반 적: 4프레임 idle 시트(알파는 판정에 쓰지 않는다 — 클릭 영역은 아래 setInteractive가 정한 표시 상자)
+      // 호수·마루 밑 일반 적: 4프레임 idle 시트(알파는 판정에 쓰지 않는다 — 클릭 영역은 아래 setInteractive가 정한 표시 상자)
       const boss = !!BOSS_SHEETS[u.characterCode];
-      const key = boss ? (u.phase === 'exposed' ? BOSS_SHEETS[u.characterCode].exposed : BOSS_SHEETS[u.characterCode].idle) : sheetKey;
-      const sprite = this.add.sprite(0, 0, key).setDisplaySize(boss ? BOSS_DISPLAY_PX : 64, boss ? BOSS_DISPLAY_PX : 64).play(this.sheetAnim(key));
+      const key = boss ? (u.phase === 'exposed' ? BOSS_SHEETS[u.characterCode].exposed : BOSS_SHEETS[u.characterCode].idle) : sheetForState(u, sheetKey);
+      const px = boss ? BOSS_DISPLAY_PX : (SHEET_DISPLAY_PX[key] ?? 64);
+      const sprite = this.add.sprite(0, 0, key).setDisplaySize(px, px).play(this.sheetAnim(key));
       if (boss) {
         // 보스 그림은 220~280px로 커서 이웃 칸의 누름을 가리지 않게 누름 영역을 한 칸 크기로 제한한다(알파는 판정에 쓰지 않는다)
         const edge = SPRITESHEET_FRAMES[key].size;
@@ -339,6 +363,11 @@ export class BattleScene extends Phaser.Scene {
         sprite.setInteractive(new Phaser.Geom.Rectangle(edge / 2 - half, edge / 2 - half, half * 2, half * 2), Phaser.Geom.Rectangle.Contains);
       }
       body = sprite;
+    } else if (u.thread && this.textures.exists(THREAD_SHEET)) {
+      // 기억실: 시트의 프레임 = 가닥 번호(thread_1~5). 진짜·가짜는 그림으로 알리지 않는다
+      body = this.add.sprite(0, 0, THREAD_SHEET, Math.max(0, Math.min(4, Number(threadNumber(u)) - 1))).setDisplaySize(THREAD_DISPLAY_PX, THREAD_DISPLAY_PX);
+    } else if (u.characterCode === 'carrier_thread' && this.textures.exists(CARRIER_KEY)) {
+      body = this.add.image(0, 0, CARRIER_KEY).setDisplaySize(TARGET_DISPLAY_PX, TARGET_DISPLAY_PX);
     } else {
       body = hasImage ? this.add.image(0, 0, `turby-${u.characterCode}`).setDisplaySize(52, 52) : this.add.circle(0, 0, u.partOf ? 16 : 24, fill);
     }
@@ -347,7 +376,7 @@ export class BattleScene extends Phaser.Scene {
     container.add([selectRing, ring, body]);
     container.setDepth(10);
     // 라벨은 줄이지 않고 두 칸 폭 안에서 줄바꿈(이웃 라벨은 위·아래로 엇갈려 겹치지 않음 — labelPlacement)
-    const hpText = this.add.text(x, y + LABEL_GAP, this.hpLabel(u), { fontSize: `${this.hud.font.label}px`, color: '#ffffff', align: 'center', wordWrap: { width: LABEL_WRAP, useAdvancedWrap: true }, backgroundColor: u.side === 'party' ? slotHex(u.participantSlot) : '#00000090', padding: { x: 4, y: 2 } }).setOrigin(0.5, 0).setDepth(11);
+    const hpText = this.add.text(x, y + LABEL_GAP, this.hpLabel(u), { fontSize: `${this.hud.font.label}px`, color: '#ffffff', align: 'center', wordWrap: { width: this.hud.labelWrap, useAdvancedWrap: true }, backgroundColor: u.side === 'party' ? slotHex(u.participantSlot) : '#00000090', padding: { x: 4, y: 2 } }).setOrigin(0.5, 0).setDepth(11);
 
     if (!body.input) body.setInteractive({ useHandCursor: true });
     body.on('pointerdown', () => {
@@ -376,6 +405,7 @@ export class BattleScene extends Phaser.Scene {
     this.layoutLabels();
     this.drawBlocked(this.snap.blocked ?? []);
     this.syncBoss();
+    this.syncStates();
     this.syncZones();
     this.syncCurrent();
     this.syncHints();
@@ -517,10 +547,12 @@ export class BattleScene extends Phaser.Scene {
       const p = this.tileToWorld(f.col, f.row);
       this.moveHighlights.push(this.add.rectangle(p.x, p.y, BATTLE_TILE_SIZE - 4, BATTLE_TILE_SIZE - 4).setStrokeStyle(3, 0xff9fb0, 1).setDepth(4));
     }
+    // 쓰러진 유닛이 남아 보이는 칸(반투명)은 채우지 않고 윤곽만 — 채운 칸이 흐린 유닛 그림을 덮어 보이지 않게(10-22 C3-6 R1-02)
+    const downed = new Set(this.snap.units.filter((o) => (o.stunned || o.inactive) && !isHiddenUnit(o)).map((o) => `${o.col},${o.row}`));
     for (const { col, row } of reachableCells(this.snap, unit)) {
       const { x, y } = this.tileToWorld(col, row);
       const rect = this.add
-        .rectangle(x, y, BATTLE_TILE_SIZE - 6, BATTLE_TILE_SIZE - 6, 0x9fe58a, 0.22)
+        .rectangle(x, y, BATTLE_TILE_SIZE - 6, BATTLE_TILE_SIZE - 6, 0x9fe58a, downed.has(`${col},${row}`) ? 0 : 0.22)
         .setStrokeStyle(2, 0x9fe58a, 0.6)
         .setDepth(4)
         .setInteractive({ useHandCursor: true })
@@ -566,6 +598,38 @@ export class BattleScene extends Phaser.Scene {
       const edge = SPRITESHEET_FRAMES[want].size;
       const half = BATTLE_TILE_SIZE / 2 / (BOSS_DISPLAY_PX / edge);
       sprite.setInteractive(new Phaser.Geom.Rectangle(edge / 2 - half, edge / 2 - half, half * 2, half * 2), Phaser.Geom.Rectangle.Contains);
+    }
+  }
+
+  // 10-16 3장: 눌린 박음이 납작 → 재봉선 노출(같은 프레임 인덱스·같은 중심), 폭신이가 가리키는 다음 기억실 위 빛무리(서버 hinted 값 그대로)
+  private hintMarks = new Map<string, Phaser.GameObjects.Image>();
+  private syncStates() {
+    for (const u of this.snap.units) {
+      const view = this.views.get(u.unitId);
+      if (!view) continue;
+      const sheets = FLAT_SHEETS[u.characterCode];
+      if (sheets && u.flat !== undefined) {
+        const sprite = view.container.list.find((o) => o.type === 'Sprite') as Phaser.GameObjects.Sprite | undefined;
+        const want = u.flat === false ? sheets.exposed : sheets.flat;
+        if (sprite && sprite.texture.key !== want && this.textures.exists(want)) {
+          const frame = Math.max(0, (sprite.anims.currentFrame?.index ?? 1) - 1);
+          const px = SHEET_DISPLAY_PX[want] ?? 64;
+          sprite.setTexture(want).setDisplaySize(px, px);
+          sprite.play({ key: this.sheetAnim(want), startFrame: frame });
+        }
+      }
+      if (!u.thread) continue;
+      const show = !!u.hinted && !isHiddenUnit(u) && this.textures.exists(THREAD_HINT_KEY);
+      let mark = this.hintMarks.get(u.unitId);
+      if (show && !mark) {
+        // 기억실 그림 아래에 깔아 실 색을 가리지 않는다(컨테이너 안 첫 자리)
+        mark = this.add.image(0, 0, THREAD_HINT_KEY).setDisplaySize(HINT_DISPLAY_PX, HINT_DISPLAY_PX);
+        view.container.addAt(mark, 0);
+        this.hintMarks.set(u.unitId, mark);
+      } else if (!show && mark) {
+        mark.destroy();
+        this.hintMarks.delete(u.unitId);
+      }
     }
   }
 
@@ -878,6 +942,24 @@ export class BattleScene extends Phaser.Scene {
       // 예고된 물살 적용: 서버가 정한 이동만 그린다(스냅샷으로 곧 같은 위치가 확정된다)
       showToast(this, `물살이 ${ev.direction === 'east' ? '→' : '←'} 방향으로 밀었어요`, { y: 660 });
       await wait(this, 350);
+    } else if (ev.type === 'wrong_thread') {
+      showToast(this, '이 실이 아니에요! 혼란에 빠졌어요', { y: 660, error: true });
+      await wait(this, 350);
+    } else if (ev.type === 'confused_action') {
+      showToast(this, '혼란 때문에 엉뚱하게 움직였어요', { y: 660 });
+      await wait(this, 250);
+    } else if (ev.type === 'carrier_cut') {
+      showToast(this, '운반 실이 끊겼어요! 실패굴이가 이쪽으로 굴러와요', { y: 660 });
+      await wait(this, 300);
+    } else if (ev.type === 'empower') {
+      showToast(this, '작은 실패굴이가 기억실을 전달했어요! 박음이가 강해졌어요', { y: 660, error: true });
+      await wait(this, 450);
+    } else if (ev.type === 'hint' && ev.code === 'thread_hint') {
+      showToast(this, ev.text, { y: 660 });
+      await wait(this, 200);
+    } else if (ev.type === 'phase' && this.unit(ev.unitId)?.flat !== undefined) {
+      showToast(this, '재봉선이 드러났어요', { y: 660 });
+      await wait(this, 200);
     } else if (ev.type === 'subturn' && ev.phase === 'wild_turn') {
       this.statusText.setText('야생 터비 차례...');
       await wait(this, 500);

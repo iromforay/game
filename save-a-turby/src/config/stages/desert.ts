@@ -4,6 +4,6 @@ import type { StageDef } from './types';
 export const STAGE_DESERT: StageDef = {
   code: 'desert',
   name: '사막 (보일러/라디에이터 옆)',
-  width: 6400,
-  height: 4800,
+  width: 3200,
+  height: 2400,
 };

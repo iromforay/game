@@ -4,6 +4,6 @@ import type { StageDef } from './types';
 export const STAGE_LAKE: StageDef = {
   code: 'lake',
   name: '호수 (어항 속)',
-  width: 4000,
-  height: 3000,
+  width: 3200,
+  height: 2400,
 };

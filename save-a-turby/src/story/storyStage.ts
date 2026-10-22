@@ -33,7 +33,7 @@ export interface StagePointView {
   assetKey: string;
   label: string;
   prompt: string;
-  art?: { width: number; height: number; pivot?: [number, number] }; // 그림 표시 크기·피벗(서버 데이터가 단일 출처). 없으면 원본 크기
+  art?: { width: number; height: number; pivot?: [number, number]; glow?: boolean }; // 그림 표시 크기·피벗(서버 데이터가 단일 출처). 없으면 원본 크기. glow = 임무 대상 외곽광
 }
 export interface StageView {
   stageCode: string;

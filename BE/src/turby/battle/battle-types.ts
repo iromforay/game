@@ -56,11 +56,24 @@ export interface BattleUnit {
   // 10-14 C2-5A(보스): 부위가 남은 중심부를 공격했을 때 — 'zero'면 행동은 소모되지만 피해 0 + 안내 1회(기본은 거부 TARGET_PROTECTED)
   protectMode?: 'reject' | 'zero';
   maxHitPercent?: number; // 이 유닛의 공격 한 번이 대상 최대 HP의 몇 %를 넘지 못하는가
+  // 10-16 C3-3(3장): 모두 전투 정의 데이터가 소유한다. 없으면 기존 전투와 같다
+  flat?: boolean; // 눌린 박음이: 첫 피격 전에는 납작해 피해가 절반(최소 최소피해). 맞으면 재봉선이 드러나 한 번만 해제된다
+  flee?: SpoolFleeDef | null; // 작은 실패굴이: 공격하지 않고 아군에게서 달아난다. N라운드 안에 못 잡으면 박음이를 강화하고 사라진다
+  reversed?: boolean; // 작은 실패굴이: 운반 실이 끊겨 방향이 뒤집힌 상태(아군 쪽으로 굴러온다)
+  carrierOf?: string | null; // 운반 실: 이 실이 끊기면 해당 작은 실패굴이의 방향이 뒤집힌다
+  thread?: { order: number | null } | null; // 보스의 기억실. order = 정해진 끊기 순서(1부터), null = 가짜 실
+  anchored?: boolean; // 제자리 적(10-16 C3-6): 이동하지 않고 인접한 아군만 공격한다(기억실에 묶인 기억 실패굴이)
+}
+
+// 10-16 C3-3: 작은 실패굴이 규칙
+export interface SpoolFleeDef {
+  empowerAfterRound: number; // 이 라운드를 넘기면(라운드 시작 때) 강화 후 사라진다
+  empowerAttack: number; // 살아 있는 납작 병사(flat 정의 유닛) 전원의 공격 증가량
 }
 
 // 지속 턴 상태 이상(M4-A). bind = 지속 턴 동안 이동력 감소. wet_bind(10-13 C2-3 젖은 속박) = 다음 이동 행동 한 번의 이동 가능 거리만 1칸 줄고(최소 1칸) 즉시 해제 —
 // 중첩·지속 시간 갱신 없음. 수치는 전투 정의 데이터에서 온다(wet_bind는 turns·movePenalty를 쓰지 않는다)
-export type StatusKind = 'bind' | 'wet_bind';
+export type StatusKind = 'bind' | 'wet_bind' | 'confused'; // confused(10-16 C3-3 혼란): 걸린 유닛의 이동·공격 대상이 서버가 정한 다른 칸·대상으로 바뀐다
 export interface StatusEffectDef {
   kind: StatusKind;
   turns: number; // 걸린 뒤 라운드가 몇 번 시작될 때까지 유지
@@ -104,6 +117,11 @@ export interface BattleUnitDefinition extends UnitStatsInput {
   exitOnDefeat?: 'flee' | null;
   protectMode?: 'reject' | 'zero';
   maxHitPercent?: number;
+  flat?: boolean;
+  anchored?: boolean;
+  flee?: SpoolFleeDef;
+  carrierOf?: string;
+  thread?: { order: number | null };
 }
 
 // 10-14 C2-5A: 보스전 전용 규칙(모두 전투 정의 데이터가 소유한다 — 전투 밖 C2-2 물살과 상태를 공유하지 않는다)
@@ -118,7 +136,8 @@ export interface BattleCurrentDef {
   directions: ('east' | 'west')[]; // 고정 순서(난수 아님), 예고할 때마다 다음 값
 }
 export interface BattleHintDef {
-  zeroDamage: string; // 보호된 중심부를 처음 공격했을 때 한 번 보여 줄 안내
+  zeroDamage?: string; // 보호된 중심부를 처음 공격했을 때 한 번 보여 줄 안내
+  threadHint?: string; // 10-16 C3-3: 매 라운드 시작에 알리는 "다음 기억실" 안내(표시 대상은 스냅샷 hinted)
 }
 
 export interface BattleDefinition {
@@ -196,7 +215,12 @@ export type BattleEvent =
   | { version: number; type: 'phase'; unitId: string; phase: 'exposed' } // 보스: 모든 부위가 끊겨 약점이 드러났다(한 번만)
   | { version: number; type: 'hint'; code: string; text: string }
   | { version: number; type: 'telegraph'; direction: 'east' | 'west'; round: number }
-  | { version: number; type: 'current'; direction: 'east' | 'west'; round: number; moved: string[]; skipped: string[] };
+  | { version: number; type: 'current'; direction: 'east' | 'west'; round: number; moved: string[]; skipped: string[] }
+  // 10-16 C3-3
+  | { version: number; type: 'wrong_thread'; unitId: string; targetId: string } // 정해진 순서가 아닌 기억실(또는 가짜 실)을 끊으려 했다 — 행동은 쓰지만 진행 없음, 공격한 유닛이 혼란
+  | { version: number; type: 'confused_action'; unitId: string; action: 'move' | 'attack' } // 혼란 때문에 목표가 바뀌었거나 행동이 헛돌았다
+  | { version: number; type: 'carrier_cut'; unitId: string; spoolId: string } // 운반 실이 끊겨 작은 실패굴이의 방향이 뒤집혔다
+  | { version: number; type: 'empower'; unitId: string; targets: string[]; attack: number }; // 작은 실패굴이가 기억실을 전달해 박음이를 강화하고 사라졌다
 
 export type ActionRequest =
   | { type: 'move'; unitId: unknown; targetCol: unknown; targetRow: unknown }
@@ -249,6 +273,10 @@ export interface BattleUnitDto {
   fled?: boolean;
   phase?: 'bound' | 'exposed'; // 부위를 가진 중심부(보스)만
   zeroDamage?: boolean; // 보호 중에도 공격은 되지만 피해 0(안내 표시)
+  flat?: boolean; // 눌린 박음이: 납작(첫 피격 전)
+  reversed?: boolean; // 작은 실패굴이: 운반 실이 끊김
+  thread?: boolean; // 보스의 기억실(진짜·가짜 구분은 알리지 않는다)
+  hinted?: boolean; // 오래된 폭신이가 지금 가리키는 "다음 기억실"
 }
 
 export interface BattleSnapshotDto {

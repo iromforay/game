@@ -78,8 +78,22 @@ export const SPRITESHEET_FRAMES: Record<string, { size: number; frames: number; 
   'waterlogged-sewn-doll-exposed': { size: 256, frames: 4, fps: 4 }, // 보스(약점 노출) — 같은 프레임 인덱스·표시 중심으로 교체
   'nubi-color-drain': { size: 192, frames: 6, fps: 9 }, // 10-13 C2-4 누비 색 빠짐 오버레이(1회 재생, 8~10fps)
   'nubi-color-restore': { size: 192, frames: 6, fps: 9 }, // 10-14 C2-6 색 회복 오버레이(1→6 순서 1회 재생 — 시트가 이미 회복 방향이다. drain을 역재생하지 않는다)
+  // 10-16 3장 2차 전투 에셋(Codex delivery-v2). 상태가 둘인 시트는 같은 프레임 인덱스·표시 중심으로 교체한다
+  'pressed-sewn-doll-idle': { size: 160, frames: 4, fps: 5 }, // 눌린 박음이(납작)
+  'pressed-sewn-doll-exposed': { size: 160, frames: 4, fps: 5 }, // 눌린 박음이(재봉선 노출)
+  'small-spool-idle': { size: 128, frames: 4, fps: 6 }, // 작은 실패굴이
+  'memory-spool-idle': { size: 256, frames: 4, fps: 4 }, // 기억 실패굴이(결박)
+  'memory-spool-exposed': { size: 256, frames: 4, fps: 4 }, // 기억 실패굴이(약점 노출)
+  'memory-thread': { size: 128, frames: 5, fps: 0 }, // 기억실 5가닥 — 재생하지 않고 프레임 = 가닥 번호(1 분홍·2 청록·3 금색·4 보라·5 산호)
 };
 
 // 전투 정의의 characterCode → 전투·지도에서 쓰는 적 시트 키(없으면 기존 터비 그림/임시 도형)
-export const ENEMY_SHEET_OF: Record<string, string> = { wet_stitchling: 'wet-stitchling-idle', wet_sewn_doll: 'wet-sewn-doll-idle', waterlogged_sewn_doll: 'waterlogged-sewn-doll-idle' };
+export const ENEMY_SHEET_OF: Record<string, string> = {
+  wet_stitchling: 'wet-stitchling-idle',
+  wet_sewn_doll: 'wet-sewn-doll-idle',
+  waterlogged_sewn_doll: 'waterlogged-sewn-doll-idle',
+  pressed_sewn_doll: 'pressed-sewn-doll-idle',
+  small_spool: 'small-spool-idle',
+  memory_spool: 'memory-spool-idle',
+};
 

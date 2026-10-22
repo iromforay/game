@@ -208,8 +208,8 @@ test('정본 장면: 문구·순서·{playerName} 토큰, cue는 nubi-color-rest
   assert.equal((await s.story.completeEvent(P, 'lake_chapter_complete_seen')).alreadyCompleted, true);
   assert.equal(count(s, 'lake_chapter_complete_seen'), 1);
   assert.deepEqual(state(s), { cp: 'CH02_COMPLETE', growth: 2, slot2: 1, events: 2 });
-  assert.equal((await s.story.getState(P)).resume.segmentId, null);
-  assert.equal(resumeOf({ checkpoint: 'CH02_COMPLETE', events: new Set(['lake_chapter_complete_seen']), objectives: new Map(), growthStage: 2 }).segmentId, null);
+  assert.equal((await s.story.getState(P)).resume.segmentId, 'ch03.entry', '10-16 C3-1: 장면을 끝까지 본 뒤에는 3장 도입이 마루바닥 밑 입장(지역 진입 트리거)에서 이어진다');
+  assert.equal(resumeOf({ checkpoint: 'CH02_COMPLETE', events: new Set(['lake_chapter_complete_seen']), objectives: new Map(), growthStage: 2 }).segmentId, 'ch03.entry');
 });
 
 test('완료 후 호수: 보스·위기·구조 지점이 다시 열리지 않고 다음 목표가 표시된다(자유 탐험)', async () => {

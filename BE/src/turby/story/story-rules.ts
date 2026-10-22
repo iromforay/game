@@ -109,9 +109,13 @@ export function resumeOf(snap: StorySnapshot): { segmentId: string | null; tutor
       case 'CH01_FIRST_KNOT_EQUIPPED':
         return has('forest_dansuring_found') ? 'ch01.primordial_knot' : null;
       case 'CH02_COMPLETE':
-        return has('lake_chapter_complete_seen') ? null : 'ch02.chapter_complete'; // 장착은 끝났고 장면을 끝까지 보기 전 — 장착·성장은 반복하지 않고 장면만 처음부터
+        return has('lake_chapter_complete_seen') ? (has('underfloor_entry_seen') ? null : 'ch03.entry') : 'ch02.chapter_complete'; // 장착은 끝났고 장면을 끝까지 보기 전 — 장착·성장은 반복하지 않고 장면만 처음부터
       case 'CH02_BOSS_DEFEATED':
         return has('lake_boss_aftermath_seen') ? null : 'ch02.boss_victory'; // 정산은 끝났고 장면을 끝까지 보기 전 — 보스전·보상은 반복하지 않고 승리 장면만 처음부터
+      case 'CH03_COMPLETE':
+        return has('underfloor_chapter_complete_seen') ? null : 'ch03.chapter_complete'; // 장착은 끝났고 장면을 끝까지 보기 전 — 장착·성장은 반복하지 않고 장면만 처음부터
+      case 'CH03_BOSS_DEFEATED':
+        return has('underfloor_boss_aftermath_seen') ? null : 'ch03.boss_victory'; // 정산은 끝났고 장면을 끝까지 보기 전 — 보스전·보상은 반복하지 않고 승리 장면만 처음부터
       case 'CH01_COMPLETE':
         return 'ch02.lake_entry'; // 호수에 들어서면(지역 진입 트리거) 물빛 입구 도입을 본다. 마을·숲에서는 자동으로 뜨지 않는다(resume은 오프닝 화면만 쓴다)
       default:
