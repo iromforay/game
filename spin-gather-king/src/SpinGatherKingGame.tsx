@@ -6,8 +6,10 @@ import './styles.css';
 interface SpinGatherKingGameProps { onExit?: () => void }
 interface Position { x: number; y: number }
 interface ResourceNode { id: string; type: 'wood' | 'log' | 'stone' | 'iron' | 'ice' | 'crystal' | 'lightning'; variant?: 'pebble' | 'boulder' | 'ice-pillar' | 'crystal-pillar' | 'thunder-crystal' | 'lightning-flower' | 'maple-tree' | 'cactus' | 'iron-rock'; x: number; y: number; hp: number; maxHp: number; active: boolean; respawnAt: number }
-interface Mob { id: string; type: 'ladybug' | 'spider' | 'polar-bear'; map: 1 | 2 | 3; x: number; y: number; spawnX: number; spawnY: number; hp: number; maxHp: number; active: boolean; respawnAt: number; lastAttackAt: number }
+type MobType = 'ladybug' | 'armored-ladybug' | 'spider' | 'scorpion' | 'polar-bear' | 'frost-bear' | 'storm-spirit' | 'lightning-spirit';
+interface Mob { id: string; type: MobType; map: 1 | 2 | 3 | 4; x: number; y: number; spawnX: number; spawnY: number; hp: number; maxHp: number; active: boolean; respawnAt: number; lastAttackAt: number }
 interface JoystickState { active: boolean; pointerId: number; dx: number; dy: number }
+interface WaveStatus { wave: number; phase: 'active' | 'waiting'; nextAt: number }
 
 const MAP_SCALE = 2;
 const MAP_REFERENCE_SIZE = 3920;
@@ -22,7 +24,6 @@ const WORLD_HEIGHT = MAP_HEIGHT;
 const CAMERA_ZOOM = 1.2;
 // 낮아진 카메라 배율에서도 키 입력이 즉각적이고 충분히 빠르게 보이도록 보정한다.
 const PLAYER_SPEED = 900;
-const ROTATION_MS = 800;
 const RESOURCE_DEPOSIT_MS = 90;
 // 캐릭터가 패널을 밟았을 때 충분한 자원을 보유했다면 가장 비싼 1맵 강화도 3초 안에 끝낸다.
 const RESOURCE_DEPOSIT_PER_TICK = 5;
@@ -40,12 +41,23 @@ const BASE_LEVEL_2_COST = { wood: 40, shell: 15 } as const;
 const BASE_LEVEL_3_COST = { wood: 80, shell: 35 } as const;
 const DESERT_BASE_LEVEL_2_COST = { wood: 40, stone: 20 } as const;
 const DESERT_BASE_LEVEL_3_COST = { wood: 80, iron: 30 } as const;
+const SNOW_BASE_LEVEL_2_COST = { ice: 40, crystal: 20 } as const;
+const SNOW_BASE_LEVEL_3_COST = { ice: 80, meat: 30 } as const;
+const STORM_BASE_LEVEL_2_COST = { lightning: 60 } as const;
+const STORM_BASE_LEVEL_3_COST = { lightning: 120 } as const;
 const EAST_UNLOCK_COST = { wood: 200, log: 100 } as const;
 const SNOW_UNLOCK_COST = { stone: 200, iron: 100 } as const;
 const STORM_UNLOCK_COST = { crystal: 200, oil: 100 } as const;
-const TURRET_COSTS = { 1: { primary: 50, rare: 20 }, 2: { primary: 50, rare: 20 }, 3: { primary: 50, rare: 20 } } as const;
+const TURRET_COSTS = { 1: { primary: 50, rare: 20 }, 2: { primary: 50, rare: 20 }, 3: { primary: 50, rare: 20 }, 4: { primary: 50, rare: 20 } } as const;
 const TURRET_RANGE = 1900;
-const TURRET_FIRE_MS = 900;
+const TURRET_STATS: Record<1 | 2 | 3, { name: string; cooldownMs: number; splashDamage: number; directBonus: number; splashRadius: number }> = {
+  1: { name: '기본 포탑', cooldownMs: 1100, splashDamage: 1, directBonus: 0, splashRadius: 560 },
+  2: { name: '화염탑', cooldownMs: 850, splashDamage: 1, directBonus: 1, splashRadius: 680 },
+  3: { name: '뇌광탑', cooldownMs: 650, splashDamage: 1, directBonus: 2, splashRadius: 780 },
+};
+const PLAYER_VISION_RANGE = 1400;
+const BASE_VISION_RANGE = 1250;
+const WAVE_BREAK_MS = 7000;
 const EAST_GATE_X = MAP1_WIDTH;
 const SNOW_GATE_X = MAP1_WIDTH + MAP2_WIDTH;
 const STORM_GATE_X = MAP1_WIDTH + MAP2_WIDTH + MAP3_WIDTH;
@@ -59,6 +71,15 @@ const BLADE_COSTS: Record<number, { wood: number; shell: number }> = {
   4: { wood: 20, shell: 5 },
 };
 const BLADE_LABELS: Record<BladeId, string> = { basic: '기본검', moonseong: '월성검', hwarak: '화락검', seongun: '성운검', noegwang: '뇌광검', seolhwa: '설화검' };
+const BLADE_STATS: Record<BladeId, { damage: number; rotationsPerSecond: number; rangeScale: number }> = {
+  basic: { damage: 1, rotationsPerSecond: 1.25, rangeScale: 1 },
+  moonseong: { damage: 2, rotationsPerSecond: 1.1, rangeScale: 1.2 },
+  hwarak: { damage: 2, rotationsPerSecond: 1.5, rangeScale: 1 },
+  seongun: { damage: 3, rotationsPerSecond: 1.2, rangeScale: 1.05 },
+  noegwang: { damage: 2, rotationsPerSecond: 1.75, rangeScale: 1.05 },
+  seolhwa: { damage: 3, rotationsPerSecond: 1.35, rangeScale: 1.15 },
+};
+const bladeRotationMs = (blade: BladeId) => 1000 / BLADE_STATS[blade].rotationsPerSecond;
 type SpecialBladeId = Exclude<BladeId, 'basic'>;
 const BLADE_RECIPES: Record<SpecialBladeId, { resource: ResourceType; label: string; cost: number; progress: keyof GameSave; icon: string }> = {
   moonseong: { resource: 'wood', label: '나무', cost: 70, progress: 'moonseongProgress', icon: '☾' },
@@ -69,20 +90,22 @@ const BLADE_RECIPES: Record<SpecialBladeId, { resource: ResourceType; label: str
 };
 // 기지 중심 2열 배치: 칼날추가/5번, 2번/3번, 1번/기지/4번, 기지강화/포탑.
 const BASE_BUILD_POINT: Position = { x: MAP1_WIDTH / 2, y: MAP_HEIGHT - 640 };
-const MAP_BASE_POINTS: Record<1 | 2 | 3, Position> = {
+const MAP_BASE_POINTS: Record<1 | 2 | 3 | 4, Position> = {
   1: BASE_BUILD_POINT,
   2: { x: MAP1_WIDTH + MAP2_WIDTH / 2, y: MAP_HEIGHT - 640 },
   3: { x: SNOW_GATE_X + MAP3_WIDTH / 2, y: MAP_HEIGHT - 640 },
+  4: { x: STORM_GATE_X + MAP4_WIDTH / 2, y: MAP_HEIGHT - 640 },
 };
 const PLAYER_START_POINT: Position = { x: MAP1_WIDTH / 2, y: MAP_HEIGHT - 980 };
 const PANEL_COLUMN_OFFSET = 1350;
 const BLADE_UPGRADE_PAD: Position = { x: BASE_BUILD_POINT.x - PANEL_COLUMN_OFFSET, y: BASE_BUILD_POINT.y - 1500 };
 const BASE_UPGRADE_PAD: Position = { x: BASE_BUILD_POINT.x - PANEL_COLUMN_OFFSET, y: BASE_BUILD_POINT.y + 430 };
 const DESERT_BASE_UPGRADE_PAD: Position = { x: BASE_UPGRADE_PAD.x + MAP_WIDTH, y: BASE_UPGRADE_PAD.y };
-const TURRET_PADS: Record<1 | 2 | 3, Position> = {
-  1: { x: MAP_BASE_POINTS[1].x + PANEL_COLUMN_OFFSET, y: MAP_BASE_POINTS[1].y + 430 },
-  2: { x: MAP_BASE_POINTS[2].x + PANEL_COLUMN_OFFSET, y: MAP_BASE_POINTS[2].y + 430 },
-  3: { x: MAP_BASE_POINTS[3].x + PANEL_COLUMN_OFFSET, y: MAP_BASE_POINTS[3].y + 430 },
+const TURRET_PADS: Record<1 | 2 | 3 | 4, Position> = {
+  1: { x: MAP_BASE_POINTS[1].x, y: MAP_BASE_POINTS[1].y - 1650 },
+  2: { x: MAP_BASE_POINTS[2].x, y: MAP_BASE_POINTS[2].y - 1650 },
+  3: { x: MAP_BASE_POINTS[3].x, y: MAP_BASE_POINTS[3].y - 1650 },
+  4: { x: MAP_BASE_POINTS[4].x, y: MAP_BASE_POINTS[4].y - 1650 },
 };
 const PEDESTALS: Record<SpecialBladeId, Position> = {
   moonseong: { x: BASE_BUILD_POINT.x - PANEL_COLUMN_OFFSET, y: BASE_BUILD_POINT.y },
@@ -91,11 +114,18 @@ const PEDESTALS: Record<SpecialBladeId, Position> = {
   noegwang: { x: BASE_BUILD_POINT.x + PANEL_COLUMN_OFFSET, y: BASE_BUILD_POINT.y },
   seolhwa: { x: BASE_BUILD_POINT.x + PANEL_COLUMN_OFFSET, y: BASE_BUILD_POINT.y - 1500 },
 };
-const mapPoint = (point: Position, map: 1 | 2 | 3): Position => ({ x: point.x + (map - 1) * MAP_WIDTH, y: point.y });
-const availableMaps = (save: GameSave): (1 | 2 | 3)[] => save.snowUnlocked ? [1, 2, 3] : save.eastUnlocked ? [1, 2] : [1];
+const mapPoint = (point: Position, map: 1 | 2 | 3 | 4): Position => ({ x: point.x + (map - 1) * MAP_WIDTH, y: point.y });
+const availableMaps = (save: GameSave): (1 | 2 | 3 | 4)[] => save.stormUnlocked ? [1, 2, 3, 4] : save.snowUnlocked ? [1, 2, 3] : save.eastUnlocked ? [1, 2] : [1];
 const BASE_MAX_HP = [100, 200, 350, 500] as const;
 const BASE_DEFENSE = [0, .25, .5, .65] as const;
 const BASE_SAFE_RADIUS = 1200;
+
+const isTurretInstalled = (save: GameSave) => (
+  ((save.meadowTurretWood ?? 0) >= 50 && (save.meadowTurretShell ?? 0) >= 20)
+  || ((save.desertTurretStone ?? 0) >= 50 && (save.desertTurretIron ?? 0) >= 20)
+  || ((save.snowTurretIce ?? 0) >= 50 && (save.snowTurretCrystal ?? 0) >= 20)
+  || ((save.stormTurretLightning ?? 0) >= 50 && (save.stormTurretCrystal ?? 0) >= 20)
+);
 
 const shortageMessage = (items: Array<{ label: string; missing: boolean }>) => (
   items.filter((item) => item.missing).map((item) => `${item.label} 부족`).join('\n')
@@ -141,6 +171,16 @@ const distanceToSegment = (point: Position, start: Position, end: Position) => {
   const projection = lengthSquared === 0 ? 0 : Math.max(0, Math.min(1, ((point.x - start.x) * segmentX + (point.y - start.y) * segmentY) / lengthSquared));
   return Math.hypot(point.x - (start.x + segmentX * projection), point.y - (start.y + segmentY * projection));
 };
+// 희귀 자원 비율은 건드리지 않고 기본 채집 오브젝트만 1.5배로 보강한다.
+// 짝수 인덱스마다 충분히 떨어진 보조 지점을 하나 만들어 겹침을 피한다.
+const enrichBasicPoints = (points: Position[]): Position[] => points.flatMap((point, index) => {
+  if (index % 2 !== 0) return [point];
+  const direction = index % 4 === 0 ? 1 : -1;
+  return [point, {
+    x: Math.max(280, Math.min(MAP_WIDTH - 280, point.x + direction * (420 + index % 3 * 80))),
+    y: Math.max(280, Math.min(MAP_HEIGHT - 280, point.y + (index % 3 - 1) * 360)),
+  }];
+});
 const MEADOW_TREE_POINTS: Position[] = [
   { x: 620, y: 720 }, { x: 1780, y: 560 }, { x: 3020, y: 880 }, { x: 4540, y: 620 }, { x: 5900, y: 900 }, { x: 7180, y: 650 },
   { x: 900, y: 2050 }, { x: 2220, y: 1840 }, { x: 3540, y: 2200 }, { x: 4920, y: 1900 }, { x: 6280, y: 2140 }, { x: 7420, y: 1880 },
@@ -190,12 +230,16 @@ const STORM_LIGHTNING_POINTS: Position[] = [
   { x: 840, y: 4820 }, { x: 2580, y: 5340 }, { x: 4380, y: 4560 }, { x: 6380, y: 5160 },
   { x: 1740, y: 6540 }, { x: 3920, y: 6120 }, { x: 6120, y: 6680 },
 ];
+const STORM_SPIRIT_POINTS: Position[] = [
+  { x: 980, y: 1580 }, { x: 3260, y: 1180 }, { x: 6420, y: 1540 },
+  { x: 2140, y: 3560 }, { x: 5260, y: 3820 }, { x: 6840, y: 5480 },
+];
 const cloneNodes = (): ResourceNode[] => [...INITIAL_NODES.flatMap((node) => {
   if (node.type === 'ice') return [{ ...node, x: SNOW_GATE_X + (node.x - 980) * MAP_SCALE, y: node.y * MAP_SCALE }];
   if (node.type === 'stone') return [];
   return [];
 }), ...cloneMeadowTrees(), ...cloneMapleTrees(), ...cloneDesertNodes(), ...cloneSnowNodes(), ...cloneStormNodes()];
-const cloneMeadowTrees = () => MEADOW_TREE_POINTS.filter((point) => distance(point, BASE_BUILD_POINT) >= BASE_SAFE_RADIUS).map((point, index) => ({
+const cloneMeadowTrees = () => enrichBasicPoints(MEADOW_TREE_POINTS).filter((point) => distance(point, BASE_BUILD_POINT) >= BASE_SAFE_RADIUS).map((point, index) => ({
   id: `tree-meadow-${index + 1}`, type: 'wood' as const, x: point.x, y: point.y,
   hp: 4, maxHp: 4, active: true, respawnAt: 0,
 }));
@@ -204,28 +248,33 @@ const cloneMapleTrees = () => MEADOW_MAPLE_TREE_POINTS.filter((point) => distanc
   x: point.x, y: point.y, hp: 10, maxHp: 10, active: true, respawnAt: 0,
 }));
 const cloneDesertNodes = (): ResourceNode[] => [
-  ...DESERT_CACTUS_POINTS.map((point, index) => ({ id: `cactus-desert-${index + 1}`, type: 'wood' as const, variant: 'cactus' as const, x: MAP1_WIDTH + point.x, y: point.y, hp: 5, maxHp: 5, active: true, respawnAt: 0 })),
-  ...DESERT_ROCK_POINTS.map((point, index) => ({ id: `rock-desert-${index + 1}`, type: 'stone' as const, variant: index % 3 ? 'pebble' as const : 'boulder' as const, x: MAP1_WIDTH + point.x, y: point.y, hp: index % 3 ? 4 : 8, maxHp: index % 3 ? 4 : 8, active: true, respawnAt: 0 })),
+  ...enrichBasicPoints(DESERT_CACTUS_POINTS).filter((point) => distance(point, BASE_BUILD_POINT) >= BASE_SAFE_RADIUS).map((point, index) => ({ id: `cactus-desert-${index + 1}`, type: 'wood' as const, variant: 'cactus' as const, x: MAP1_WIDTH + point.x, y: point.y, hp: 5, maxHp: 5, active: true, respawnAt: 0 })),
+  ...enrichBasicPoints(DESERT_ROCK_POINTS).filter((point) => distance(point, BASE_BUILD_POINT) >= BASE_SAFE_RADIUS).map((point, index) => ({ id: `rock-desert-${index + 1}`, type: 'stone' as const, variant: index % 3 ? 'pebble' as const : 'boulder' as const, x: MAP1_WIDTH + point.x, y: point.y, hp: index % 3 ? 4 : 8, maxHp: index % 3 ? 4 : 8, active: true, respawnAt: 0 })),
   ...DESERT_IRON_POINTS.map((point, index) => ({ id: `iron-desert-${index + 1}`, type: 'iron' as const, variant: 'iron-rock' as const, x: MAP1_WIDTH + point.x, y: point.y, hp: 12, maxHp: 12, active: true, respawnAt: 0 })),
 ];
 const cloneSnowNodes = (): ResourceNode[] => [
-  ...SNOW_ICE_POINTS.map((point, index) => ({ id: `ice-snow-${index + 1}`, type: 'ice' as const, variant: 'ice-pillar' as const, x: SNOW_GATE_X + point.x, y: point.y, hp: 8, maxHp: 8, active: true, respawnAt: 0 })),
+  ...enrichBasicPoints(SNOW_ICE_POINTS).filter((point) => distance(point, BASE_BUILD_POINT) >= BASE_SAFE_RADIUS).map((point, index) => ({ id: `ice-snow-${index + 1}`, type: 'ice' as const, variant: 'ice-pillar' as const, x: SNOW_GATE_X + point.x, y: point.y, hp: 8, maxHp: 8, active: true, respawnAt: 0 })),
   ...SNOW_CRYSTAL_POINTS.map((point, index) => ({ id: `crystal-snow-${index + 1}`, type: 'crystal' as const, variant: 'crystal-pillar' as const, x: SNOW_GATE_X + point.x, y: point.y, hp: 14, maxHp: 14, active: true, respawnAt: 0 })),
 ];
-const cloneStormNodes = (): ResourceNode[] => STORM_LIGHTNING_POINTS.map((point, index) => ({ id: `lightning-storm-${index + 1}`, type: 'lightning' as const, variant: index % 3 === 2 ? 'lightning-flower' as const : 'thunder-crystal' as const, x: STORM_GATE_X + point.x, y: point.y, hp: index % 3 === 2 ? 10 : 16, maxHp: index % 3 === 2 ? 10 : 16, active: true, respawnAt: 0 }));
-const cloneMobs = () => INITIAL_MOBS.flatMap((mob) => {
+const cloneStormNodes = (): ResourceNode[] => enrichBasicPoints(STORM_LIGHTNING_POINTS).filter((point) => distance(point, BASE_BUILD_POINT) >= BASE_SAFE_RADIUS).map((point, index) => ({ id: `lightning-storm-${index + 1}`, type: 'lightning' as const, variant: index % 3 === 2 ? 'lightning-flower' as const : 'thunder-crystal' as const, x: STORM_GATE_X + point.x, y: point.y, hp: index % 3 === 2 ? 10 : 16, maxHp: index % 3 === 2 ? 10 : 16, active: true, respawnAt: 0 }));
+const cloneMobs = (): Mob[] => (INITIAL_MOBS.flatMap((mob, index) => {
   if (mob.type === 'polar-bear') {
     const mapOffset = SNOW_GATE_X - 980 * MAP_SCALE;
-    return [{ ...mob, x: mob.x * MAP_SCALE + mapOffset, y: mob.y * MAP_SCALE, spawnX: mob.spawnX * MAP_SCALE + mapOffset, spawnY: mob.spawnY * MAP_SCALE }];
+    const elite = index % 2 === 0;
+    return [{ ...mob, type: elite ? 'frost-bear' as const : 'polar-bear' as const, hp: elite ? 22 : 14, maxHp: elite ? 22 : 14, x: mob.x * MAP_SCALE + mapOffset, y: mob.y * MAP_SCALE, spawnX: mob.spawnX * MAP_SCALE + mapOffset, spawnY: mob.spawnY * MAP_SCALE }];
   }
   return [];
-}).concat(MEADOW_BEETLE_POINTS.filter((point) => distance(point, BASE_BUILD_POINT) >= BASE_SAFE_RADIUS).map((point, index) => ({
-  id: `ladybug-meadow-${index + 1}`, type: 'ladybug' as const, map: 1 as const, x: point.x, y: point.y,
-  spawnX: point.x, spawnY: point.y, hp: 7, maxHp: 7, active: true, respawnAt: 0, lastAttackAt: 0,
+}) as Mob[]).concat(MEADOW_BEETLE_POINTS.filter((point) => distance(point, BASE_BUILD_POINT) >= BASE_SAFE_RADIUS).map((point, index) => ({
+  id: `ladybug-meadow-${index + 1}`, type: index % 3 === 2 ? 'armored-ladybug' as const : 'ladybug' as const, map: 1 as const, x: point.x, y: point.y,
+  spawnX: point.x, spawnY: point.y, hp: index % 3 === 2 ? 12 : 7, maxHp: index % 3 === 2 ? 12 : 7, active: true, respawnAt: 0, lastAttackAt: 0,
 }))).concat(DESERT_SPIDER_POINTS.map((point, index) => ({
-  id: `spider-desert-${index + 1}`, type: 'spider' as const, map: 2 as const,
+  id: `spider-desert-${index + 1}`, type: index % 2 === 1 ? 'scorpion' as const : 'spider' as const, map: 2 as const,
   x: MAP1_WIDTH + point.x, y: point.y, spawnX: MAP1_WIDTH + point.x, spawnY: point.y,
-  hp: 10, maxHp: 10, active: true, respawnAt: 0, lastAttackAt: 0,
+  hp: index % 2 === 1 ? 16 : 10, maxHp: index % 2 === 1 ? 16 : 10, active: true, respawnAt: 0, lastAttackAt: 0,
+}))).concat(STORM_SPIRIT_POINTS.map((point, index) => ({
+  id: `storm-spirit-${index + 1}`, type: index % 2 === 1 ? 'lightning-spirit' as const : 'storm-spirit' as const, map: 4 as const,
+  x: STORM_GATE_X + point.x, y: point.y, spawnX: STORM_GATE_X + point.x, spawnY: point.y,
+  hp: index % 2 === 1 ? 13 : 18, maxHp: index % 2 === 1 ? 13 : 18, active: true, respawnAt: 0, lastAttackAt: 0,
 })));
 
 export function SpinGatherKingGame({ onExit }: SpinGatherKingGameProps) {
@@ -241,7 +290,9 @@ export function SpinGatherKingGame({ onExit }: SpinGatherKingGameProps) {
   const nodesRef = useRef<ResourceNode[]>(cloneNodes());
   const mobsRef = useRef<Mob[]>(cloneMobs());
   const lastRespawnRef = useRef(0);
-  const lastTurretShotRef = useRef<Record<1 | 2 | 3, number>>({ 1: 0, 2: 0, 3: 0 });
+  const lastTurretShotRef = useRef<Record<1 | 2 | 3 | 4, number>>({ 1: 0, 2: 0, 3: 0, 4: 0 });
+  const pendingTurretDamageRef = useRef(new Map<string, number>());
+  const waveStatusRef = useRef<Record<1 | 2 | 3 | 4, WaveStatus>>({ 1: { wave: 1, phase: 'active', nextAt: 0 }, 2: { wave: 1, phase: 'active', nextAt: 0 }, 3: { wave: 1, phase: 'active', nextAt: 0 }, 4: { wave: 1, phase: 'active', nextAt: 0 } });
   const saveRef = useRef<GameSave>(loadSave());
   const loadedRef = useRef(false);
   const remoteReadyRef = useRef(false);
@@ -256,7 +307,7 @@ export function SpinGatherKingGame({ onExit }: SpinGatherKingGameProps) {
   const [hitMobId, setHitMobId] = useState<string | null>(null);
   const [mobImpact, setMobImpact] = useState<{ id: number; x: number; y: number; defeated: boolean } | null>(null);
   const [hitBurst, setHitBurst] = useState<{ id: number; x: number; y: number; blade: BladeId } | null>(null);
-  const [turretShots, setTurretShots] = useState<Array<{ id: string; from: Position; to: Position; kind: 'shell' | 'fire' | 'thunder' }>>([]);
+  const [turretShots, setTurretShots] = useState<Array<{ id: string; from: Position; to: Position; targetId: string; kind: 'shell' | 'fire' | 'thunder' }>>([]);
   const [turretFields, setTurretFields] = useState<Array<{ id: string; at: Position; kind: 'fire' | 'thunder'; expiresAt: number }>>([]);
   const [joystickVisual, setJoystickVisual] = useState({ active: false, x: 88, y: 604, dx: 0, dy: 0 });
   const [equipTarget, setEquipTarget] = useState<BladeId | null>(null);
@@ -271,6 +322,9 @@ export function SpinGatherKingGame({ onExit }: SpinGatherKingGameProps) {
   const [overchargedNodes, setOverchargedNodes] = useState<Record<string, number>>({});
   const overchargedNodesRef = useRef<Record<string, number>>({});
   const [electricChain, setElectricChain] = useState<{ id: number; from: Position; to: Position } | null>(null);
+  const [baseImpacts, setBaseImpacts] = useState<Array<{ id: string; map: 1 | 2 | 3 | 4; damage: number }>>([]);
+  const [waveStatuses, setWaveStatuses] = useState(waveStatusRef.current);
+  const [waveClock, setWaveClock] = useState(Date.now());
   const resourceToastRef = useRef({ message: '', shownAt: 0, timer: 0 });
   const previousProgressRef = useRef({ baseLevel: saveRef.current.baseLevel, bladeCount: saveRef.current.bladeCount, unlockedCount: saveRef.current.unlockedBladeIds.length, eastUnlocked: saveRef.current.eastUnlocked });
   const fenceBuilt = save.baseLevel >= 1;
@@ -278,11 +332,14 @@ export function SpinGatherKingGame({ onExit }: SpinGatherKingGameProps) {
   const safeDesertBaseHp = save.desertBaseHp ?? BASE_MAX_HP[safeDesertBaseLevel];
   const safeSnowBaseLevel = save.snowBaseLevel ?? 1;
   const safeSnowBaseHp = save.snowBaseHp ?? BASE_MAX_HP[safeSnowBaseLevel];
+  const safeStormBaseLevel = save.stormBaseLevel ?? 1;
+  const safeStormBaseHp = save.stormBaseHp ?? BASE_MAX_HP[safeStormBaseLevel];
   const currentMap: 1 | 2 | 3 | 4 = position.x < MAP1_WIDTH ? 1 : position.x < SNOW_GATE_X ? 2 : position.x < STORM_GATE_X ? 3 : 4;
-  const baseDefeated = currentMap === 1 ? fenceBuilt && save.baseHp <= 0 : currentMap === 2 ? save.eastUnlocked && save.desertEntered && safeDesertBaseHp <= 0 : currentMap === 3 ? save.snowUnlocked && save.snowEntered && safeSnowBaseHp <= 0 : false;
+  const baseDefeated = currentMap === 1 ? fenceBuilt && save.baseHp <= 0 : currentMap === 2 ? save.eastUnlocked && save.desertEntered && safeDesertBaseHp <= 0 : currentMap === 3 ? save.snowUnlocked && save.snowEntered && safeSnowBaseHp <= 0 : save.stormUnlocked && safeStormBaseHp <= 0;
   const desertUnlockReady = save.eastUnlockWood >= EAST_UNLOCK_COST.wood && save.eastUnlockLog >= EAST_UNLOCK_COST.log;
 
   useEffect(() => { overchargedNodesRef.current = overchargedNodes; }, [overchargedNodes]);
+  useEffect(() => { waveStatusRef.current = waveStatuses; }, [waveStatuses]);
 
   useEffect(() => {
     if (!save.stormUnlocked || currentMap !== 4) { setLightningEvent(null); return; }
@@ -455,6 +512,50 @@ export function SpinGatherKingGame({ onExit }: SpinGatherKingGameProps) {
   }, [currentMap, patchSave, save.snowEntered, save.snowUnlocked]);
 
   useEffect(() => {
+    if (!save.stormUnlocked || currentMap !== 4 || save.stormEntered) return;
+    patchSave((current) => ({ ...current, stormEntered: true, stormBaseHp: BASE_MAX_HP[current.stormBaseLevel ?? 1] }));
+    const activated = mobsRef.current.map((mob) => mob.map === 4
+      ? { ...mob, x: mob.spawnX, y: mob.spawnY, hp: mob.maxHp, active: true, respawnAt: 0, lastAttackAt: 0 }
+      : mob);
+    mobsRef.current = activated;
+    setMobs(activated);
+    setNotice('뇌운 고원에 진입했습니다! 폭풍 정령이 나타납니다.');
+  }, [currentMap, patchSave, save.stormEntered, save.stormUnlocked]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const now = Date.now();
+      setWaveClock(now);
+      const entered = currentMap === 1 ? fenceBuilt : currentMap === 2 ? saveRef.current.desertEntered : currentMap === 3 ? saveRef.current.snowEntered : saveRef.current.stormEntered;
+      if (!entered) return;
+      const status = waveStatusRef.current[currentMap];
+      const alive = mobsRef.current.filter((mob) => mob.map === currentMap && mob.active).length;
+      if (status.phase === 'active' && alive === 0) {
+        const nextStatus = { ...waveStatusRef.current, [currentMap]: { ...status, phase: 'waiting' as const, nextAt: now + WAVE_BREAK_MS } };
+        waveStatusRef.current = nextStatus;
+        setWaveStatuses(nextStatus);
+        const reward = currentMap === 1 ? { resource: 'wood' as const, amount: 10, label: '나무' } : currentMap === 2 ? { resource: 'stone' as const, amount: 8, label: '돌' } : currentMap === 3 ? { resource: 'ice' as const, amount: 8, label: '얼음' } : { resource: 'lightning' as const, amount: 6, label: '번개' };
+        patchSave((current) => ({ ...current, resources: { ...current.resources, [reward.resource]: current.resources[reward.resource] + reward.amount } }));
+        setNotice(`${currentMap}번 맵 ${status.wave} 웨이브 방어 성공 · ${reward.label} +${reward.amount}`);
+        return;
+      }
+      if (status.phase === 'waiting' && now >= status.nextAt) {
+        const nextWave = status.wave + 1;
+        const revived = mobsRef.current.map((mob) => mob.map === currentMap
+          ? { ...mob, x: mob.spawnX, y: mob.spawnY, maxHp: mob.maxHp + 2, hp: mob.maxHp + 2, active: true, respawnAt: 0, lastAttackAt: 0 }
+          : mob);
+        mobsRef.current = revived;
+        setMobs(revived);
+        const nextStatus = { ...waveStatusRef.current, [currentMap]: { wave: nextWave, phase: 'active' as const, nextAt: 0 } };
+        waveStatusRef.current = nextStatus;
+        setWaveStatuses(nextStatus);
+        setNotice(`${currentMap}번 맵 ${nextWave} 웨이브 시작! 몬스터가 더 강해졌습니다.`);
+      }
+    }, 250);
+    return () => window.clearInterval(timer);
+  }, [currentMap, fenceBuilt, patchSave]);
+
+  useEffect(() => {
     if (save.eastUnlocked || !desertUnlockReady) return;
     patchSave((current) => current.eastUnlocked ? current : { ...current, eastUnlocked: true });
     setNotice('사막 맵 개방 완료!');
@@ -486,10 +587,12 @@ export function SpinGatherKingGame({ onExit }: SpinGatherKingGameProps) {
   const harvest = useCallback((now: number) => {
     const gathered: Record<ResourceType, number> = { wood: 0, log: 0, stone: 0, iron: 0, ice: 0, crystal: 0, oil: 0, lightning: 0, meat: 0, shell: 0 };
     const struck: ResourceNode[] = [];
-    const baseAngle = now / ROTATION_MS * Math.PI * 2;
+    const bladeStats = BLADE_STATS[saveRef.current.equippedBladeId];
+    const rotationMs = bladeRotationMs(saveRef.current.equippedBladeId);
+    const baseAngle = now / rotationMs * Math.PI * 2;
     const stageScale = Math.max(.05, stageScaleRef.current);
     const bladeInnerRadius = BLADE_INNER_PX / stageScale;
-    const bladeOuterRadius = BLADE_OUTER_PX / stageScale;
+    const bladeOuterRadius = BLADE_OUTER_PX * bladeStats.rangeScale / stageScale;
     const nodeHitRadius = NODE_HIT_PX / stageScale;
     let changed = false;
     const nextNodes = nodesRef.current.map((node) => {
@@ -502,8 +605,8 @@ export function SpinGatherKingGame({ onExit }: SpinGatherKingGameProps) {
         const end = { x: positionRef.current.x + direction.x * bladeOuterRadius, y: positionRef.current.y + direction.y * bladeOuterRadius };
         if (distanceToSegment(node, start, end) > nodeHitRadius) continue;
         const hitKey = `${node.id}:${bladeIndex}`;
-        const previousHit = bladeHitTimesRef.current.get(hitKey) ?? -ROTATION_MS;
-        if (now - previousHit < ROTATION_MS * .72) continue;
+        const previousHit = bladeHitTimesRef.current.get(hitKey) ?? -rotationMs;
+        if (now - previousHit < rotationMs * .72) continue;
         bladeHitTimesRef.current.set(hitKey, now);
         hitCount += 1;
       }
@@ -518,7 +621,7 @@ export function SpinGatherKingGame({ onExit }: SpinGatherKingGameProps) {
           window.setTimeout(() => setElectricChain((current) => current?.id === chainId ? null : current), 260);
         }
       }
-      const nextHp = node.hp - hitCount;
+      const nextHp = node.hp - hitCount * bladeStats.damage;
       if (nextHp > 0) return { ...node, hp: nextHp };
       const baseYield = node.type === 'wood' ? 3 : node.type === 'log' ? 1 : node.type === 'iron' ? 2 : node.type === 'ice' ? 3 : node.type === 'crystal' ? 1 : node.type === 'lightning' ? node.variant === 'lightning-flower' ? 2 : 3 : node.variant === 'pebble' ? 1 : 3;
       gathered[node.type] += baseYield * ((overchargedNodesRef.current[node.id] ?? 0) > Date.now() ? 3 : 1);
@@ -541,39 +644,44 @@ export function SpinGatherKingGame({ onExit }: SpinGatherKingGameProps) {
 
   const updateMobs = useCallback((now: number, delta: number) => {
     let changed = false;
-    const rewards = { meat: 0, shell: 0 };
+    const rewards = { meat: 0, shell: 0, lightning: 0 };
     let meadowBaseDamage = 0;
     let desertBaseDamage = 0;
     let snowBaseDamage = 0;
+    let stormBaseDamage = 0;
     const stageScale = Math.max(.05, stageScaleRef.current);
     const bladeInnerRadius = BLADE_INNER_PX / stageScale;
-    const bladeOuterRadius = BLADE_OUTER_PX / stageScale;
+    const bladeStats = BLADE_STATS[saveRef.current.equippedBladeId];
+    const rotationMs = bladeRotationMs(saveRef.current.equippedBladeId);
+    const bladeOuterRadius = BLADE_OUTER_PX * bladeStats.rangeScale / stageScale;
     const mobHitRadius = MOB_HIT_PX / stageScale;
-    const playerMap: 1 | 2 | 3 = positionRef.current.x < MAP1_WIDTH ? 1 : positionRef.current.x < SNOW_GATE_X ? 2 : 3;
-    const turretInstalled: Record<1 | 2 | 3, boolean> = {
-      1: (saveRef.current.meadowTurretWood ?? 0) >= TURRET_COSTS[1].primary && (saveRef.current.meadowTurretShell ?? 0) >= TURRET_COSTS[1].rare,
-      2: (saveRef.current.desertTurretStone ?? 0) >= TURRET_COSTS[2].primary && (saveRef.current.desertTurretIron ?? 0) >= TURRET_COSTS[2].rare,
-      3: (saveRef.current.snowTurretIce ?? 0) >= TURRET_COSTS[3].primary && (saveRef.current.snowTurretCrystal ?? 0) >= TURRET_COSTS[3].rare,
-    };
-    const turretDamage = new Map<string, number>();
-    ([1, 2, 3] as const).forEach((map) => {
-      if (!turretInstalled[map] || now - lastTurretShotRef.current[map] < TURRET_FIRE_MS / Math.max(1, saveRef.current.turretLevel)) return;
-      const target = mobsRef.current.find((mob) => mob.map === map && mob.active && distance(mob, MAP_BASE_POINTS[map]) <= TURRET_RANGE);
+    const playerMap: 1 | 2 | 3 | 4 = positionRef.current.x < MAP1_WIDTH ? 1 : positionRef.current.x < SNOW_GATE_X ? 2 : positionRef.current.x < STORM_GATE_X ? 3 : 4;
+    const sharedTurretInstalled = isTurretInstalled(saveRef.current);
+    const turretDamage = pendingTurretDamageRef.current;
+    pendingTurretDamageRef.current = new Map<string, number>();
+    ([1, 2, 3, 4] as const).forEach((map) => {
+      if ((map === 2 && !saveRef.current.desertEntered) || (map === 3 && !saveRef.current.snowEntered) || (map === 4 && !saveRef.current.stormEntered)) return;
+      const turretLevel = saveRef.current.turretLevel ?? 1;
+      const turretStats = TURRET_STATS[turretLevel];
+      if (!sharedTurretInstalled || now - lastTurretShotRef.current[map] < turretStats.cooldownMs) return;
+      const target = mobsRef.current
+        .filter((mob) => mob.map === map && mob.active && distance(mob, TURRET_PADS[map]) <= TURRET_RANGE)
+        .sort((a, b) => distance(a, MAP_BASE_POINTS[map]) - distance(b, MAP_BASE_POINTS[map]))[0];
       if (target) {
-        const turretLevel = saveRef.current.turretLevel ?? 1;
         const kind = turretLevel === 1 ? 'shell' : turretLevel === 2 ? 'fire' : 'thunder';
-        // 모든 포탑은 착탄 지점 주변에 동일한 기본 스플래시 피해를 준다.
-        mobsRef.current
-          .filter((mob) => mob.map === map && mob.active && distance(mob, target) <= 620)
-          .forEach((mob) => turretDamage.set(mob.id, 1));
-        // 강화 포탑은 스플래시와 별개로 직격 대상에 속성 추가 피해를 준다.
-        if (turretLevel > 1) turretDamage.set(target.id, 1 + (turretLevel - 1));
         lastTurretShotRef.current[map] = now;
         const id = `${map}-${now}`;
         const impactPoint = { x: target.x, y: target.y };
-        setTurretShots((current) => [...current, { id, from: TURRET_PADS[map], to: impactPoint, kind }]);
+        setTurretShots((current) => [...current, { id, from: TURRET_PADS[map], to: impactPoint, targetId: target.id, kind }]);
         window.setTimeout(() => {
           setTurretShots((current) => current.filter((shot) => shot.id !== id));
+          // 피해는 포탄이 착탄한 순간에 판정한다. 모든 포탑은 스플래시 1,
+          // 강화 포탑은 최초 직격 대상에 속성 추가 피해를 더한다.
+          const damage = pendingTurretDamageRef.current;
+          mobsRef.current
+            .filter((mob) => mob.map === map && mob.active && distance(mob, impactPoint) <= turretStats.splashRadius)
+            .forEach((mob) => damage.set(mob.id, (damage.get(mob.id) ?? 0) + turretStats.splashDamage));
+          if (turretStats.directBonus > 0 && mobsRef.current.some((mob) => mob.id === target.id && mob.active)) damage.set(target.id, (damage.get(target.id) ?? 0) + turretStats.directBonus);
           if (kind !== 'shell') {
             const expiresAt = Date.now() + 3000;
             setTurretFields((current) => [...current, { id, at: impactPoint, kind, expiresAt }]);
@@ -585,16 +693,13 @@ export function SpinGatherKingGame({ onExit }: SpinGatherKingGameProps) {
     const nextMobs = mobsRef.current.map((mob) => {
       if (mob.map === 2 && (!saveRef.current.eastUnlocked || !saveRef.current.desertEntered)) return mob;
       if (mob.map === 3 && (!saveRef.current.snowUnlocked || !saveRef.current.snowEntered)) return mob;
-      if (!mob.active) {
-        if (mob.map !== playerMap) return mob;
-        if (now < mob.respawnAt) return mob;
-        changed = true;
-        return { ...mob, x: mob.spawnX, y: mob.spawnY, hp: mob.maxHp, active: true, respawnAt: 0, lastAttackAt: 0 };
-      }
+      if (mob.map === 4 && (!saveRef.current.stormUnlocked || !saveRef.current.stormEntered)) return mob;
+      if (!mob.active) return mob;
       let hp = mob.hp;
       hp -= turretDamage.get(mob.id) ?? 0;
+      if (hp !== mob.hp) changed = true;
       if (distance(positionRef.current, mob) <= bladeOuterRadius + mobHitRadius) {
-        const baseAngle = now / ROTATION_MS * Math.PI * 2;
+        const baseAngle = now / rotationMs * Math.PI * 2;
         for (let bladeIndex = 0; bladeIndex < saveRef.current.bladeCount; bladeIndex += 1) {
           const angle = baseAngle + bladeIndex * Math.PI * 2 / saveRef.current.bladeCount;
           const direction = { x: Math.sin(angle), y: -Math.cos(angle) };
@@ -602,10 +707,10 @@ export function SpinGatherKingGame({ onExit }: SpinGatherKingGameProps) {
           const end = { x: positionRef.current.x + direction.x * bladeOuterRadius, y: positionRef.current.y + direction.y * bladeOuterRadius };
           if (distanceToSegment(mob, start, end) > mobHitRadius) continue;
           const hitKey = `mob:${mob.id}:${bladeIndex}`;
-          const previousHit = bladeHitTimesRef.current.get(hitKey) ?? -ROTATION_MS;
-          if (now - previousHit < ROTATION_MS * .72) continue;
+          const previousHit = bladeHitTimesRef.current.get(hitKey) ?? -rotationMs;
+          if (now - previousHit < rotationMs * .72) continue;
           bladeHitTimesRef.current.set(hitKey, now);
-          hp -= 1;
+          hp -= bladeStats.damage;
         }
       }
       if (hp <= 0) {
@@ -613,7 +718,13 @@ export function SpinGatherKingGame({ onExit }: SpinGatherKingGameProps) {
         setHitMobId(mob.id); setMobImpact({ id: now, x: mob.x, y: mob.y, defeated: true });
         window.setTimeout(() => setHitMobId((current) => current === mob.id ? null : current), 260);
         window.setTimeout(() => setMobImpact((current) => current?.id === now ? null : current), 720);
-        if (mob.type === 'polar-bear') rewards.meat += 2; else rewards.shell += mob.type === 'spider' ? 2 : 1;
+        if (mob.type === 'frost-bear') rewards.meat += 3;
+        else if (mob.type === 'polar-bear') rewards.meat += 2;
+        else if (mob.type === 'lightning-spirit') rewards.lightning += 3;
+        else if (mob.type === 'storm-spirit') rewards.lightning += 2;
+        else if (mob.type === 'scorpion') rewards.shell += 3;
+        else if (mob.type === 'spider' || mob.type === 'armored-ladybug') rewards.shell += 2;
+        else rewards.shell += 1;
         return { ...mob, hp: 0, active: false, respawnAt: now + 5200 };
       }
       if (hp < mob.hp) {
@@ -621,7 +732,7 @@ export function SpinGatherKingGame({ onExit }: SpinGatherKingGameProps) {
         window.setTimeout(() => setHitMobId((current) => current === mob.id ? null : current), 180);
         window.setTimeout(() => setMobImpact((current) => current?.id === now ? null : current), 480);
       }
-      const mobBaseBuilt = mob.map === 1 ? fenceBuilt : mob.map === 2 ? saveRef.current.eastUnlocked : saveRef.current.snowUnlocked;
+      const mobBaseBuilt = mob.map === 1 ? fenceBuilt : mob.map === 2 ? saveRef.current.eastUnlocked : mob.map === 3 ? saveRef.current.snowUnlocked : saveRef.current.stormUnlocked;
       if (!mobBaseBuilt) return hp === mob.hp ? mob : { ...mob, hp };
       const baseTarget = MAP_BASE_POINTS[mob.map];
       const baseDistance = distance(mob, baseTarget);
@@ -633,12 +744,13 @@ export function SpinGatherKingGame({ onExit }: SpinGatherKingGameProps) {
         const boundaryY = baseTarget.y + directionY * BASE_SAFE_RADIUS;
         const attackInterval = mob.map === playerMap ? 1000 : 5000;
         if (now - mob.lastAttackAt >= attackInterval) {
-          const rawDamage = mob.type === 'polar-bear' ? 10 : mob.type === 'spider' ? 7 : 4;
-          const targetLevel = mob.map === 1 ? saveRef.current.baseLevel : mob.map === 2 ? (saveRef.current.desertBaseLevel ?? 1) : (saveRef.current.snowBaseLevel ?? 1);
+          const rawDamage = mob.type === 'frost-bear' ? 14 : mob.type === 'storm-spirit' ? 12 : mob.type === 'scorpion' ? 10 : mob.type === 'lightning-spirit' ? 9 : mob.type === 'polar-bear' ? 10 : mob.type === 'spider' ? 7 : mob.type === 'armored-ladybug' ? 6 : 4;
+          const targetLevel = mob.map === 1 ? saveRef.current.baseLevel : mob.map === 2 ? (saveRef.current.desertBaseLevel ?? 1) : mob.map === 3 ? (saveRef.current.snowBaseLevel ?? 1) : (saveRef.current.stormBaseLevel ?? 1);
           const damage = Math.max(1, Math.round(rawDamage * (1 - BASE_DEFENSE[targetLevel])));
           if (mob.map === 1) meadowBaseDamage += damage;
           else if (mob.map === 2) desertBaseDamage += damage;
-          else snowBaseDamage += damage;
+          else if (mob.map === 3) snowBaseDamage += damage;
+          else stormBaseDamage += damage;
           changed = true;
           return { ...mob, x: boundaryX, y: boundaryY, hp, lastAttackAt: now };
         }
@@ -648,7 +760,7 @@ export function SpinGatherKingGame({ onExit }: SpinGatherKingGameProps) {
         }
         return mob;
       }
-      const activeSpeed = mob.type === 'polar-bear' ? 24 : mob.type === 'spider' ? 30 : 34;
+      const activeSpeed = mob.type === 'lightning-spirit' ? 50 : mob.type === 'storm-spirit' ? 38 : mob.type === 'frost-bear' ? 32 : mob.type === 'polar-bear' ? 24 : mob.type === 'scorpion' ? 22 : mob.type === 'spider' ? 30 : mob.type === 'armored-ladybug' ? 25 : 34;
       const speed = activeSpeed * (mob.map === playerMap ? 1 : .14);
       const mapMinX = (mob.map - 1) * MAP_WIDTH + 48;
       const mapMaxX = mob.map * MAP_WIDTH - 48;
@@ -658,26 +770,35 @@ export function SpinGatherKingGame({ onExit }: SpinGatherKingGameProps) {
       return { ...mob, x, y, hp };
     });
     if (changed) { mobsRef.current = nextMobs; setMobs(nextMobs); }
-    if (rewards.meat || rewards.shell) patchSave((current) => ({ ...current, resources: { ...current.resources, meat: current.resources.meat + rewards.meat, shell: current.resources.shell + rewards.shell } }));
+    if (rewards.meat || rewards.shell || rewards.lightning) patchSave((current) => ({ ...current, resources: { ...current.resources, meat: current.resources.meat + rewards.meat, shell: current.resources.shell + rewards.shell, lightning: current.resources.lightning + rewards.lightning } }));
     if (rewards.meat) setNotice(`북극곰 퇴치 · 고기 +${rewards.meat}`);
     else if (rewards.shell) setNotice(`갑각 몬스터 퇴치 · 갑각 +${rewards.shell}`);
-    if (meadowBaseDamage || desertBaseDamage || snowBaseDamage) patchSave((current) => ({
-      ...current,
-      baseHp: Math.max(0, current.baseHp - meadowBaseDamage),
-      desertBaseHp: Math.max(0, (current.desertBaseHp ?? BASE_MAX_HP[current.desertBaseLevel ?? 1]) - desertBaseDamage),
-      snowBaseHp: Math.max(0, (current.snowBaseHp ?? BASE_MAX_HP[current.snowBaseLevel ?? 1]) - snowBaseDamage),
-    }));
+    else if (rewards.lightning) setNotice(`폭풍 정령 퇴치 · 번개 +${rewards.lightning}`);
+    if (meadowBaseDamage || desertBaseDamage || snowBaseDamage || stormBaseDamage) {
+      const damages = [meadowBaseDamage, desertBaseDamage, snowBaseDamage, stormBaseDamage] as const;
+      const impacts = damages.flatMap((damage, index) => damage > 0 ? [{ id: `${now}-${index + 1}`, map: (index + 1) as 1 | 2 | 3 | 4, damage }] : []);
+      setBaseImpacts((current) => [...current, ...impacts]);
+      impacts.forEach((impact) => window.setTimeout(() => setBaseImpacts((current) => current.filter((item) => item.id !== impact.id)), 720));
+      patchSave((current) => ({
+        ...current,
+        baseHp: Math.max(0, current.baseHp - meadowBaseDamage),
+        desertBaseHp: Math.max(0, (current.desertBaseHp ?? BASE_MAX_HP[current.desertBaseLevel ?? 1]) - desertBaseDamage),
+        snowBaseHp: Math.max(0, (current.snowBaseHp ?? BASE_MAX_HP[current.snowBaseLevel ?? 1]) - snowBaseDamage),
+        stormBaseHp: Math.max(0, (current.stormBaseHp ?? BASE_MAX_HP[current.stormBaseLevel ?? 1]) - stormBaseDamage),
+      }));
+    }
   }, [fenceBuilt, patchSave]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
-      const playerMap: 1 | 2 | 3 = positionRef.current.x < MAP1_WIDTH ? 1 : positionRef.current.x < SNOW_GATE_X ? 2 : 3;
+      const playerMap: 1 | 2 | 3 | 4 = positionRef.current.x < MAP1_WIDTH ? 1 : positionRef.current.x < SNOW_GATE_X ? 2 : positionRef.current.x < STORM_GATE_X ? 3 : 4;
       if (distance(positionRef.current, TURRET_PADS[playerMap]) >= STATION_INTERACTION_RADIUS) return;
       patchSave((current) => {
         const resources = { ...current.resources };
-        let primary = playerMap === 1 ? current.meadowTurretWood ?? 0 : playerMap === 2 ? current.desertTurretStone ?? 0 : current.snowTurretIce ?? 0;
-        let rare = playerMap === 1 ? current.meadowTurretShell ?? 0 : playerMap === 2 ? current.desertTurretIron ?? 0 : current.snowTurretCrystal ?? 0;
-        if (primary >= 50 && rare >= 20) {
+        const sharedInstalled = isTurretInstalled(current);
+        let primary = playerMap === 1 ? current.meadowTurretWood ?? 0 : playerMap === 2 ? current.desertTurretStone ?? 0 : playerMap === 3 ? current.snowTurretIce ?? 0 : current.stormTurretLightning ?? 0;
+        let rare = playerMap === 1 ? current.meadowTurretShell ?? 0 : playerMap === 2 ? current.desertTurretIron ?? 0 : playerMap === 3 ? current.snowTurretCrystal ?? 0 : current.stormTurretCrystal ?? 0;
+        if (sharedInstalled) {
           const level = current.turretLevel ?? 1;
           const resource = level === 1 ? 'oil' : 'lightning';
           const label = level === 1 ? '기름' : '번개';
@@ -692,16 +813,16 @@ export function SpinGatherKingGame({ onExit }: SpinGatherKingGameProps) {
         let deposited = 0;
         while (deposited < RESOURCE_DEPOSIT_PER_TICK) {
           if (primary < 50) {
-            const amount = playerMap === 1 ? resources.wood : playerMap === 2 ? resources.stone : resources.ice;
+            const amount = playerMap === 1 ? resources.wood : playerMap === 2 ? resources.stone : playerMap === 3 ? resources.ice : resources.lightning;
             if (amount <= 0) {
               showResourceToast(shortageMessage([
-                { label: playerMap === 1 ? '나무' : playerMap === 2 ? '돌' : '얼음', missing: primary < 50 && amount <= 0 },
+                { label: playerMap === 1 ? '나무' : playerMap === 2 ? '돌' : playerMap === 3 ? '얼음' : '번개', missing: primary < 50 && amount <= 0 },
                 { label: playerMap === 1 ? '갑각' : playerMap === 2 ? '철광석' : '수정', missing: rare < 20 && (playerMap === 1 ? resources.shell : playerMap === 2 ? resources.iron : resources.crystal) <= 0 },
               ]));
               break;
             }
             primary += 1; deposited += 1;
-            if (playerMap === 1) resources.wood -= 1; else if (playerMap === 2) resources.stone -= 1; else resources.ice -= 1;
+            if (playerMap === 1) resources.wood -= 1; else if (playerMap === 2) resources.stone -= 1; else if (playerMap === 3) resources.ice -= 1; else resources.lightning -= 1;
           } else if (rare < 20) {
             const amount = playerMap === 1 ? resources.shell : playerMap === 2 ? resources.iron : resources.crystal;
             if ((amount ?? 0) <= 0) { showResourceToast(`${playerMap === 1 ? '갑각' : playerMap === 2 ? '철광석' : '수정'} 부족`); break; }
@@ -712,7 +833,8 @@ export function SpinGatherKingGame({ onExit }: SpinGatherKingGameProps) {
         if (!deposited) return current;
         if (playerMap === 1) return { ...current, resources, meadowTurretWood: primary, meadowTurretShell: rare };
         if (playerMap === 2) return { ...current, resources, desertTurretStone: primary, desertTurretIron: rare };
-        return { ...current, resources, snowTurretIce: primary, snowTurretCrystal: rare };
+        if (playerMap === 3) return { ...current, resources, snowTurretIce: primary, snowTurretCrystal: rare };
+        return { ...current, resources, stormTurretLightning: primary, stormTurretCrystal: rare };
       });
     }, RESOURCE_DEPOSIT_MS);
     return () => window.clearInterval(timer);
@@ -787,7 +909,10 @@ export function SpinGatherKingGame({ onExit }: SpinGatherKingGameProps) {
       const nearBaseRepair = distance(currentPosition, BASE_BUILD_POINT) < BASE_INTERACTION_RADIUS;
       const nearDesertBase = distance(currentPosition, MAP_BASE_POINTS[2]) < BASE_INTERACTION_RADIUS;
       const nearSnowBase = distance(currentPosition, MAP_BASE_POINTS[3]) < BASE_INTERACTION_RADIUS;
+      const nearStormBase = distance(currentPosition, MAP_BASE_POINTS[4]) < BASE_INTERACTION_RADIUS;
       const nearDesertBaseUpgrade = distance(currentPosition, DESERT_BASE_UPGRADE_PAD) < STATION_INTERACTION_RADIUS;
+      const nearSnowBaseUpgrade = distance(currentPosition, mapPoint(BASE_UPGRADE_PAD, 3)) < STATION_INTERACTION_RADIUS;
+      const nearStormBaseUpgrade = distance(currentPosition, mapPoint(BASE_UPGRADE_PAD, 4)) < STATION_INTERACTION_RADIUS;
       patchSave((current) => {
       if (!fenceBuilt && nearFence) {
         if (current.resources.wood <= 0) { showResourceToast('나무 부족'); return current; }
@@ -924,6 +1049,27 @@ export function SpinGatherKingGame({ onExit }: SpinGatherKingGameProps) {
         const complete = wood >= DESERT_BASE_LEVEL_3_COST.wood && iron >= DESERT_BASE_LEVEL_3_COST.iron;
         return { ...current, resources, desertBaseLevel: complete ? 3 : 2, desertBaseHp: complete ? BASE_MAX_HP[3] : current.desertBaseHp, desertBase3Wood: wood, desertBase3Iron: iron };
       }
+      if (current.snowUnlocked && current.snowBaseLevel < 3 && nearSnowBaseUpgrade) {
+        const third = current.snowBaseLevel === 2; const resources = { ...current.resources }; let deposited = 0;
+        let primary = third ? current.snowBase3Ice : current.snowBase2Ice; let rare = third ? current.snowBase3Meat : current.snowBase2Crystal;
+        const primaryCost = third ? SNOW_BASE_LEVEL_3_COST.ice : SNOW_BASE_LEVEL_2_COST.ice; const rareCost = third ? SNOW_BASE_LEVEL_3_COST.meat : SNOW_BASE_LEVEL_2_COST.crystal;
+        while (deposited < RESOURCE_DEPOSIT_PER_TICK) {
+          if (primary < primaryCost && resources.ice > 0) { primary += 1; resources.ice -= 1; deposited += 1; }
+          else if (rare < rareCost && (third ? resources.meat : resources.crystal) > 0) { rare += 1; if (third) resources.meat -= 1; else resources.crystal -= 1; deposited += 1; }
+          else break;
+        }
+        if (!deposited) { showResourceToast(shortageMessage([{ label: '얼음', missing: primary < primaryCost && resources.ice <= 0 }, { label: third ? '고기' : '수정', missing: rare < rareCost && (third ? resources.meat : resources.crystal) <= 0 }])); return current; }
+        const complete = primary >= primaryCost && rare >= rareCost;
+        return third ? { ...current, resources, snowBaseLevel: complete ? 3 : 2, snowBaseHp: complete ? BASE_MAX_HP[3] : current.snowBaseHp, snowBase3Ice: primary, snowBase3Meat: rare } : { ...current, resources, snowBaseLevel: complete ? 2 : 1, snowBaseHp: complete ? BASE_MAX_HP[2] : current.snowBaseHp, snowBase2Ice: primary, snowBase2Crystal: rare };
+      }
+      if (current.stormUnlocked && current.stormBaseLevel < 3 && nearStormBaseUpgrade) {
+        const cost = current.stormBaseLevel === 1 ? STORM_BASE_LEVEL_2_COST.lightning : STORM_BASE_LEVEL_3_COST.lightning;
+        const key = current.stormBaseLevel === 1 ? 'stormBase2Lightning' : 'stormBase3Lightning';
+        const progress = current[key];
+        if (current.resources.lightning <= 0) { showResourceToast('번개 부족'); return current; }
+        const amount = Math.min(RESOURCE_DEPOSIT_PER_TICK, cost - progress, current.resources.lightning); const next = progress + amount; const nextLevel = next >= cost ? (current.stormBaseLevel + 1) as GameSave['stormBaseLevel'] : current.stormBaseLevel;
+        return { ...current, resources: { ...current.resources, lightning: current.resources.lightning - amount }, [key]: next, stormBaseLevel: nextLevel, stormBaseHp: nextLevel > current.stormBaseLevel ? BASE_MAX_HP[nextLevel] : current.stormBaseHp };
+      }
       const baseMaxHp = BASE_MAX_HP[current.baseLevel];
       if (current.baseLevel >= 1 && current.baseHp > 0 && nearBaseRepair && current.baseHp < baseMaxHp && current.resources.wood > 0) {
         return { ...current, resources: { ...current.resources, wood: current.resources.wood - 1 }, baseHp: Math.min(baseMaxHp, current.baseHp + 5) };
@@ -939,6 +1085,8 @@ export function SpinGatherKingGame({ onExit }: SpinGatherKingGameProps) {
       if (current.snowEntered && snowHp > 0 && nearSnowBase && snowHp < BASE_MAX_HP[snowLevel] && current.resources.ice > 0) {
         return { ...current, resources: { ...current.resources, ice: current.resources.ice - 1 }, snowBaseHp: Math.min(BASE_MAX_HP[snowLevel], snowHp + 5) };
       }
+      const stormLevel = current.stormBaseLevel ?? 1; const stormHp = current.stormBaseHp ?? BASE_MAX_HP[stormLevel];
+      if (current.stormUnlocked && stormHp > 0 && nearStormBase && stormHp < BASE_MAX_HP[stormLevel] && current.resources.lightning > 0) return { ...current, resources: { ...current.resources, lightning: current.resources.lightning - 1 }, stormBaseHp: Math.min(BASE_MAX_HP[stormLevel], stormHp + 5) };
       return current;
       });
     }, RESOURCE_DEPOSIT_MS);
@@ -984,6 +1132,8 @@ export function SpinGatherKingGame({ onExit }: SpinGatherKingGameProps) {
   const reset = () => {
     clearSave(); const initial = createInitialSave(); saveRef.current = initial; setSave(initial); setJsonDraft(JSON.stringify(initial, null, 2));
     positionRef.current = { ...PLAYER_START_POINT }; destinationRef.current = null; bladeHitTimesRef.current.clear(); setPosition(positionRef.current); nodesRef.current = cloneNodes(); setNodes(nodesRef.current); mobsRef.current = cloneMobs(); setMobs(mobsRef.current); setNotice('진행을 초기화했습니다.');
+    const initialWaves: Record<1 | 2 | 3 | 4, WaveStatus> = { 1: { wave: 1, phase: 'active', nextAt: 0 }, 2: { wave: 1, phase: 'active', nextAt: 0 }, 3: { wave: 1, phase: 'active', nextAt: 0 }, 4: { wave: 1, phase: 'active', nextAt: 0 } };
+    waveStatusRef.current = initialWaves; setWaveStatuses(initialWaves);
   };
   const restartMeadow = () => {
     patchSave((current) => ({ ...current, baseHp: BASE_MAX_HP[current.baseLevel] }));
@@ -1009,6 +1159,13 @@ export function SpinGatherKingGame({ onExit }: SpinGatherKingGameProps) {
     destinationRef.current = null; setPosition(positionRef.current);
     mobsRef.current = cloneMobs(); setMobs(mobsRef.current);
     setNotice('설원 기지를 복구하고 다시 시작합니다.');
+  };
+  const restartStorm = () => {
+    patchSave((current) => ({ ...current, stormBaseHp: BASE_MAX_HP[current.stormBaseLevel ?? 1] }));
+    positionRef.current = { x: MAP_BASE_POINTS[4].x, y: MAP_BASE_POINTS[4].y - 340 };
+    destinationRef.current = null; setPosition(positionRef.current);
+    mobsRef.current = cloneMobs(); setMobs(mobsRef.current);
+    setNotice('뇌운 기지를 복구하고 다시 시작합니다.');
   };
 
   const woodBundleCount = Math.floor(save.resources.wood / WOOD_PER_BUNDLE);
@@ -1058,14 +1215,47 @@ export function SpinGatherKingGame({ onExit }: SpinGatherKingGameProps) {
     ? { name: '초원 기지', level: save.baseLevel, hp: save.baseHp, defense: BASE_DEFENSE[save.baseLevel] }
     : currentMap === 2
       ? { name: '사막 기지', level: safeDesertBaseLevel, hp: safeDesertBaseHp, defense: BASE_DEFENSE[safeDesertBaseLevel] }
-      : currentMap === 3 && save.snowUnlocked ? { name: '설원 기지', level: safeSnowBaseLevel, hp: safeSnowBaseHp, defense: BASE_DEFENSE[safeSnowBaseLevel] } : null;
+      : currentMap === 3 && save.snowUnlocked ? { name: '설원 기지', level: safeSnowBaseLevel, hp: safeSnowBaseHp, defense: BASE_DEFENSE[safeSnowBaseLevel] }
+        : currentMap === 4 && save.stormUnlocked ? { name: '뇌운 기지', level: safeStormBaseLevel, hp: safeStormBaseHp, defense: BASE_DEFENSE[safeStormBaseLevel] } : null;
   const pedestalEntries = Object.entries(PEDESTALS) as [SpecialBladeId, Position][];
+  const sharedTurretInstalled = isTurretInstalled(save);
+  const visibleMaps = availableMaps(save);
+  const discoveredMaps = new Set<1 | 2 | 3 | 4>([1, ...(save.desertEntered ? [2 as const] : []), ...(save.snowEntered ? [3 as const] : []), ...(save.stormEntered ? [4 as const] : [])]);
+  const isInVision = (point: Position) => (
+    distance(point, position) <= PLAYER_VISION_RANGE
+    || visibleMaps.some((map) => distance(point, MAP_BASE_POINTS[map]) <= BASE_VISION_RANGE)
+    || (sharedTurretInstalled && visibleMaps.some((map) => distance(point, TURRET_PADS[map]) <= TURRET_RANGE))
+  );
+  const targetedMobIds = new Set(turretShots.map((shot) => shot.targetId));
+  const currentTurretStats = TURRET_STATS[save.turretLevel ?? 1];
+  const turretName = currentTurretStats.name;
+  const currentTurretFiring = turretShots.some((shot) => shot.from.x === TURRET_PADS[currentMap].x && shot.from.y === TURRET_PADS[currentMap].y);
+  const currentWave = waveStatuses[currentMap];
+  const currentWaveEnemies = mobs.filter((mob) => mob.map === currentMap && mob.active).length;
+  const nextWaveSeconds = currentWave.phase === 'waiting' ? Math.max(0, Math.ceil((currentWave.nextAt - waveClock) / 1000)) : 0;
+  const threatenedMaps = new Set(mobs.filter((mob) => mob.active && distance(mob, MAP_BASE_POINTS[mob.map]) <= BASE_SAFE_RADIUS + 220).map((mob) => mob.map));
+  const currentUnderAttack = threatenedMaps.has(currentMap);
+  const impactedMaps = new Set(baseImpacts.map((impact) => impact.map));
+  const minimapMaps = [
+    { map: 1 as const, name: '초원', unlocked: true, hp: save.baseHp, maxHp: BASE_MAX_HP[save.baseLevel] },
+    { map: 2 as const, name: '사막', unlocked: save.eastUnlocked, hp: safeDesertBaseHp, maxHp: BASE_MAX_HP[safeDesertBaseLevel] },
+    { map: 3 as const, name: '설원', unlocked: save.snowUnlocked, hp: safeSnowBaseHp, maxHp: BASE_MAX_HP[safeSnowBaseLevel] },
+    { map: 4 as const, name: '뇌운', unlocked: save.stormUnlocked, hp: safeStormBaseHp, maxHp: BASE_MAX_HP[safeStormBaseLevel] },
+  ];
+  const criticalMaps = new Set(minimapMaps.filter(({ hp, maxHp }) => hp > 0 && hp / maxHp <= .3).map(({ map }) => map));
+  const repairResource = currentMap <= 2 ? { label: '나무', count: save.resources.wood } : currentMap === 3 ? { label: '얼음', count: save.resources.ice } : { label: '번개', count: save.resources.lightning };
+  const currentBaseNeedsRepair = currentBase ? currentBase.hp > 0 && currentBase.hp < BASE_MAX_HP[currentBase.level] : false;
 
   return <main className={`sgk-shell blade-${save.equippedBladeId}`}>
     <header className="sgk-header"><button type="button" className="sgk-exit" onClick={onExit ?? (() => history.back())}>← 허브</button><div><span className="sgk-kicker">GAME 07 · MVP</span><h1>빙글 채집왕</h1></div><button type="button" className="sgk-settings-button" onClick={() => { setSettingsOpen(true); setJsonDraft(JSON.stringify(save, null, 2)); }}>MVP 설정</button></header>
-    <section className="sgk-hud"><div className="sgk-objective"><small>현재 목표</small><strong>{objective}</strong></div>{currentBase && <div className="sgk-base-hud"><small>{currentBase.name} · {currentBase.level}단계</small><strong>HP {currentBase.hp}/{BASE_MAX_HP[currentBase.level]}</strong><span>방어력 {Math.round(currentBase.defense * 100)}%</span><em><b style={{ width: `${currentBase.hp / BASE_MAX_HP[currentBase.level] * 100}%` }} /></em></div>}</section>
+    <section className="sgk-hud"><div className="sgk-objective"><small>현재 목표</small><strong>{objective}</strong></div>{currentBase && <div className={`sgk-base-hud ${currentUnderAttack ? 'under-attack' : ''} ${criticalMaps.has(currentMap) ? 'critical' : ''}`}><small>{currentBase.name} · {currentBase.level}단계{criticalMaps.has(currentMap) ? ' · HP 위험!' : currentUnderAttack ? ' · 공격 경보!' : ''}</small><strong>HP {currentBase.hp}/{BASE_MAX_HP[currentBase.level]}</strong><span>방어력 {Math.round(currentBase.defense * 100)}% · {sharedTurretInstalled ? `${turretName} ${currentTurretFiring ? '발사!' : '경계'} · 직격 ${currentTurretStats.splashDamage + currentTurretStats.directBonus} · ${currentTurretStats.cooldownMs / 1000}초` : '포탑 미설치'}</span>{currentBaseNeedsRepair && <i className="base-repair-hint">기지 안에서 {repairResource.label} 자동 수리 · 보유 {repairResource.count} · 1개당 HP 5</i>}<em><b style={{ width: `${currentBase.hp / BASE_MAX_HP[currentBase.level] * 100}%` }} /></em></div>}<div className={`sgk-wave-hud ${currentWave.phase}`}><small>{currentMap}번 맵 방어</small><strong>{currentWave.phase === 'waiting' ? `다음 웨이브 ${nextWaveSeconds}초` : `웨이브 ${currentWave.wave}`}</strong><span>{currentWave.phase === 'waiting' ? '방어 성공' : `남은 적 ${currentWaveEnemies}`}</span></div></section>
     <section className="sgk-world-frame"><div ref={worldRef} className="sgk-world" onPointerDown={moveFromPointer} onPointerMove={pointerMove} onPointerUp={endJoystick} onPointerCancel={endJoystick} role="application" aria-label="빙글 채집왕 플레이 맵">
       <div className="sgk-item-count"><span><i className="wood-chip" />나무 <strong>{save.resources.wood}</strong></span><span><i className="log-chip" />단풍목 <strong>{save.resources.log}</strong></span><span><i className="stone-chip" />돌 <strong>{save.resources.stone}</strong></span><span><i className="shell-chip" />갑각 <strong>{save.resources.shell}</strong></span>{save.eastUnlocked && <span><i className="iron-chip" />철광석 <strong>{save.resources.iron}</strong></span>}{save.snowUnlocked && <><span><i className="ice-chip" />얼음 <strong>{save.resources.ice}</strong></span><span><i className="crystal-chip" />수정 <strong>{save.resources.crystal ?? 0}</strong></span><span><i className="oil-chip" />기름 <strong>{save.resources.oil}</strong></span></>}{save.stormUnlocked && <span><i className="lightning-chip" />번개 <strong>{save.resources.lightning}</strong></span>}</div>
+      <aside className="sgk-minimap" aria-label="전체 맵 현황">
+        <div className="minimap-zones">{minimapMaps.map(({ map, name, unlocked, hp, maxHp }) => <div key={map} className={`minimap-zone map-${map} ${unlocked ? 'unlocked' : 'locked'} ${unlocked && !discoveredMaps.has(map) ? 'unexplored' : ''} ${currentMap === map ? 'current' : ''} ${threatenedMaps.has(map) ? 'under-attack' : ''} ${criticalMaps.has(map) ? 'critical' : ''}`}><strong>{map}. {unlocked && !discoveredMaps.has(map) ? '???' : name} · W{waveStatuses[map].wave}</strong><small>{!unlocked ? '잠김' : !discoveredMaps.has(map) ? '미탐사' : criticalMaps.has(map) ? `긴급 · 기지 ${Math.max(0, Math.round(hp / maxHp * 100))}%` : threatenedMaps.has(map) ? `⚠ 공격 중 · ${Math.max(0, Math.round(hp / maxHp * 100))}%` : `기지 ${Math.max(0, Math.round(hp / maxHp * 100))}%`}</small></div>)}</div>
+        {visibleMaps.map((map) => <i key={`mini-base-${map}`} className={`minimap-base ${sharedTurretInstalled ? 'turret-online' : ''}`} style={{ left: `${MAP_BASE_POINTS[map].x / WORLD_WIDTH * 100}%`, top: `${MAP_BASE_POINTS[map].y / WORLD_HEIGHT * 100}%` }} title={`${map}번 맵 기지`} />)}
+        <b className="minimap-player" style={{ left: `${position.x / WORLD_WIDTH * 100}%`, top: `${position.y / WORLD_HEIGHT * 100}%` }} aria-label={`현재 ${currentMap}번 맵`} />
+      </aside>
       {milestone && <div className="sgk-milestone">{milestone}</div>}
       {stormFlash && <div className="storm-screen-flash" />}
       <div className="sgk-stage" style={{ width: `${WORLD_WIDTH * stageScale}px`, height: `${WORLD_HEIGHT * stageScale}px`, transform: `translate(${-cameraLeft * stageScale * CAMERA_ZOOM}px, ${-cameraTop * stageScale * CAMERA_ZOOM}px) scale(${CAMERA_ZOOM})` }}>
@@ -1073,6 +1263,10 @@ export function SpinGatherKingGame({ onExit }: SpinGatherKingGameProps) {
       <div className="sgk-map2" />
       <div className="sgk-map3" />
       <div className="sgk-map4" />
+      <svg className="vision-fog" viewBox={`0 0 ${WORLD_WIDTH} ${WORLD_HEIGHT}`} preserveAspectRatio="none" aria-hidden="true">
+        <defs><radialGradient id="sgk-soft-vision"><stop offset="0%" stopColor="black" /><stop offset="76%" stopColor="black" /><stop offset="100%" stopColor="white" /></radialGradient><mask id="sgk-vision-mask"><rect width={WORLD_WIDTH} height={WORLD_HEIGHT} fill="white" /><circle cx={position.x} cy={position.y} r={PLAYER_VISION_RANGE} fill="url(#sgk-soft-vision)" />{visibleMaps.map((map) => <circle key={`base-vision-${map}`} cx={MAP_BASE_POINTS[map].x} cy={MAP_BASE_POINTS[map].y} r={BASE_VISION_RANGE} fill="url(#sgk-soft-vision)" />)}{sharedTurretInstalled && visibleMaps.map((map) => <circle key={`turret-vision-${map}`} cx={TURRET_PADS[map].x} cy={TURRET_PADS[map].y} r={TURRET_RANGE} fill="url(#sgk-soft-vision)" />)}</mask></defs>
+        <rect width={WORLD_WIDTH} height={WORLD_HEIGHT} fill="#07101f" fillOpacity=".68" mask="url(#sgk-vision-mask)" />
+      </svg>
       <div className="sgk-zone-label forest">맵 1 · 초원<small>나무 → 나무 · 단풍나무 → 단풍목</small></div>
       <div className="sgk-zone-label desert">맵 2 · 사막<small>선인장 → 나무 · 바위 → 돌 · 철광 바위 → 철광석</small></div>
       <div className="sgk-zone-label snowfield">맵 3 · 설원<small>얼음 기둥 → 얼음 · 수정 기둥 → 수정</small></div>
@@ -1086,38 +1280,55 @@ export function SpinGatherKingGame({ onExit }: SpinGatherKingGameProps) {
       <div className={`sgk-east-lock storm-lock ${save.stormUnlocked ? 'open' : ''}`} style={{ left: `${STORM_GATE_X / WORLD_WIDTH * 100}%` }} />
       <div className={`sgk-east-gate storm-gate ${save.stormUnlocked ? 'open' : ''}`} style={{ left: `${STORM_GATE_X / WORLD_WIDTH * 100}%` }} />
       {save.snowUnlocked && !save.stormUnlocked && <div className="east-unlock-pad storm-unlock-pad" style={{ left: `${STORM_UNLOCK_PAD.x / WORLD_WIDTH * 100}%`, top: `${STORM_UNLOCK_PAD.y / WORLD_HEIGHT * 100}%`, '--build-progress': `${((save.stormUnlockCrystal ?? 0) + (save.stormUnlockOil ?? 0)) / (STORM_UNLOCK_COST.crystal + STORM_UNLOCK_COST.oil) * 100}%` } as React.CSSProperties}><i>ϟ</i><strong>뇌운 고원 개방</strong><small>수정 {save.stormUnlockCrystal ?? 0}/200 · 기름 {save.stormUnlockOil ?? 0}/100</small></div>}
-      <div className={`sgk-safe-zone base-level-${save.baseLevel} ${fenceBuilt ? 'built' : ''}`} aria-label={save.baseLevel === 3 ? '초원 갑각 목책 기지' : `초원 기지 ${save.baseLevel}단계`} style={{ left: `${BASE_BUILD_POINT.x / WORLD_WIDTH * 100}%`, top: `${BASE_BUILD_POINT.y / WORLD_HEIGHT * 100}%`, '--fence-progress': `${save.fenceWood / FENCE_WOOD_COST * 100}%` } as React.CSSProperties}><span className="fence top" /><span className="fence left" /><span className="fence right" /></div>
+      <div className={`sgk-safe-zone base-level-${save.baseLevel} ${fenceBuilt ? 'built' : ''} ${threatenedMaps.has(1) ? 'under-attack' : ''} ${impactedMaps.has(1) ? 'hit' : ''} ${criticalMaps.has(1) ? 'critical' : ''}`} aria-label={save.baseLevel === 3 ? '초원 갑각 목책 기지' : `초원 기지 ${save.baseLevel}단계`} style={{ left: `${BASE_BUILD_POINT.x / WORLD_WIDTH * 100}%`, top: `${BASE_BUILD_POINT.y / WORLD_HEIGHT * 100}%`, '--fence-progress': `${save.fenceWood / FENCE_WOOD_COST * 100}%` } as React.CSSProperties}><span className="fence top" /><span className="fence left" /><span className="fence right" /></div>
       <div className="base-vitals" style={{ left: `${BASE_BUILD_POINT.x / WORLD_WIDTH * 100}%`, top: `${BASE_BUILD_POINT.y / WORLD_HEIGHT * 100}%` }}><strong>초원 기지 {save.baseLevel}단계 · HP {save.baseHp}/{BASE_MAX_HP[save.baseLevel]}</strong><small>방어력 {Math.round(BASE_DEFENSE[save.baseLevel] * 100)}% · 기지 안에서 나무로 자동 수리</small><span><b style={{ width: `${save.baseHp / BASE_MAX_HP[save.baseLevel] * 100}%` }} /></span></div>
-      {save.eastUnlocked && <><div className={`sgk-safe-zone desert-base base-level-${safeDesertBaseLevel} built`} aria-label={`사막 기지 ${safeDesertBaseLevel}단계`} style={{ left: `${MAP_BASE_POINTS[2].x / WORLD_WIDTH * 100}%`, top: `${MAP_BASE_POINTS[2].y / WORLD_HEIGHT * 100}%` }} /><div className="base-vitals desert-vitals" style={{ left: `${MAP_BASE_POINTS[2].x / WORLD_WIDTH * 100}%`, top: `${MAP_BASE_POINTS[2].y / WORLD_HEIGHT * 100}%` }}><strong>사막 기지 {safeDesertBaseLevel}단계 · HP {safeDesertBaseHp}/{BASE_MAX_HP[safeDesertBaseLevel]}</strong><small>방어력 {Math.round(BASE_DEFENSE[safeDesertBaseLevel] * 100)}% · 나무로 자동 수리</small><span><b style={{ width: `${safeDesertBaseHp / BASE_MAX_HP[safeDesertBaseLevel] * 100}%` }} /></span></div></>}
-      {save.snowUnlocked && <div className={`sgk-safe-zone snow-base base-level-${safeSnowBaseLevel} built`} aria-label={`설원 기지 ${safeSnowBaseLevel}단계`} style={{ left: `${MAP_BASE_POINTS[3].x / WORLD_WIDTH * 100}%`, top: `${MAP_BASE_POINTS[3].y / WORLD_HEIGHT * 100}%` }} />}
-      {nodes.map((node) => <div key={node.id} className={`sgk-node ${node.type} ${node.variant ?? ''} ${(node.x >= EAST_GATE_X && !save.eastUnlocked) || (node.x >= SNOW_GATE_X && !save.snowUnlocked) || (node.x >= STORM_GATE_X && !save.stormUnlocked) ? 'map2-locked' : ''} ${(overchargedNodes[node.id] ?? 0) > Date.now() ? 'overcharged' : ''} ${node.active ? '' : 'depleted'} ${hitNodeId === node.id ? 'hit' : ''}`} style={{ left: `${node.x / WORLD_WIDTH * 100}%`, top: `${node.y / WORLD_HEIGHT * 100}%` }}>{node.type === 'wood' ? <><i className="tree-crown" /><i className="tree-trunk" /></> : <i className="rock-body" />}{(overchargedNodes[node.id] ?? 0) > Date.now() && <em className="overcharge-label">과충전 ×3</em>}{node.active && node.hp < node.maxHp && <span className="node-hp"><b style={{ width: `${node.hp / node.maxHp * 100}%` }} /></span>}{!node.active && <span className="respawn-mark">↻</span>}</div>)}
+      {save.eastUnlocked && <><div className={`sgk-safe-zone desert-base base-level-${safeDesertBaseLevel} built ${threatenedMaps.has(2) ? 'under-attack' : ''} ${impactedMaps.has(2) ? 'hit' : ''} ${criticalMaps.has(2) ? 'critical' : ''}`} aria-label={`사막 기지 ${safeDesertBaseLevel}단계`} style={{ left: `${MAP_BASE_POINTS[2].x / WORLD_WIDTH * 100}%`, top: `${MAP_BASE_POINTS[2].y / WORLD_HEIGHT * 100}%` }} /><div className="base-vitals desert-vitals" style={{ left: `${MAP_BASE_POINTS[2].x / WORLD_WIDTH * 100}%`, top: `${MAP_BASE_POINTS[2].y / WORLD_HEIGHT * 100}%` }}><strong>사막 기지 {safeDesertBaseLevel}단계 · HP {safeDesertBaseHp}/{BASE_MAX_HP[safeDesertBaseLevel]}</strong><small>방어력 {Math.round(BASE_DEFENSE[safeDesertBaseLevel] * 100)}% · 나무로 자동 수리</small><span><b style={{ width: `${safeDesertBaseHp / BASE_MAX_HP[safeDesertBaseLevel] * 100}%` }} /></span></div></>}
+      {save.snowUnlocked && <div className={`sgk-safe-zone snow-base base-level-${safeSnowBaseLevel} built ${threatenedMaps.has(3) ? 'under-attack' : ''} ${impactedMaps.has(3) ? 'hit' : ''} ${criticalMaps.has(3) ? 'critical' : ''}`} aria-label={`설원 기지 ${safeSnowBaseLevel}단계`} style={{ left: `${MAP_BASE_POINTS[3].x / WORLD_WIDTH * 100}%`, top: `${MAP_BASE_POINTS[3].y / WORLD_HEIGHT * 100}%` }} />}
+      {save.stormUnlocked && <div className={`sgk-safe-zone storm-base base-level-${safeStormBaseLevel} built ${threatenedMaps.has(4) ? 'under-attack' : ''} ${impactedMaps.has(4) ? 'hit' : ''} ${criticalMaps.has(4) ? 'critical' : ''}`} aria-label={`뇌운 기지 ${safeStormBaseLevel}단계`} style={{ left: `${MAP_BASE_POINTS[4].x / WORLD_WIDTH * 100}%`, top: `${MAP_BASE_POINTS[4].y / WORLD_HEIGHT * 100}%` }} />}
+      {baseImpacts.map((impact) => <div key={impact.id} className="base-damage-pop" style={{ left: `${MAP_BASE_POINTS[impact.map].x / WORLD_WIDTH * 100}%`, top: `${MAP_BASE_POINTS[impact.map].y / WORLD_HEIGHT * 100}%` }}>-{impact.damage}</div>)}
+      <div className="vision-range-ring player-vision" style={{ left: `${position.x / WORLD_WIDTH * 100}%`, top: `${position.y / WORLD_HEIGHT * 100}%`, width: `${PLAYER_VISION_RANGE * 2 * stageScale}px`, height: `${PLAYER_VISION_RANGE * 2 * stageScale}px` }} aria-hidden="true" />
+      {visibleMaps.map((map) => <div key={`base-range-${map}`} className="vision-range-ring base-vision" style={{ left: `${MAP_BASE_POINTS[map].x / WORLD_WIDTH * 100}%`, top: `${MAP_BASE_POINTS[map].y / WORLD_HEIGHT * 100}%`, width: `${BASE_VISION_RANGE * 2 * stageScale}px`, height: `${BASE_VISION_RANGE * 2 * stageScale}px` }} aria-hidden="true" />)}
+      {sharedTurretInstalled && visibleMaps.map((map) => { const pad = TURRET_PADS[map]; const active = distance(position, pad) <= STATION_INTERACTION_RADIUS || turretShots.some((shot) => shot.from.x === pad.x && shot.from.y === pad.y); return <div key={`turret-range-${map}`} className={`turret-range-ring ${active ? 'active' : ''}`} style={{ left: `${pad.x / WORLD_WIDTH * 100}%`, top: `${pad.y / WORLD_HEIGHT * 100}%`, width: `${TURRET_RANGE * 2 * stageScale}px`, height: `${TURRET_RANGE * 2 * stageScale}px` }} aria-hidden="true" />; })}
+      {nodes.map((node) => <div key={node.id} className={`sgk-node ${node.type} ${node.variant ?? ''} ${isInVision(node) ? '' : 'out-of-vision'} ${(node.x >= EAST_GATE_X && !save.eastUnlocked) || (node.x >= SNOW_GATE_X && !save.snowUnlocked) || (node.x >= STORM_GATE_X && !save.stormUnlocked) ? 'map2-locked' : ''} ${(overchargedNodes[node.id] ?? 0) > Date.now() ? 'overcharged' : ''} ${node.active ? '' : 'depleted'} ${hitNodeId === node.id ? 'hit' : ''}`} style={{ left: `${node.x / WORLD_WIDTH * 100}%`, top: `${node.y / WORLD_HEIGHT * 100}%` }}>{node.type === 'wood' ? <><i className="tree-crown" /><i className="tree-trunk" /></> : <i className="rock-body" />}{(overchargedNodes[node.id] ?? 0) > Date.now() && <em className="overcharge-label">과충전 ×3</em>}{node.active && node.hp < node.maxHp && <span className="node-hp"><b style={{ width: `${node.hp / node.maxHp * 100}%` }} /></span>}{!node.active && <span className="respawn-mark">↻</span>}</div>)}
       {lightningEvent && <div className={`lightning-event ${lightningEvent.phase}`} style={{ left: `${lightningEvent.x / WORLD_WIDTH * 100}%`, top: `${lightningEvent.y / WORLD_HEIGHT * 100}%` }}><i /><b>{lightningEvent.phase === 'warning' ? '낙뢰 예고' : lightningEvent.phase === 'thunder' ? '쿠르릉!' : ''}</b></div>}
       {electricChain && <svg key={electricChain.id} className="electric-chain" viewBox={`0 0 ${WORLD_WIDTH} ${WORLD_HEIGHT}`} preserveAspectRatio="none"><line x1={electricChain.from.x} y1={electricChain.from.y} x2={electricChain.to.x} y2={electricChain.to.y} /></svg>}
-      {mobs.map((mob) => (mob.map === 1 || (mob.map === 2 && save.desertEntered) || (mob.map === 3 && save.snowEntered)) && <div key={mob.id} className={`sgk-mob ${mob.type} ${hitMobId === mob.id ? 'hit' : ''} ${mob.active ? '' : 'defeated'}`} style={{ left: `${mob.x / WORLD_WIDTH * 100}%`, top: `${mob.y / WORLD_HEIGHT * 100}%` }}>{mob.active && mob.hp < mob.maxHp && <span className="node-hp"><b style={{ width: `${mob.hp / mob.maxHp * 100}%` }} /></span>}</div>)}
+      {mobs.map((mob) => (mob.map === 1 || (mob.map === 2 && save.desertEntered) || (mob.map === 3 && save.snowEntered) || (mob.map === 4 && save.stormEntered)) && <div key={mob.id} className={`sgk-mob ${mob.type} ${isInVision(mob) ? '' : 'out-of-vision'} ${targetedMobIds.has(mob.id) ? 'turret-targeted' : ''} ${hitMobId === mob.id ? 'hit' : ''} ${mob.active ? '' : 'defeated'}`} style={{ left: `${mob.x / WORLD_WIDTH * 100}%`, top: `${mob.y / WORLD_HEIGHT * 100}%` }}>{mob.active && mob.hp < mob.maxHp && <span className="node-hp"><b style={{ width: `${mob.hp / mob.maxHp * 100}%` }} /></span>}</div>)}
       {mobImpact && <div key={`mob-impact-${mobImpact.id}`} className={`mob-impact ${mobImpact.defeated ? 'finisher' : ''}`} style={{ left: `${mobImpact.x / WORLD_WIDTH * 100}%`, top: `${mobImpact.y / WORLD_HEIGHT * 100}%` }}><i>✦</i><b>{mobImpact.defeated ? '퇴치!' : '-1'}</b></div>}
       {hitBurst && <div key={`blade-burst-${hitBurst.id}`} className={`blade-burst ${hitBurst.blade}`} style={{ left: `${hitBurst.x / WORLD_WIDTH * 100}%`, top: `${hitBurst.y / WORLD_HEIGHT * 100}%` }}>{hitBurst.blade === 'hwarak' ? '❀' : hitBurst.blade === 'noegwang' ? 'ϟ' : hitBurst.blade === 'seolhwa' ? '❄' : hitBurst.blade === 'seongun' ? '✦' : hitBurst.blade === 'moonseong' ? '☾' : '✧'}</div>}
+      {!fenceBuilt && <>
+        <div className="blade-upgrade-pad station-pad compact-station station-preview" style={{ left: `${BLADE_UPGRADE_PAD.x / WORLD_WIDTH * 100}%`, top: `${BLADE_UPGRADE_PAD.y / WORLD_HEIGHT * 100}%`, '--build-progress': '0%' } as React.CSSProperties}><i>✦</i><strong>칼날 추가</strong><small>기지 완성 후 활성</small></div>
+        {(Object.entries(PEDESTALS) as [SpecialBladeId, Position][]).map(([blade, point]) => <div key={`preview-${blade}`} className={`blade-pedestal station-pad compact-station station-preview ${blade}`} style={{ left: `${point.x / WORLD_WIDTH * 100}%`, top: `${point.y / WORLD_HEIGHT * 100}%`, '--build-progress': '0%' } as React.CSSProperties}><i>{BLADE_RECIPES[blade].icon}</i><strong>{BLADE_LABELS[blade]}</strong><small>기지 완성 후 활성</small></div>)}
+        <div className="base-upgrade-pad station-pad station-preview" style={{ left: `${BASE_UPGRADE_PAD.x / WORLD_WIDTH * 100}%`, top: `${BASE_UPGRADE_PAD.y / WORLD_HEIGHT * 100}%`, '--build-progress': '0%' } as React.CSSProperties}><i>⌂</i><strong>기지 업그레이드</strong><small>기지 완성 후 활성</small></div>
+        <div className="turret-pad station-pad station-preview" style={{ left: `${TURRET_PADS[1].x / WORLD_WIDTH * 100}%`, top: `${TURRET_PADS[1].y / WORLD_HEIGHT * 100}%`, '--build-progress': '0%' } as React.CSSProperties}><i>⌁</i><strong>포탑 설치</strong><small>기지 완성 후 활성</small></div>
+      </>}
+      {fenceBuilt && save.bladeCount < 4 && <div className="base-upgrade-pad station-pad station-preview" style={{ left: `${BASE_UPGRADE_PAD.x / WORLD_WIDTH * 100}%`, top: `${BASE_UPGRADE_PAD.y / WORLD_HEIGHT * 100}%`, '--build-progress': '0%' } as React.CSSProperties}><i>⌂</i><strong>기지 업그레이드</strong><small>칼날 4개부터 활성</small></div>}
       {fenceBuilt && save.bladeCount >= 4 && save.baseLevel < 3 && (() => { const upgradingThird = save.baseLevel === 2; const progress = upgradingThird ? (save.base3Wood + save.base3Shell) / (BASE_LEVEL_3_COST.wood + BASE_LEVEL_3_COST.shell) : (save.baseUpgradeWood + save.baseUpgradeShell) / (BASE_LEVEL_2_COST.wood + BASE_LEVEL_2_COST.shell); const nearby = distance(position, BASE_UPGRADE_PAD) < STATION_INTERACTION_RADIUS; return <div className={`base-upgrade-pad station-pad ${nearby ? 'nearby' : ''}`} style={{ left: `${BASE_UPGRADE_PAD.x / WORLD_WIDTH * 100}%`, top: `${BASE_UPGRADE_PAD.y / WORLD_HEIGHT * 100}%`, '--build-progress': `${progress * 100}%` } as React.CSSProperties}><i>⌂</i><strong>{`초원 기지 ${save.baseLevel + 1}단계`}</strong><small>{upgradingThird ? `나무 ${save.base3Wood}/${BASE_LEVEL_3_COST.wood} · 갑각 ${save.base3Shell}/${BASE_LEVEL_3_COST.shell}` : `나무 ${save.baseUpgradeWood}/${BASE_LEVEL_2_COST.wood} · 갑각 ${save.baseUpgradeShell}/${BASE_LEVEL_2_COST.shell}`}</small></div>; })()}
       {fenceBuilt && save.baseLevel >= 3 && <div className="base-upgrade-pad station-pad compact-station complete" style={{ left: `${BASE_UPGRADE_PAD.x / WORLD_WIDTH * 100}%`, top: `${BASE_UPGRADE_PAD.y / WORLD_HEIGHT * 100}%`, '--build-progress': '100%' } as React.CSSProperties}><i>⌂</i><strong>초원 기지 3단계</strong><small>최종 강화 완료</small></div>}
       {save.eastUnlocked && safeDesertBaseLevel < 3 && (() => { const third = safeDesertBaseLevel === 2; const wood2 = save.desertBase2Wood ?? 0; const stone2 = save.desertBase2Stone ?? 0; const wood3 = save.desertBase3Wood ?? 0; const iron3 = save.desertBase3Iron ?? 0; const total = third ? DESERT_BASE_LEVEL_3_COST.wood + DESERT_BASE_LEVEL_3_COST.iron : DESERT_BASE_LEVEL_2_COST.wood + DESERT_BASE_LEVEL_2_COST.stone; const progress = third ? wood3 + iron3 : wood2 + stone2; const nearby = distance(position, DESERT_BASE_UPGRADE_PAD) < STATION_INTERACTION_RADIUS; return <div className={`base-upgrade-pad desert-upgrade station-pad ${nearby ? 'nearby' : ''}`} style={{ left: `${DESERT_BASE_UPGRADE_PAD.x / WORLD_WIDTH * 100}%`, top: `${DESERT_BASE_UPGRADE_PAD.y / WORLD_HEIGHT * 100}%`, '--build-progress': `${progress / total * 100}%` } as React.CSSProperties}><i>⌂</i><strong>{`사막 기지 ${safeDesertBaseLevel + 1}단계`}</strong><small>{third ? `나무 ${wood3}/80 · 철광석 ${iron3}/30` : `나무 ${wood2}/40 · 돌 ${stone2}/20`}</small></div>; })()}
-      {([1, 2, 3] as const).map((map) => {
-        if ((map === 2 && !save.eastUnlocked) || (map === 3 && !save.snowUnlocked) || (map === 1 && !fenceBuilt)) return null;
-        const primary = map === 1 ? save.meadowTurretWood ?? 0 : map === 2 ? save.desertTurretStone ?? 0 : save.snowTurretIce ?? 0;
-        const rare = map === 1 ? save.meadowTurretShell ?? 0 : map === 2 ? save.desertTurretIron ?? 0 : save.snowTurretCrystal ?? 0;
-        const installed = primary >= 50 && rare >= 20;
-        const labels = map === 1 ? ['나무', '갑각'] : map === 2 ? ['돌', '철광석'] : ['얼음', '수정'];
+      {save.eastUnlocked && safeDesertBaseLevel >= 3 && <div className="base-upgrade-pad desert-upgrade station-pad complete" style={{ left: `${DESERT_BASE_UPGRADE_PAD.x / WORLD_WIDTH * 100}%`, top: `${DESERT_BASE_UPGRADE_PAD.y / WORLD_HEIGHT * 100}%`, '--build-progress': '100%' } as React.CSSProperties}><i>⌂</i><strong>사막 기지 3단계</strong><small>최종 강화 완료</small></div>}
+      {save.snowUnlocked && safeSnowBaseLevel < 3 && (() => { const third = safeSnowBaseLevel === 2; const primary = third ? save.snowBase3Ice : save.snowBase2Ice; const rare = third ? save.snowBase3Meat : save.snowBase2Crystal; const primaryCost = third ? 80 : 40; const rareCost = third ? 30 : 20; const point = mapPoint(BASE_UPGRADE_PAD, 3); return <div className="base-upgrade-pad station-pad" style={{ left: `${point.x / WORLD_WIDTH * 100}%`, top: `${point.y / WORLD_HEIGHT * 100}%`, '--build-progress': `${(primary + rare) / (primaryCost + rareCost) * 100}%` } as React.CSSProperties}><i>⌂</i><strong>설원 기지 {safeSnowBaseLevel + 1}단계</strong><small>얼음 {primary}/{primaryCost} · {third ? '고기' : '수정'} {rare}/{rareCost}</small></div>; })()}
+      {save.snowUnlocked && safeSnowBaseLevel >= 3 && <div className="base-upgrade-pad station-pad complete" style={{ left: `${mapPoint(BASE_UPGRADE_PAD, 3).x / WORLD_WIDTH * 100}%`, top: `${BASE_UPGRADE_PAD.y / WORLD_HEIGHT * 100}%`, '--build-progress': '100%' } as React.CSSProperties}><i>⌂</i><strong>설원 기지 3단계</strong><small>최종 강화 완료</small></div>}
+      {save.stormUnlocked && safeStormBaseLevel < 3 && (() => { const third = safeStormBaseLevel === 2; const progress = third ? save.stormBase3Lightning : save.stormBase2Lightning; const cost = third ? 120 : 60; const point = mapPoint(BASE_UPGRADE_PAD, 4); return <div className="base-upgrade-pad station-pad" style={{ left: `${point.x / WORLD_WIDTH * 100}%`, top: `${point.y / WORLD_HEIGHT * 100}%`, '--build-progress': `${progress / cost * 100}%` } as React.CSSProperties}><i>⌂</i><strong>뇌운 기지 {safeStormBaseLevel + 1}단계</strong><small>번개 {progress}/{cost}</small></div>; })()}
+      {save.stormUnlocked && safeStormBaseLevel >= 3 && <div className="base-upgrade-pad station-pad complete" style={{ left: `${mapPoint(BASE_UPGRADE_PAD, 4).x / WORLD_WIDTH * 100}%`, top: `${BASE_UPGRADE_PAD.y / WORLD_HEIGHT * 100}%`, '--build-progress': '100%' } as React.CSSProperties}><i>⌂</i><strong>뇌운 기지 3단계</strong><small>최종 강화 완료</small></div>}
+      {([1, 2, 3, 4] as const).map((map) => {
+        if ((map === 2 && !save.eastUnlocked) || (map === 3 && !save.snowUnlocked) || (map === 4 && !save.stormUnlocked) || (map === 1 && !fenceBuilt)) return null;
+        const primary = map === 1 ? save.meadowTurretWood ?? 0 : map === 2 ? save.desertTurretStone ?? 0 : map === 3 ? save.snowTurretIce ?? 0 : save.stormTurretLightning ?? 0;
+        const rare = map === 1 ? save.meadowTurretShell ?? 0 : map === 2 ? save.desertTurretIron ?? 0 : map === 3 ? save.snowTurretCrystal ?? 0 : save.stormTurretCrystal ?? 0;
+        const installed = isTurretInstalled(save);
+        const labels = map === 1 ? ['나무', '갑각'] : map === 2 ? ['돌', '철광석'] : map === 3 ? ['얼음', '수정'] : ['번개', '수정'];
         const nearby = distance(position, TURRET_PADS[map]) < STATION_INTERACTION_RADIUS;
-        if (installed) { const level = save.turretLevel ?? 1; const progress = level === 1 ? save.turretOilProgress ?? 0 : save.turretLightningProgress ?? 0; const material = level === 1 ? '기름' : '번개'; const name = level === 1 ? '기본 포탑' : level === 2 ? '화염탑' : '뇌광탑'; return <div key={`turret-${map}`} className={`sgk-turret turret-level-${level} ${nearby ? 'nearby' : ''}`} aria-label={`${map}번 맵 ${name}`} style={{ left: `${TURRET_PADS[map].x / WORLD_WIDTH * 100}%`, top: `${TURRET_PADS[map].y / WORLD_HEIGHT * 100}%`, '--build-progress': level >= 3 ? '100%' : `${progress / 30 * 100}%` } as React.CSSProperties}><i /><strong>{name}</strong><small>{level >= 3 ? '최종 강화 · 전체 맵 공통' : `${material} ${progress}/30 · 전체 맵 공통`}</small></div>; }
+        if (installed) { const level = save.turretLevel ?? 1; const stats = TURRET_STATS[level]; const progress = level === 1 ? save.turretOilProgress ?? 0 : save.turretLightningProgress ?? 0; const material = level === 1 ? '기름' : '번개'; const name = stats.name; return <div key={`turret-${map}`} className={`sgk-turret turret-level-${level} ${nearby ? 'nearby' : ''}`} aria-label={`${map}번 맵 ${name} 직격 ${stats.splashDamage + stats.directBonus}, 스플래시 반경 ${stats.splashRadius}`} style={{ left: `${TURRET_PADS[map].x / WORLD_WIDTH * 100}%`, top: `${TURRET_PADS[map].y / WORLD_HEIGHT * 100}%`, '--build-progress': level >= 3 ? '100%' : `${progress / 30 * 100}%` } as React.CSSProperties}><i /><strong>{name}</strong><small>{level >= 3 ? `직격 ${stats.splashDamage + stats.directBonus} · ${stats.cooldownMs / 1000}초 · 최종` : `${material} ${progress}/30 · 직격 ${stats.splashDamage + stats.directBonus} · ${stats.cooldownMs / 1000}초`}</small></div>; }
         return <div key={`turret-${map}`} className={`turret-pad station-pad ${nearby ? 'nearby' : ''}`} style={{ left: `${TURRET_PADS[map].x / WORLD_WIDTH * 100}%`, top: `${TURRET_PADS[map].y / WORLD_HEIGHT * 100}%`, '--build-progress': `${(primary + rare) / 70 * 100}%` } as React.CSSProperties}><i>⌁</i><strong>포탑 설치</strong><small>{`${labels[0]} ${primary}/50 · ${labels[1]} ${rare}/20`}</small></div>;
       })}
       {fenceBuilt && availableMaps(save).map((map) => { const point = mapPoint(BLADE_UPGRADE_PAD, map); const cost = save.bladeCount < 5 ? BLADE_COSTS[save.bladeCount] : null; const totalProgress = cost ? save.bladeSlotProgress + save.bladeShellProgress : 1; const totalCost = cost ? cost.wood + cost.shell : 1; const nearby = distance(position, point) < STATION_INTERACTION_RADIUS; return <div key={`blade-count-${map}`} className={`blade-upgrade-pad station-pad compact-station ${nearby ? 'nearby' : ''} ${save.bladeCount >= 5 ? 'complete' : ''}`} style={{ left: `${point.x / WORLD_WIDTH * 100}%`, top: `${point.y / WORLD_HEIGHT * 100}%`, '--build-progress': save.bladeCount >= 5 ? '100%' : `${totalProgress / totalCost * 100}%` } as React.CSSProperties}><i>✦</i><strong>칼날 {save.bladeCount}개</strong><small>{!cost ? '최대 확장' : cost.shell > 0 ? `나무 ${save.bladeSlotProgress}/${cost.wood} · 갑각 ${save.bladeShellProgress}/${cost.shell}` : `나무 ${save.bladeSlotProgress}/${cost.wood}`}</small></div>; })}
-      {fenceBuilt && availableMaps(save).flatMap((map) => pedestalEntries.map(([blade, sourcePoint]) => { const recipe = BLADE_RECIPES[blade]; const point = mapPoint(sourcePoint, map); const unlocked = save.unlockedBladeIds.includes(blade); const equipped = save.equippedBladeId === blade; const progress = Number(save[recipe.progress]) || 0; const changing = equipTarget === blade; const ringProgress = unlocked ? changing ? equipProgress * 100 : equipped ? 100 : 0 : progress / recipe.cost * 100; const nearby = distance(position, point) < STATION_INTERACTION_RADIUS; const remaining = Math.max(0, 3 - equipProgress * 3).toFixed(1); return <div key={`${blade}-${map}`} className={`blade-pedestal station-pad compact-station ${blade} ${nearby ? 'nearby interacting' : ''} ${unlocked ? 'unlocked' : 'locked'} ${equipped ? 'equipped' : ''}`} style={{ left: `${point.x / WORLD_WIDTH * 100}%`, top: `${point.y / WORLD_HEIGHT * 100}%`, '--build-progress': `${ringProgress}%` } as React.CSSProperties}><i>{recipe.icon}</i><strong>{BLADE_LABELS[blade]}</strong><small>{equipped ? '현재 장착' : unlocked ? changing ? `변경 중 · ${remaining}초` : '3초 유지하여 변경' : `${recipe.label} ${progress}/${recipe.cost}`}</small></div>; }))}
+      {fenceBuilt && availableMaps(save).flatMap((map) => pedestalEntries.map(([blade, sourcePoint]) => { const recipe = BLADE_RECIPES[blade]; const stats = BLADE_STATS[blade]; const point = mapPoint(sourcePoint, map); const unlocked = save.unlockedBladeIds.includes(blade); const equipped = save.equippedBladeId === blade; const progress = Number(save[recipe.progress]) || 0; const changing = equipTarget === blade; const ringProgress = unlocked ? changing ? equipProgress * 100 : equipped ? 100 : 0 : progress / recipe.cost * 100; const nearby = distance(position, point) < STATION_INTERACTION_RADIUS; const remaining = Math.max(0, 3 - equipProgress * 3).toFixed(1); const spec = `파괴 ${stats.damage} · ${stats.rotationsPerSecond}회/s · 범위 ${Math.round(stats.rangeScale * 100)}%`; return <div key={`${blade}-${map}`} className={`blade-pedestal station-pad compact-station ${blade} ${nearby ? 'nearby interacting' : ''} ${unlocked ? 'unlocked' : 'locked'} ${equipped ? 'equipped' : ''}`} aria-label={`${BLADE_LABELS[blade]} ${spec}`} style={{ left: `${point.x / WORLD_WIDTH * 100}%`, top: `${point.y / WORLD_HEIGHT * 100}%`, '--build-progress': `${ringProgress}%` } as React.CSSProperties}><i>{recipe.icon}</i><strong>{BLADE_LABELS[blade]}</strong><small>{equipped ? `장착 · ${spec}` : unlocked ? changing ? `변경 중 · ${remaining}초` : `${spec} · 3초 변경` : `${recipe.label} ${progress}/${recipe.cost}`}</small></div>; }))}
       {activeDeposit && <div className={`resource-stream ${activeDeposit.type}`} style={{ left: `${activeDeposit.point.x / WORLD_WIDTH * 100}%`, top: `${activeDeposit.point.y / WORLD_HEIGHT * 100}%` }}><i /><i /><i /></div>}
       {turretShots.map((shot) => <div key={shot.id} className={`turret-shot ${shot.kind}`} style={{ left: `${shot.from.x / WORLD_WIDTH * 100}%`, top: `${shot.from.y / WORLD_HEIGHT * 100}%`, '--shot-x': `${(shot.to.x - shot.from.x) * stageScale}px`, '--shot-y': `${(shot.to.y - shot.from.y) * stageScale}px` } as React.CSSProperties}><i /></div>)}
       {turretFields.map((field) => <div key={`${field.id}-field`} className={`turret-field ${field.kind}`} style={{ left: `${field.at.x / WORLD_WIDTH * 100}%`, top: `${field.at.y / WORLD_HEIGHT * 100}%` }} aria-hidden="true"><i /><i /><i /></div>)}
-      <div className="sgk-player" data-blade-count={save.bladeCount} style={{ left: `${position.x / WORLD_WIDTH * 100}%`, top: `${position.y / WORLD_HEIGHT * 100}%` }}><div className="blade-orbit">{Array.from({ length: save.bladeCount }, (_, index) => <span key={index} style={{ '--angle': `${index * 360 / save.bladeCount}deg` } as React.CSSProperties}><i /></span>)}</div><div className="player-shadow" /><div className="player-body"><i /><b>채집왕</b></div>{woodBundleCount > 0 && <div className="carried-bundles" aria-label={`목재 ${WOOD_PER_BUNDLE}개 묶음 ${woodBundleCount}개`}>{Array.from({ length: Math.min(woodBundleCount, 3) }, (_, index) => <i key={index} />)}{woodBundleCount > 3 && <b>×{woodBundleCount}</b>}</div>}{looseWoodCount > 0 && <div className="carried-wood" aria-label={`낱개 목재 ${looseWoodCount}개`}>{Array.from({ length: looseWoodCount }, (_, index) => <i key={index} />)}</div>}</div>
+      <div className="sgk-player" data-blade-count={save.bladeCount} style={{ left: `${position.x / WORLD_WIDTH * 100}%`, top: `${position.y / WORLD_HEIGHT * 100}%`, '--blade-rotation-ms': `${bladeRotationMs(save.equippedBladeId)}ms`, '--blade-orbit-radius': `${68 * BLADE_STATS[save.equippedBladeId].rangeScale}px` } as React.CSSProperties}><div className="blade-orbit">{Array.from({ length: save.bladeCount }, (_, index) => <span key={index} style={{ '--angle': `${index * 360 / save.bladeCount}deg` } as React.CSSProperties}><i /></span>)}</div><div className="player-shadow" /><div className="player-body"><i /><b>채집왕</b></div>{woodBundleCount > 0 && <div className="carried-bundles" aria-label={`목재 ${WOOD_PER_BUNDLE}개 묶음 ${woodBundleCount}개`}>{Array.from({ length: Math.min(woodBundleCount, 3) }, (_, index) => <i key={index} />)}{woodBundleCount > 3 && <b>×{woodBundleCount}</b>}</div>}{looseWoodCount > 0 && <div className="carried-wood" aria-label={`낱개 목재 ${looseWoodCount}개`}>{Array.from({ length: looseWoodCount }, (_, index) => <i key={index} />)}</div>}</div>
       </div>
       <div className="joystick-hint">이곳을 드래그</div>{joystickVisual.active && <div className="floating-stick" style={{ left: joystickVisual.x, top: joystickVisual.y }}><i style={{ transform: `translate(${joystickVisual.dx}px, ${joystickVisual.dy}px)` }} /></div>}
-      {baseDefeated && <div className="sgk-game-over"><div><span>기지 파괴</span><h2>{currentMap === 3 ? '설원 방어 실패' : currentMap === 2 ? '사막 방어 실패' : '초원 방어 실패'}</h2><p>현재 맵의 기지 HP가 모두 소진되었습니다.</p><button type="button" onClick={currentMap === 3 ? restartSnow : currentMap === 2 ? restartDesert : restartMeadow}>{currentMap === 3 ? '설원 다시 시작' : currentMap === 2 ? '사막 다시 시작' : '초원 다시 시작'}</button></div></div>}
+      {baseDefeated && <div className="sgk-game-over"><div><span>기지 파괴</span><h2>{currentMap === 4 ? '뇌운 방어 실패' : currentMap === 3 ? '설원 방어 실패' : currentMap === 2 ? '사막 방어 실패' : '초원 방어 실패'}</h2><p>현재 맵의 기지 HP가 모두 소진되었습니다.</p><button type="button" onClick={currentMap === 4 ? restartStorm : currentMap === 3 ? restartSnow : currentMap === 2 ? restartDesert : restartMeadow}>{currentMap === 4 ? '뇌운 다시 시작' : currentMap === 3 ? '설원 다시 시작' : currentMap === 2 ? '사막 다시 시작' : '초원 다시 시작'}</button></div></div>}
     </div></section>
     {resourceToast && <div className="sgk-resource-toast" role="status">{resourceToast}</div>}
     <footer className="sgk-footer"><p>{notice}</p><span>왼쪽 아래 드래그 또는 화면 클릭 이동 · WASD·방향키 지원</span></footer>
