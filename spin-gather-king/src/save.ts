@@ -33,12 +33,23 @@ export interface GameSave {
   snowUnlockIron: number;
   snowBaseLevel: 1 | 2 | 3;
   snowBaseHp: number;
+  snowBase2Ice: number;
+  snowBase2Crystal: number;
+  snowBase3Ice: number;
+  snowBase3Meat: number;
+  stormBaseLevel: 1 | 2 | 3;
+  stormBaseHp: number;
+  stormEntered: boolean;
+  stormBase2Lightning: number;
+  stormBase3Lightning: number;
   meadowTurretWood: number;
   meadowTurretShell: number;
   desertTurretStone: number;
   desertTurretIron: number;
   snowTurretIce: number;
   snowTurretCrystal: number;
+  stormTurretLightning: number;
+  stormTurretCrystal: number;
   turretLevel: 1 | 2 | 3;
   turretOilProgress: number;
   turretLightningProgress: number;
@@ -94,12 +105,23 @@ export const createInitialSave = (): GameSave => ({
   snowUnlockIron: 0,
   snowBaseLevel: 1,
   snowBaseHp: 200,
+  snowBase2Ice: 0,
+  snowBase2Crystal: 0,
+  snowBase3Ice: 0,
+  snowBase3Meat: 0,
+  stormBaseLevel: 1,
+  stormBaseHp: 200,
+  stormEntered: false,
+  stormBase2Lightning: 0,
+  stormBase3Lightning: 0,
   meadowTurretWood: 0,
   meadowTurretShell: 0,
   desertTurretStone: 0,
   desertTurretIron: 0,
   snowTurretIce: 0,
   snowTurretCrystal: 0,
+  stormTurretLightning: 0,
+  stormTurretCrystal: 0,
   turretLevel: 1,
   turretOilProgress: 0,
   turretLightningProgress: 0,
@@ -151,6 +173,8 @@ export const normalizeSave = (value: unknown): GameSave => {
   const desertBaseMaxHp = desertBaseLevel === 3 ? 500 : desertBaseLevel === 2 ? 350 : 200;
   const snowBaseLevel = Math.max(1, asCount(source.snowBaseLevel, 3)) as GameSave['snowBaseLevel'];
   const snowBaseMaxHp = snowBaseLevel === 3 ? 500 : snowBaseLevel === 2 ? 350 : 200;
+  const stormBaseLevel = Math.max(1, asCount(source.stormBaseLevel, 3)) as GameSave['stormBaseLevel'];
+  const stormBaseMaxHp = stormBaseLevel === 3 ? 500 : stormBaseLevel === 2 ? 350 : 200;
   const unlocked: BladeId[] = Array.isArray(source.unlockedBladeIds)
     ? source.unlockedBladeIds.filter(isBladeId)
     : ['basic'];
@@ -200,12 +224,23 @@ export const normalizeSave = (value: unknown): GameSave => {
     snowUnlockIron: asCount(source.snowUnlockIron, 100),
     snowBaseLevel,
     snowBaseHp: source.snowBaseHp === undefined ? snowBaseMaxHp : asCount(source.snowBaseHp, snowBaseMaxHp),
+    snowBase2Ice: asCount(source.snowBase2Ice, 40),
+    snowBase2Crystal: asCount(source.snowBase2Crystal, 20),
+    snowBase3Ice: asCount(source.snowBase3Ice, 80),
+    snowBase3Meat: asCount(source.snowBase3Meat, 30),
+    stormBaseLevel,
+    stormBaseHp: source.stormBaseHp === undefined ? stormBaseMaxHp : asCount(source.stormBaseHp, stormBaseMaxHp),
+    stormEntered: source.stormEntered === true,
+    stormBase2Lightning: asCount(source.stormBase2Lightning, 60),
+    stormBase3Lightning: asCount(source.stormBase3Lightning, 120),
     meadowTurretWood: asCount(source.meadowTurretWood, 50),
     meadowTurretShell: asCount(source.meadowTurretShell, 20),
     desertTurretStone: asCount(source.desertTurretStone, 50),
     desertTurretIron: asCount(source.desertTurretIron, 20),
     snowTurretIce: asCount(source.snowTurretIce, 50),
     snowTurretCrystal: asCount(source.snowTurretCrystal, 20),
+    stormTurretLightning: asCount(source.stormTurretLightning, 50),
+    stormTurretCrystal: asCount(source.stormTurretCrystal, 20),
     turretLevel: Math.max(1, asCount(source.turretLevel, 3)) as GameSave['turretLevel'],
     turretOilProgress: asCount(source.turretOilProgress, 30),
     turretLightningProgress: asCount(source.turretLightningProgress, 30),
