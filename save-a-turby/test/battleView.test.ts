@@ -203,7 +203,7 @@ test('보스 표시 계약: 시트 키 연결, 구역 상태 교체(같은 객�
   const scene = readFileSync(root + 'src/scenes/BattleScene.ts', 'utf8');
   const reg = readFileSync(root + 'src/assets/registry.ts', 'utf8');
   assert.match(reg, /waterlogged_sewn_doll: 'waterlogged-sewn-doll-idle'/);
-  assert.match(scene, /BOSS_SHEETS: Record<string, \{ idle: string; exposed: string \}>/);
+  assert.match(scene, /BOSS_SHEETS: Record<string, \{ idle: string; exposed: string; labelBelow\?: number \}>/);
   assert.match(scene, /sprite\.play\(\{ key: this\.sheetAnim\(want\), startFrame: frame \}\)/); // 같은 프레임 인덱스로 교체
   assert.match(scene, /다음 물살: \$\{east \? '→' : '←'\}/); // 방향을 글자(화살표)로도 표시 — 색에만 의존하지 않는다
   assert.match(scene, /this\.hintsSeen = new Set\(shown\.map/); // 복원 때 이미 낸 안내는 반복하지 않는다

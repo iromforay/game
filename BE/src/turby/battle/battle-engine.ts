@@ -257,6 +257,7 @@ function addDefinitionUnits(state: BattleState, def: BattleDefinition) {
       protectMode: d.protectMode ?? 'reject',
       ...(d.maxHitPercent !== undefined ? { maxHitPercent: d.maxHitPercent } : {}),
       ...(d.flat ? { flat: true } : {}),
+      ...(d.anchored ? { anchored: true } : {}),
       ...(d.flee ? { flee: { ...d.flee }, reversed: false } : {}),
       ...(d.carrierOf ? { carrierOf: d.carrierOf } : {}),
       ...(d.thread ? { thread: { order: d.thread.order } } : {}),
@@ -648,6 +649,11 @@ function runOneEnemy(state: BattleState, wild: BattleUnit, ctx: Ctx): boolean {
       strike(state, wild, target, ctx);
       if (state.phase !== 'wild_turn') return false;
       continue;
+    }
+    // 제자리 적: 인접한 아군이 없으면 남은 행동력을 쓰고 차례를 마친다
+    if (wild.anchored) {
+      wild.ap = 0;
+      break;
     }
     // 가장 가까운 아군 쪽으로 1칸(가로 우선). 막혀 있으면 이동 없이 AP만 소모한다(로컬 규칙과 동일)
     const dCol = Math.sign(target.col - wild.col);

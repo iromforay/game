@@ -87,6 +87,7 @@ export interface StagePointArt {
   width: number;
   height: number;
   pivot?: [number, number]; // 이미지 안의 기준점(0~1), 지점 좌표에 놓인다. 생략 시 (0.5, 0.7)
+  glow?: boolean; // 임무 대상 외곽광(크림색) — 배경 소품과 구별해야 하는 대상만(10-16 C3-6)
 }
 export interface StageOverlayData {
   id: string;
@@ -144,6 +145,7 @@ export function validateRender(data: StageStoryData, stageCode: string): void {
       const w = p.art.width, h = p.art.height;
       if (!num(w) || !num(h) || w <= 0 || h <= 0) bad.push(`storyPoints(${p.id}).art: width·height는 0보다 큰 숫자`);
       pivot(p.art.pivot, `storyPoints(${p.id}).art.pivot`);
+      if (p.art.glow !== undefined && typeof p.art.glow !== 'boolean') bad.push(`storyPoints(${p.id}).art.glow: true/false`);
     }
   }
   for (const g of data.layout?.gates ?? []) {

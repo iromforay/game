@@ -42,7 +42,7 @@ export interface GatePlan {
 export interface ActorPlan {
   id: string;
   assetKey: string | null; // 이 키의 텍스처가 있으면 그 그림, 없으면 null(임시 도형)
-  art: { width: number; height: number; pivot: [number, number] } | null; // 서버가 정한 표시 크기(없으면 원본 크기)
+  art: { width: number; height: number; pivot: [number, number]; glow?: boolean } | null; // 서버가 정한 표시 크기(없으면 원본 크기). glow = 임무 대상 외곽광
   marker: boolean; // 임시 표식(고리·동심원·라벨)을 그린다 — 'final' 모드에서 그림(또는 대신하는 월드 그림)이 있으면 false
 }
 
@@ -90,7 +90,7 @@ export function planStageRender(view: StageView | null, has: HasTexture, fallbac
   const actor = (o: StageObject | StagePointView): ActorPlan => {
     const art = has(o.assetKey) ? o.assetKey : null;
     const pa = 'art' in o ? o.art : undefined;
-    return { id: o.id, assetKey: art, art: pa ? { width: pa.width, height: pa.height, pivot: pa.pivot ?? [0.5, 0.7] } : null, marker: !(markerMode === 'final' && (art || covered.has(o.id))) };
+    return { id: o.id, assetKey: art, art: pa ? { width: pa.width, height: pa.height, pivot: pa.pivot ?? [0.5, 0.7], ...('glow' in pa && pa.glow ? { glow: true } : {}) } : null, marker: !(markerMode === 'final' && (art || covered.has(o.id))) };
   };
   return { markerMode, background, overlays, gates, objects: (view?.objects ?? []).map(actor), points: (view?.points ?? []).map(actor), bounds };
 }

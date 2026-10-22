@@ -42,22 +42,24 @@ const wait = (scene: Phaser.Scene, ms: number) => new Promise<void>((resolve) =>
 // 4-B: 서버 권위 전투의 렌더러 겸 입력기. 규칙(이동·공격·AI·승패)은 전부 서버가 계산하고,
 // 이 씬은 서버 snapshot을 그리고 이동/공격/턴 종료 "의도"만 보낸다. 임시 도형 UI(디자인 확정 전)는 그대로 유지한다.
 // 10-14 C2-5A 보스 시트(결박/약점 노출)와 표시 크기, 색 구역 표시 크기(자산 계약: 보스 220~280px, 구역 620~760x410~510px)
-const BOSS_SHEETS: Record<string, { idle: string; exposed: string }> = {
+// labelBelow: 라벨을 보스 그림 아래 빈 칸에 둔다(보스 중심에서 라벨 위끝까지 px). 없으면 일반 유닛처럼 중심 근처(2장 기준 유지)
+const BOSS_SHEETS: Record<string, { idle: string; exposed: string; labelBelow?: number }> = {
   waterlogged_sewn_doll: { idle: 'waterlogged-sewn-doll-idle', exposed: 'waterlogged-sewn-doll-exposed' },
-  memory_spool: { idle: 'memory-spool-idle', exposed: 'memory-spool-exposed' }, // 10-16 3장 기억 실패굴이(결박 → 약점 노출)
+  memory_spool: { idle: 'memory-spool-idle', exposed: 'memory-spool-exposed', labelBelow: 118 }, // 10-16 3장 기억 실패굴이(결박 → 약점 노출). C3-6 QA-08: 라벨이 솜심 약점을 가리지 않게 그림 아래로
 };
 const BOSS_DISPLAY_PX = 240;
-// 10-16 3장: 일반 적 시트의 표시 크기(기본 64). 보이는 몸이 전투 칸(80) 안에 들어오게 원본 투명 여백을 감안했다
-const SHEET_DISPLAY_PX: Record<string, number> = { 'pressed-sewn-doll-idle': 88, 'pressed-sewn-doll-exposed': 88, 'small-spool-idle': 80 };
+// 10-16 3장: 일반 적 시트의 표시 크기(기본 64). 원본 투명 여백을 감안했다. C3-6 QA-06: 전투판 대비 작아 박음이 88→104, 실패굴이 80→88
+const SHEET_DISPLAY_PX: Record<string, number> = { 'pressed-sewn-doll-idle': 104, 'pressed-sewn-doll-exposed': 104, 'small-spool-idle': 88 };
 // 눌린 박음이: 납작(flat=true) → 재봉선 노출(flat=false). 같은 프레임 인덱스·같은 중심에서 텍스처만 바꾼다(서버 스냅샷 상태 — 화면이 정하지 않는다)
 const FLAT_SHEETS: Record<string, { flat: string; exposed: string }> = { pressed_sewn_doll: { flat: 'pressed-sewn-doll-idle', exposed: 'pressed-sewn-doll-exposed' } };
 // 보스 부위·표적 그림: 운반 실(한 장), 기억실(5가닥 시트의 프레임 = 가닥 번호), 폭신이가 가리키는 다음 실 표시(기억실 위에 중첩)
 const CARRIER_KEY = 'carrier-thread';
 const THREAD_SHEET = 'memory-thread';
 const THREAD_HINT_KEY = 'memory-thread-hint';
-const TARGET_DISPLAY_PX = 64;
-const THREAD_DISPLAY_PX = 72;
-const HINT_DISPLAY_PX = 80;
+// C3-6 QA-06·07: 운반 실 64→72, 기억실 72→80, 다음 실 빛무리 80→88(기억실보다 커야 둘레가 보인다)
+const TARGET_DISPLAY_PX = 72;
+const THREAD_DISPLAY_PX = 80;
+const HINT_DISPLAY_PX = 88;
 const sheetForState = (u: BattleUnit, sheetKey: string) => {
   const flat = FLAT_SHEETS[u.characterCode];
   return flat && u.flat === false ? flat.exposed : sheetKey;
@@ -265,7 +267,10 @@ export class BattleScene extends Phaser.Scene {
       let pref = labelPlacement(this.snap, u);
       if (u.row === 0) pref = 'below';
       if (u.row === this.snap.grid.rows - 1) pref = 'above';
-      boxes.push({ id: u.unitId, cx: x, anchorY: y, w: v.hpText.width, h: v.hpText.height, pref });
+      const below = BOSS_SHEETS[u.characterCode]?.labelBelow;
+      // 그림 아래 라벨: 위끝이 중심 + labelBelow가 되도록 기준점을 내린다(아래가 모자라면 resolveLabels가 위로 비킨다)
+      if (below) boxes.push({ id: u.unitId, cx: x, anchorY: y + below - LABEL_GAP, w: v.hpText.width, h: v.hpText.height, pref: 'below' });
+      else boxes.push({ id: u.unitId, cx: x, anchorY: y, w: v.hpText.width, h: v.hpText.height, pref });
     }
     const spots = resolveLabels(boxes, { x: this.offsetX, y: this.offsetY, w: this.gridW, h: this.gridH }, LABEL_GAP);
     for (const [id, p] of spots) this.views.get(id)!.hpText.setOrigin(0.5, 0).setPosition(p.cx, p.top);

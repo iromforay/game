@@ -95,6 +95,9 @@ test('C3-6 캡처 ①(1280×720): 지도 — 입구·홀·장갑 기억 비침·
     await g.capture('c02_hall_elder');
     // 폭신이를 만난 상태 → 장갑을 살펴본다(기억 비침)
     backend.grantEvents(device, ELDER_MET, 'CH03_ELDER_MET');
+    // C3-6 재검수: 조사 소품 3개(외곽광)가 한 화면에 — 장갑·담요·인형
+    await moveTo(g, device, { x: 1560, y: 1480 });
+    await g.capture('c15_hall_props');
     await moveTo(g, device, { x: 1240, y: 1340 });
     await talk(g, 'underfloor_glove', [{ x: 1270, y: 1300 }, { x: 1300, y: 1270 }]);
     await g.until('장갑 기억 비침', glimpseShown('memory-glove'), 10_000);
@@ -184,6 +187,21 @@ test('C3-6 캡처 ⑤(640×360): 홀·매복 전투', async () => {
     await g.capture('m01_hall');
     await enterBattle(g, 'underfloor_ambush', [{ x: 1600, y: 1500 }]);
     await g.capture('m02_ambush');
+  }, backend, device);
+  await g.close();
+});
+
+test('C3-6 캡처 ⑧(640×360): 홀 — 오래된 폭신이, 만난 뒤 조사 소품 3개(재검수)', async () => {
+  const device = 'qa-hall-640';
+  await backend.start(seedUnderfloor(device, 'started'), { 'story.stageAccessV2': true });
+  const g = await Game.open(browser, `${vite.url}/?device=${device}`, device, SMALL);
+  await withDiagnosis(g, 'qa-hall-640', async () => {
+    await enterUnderfloor(g);
+    await moveTo(g, device, { x: 1480, y: 1500 });
+    await g.capture('m05_hall_elder');
+    backend.grantEvents(device, ELDER_MET, 'CH03_ELDER_MET');
+    await moveTo(g, device, { x: 1560, y: 1480 });
+    await g.capture('m06_hall_props');
   }, backend, device);
   await g.close();
 });

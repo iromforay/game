@@ -204,7 +204,7 @@ test('보스: 정해진 순서대로 진짜 실 3가닥을 끊으면 약점이 �
 
 test('보스: 가짜 실이나 순서가 아닌 실을 끊으려 하면 행동만 쓰고 진행 없이 공격한 유닛이 혼란에 걸린다', () => {
   const s = start(BOSS);
-  place(s, me(s).unitId, 7, 1);
+  place(s, me(s).unitId, 6, 1);
   const apBefore = me(s).ap;
   const e = attack(s, 'thread_1'); // 가짜 실
   assert.equal(types(e).includes('wrong_thread'), true);
@@ -213,7 +213,7 @@ test('보스: 가짜 실이나 순서가 아닌 실을 끊으려 하면 행동�
   assert.equal((me(s).statuses ?? []).some((x) => x.kind === 'confused'), true);
   assert.equal(toSnapshot(s).units.find((x) => x.unitId === 'memory_spool')!.phase, 'bound');
   // 혼란 중에는 인접한 다른 적이 없으면 헛손질이라 진행이 없고 상태는 쌓이지 않는다. 혼란이 풀린 뒤 순서가 아닌 진짜 실(thread_5)을 끊으려 해도 마찬가지로 진행이 없고 다시 혼란
-  place(s, me(s).unitId, 7, 7);
+  place(s, me(s).unitId, 6, 7);
   const e2 = attack(s, 'thread_5');
   assert.equal(types(e2).includes('confused_action'), true);
   assert.equal((me(s).statuses ?? []).filter((x) => x.kind === 'confused').length, 1);
@@ -228,12 +228,12 @@ test('보스: 가짜 실이나 순서가 아닌 실을 끊으려 하면 행동�
 
 test('혼란: 이동은 누른 칸의 반대쪽으로, 공격은 인접한 다른 적으로 바뀌고 헛돌 수 있으며, 1라운드 뒤에 풀린다', () => {
   const s = start(BOSS, [hero({ actionPower: 20 })]); // 행동력이 넉넉해 이 시험 안에서 턴이 저절로 끝나지 않는다
-  place(s, me(s).unitId, 7, 1);
+  place(s, me(s).unitId, 6, 1);
   attack(s, 'thread_1'); // 혼란 시작
-  // 이동: (5,1)을 누르면 (9,1)로(점대칭) — 행동력 비용 2
-  const m = move(s, 5, 1);
+  // 이동: (4,1)을 누르면 (8,1)로(점대칭) — 행동력 비용 2
+  const m = move(s, 4, 1);
   assert.equal(types(m).includes('confused_action'), true);
-  assert.deepEqual([me(s).col, me(s).row], [9, 1]);
+  assert.deepEqual([me(s).col, me(s).row], [8, 1]);
   // 갈 수 없는 반대쪽(격자 밖으로 맞췄더니 제자리)이면 행동력만 쓴다
   place(s, me(s).unitId, 11, 0);
   const apBefore = me(s).ap;
@@ -241,7 +241,7 @@ test('혼란: 이동은 누른 칸의 반대쪽으로, 공격은 인접한 다�
   assert.deepEqual([me(s).col, me(s).row], [11, 0]);
   assert.equal(me(s).ap, apBefore - 1);
   // 공격: 인접한 다른 적이 없으면 헛손질(피해 0)
-  place(s, me(s).unitId, 7, 1);
+  place(s, me(s).unitId, 6, 1);
   me(s).ap = 3;
   const a = attack(s, 'thread_1');
   assert.equal(types(a).includes('confused_action'), true);
@@ -252,6 +252,21 @@ test('혼란: 이동은 누른 칸의 반대쪽으로, 공격은 인접한 다�
   assert.equal((me(s).statuses ?? []).some((x) => x.kind === 'confused'), true, '다음 아군 차례에도 혼란');
   nextRound(s);
   assert.equal((me(s).statuses ?? []).some((x) => x.kind === 'confused'), false, '그다음에는 풀린다');
+});
+
+test('보스: 감긴 기억실을 두고 걷지 않는다(anchored) — 아군이 멀면 제자리, 인접하면 공격한다', () => {
+  assert.equal(BOSS.units.find((x) => x.unitId === 'memory_spool')!.anchored, true);
+  const s = start(BOSS);
+  const at = () => [u(s, 'memory_spool').col, u(s, 'memory_spool').row];
+  const home = at();
+  nextRound(s);
+  nextRound(s);
+  assert.deepEqual(at(), home, '멀리 있는 아군에게 다가가지 않는다');
+  place(s, me(s).unitId, home[0] - 1, home[1]);
+  const hp = me(s).hp;
+  nextRound(s);
+  assert.deepEqual(at(), home);
+  assert.ok(me(s).hp < hp, '인접한 아군은 공격한다');
 });
 
 test('보스: 결박 중인 보스를 공격하면 피해 0(행동은 소모)이고 안내는 한 번만, 거절하지 않는다', () => {

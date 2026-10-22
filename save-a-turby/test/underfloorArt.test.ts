@@ -10,9 +10,9 @@ const here = (rel: string) => fileURLToPath(new URL(rel, import.meta.url));
 const UG = JSON.parse(readFileSync(here('../../BE/story-data/save-a-turby/stages/underground.json'), 'utf8')) as {
   greybox: boolean;
   size: { width: number; height: number };
-  storyPoints: { id: string; assetKey: string; art: { width: number; height: number; pivot: [number, number] } }[];
+  storyPoints: { id: string; assetKey: string; art: { width: number; height: number; pivot: [number, number]; glow?: boolean } }[];
   render: { markerMode: string; background: { assetKey: string }; overlays: Record<string, unknown>[] };
-  layout: { gates: { id: string; closedAssetKey: string; openAssetKey: string; art: { x: number; y: number; width: number; height: number; pivot: [number, number] }; x: number; y: number; width: number; height: number }[] };
+  layout: { gates: { id: string; closedAssetKey: string; openAssetKey: string; art: { x: number; y: number; width: number; height: number; pivot: [number, number] }; openPieces: { x: number; y: number; width: number; height: number; frame: number[] }[]; x: number; y: number; width: number; height: number }[] };
 };
 
 // [키, 런타임 경로, 너비, 높이, 알파 있음, SHA-256(Codex delivery-v1 manifest)]
@@ -57,15 +57,23 @@ test('지역 데이터 표시 계약: 배경·지점 그림 크기/피벗·문 �
   assert.deepEqual(UG.render.background, { assetKey: 'underfloor-base' });
   const art = (id: string) => UG.storyPoints.find((p) => p.id === id)!;
   const elder = art('underfloor_elder');
-  assert.deepEqual([elder.assetKey, elder.art.width, elder.art.height, elder.art.pivot], ['elder-pokshini', 96, 96, [0.5, 0.7]]);
+  // C3-6 화면 검수: 폭신이 96→124(1.3배), 조사 소품 104→146(1.4배)+외곽광, 기억 조각 지점은 연출 그림 축소 재사용
+  assert.deepEqual([elder.assetKey, elder.art.width, elder.art.height, elder.art.pivot, elder.art.glow], ['elder-pokshini', 124, 124, [0.5, 0.7], undefined]);
   for (const k of ['glove', 'blanket', 'doll']) {
     const p = art(`underfloor_${k}`);
-    assert.deepEqual([p.assetKey, p.art.width, p.art.height, p.art.pivot], [`inspect-${k}`, 104, 104, [0.5, 0.75]]);
+    assert.deepEqual([p.assetKey, p.art.width, p.art.height, p.art.pivot, p.art.glow], [`inspect-${k}`, 146, 146, [0.5, 0.75], true]);
   }
+  const frag = art('underfloor_fragment');
+  assert.deepEqual([frag.assetKey, frag.art.width, frag.art.height, frag.art.pivot], ['memory-fragment', 80, 80, [0.5, 0.5]]);
   const gate = UG.layout.gates[0];
   assert.deepEqual([gate.closedAssetKey, gate.openAssetKey], ['dust-yarn-gate-closed', 'dust-yarn-gate-open']);
   assert.deepEqual([gate.art.width, gate.art.height, gate.art.pivot], [220, 140, [0.5, 0.85]]);
   assert.equal(gate.art.x, gate.x + gate.width / 2, '문 그림은 충돌 사각형의 가운데');
+  // C3-6 QA-04: 열린 문 = 열림 그림 좌우 반쪽(0.8배)을 벽 쪽으로. 반쪽 안쪽 잔여물 끝(원본 x 570·1015)이 문 중심에서 52px 넘게 떨어진다
+  const [left, right] = gate.openPieces;
+  assert.deepEqual([left.frame, right.frame, left.width, left.height], [[0, 0, 768, 1024], [768, 0, 768, 1024], 88, 112]);
+  const cx = gate.x + gate.width / 2;
+  assert.ok(cx - (left.x + ((570 - 384) / 768) * left.width) > 52 && right.x + ((1015 - 768 - 384) / 768) * right.width - cx > 52, '가운데 통행 폭');
   const trail = UG.render.overlays.find((o) => o.assetKey === 'memory-trail')!;
   assert.deepEqual([trail.x, trail.y, trail.width, trail.height, trail.pivot, trail.alpha, trail.visibleAfter], [1900, 600, 720, 680, [0, 0], 0.7, 'underfloor_memory_trail_found']);
   assert.ok((trail.x as number) + (trail.width as number) <= UG.size.width && (trail.y as number) + (trail.height as number) <= UG.size.height, '지도 안');

@@ -64,7 +64,7 @@ test('시트 프레임 계약: 등록된 프레임 크기 × 프레임 수 = 시
 
 test('전투 표시 연결: 보스 결박/노출, 눌린 박음이 납작/노출 교체, 기억실 프레임 = 가닥 번호, 다음 실 빛무리는 기억실 아래에 중첩', () => {
   const scene = readFileSync(here('../src/scenes/BattleScene.ts'), 'utf8').replace(/\r\n/g, '\n');
-  assert.match(scene, /memory_spool: \{ idle: 'memory-spool-idle', exposed: 'memory-spool-exposed' \}/);
+  assert.match(scene, /memory_spool: \{ idle: 'memory-spool-idle', exposed: 'memory-spool-exposed', labelBelow: \d+ \}/, '보스 라벨은 그림 아래(C3-6 QA-08)');
   assert.match(scene, /pressed_sewn_doll: \{ flat: 'pressed-sewn-doll-idle', exposed: 'pressed-sewn-doll-exposed' \}/);
   assert.match(scene, /u\.flat === false \? sheets\.exposed : sheets\.flat/, '서버 flat 값으로만 교체');
   assert.match(scene, /this\.add\.sprite\(0, 0, THREAD_SHEET, Math\.max\(0, Math\.min\(4, Number\(threadNumber\(u\)\) - 1\)\)\)/, '기억실 프레임 = 가닥 번호 - 1');
@@ -73,6 +73,22 @@ test('전투 표시 연결: 보스 결박/노출, 눌린 박음이 납작/노출
   // 전투 정의의 기억실 unitId는 thread_1~5(가닥 번호 = 마지막 글자)
   const boss = JSON.parse(readFileSync(here('../../BE/story-data/save-a-turby/battles/underfloor_boss_memory_spool.json'), 'utf8')) as { units: { unitId: string; characterCode: string }[] };
   assert.deepEqual(boss.units.filter((u) => u.characterCode === 'memory_thread').map((u) => u.unitId), ['thread_1', 'thread_2', 'thread_3', 'thread_4', 'thread_5']);
+});
+
+test('C3-6 화면 검수: 전투 표시 크기(박음이 104·실패굴이 88·운반 실 72·기억실 80·빛무리 88), 기억실은 240px 보스 그림 밖(한 칸 더 이격)', () => {
+  const scene = readFileSync(here('../src/scenes/BattleScene.ts'), 'utf8').replace(/\r\n/g, '\n');
+  assert.match(scene, /'pressed-sewn-doll-idle': 104, 'pressed-sewn-doll-exposed': 104, 'small-spool-idle': 88/);
+  assert.match(scene, /const TARGET_DISPLAY_PX = 72;\nconst THREAD_DISPLAY_PX = 80;\nconst HINT_DISPLAY_PX = 88;/);
+  const boss = JSON.parse(readFileSync(here('../../BE/story-data/save-a-turby/battles/underfloor_boss_memory_spool.json'), 'utf8')) as { units: { unitId: string; characterCode: string; col: number; row: number }[] };
+  const spool = boss.units.find((u) => u.characterCode === 'memory_spool')!;
+  const TILE = 80;
+  const half = 240 / 2;
+  for (const t of boss.units.filter((u) => u.characterCode === 'memory_thread')) {
+    // 기억실 표시 상자(80)와 보스 표시 상자(240)가 겹치지 않는다(모서리 맞닿음까지 허용)
+    const dx = Math.abs(t.col - spool.col) * TILE;
+    const dy = Math.abs(t.row - spool.row) * TILE;
+    assert.ok(dx >= half + 40 || dy >= half + 40, `${t.unitId} (${t.col},${t.row})`);
+  }
 });
 
 test('지도 소품·오버레이 계약: 매복 더미·보스 입구 표식 120×120 피벗 (0.5,0.7), 보스 공간 오버레이 (2450,140) 700×600 알파 0.8(지도 안)', () => {

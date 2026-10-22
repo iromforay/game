@@ -21,8 +21,8 @@ export function densify(points: [number, number][], step = STEP): Pt[] {
 export const SPAWN_TO_ELDER = densify([[330, 2080], [560, 1880], [860, 1760], [1130, 1650], [1230, 1660]]);
 export const ELDER_TO_GLOVE = densify([[1230, 1660], [1180, 1450], [1240, 1330], [1300, 1270]]);
 export const GLOVE_TO_BLANKET = densify([[1300, 1270], [1880, 1300]]);
-export const BLANKET_TO_DOLL = densify([[1880, 1300], [1650, 1400], [1640, 1700], [1720, 1820]]);
-export const DOLL_TO_AMBUSH = densify([[1720, 1820], [1640, 1700], [1600, 1500]]);
+export const BLANKET_TO_DOLL = densify([[1880, 1300], [1650, 1400], [1640, 1700], [1680, 1760]]);
+export const DOLL_TO_AMBUSH = densify([[1680, 1760], [1640, 1700], [1600, 1500]]);
 
 // 3장 C3-3: 매복 지점까지(입구 → 폭신이 앞 → 홀 가운데 → 매복 자리)
 export const SPAWN_TO_AMBUSH = densify([[330, 2080], [560, 1880], [860, 1760], [1130, 1650], [1400, 1660], [1600, 1500]]);

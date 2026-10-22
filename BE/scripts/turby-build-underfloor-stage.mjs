@@ -127,14 +127,15 @@ for (let i = 0; i < W * H; i++) {
 const P = Object.fromEntries(SKEL.points.map((p) => [p.id, p]));
 const pt = (id) => ({ id, x: P[id].x, y: P[id].y, radius: P[id].radius });
 const POINT_IDS = ['underfloor_elder', 'underfloor_glove', 'underfloor_blanket', 'underfloor_doll', 'underfloor_ambush', 'underfloor_fragment', 'underfloor_boss_entrance'];
-const art = (w, h, pivot = [0.5, 0.7]) => ({ width: w, height: h, pivot });
+const art = (w, h, pivot = [0.5, 0.7], extra = {}) => ({ width: w, height: h, pivot, ...extra });
+// 10-16 C3-6 화면 검수: 배경 사물이 커서 폭신이 96→124(1.3배), 조사 소품 104→146(1.4배)+크림색 외곽광(임무 대상)
 const storyPoints = [
-  { id: 'underfloor_elder', kind: 'npc', assetKey: 'elder-pokshini', label: '오래된 폭신이', prompt: '오래된 폭신이에게 다가가기', art: art(96, 96, [0.5, 0.7]) },
-  { id: 'underfloor_glove', kind: 'inspect', assetKey: 'inspect-glove', label: '낡은 장갑', prompt: '낡은 장갑을 살펴보기', art: art(104, 104, [0.5, 0.75]) },
-  { id: 'underfloor_blanket', kind: 'inspect', assetKey: 'inspect-blanket', label: '작은 담요', prompt: '작은 담요를 살펴보기', art: art(104, 104, [0.5, 0.75]) },
-  { id: 'underfloor_doll', kind: 'inspect', assetKey: 'inspect-doll', label: '찢어진 인형', prompt: '찢어진 인형을 살펴보기', art: art(104, 104, [0.5, 0.75]) },
+  { id: 'underfloor_elder', kind: 'npc', assetKey: 'elder-pokshini', label: '오래된 폭신이', prompt: '오래된 폭신이에게 다가가기', art: art(124, 124, [0.5, 0.7]) },
+  { id: 'underfloor_glove', kind: 'inspect', assetKey: 'inspect-glove', label: '낡은 장갑', prompt: '낡은 장갑을 살펴보기', art: art(146, 146, [0.5, 0.75], { glow: true }) },
+  { id: 'underfloor_blanket', kind: 'inspect', assetKey: 'inspect-blanket', label: '작은 담요', prompt: '작은 담요를 살펴보기', art: art(146, 146, [0.5, 0.75], { glow: true }) },
+  { id: 'underfloor_doll', kind: 'inspect', assetKey: 'inspect-doll', label: '찢어진 인형', prompt: '찢어진 인형을 살펴보기', art: art(146, 146, [0.5, 0.75], { glow: true }) },
   { id: 'underfloor_ambush', kind: 'inspect', assetKey: 'ambush-pile', label: '수상한 물건 더미', prompt: '소리가 나는 쪽으로 다가가기', art: art(120, 120, [0.5, 0.7]) }, // 10-16 2차 에셋 W03-MAP-04
-  { id: 'underfloor_fragment', kind: 'inspect', assetKey: 'memory-trail-mark', label: '굴러간 실패 자국', prompt: '자국을 따라가기', art: art(96, 96) },
+  { id: 'underfloor_fragment', kind: 'inspect', assetKey: 'memory-fragment', label: '굴러간 실패 자국', prompt: '자국을 따라가기', art: art(80, 80, [0.5, 0.5]) }, // C3-6 QA-11: 기억 조각 연출 그림을 지도 지점에 축소 재사용
   { id: 'underfloor_boss_entrance', kind: 'inspect', assetKey: 'boss-entrance-mark', label: '넓은 빈 공간 입구', prompt: '넓은 빈 공간으로 들어가기', art: art(120, 120, [0.5, 0.7]) }, // 10-16 2차 에셋 W03-MAP-05
 ];
 const goals = [
@@ -168,6 +169,11 @@ const gates = [
     closedAssetKey: 'dust-yarn-gate-closed',
     openAssetKey: 'dust-yarn-gate-open',
     art: { x: gate.x + gate.width / 2, y: gate.y + gate.height, width: 220, height: 140, pivot: [0.5, 0.85] },
+    // C3-6 QA-04: 열린 문은 열림 그림을 좌우 반쪽으로 나눠 0.8배로 줄이고 벽 쪽으로 붙인다(잔여물 안쪽 끝이 문 중심에서 52px 넘게 떨어짐)
+    openPieces: [
+      { x: gate.x + gate.width / 2 - 76, y: gate.y + gate.height, width: 88, height: 112, pivot: [0.5, 0.85], frame: [0, 0, 768, 1024] },
+      { x: gate.x + gate.width / 2 + 76, y: gate.y + gate.height, width: 88, height: 112, pivot: [0.5, 0.85], frame: [768, 0, 768, 1024] },
+    ],
   },
 ];
 const paths = [{ points: [[330, 2080], ...SKEL.corridors[0].points.slice(1), [1130, 1650], [1600, 1500], [2000, 1240], ...SKEL.corridors[3].points.slice(1)] }];

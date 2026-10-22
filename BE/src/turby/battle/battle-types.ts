@@ -62,6 +62,7 @@ export interface BattleUnit {
   reversed?: boolean; // 작은 실패굴이: 운반 실이 끊겨 방향이 뒤집힌 상태(아군 쪽으로 굴러온다)
   carrierOf?: string | null; // 운반 실: 이 실이 끊기면 해당 작은 실패굴이의 방향이 뒤집힌다
   thread?: { order: number | null } | null; // 보스의 기억실. order = 정해진 끊기 순서(1부터), null = 가짜 실
+  anchored?: boolean; // 제자리 적(10-16 C3-6): 이동하지 않고 인접한 아군만 공격한다(기억실에 묶인 기억 실패굴이)
 }
 
 // 10-16 C3-3: 작은 실패굴이 규칙
@@ -117,6 +118,7 @@ export interface BattleUnitDefinition extends UnitStatsInput {
   protectMode?: 'reject' | 'zero';
   maxHitPercent?: number;
   flat?: boolean;
+  anchored?: boolean;
   flee?: SpoolFleeDef;
   carrierOf?: string;
   thread?: { order: number | null };

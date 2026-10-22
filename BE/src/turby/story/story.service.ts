@@ -104,7 +104,7 @@ export interface StageViewDto {
   // 아직 수집하지 않은 오브젝트만. locked = 아직 모을 수 없음(보풀이 구조 전)
   objects: { id: string; objectiveKey: string; x: number; y: number; radius: number; assetKey: string; label: string; prompt: string; state: 'locked' | 'available' }[];
   // 지금 활성화된 이야기 지점만(비활성·완료 지점은 내려 주지 않는다)
-  points: { id: string; kind: string; x: number; y: number; radius: number; assetKey: string; label: string; prompt: string; art?: { width: number; height: number; pivot?: [number, number] } }[];
+  points: { id: string; kind: string; x: number; y: number; radius: number; assetKey: string; label: string; prompt: string; art?: { width: number; height: number; pivot?: [number, number]; glow?: boolean } }[];
   // 문: open은 서버가 openEvent로 한 번만 정한 값 — 화면의 그림(닫힘/열림 키)과 클라이언트 충돌 예측이 모두 이 값을 쓴다
   gates: { id: string; label: string; x: number; y: number; width: number; height: number; open: boolean; closedAssetKey: string | null; openAssetKey: string | null; art: { x: number; y: number; width: number; height: number; pivot?: [number, number] } | null; openPieces?: StageGatePiece[] }[];
   // 최종 에셋 연결: 대형 배경 키와 지금 보이는 오버레이·월드 오브젝트(진행 상태별). 없으면 회색상자·임시 도형 유지. markerMode final = 에셋이 연결된 대상의 임시 표식(고리·마름모·라벨)을 없앤다
