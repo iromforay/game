@@ -10,7 +10,7 @@ import { NAME_RULE_TEXT, nameReasonMessage, precheckName } from '../story/nameRu
 import type { OpeningStoryState, StoryClient } from '../story/storyClient';
 
 // 장 전용 대화 배경(한 장 그림, 화면 크기). 없으면 bg-<code> 타일(1·2장 숲·집)
-const DIALOGUE_BACKDROPS: Record<string, { key: string; alpha: number }> = { underfloor: { key: 'chapter03-dialogue-bg', alpha: 0.8 } };
+const DIALOGUE_BACKDROPS: Record<string, { key: string; alpha: number }> = { underfloor: { key: 'chapter03-dialogue-bg', alpha: 0.8 }, fridge: { key: 'chapter04-dialogue-bg', alpha: 0.8 } };
 
 // M3 오프닝 — 서버 체크포인트가 지정한 구간부터 공용 대사 재생기(story/dialogueRunner.ts)로 재생한다.
 // 이 씬은 그리기와 입력만 맡는다. 진행·보상·체크포인트는 전부 서버가 판정한다.

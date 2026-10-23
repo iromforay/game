@@ -1,7 +1,7 @@
 {
   "stageCode": "ice",
-  "greybox": true,
-  "note": "4장 냉장고 속 길 골격 v1(10-23 C4-1). 좌표는 BE/scripts/data/fridge-skeleton.json에서 BE/scripts/turby-build-fridge-stage.mjs로 만든다(blockers는 생성물 — 손으로 고치지 않는다). 사건·지점 ID는 바뀌지 않는다. 회색상자 단계 — 1차 에셋(C4-2)은 C4-3에서 연결한다.",
+  "greybox": false,
+  "note": "4장 냉장고 속 길 골격 v1(10-23 C4-1). 좌표는 BE/scripts/data/fridge-skeleton.json에서 BE/scripts/turby-build-fridge-stage.mjs로 만든다(blockers는 생성물 — 손으로 고치지 않는다). 사건·지점 ID는 바뀌지 않는다. C4-3: 1차 에셋(배경·가느리·저장고 문·고백 빛·도안 벽·바늘 표식) 연결, 길목·서리 미싱 입구 표식은 2차 에셋(C4-4).",
   "size": {
     "width": 3200,
     "height": 2400

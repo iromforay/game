@@ -265,6 +265,8 @@ export function unitLabel(u: BattleUnit, compact: boolean): string {
   if (u.thread) return compact ? `${u.name} ${threadNumber(u)}${u.hinted ? ' ▶' : ''}` : `${u.name} ${threadNumber(u)}${u.hinted ? ' (다음 실)' : ''}`;
   if (isSeam(u)) return compact ? `검은 실 ${seamLetter(u)}` : `${u.name} ${seamLetter(u)} HP ${u.hp}/${u.maxHp}`;
   const tags = unitTags(u);
+  // 10-23 C4-3: 공격 대상이 아닌 적(서리 미싱 본체 — 부위를 끊어 멈춘다)은 HP를 보이지 않는다
+  if (u.side === 'wild' && u.targetable === false) return tags.length === 0 ? u.name : compact ? `${u.name}\n${tags.join(' · ')}` : `${u.name} (${tags.join(' · ')})`;
   if (!compact) return `${u.name} HP ${u.hp}/${u.maxHp}${tags.length > 0 ? ` (${tags.join(' · ')})` : ''}`;
   const short = tags.map((t) => SHORT_TAG[t] ?? t);
   return `${u.name}\n${[`${u.hp}/${u.maxHp}`, ...short].join(' · ')}`;

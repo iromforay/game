@@ -64,10 +64,10 @@ const SPAWN = C.spawn;
 const CLOSED = new Set<string>();
 const OPEN = new Set<string>([EVENT_BY_ID.get('fridge_frozen_guard_won')!.id]);
 
-test('지역 데이터: 3200×2400, 시작 지점·지점 좌표가 골격 명세 그대로이고 표시 정보가 있다(회색상자 단계)', () => {
+test('지역 데이터: 3200×2400, 시작 지점·지점 좌표가 골격 명세 그대로이고 표시 정보가 있다', () => {
   assert.deepEqual(ICE.size, { width: 3200, height: 2400 });
   assert.deepEqual(ICE.spawnPoint, { x: 380, y: 2020 });
-  assert.equal(ICE.greybox, true, 'C4-1: 1차 에셋은 C4-3에서 연결');
+  assert.equal(ICE.greybox, false, 'C4-3: 1차 에셋(C4-2) 연결 — 최종 배경 fridge-base');
   for (const p of SKEL.points.filter((x) => x.id.startsWith('fridge_'))) {
     const mine = point(p.id);
     assert.deepEqual([mine.x, mine.y, mine.radius], [p.x, p.y, p.radius], `${p.id} 좌표·반경`);

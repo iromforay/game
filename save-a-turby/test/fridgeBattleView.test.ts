@@ -17,3 +17,10 @@ test('공격 대상: 골무 보호 중인 박음이는 zero(공격은 되지만 
   assert.equal(targetState(snap([]), unit({ guarded: true })), 'zero');
   assert.equal(targetState(snap([]), unit({ guarded: false })), 'ok');
 });
+
+test('라벨: 공격 대상이 아닌 서리 미싱 본체는 HP 없이 이름과 상태만(일반 화면·작은 화면)', async () => {
+  const { unitLabel } = await import('../src/battle/battleView.ts');
+  const m = unit({ characterCode: 'frost_machine', name: '서리 미싱', targetable: false, maxHp: 1, hp: 1, phase: 'bound' });
+  assert.equal(unitLabel(m, false), '서리 미싱 (결박)');
+  assert.equal(unitLabel(m, true), '서리 미싱\n결박');
+});

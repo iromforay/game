@@ -651,7 +651,8 @@ export class BattleScene extends Phaser.Scene {
     if (needles !== this.needleDrawn) {
       this.needleDrawn = needles;
       this.needleObjs.forEach((o) => o.destroy());
-      this.needleObjs = draw(this.snap.needleMarks ?? [], NEEDLE_MARK_KEY, 0xf2fbff, 0.4, 3.5);
+      // 이동 가능 칸(깊이 4) 위·유닛(10) 아래 — 내 유닛이 서 있는 칸의 예고도 가려지지 않게
+      this.needleObjs = draw(this.snap.needleMarks ?? [], NEEDLE_MARK_KEY, 0xf2fbff, 0.55, 5);
     }
   }
   private syncStates() {
