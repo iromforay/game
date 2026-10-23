@@ -19,6 +19,6 @@ export interface MultiplayerSnapshot {
   }>;
 }
 
-export function createColorBlastersSocket(serverUrl: string): Socket {
+export function createColorBlastersSocket(serverUrl = import.meta.env.VITE_COLOR_BLASTERS_SERVER_URL ?? 'http://localhost:3007'): Socket {
   return io(serverUrl, { transports: ['websocket'], autoConnect: false });
 }

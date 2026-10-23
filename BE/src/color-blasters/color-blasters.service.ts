@@ -12,6 +12,14 @@ const REQUIRED_ZONES = 4;
 const FIRE_INTERVAL_MS = 140;
 const ARENA_X = 10.5;
 const ARENA_Z = 13.5;
+const PLAYER_RADIUS = 0.55;
+// FE threeAssets arenaBarrier의 기초·지지대를 포함한 월드 경계와 동일하게 유지한다.
+const COVER_BOUNDS = [
+  { minX: -5.36, maxX: -3.44, minY: 0, maxY: 3.05, minZ: -3.25, maxZ: 0.25 },
+  { minX: 3.44, maxX: 5.36, minY: 0, maxY: 3.05, minZ: -0.25, maxZ: 3.25 },
+  { minX: -2.55, maxX: 2.55, minY: 0, maxY: 3.05, minZ: -7.16, maxZ: -5.24 },
+  { minX: -2.55, maxX: 2.55, minY: 0, maxY: 3.05, minZ: 5.24, maxZ: 7.16 },
+] as const;
 
 @Injectable()
 export class ColorBlastersService {
@@ -44,11 +52,11 @@ export class ColorBlastersService {
   move(socketId: string, position: BattlePosition) {
     const match = this.requireMatch(socketId);
     const player = this.requirePlayer(match, socketId);
-    player.position = {
-      x: this.clampFinite(position.x, -ARENA_X, ARENA_X),
-      z: this.clampFinite(position.z, -ARENA_Z, ARENA_Z),
-      facing: this.clampFinite(position.facing, -Math.PI, Math.PI),
-    };
+    const requestedX = this.clampFinite(position.x, -ARENA_X, ARENA_X);
+    const requestedZ = this.clampFinite(position.z, -ARENA_Z, ARENA_Z);
+    if (!this.insideCover(requestedX, player.position.z)) player.position.x = requestedX;
+    if (!this.insideCover(player.position.x, requestedZ)) player.position.z = requestedZ;
+    player.position.facing = this.clampFinite(position.facing, -Math.PI, Math.PI);
     return this.snapshot(match);
   }
 
@@ -62,7 +70,9 @@ export class ColorBlastersService {
     if (Math.hypot(shotOrigin.x - shooter.position.x, shotOrigin.z - shooter.position.z) > 2) throw new Error('INVALID_ORIGIN');
     shooter.lastShotAt = now;
     const target = match.players.find((player) => player.socketId !== socketId)!;
-    const zone = this.hitZone(shotOrigin, shotDirection, target.position);
+    const hit = this.hitZone(shotOrigin, shotDirection, target.position);
+    const coverDistance = this.firstCoverDistance(shotOrigin, shotDirection);
+    const zone = hit && (coverDistance === null || hit.distance < coverDistance) ? hit.zone : null;
     if (zone) target.paintedZones.add(zone);
     if (target.paintedZones.size >= REQUIRED_ZONES) match.finished = true;
     return {
@@ -85,7 +95,7 @@ export class ColorBlastersService {
   }
 
   private makePlayer(playerId: string, socketId: string, z: number): BattlePlayerState {
-    return { playerId, socketId, position: { x: 0, z, facing: 0 }, paintedZones: new Set(), lastShotAt: 0 };
+    return { playerId, socketId, position: { x: 7, z, facing: 0 }, paintedZones: new Set(), lastShotAt: 0 };
   }
 
   private requireMatch(socketId: string) {
@@ -117,7 +127,38 @@ export class ColorBlastersService {
     return { x: vector.x / length, y: vector.y / length, z: vector.z / length };
   }
 
-  private hitZone(origin: BattleVector3, direction: BattleVector3, target: BattlePosition): ColorBlastersZone | null {
+  private insideCover(x: number, z: number) {
+    return COVER_BOUNDS.some((cover) => (
+      x >= cover.minX - PLAYER_RADIUS && x <= cover.maxX + PLAYER_RADIUS
+      && z >= cover.minZ - PLAYER_RADIUS && z <= cover.maxZ + PLAYER_RADIUS
+    ));
+  }
+
+  private firstCoverDistance(origin: BattleVector3, direction: BattleVector3) {
+    let nearest: number | null = null;
+    for (const cover of COVER_BOUNDS) {
+      let minimum = 0;
+      let maximum = 45;
+      for (const axis of ['x', 'y', 'z'] as const) {
+        const axisDirection = direction[axis];
+        const low = cover[`min${axis.toUpperCase() as 'X' | 'Y' | 'Z'}`];
+        const high = cover[`max${axis.toUpperCase() as 'X' | 'Y' | 'Z'}`];
+        if (Math.abs(axisDirection) < 0.0001) {
+          if (origin[axis] < low || origin[axis] > high) { minimum = 46; break; }
+          continue;
+        }
+        const first = (low - origin[axis]) / axisDirection;
+        const second = (high - origin[axis]) / axisDirection;
+        minimum = Math.max(minimum, Math.min(first, second));
+        maximum = Math.min(maximum, Math.max(first, second));
+        if (maximum < minimum) break;
+      }
+      if (minimum <= maximum && minimum >= 0 && (nearest === null || minimum < nearest)) nearest = minimum;
+    }
+    return nearest;
+  }
+
+  private hitZone(origin: BattleVector3, direction: BattleVector3, target: BattlePosition): { zone: ColorBlastersZone; distance: number } | null {
     const offsets: Record<ColorBlastersZone, [number, number, number, number]> = {
       head: [0, 4.02, 0, 0.68], torso: [0, 2.72, 0, 0.92],
       leftArm: [-1.02, 2.72, 0, 0.52], rightArm: [1.02, 2.72, 0, 0.52],
@@ -138,7 +179,7 @@ export class ColorBlastersService {
       const distance = Math.hypot(closest.x - center.x, closest.y - center.y, closest.z - center.z);
       if (distance <= radius && (!nearest || projection < nearest.distance)) nearest = { zone, distance: projection };
     }
-    return nearest?.zone ?? null;
+    return nearest;
   }
 
   private snapshot(match: BattleMatch) {

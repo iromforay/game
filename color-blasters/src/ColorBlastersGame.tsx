@@ -53,6 +53,7 @@ interface HudState {
   aiZones: PaintZone[];
   nearStation: boolean;
   charging: boolean;
+  inCover: boolean;
   message: string;
 }
 
@@ -73,6 +74,7 @@ const INITIAL_HUD: HudState = {
   aiZones: [],
   nearStation: false,
   charging: false,
+  inCover: false,
   message: 'AI보다 먼저 4개 부위를 칠하세요!',
 };
 
@@ -113,8 +115,8 @@ export function ColorBlastersGame({ onExit }: ColorBlastersGameProps) {
     if (!mount) return;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x7dd3fc);
-    scene.fog = new THREE.Fog(0x7dd3fc, 24, 48);
+    scene.background = new THREE.Color(0x8bcfe6);
+    scene.fog = new THREE.Fog(0x8bcfe6, 28, 54);
 
     const camera = new THREE.PerspectiveCamera(52, 1, 0.1, 100);
     const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -122,27 +124,42 @@ export function ColorBlastersGame({ onExit }: ColorBlastersGameProps) {
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.08;
     mount.appendChild(renderer.domElement);
 
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x243b53, 2.8));
-    const sun = new THREE.DirectionalLight(0xfff7df, 3.6);
+    scene.add(new THREE.HemisphereLight(0xf4fbff, 0x1e293b, 2.15));
+    const sun = new THREE.DirectionalLight(0xfff4dd, 3.15);
     sun.position.set(-7, 15, 9);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(1024, 1024);
+    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.camera.left = -18;
+    sun.shadow.camera.right = 18;
+    sun.shadow.camera.top = 20;
+    sun.shadow.camera.bottom = -20;
     scene.add(sun);
+    const cyanFill = new THREE.PointLight(0x22d3ee, 18, 22, 2);
+    cyanFill.position.set(-10, 5, 8);
+    scene.add(cyanFill);
+    const coralFill = new THREE.PointLight(0xfb7185, 16, 22, 2);
+    coralFill.position.set(10, 5, -8);
+    scene.add(coralFill);
 
     const arena = createArenaAssets();
     scene.add(arena.group);
     const coverBoxes = arena.covers;
     const station = arena.station;
+    arena.group.updateMatrixWorld(true);
+    const coverBounds = coverBoxes.map((cover) => new THREE.Box3().setFromObject(cover));
+    const playerCollisionBounds = coverBounds.map((box) => box.clone().expandByScalar(0.55));
 
     const player = createPaintSportCharacter(PLAYER_BASE, PLAYER_COLOR);
-    player.group.position.set(0, 0, 9.5);
+    player.group.position.set(7, 0, 9.5);
     player.group.rotation.y = Math.PI;
     scene.add(player.group);
 
     const ai = createPaintSportCharacter(AI_BASE, AI_COLOR);
-    ai.group.position.set(0, 0, -10.5);
+    ai.group.position.set(7, 0, -10.5);
     scene.add(ai.group);
 
     const playerPaintMaterial = new THREE.MeshStandardMaterial({
@@ -183,6 +200,25 @@ export function ColorBlastersGame({ onExit }: ColorBlastersGameProps) {
     const playerVelocity = new THREE.Vector3();
     let fireHeld = false;
     let nearStation = false;
+    let inCover = false;
+
+    const segmentHitsCover = (start: THREE.Vector3, end: THREE.Vector3) => {
+      const direction = end.clone().sub(start);
+      const distance = direction.length();
+      if (distance < 0.001) return false;
+      const ray = new THREE.Ray(start, direction.normalize());
+      const hitPoint = new THREE.Vector3();
+      return coverBounds.some((box) => ray.intersectBox(box, hitPoint) !== null && hitPoint.distanceTo(start) <= distance);
+    };
+
+    const moveAroundCovers = (object: THREE.Object3D, movement: THREE.Vector3, bounds: THREE.Box3[]) => {
+      const nextX = object.position.clone();
+      nextX.x += movement.x;
+      if (!bounds.some((box) => box.containsPoint(new THREE.Vector3(nextX.x, 0.8, nextX.z)))) object.position.x = nextX.x;
+      const nextZ = object.position.clone();
+      nextZ.z += movement.z;
+      if (!bounds.some((box) => box.containsPoint(new THREE.Vector3(nextZ.x, 0.8, nextZ.z)))) object.position.z = nextZ.z;
+    };
 
     const resize = () => {
       const width = mount.clientWidth;
@@ -208,13 +244,22 @@ export function ColorBlastersGame({ onExit }: ColorBlastersGameProps) {
         aiZones: [...aiPainted],
         nearStation,
         charging,
+        inCover,
         message: message ?? previous.message,
       }));
     };
 
     const resetMaterials = (rig: CharacterRig) => {
-      rig.zones.forEach((mesh, zone) => {
-        mesh.material = rig.baseMaterials.get(zone)!;
+      rig.group.traverse((object) => {
+        if (!(object instanceof THREE.Mesh)) return;
+        const zone = object.userData.paintZone as PaintZone | undefined;
+        if (zone) object.material = object.userData.baseMaterial as THREE.Material;
+      });
+    };
+
+    const applyZoneMaterial = (rig: CharacterRig, zone: PaintZone, material: THREE.Material) => {
+      rig.group.traverse((object) => {
+        if (object instanceof THREE.Mesh && object.userData.paintZone === zone) object.material = material;
       });
     };
 
@@ -245,9 +290,9 @@ export function ColorBlastersGame({ onExit }: ColorBlastersGameProps) {
       fireHeld = false;
       playerVelocity.set(0, 0, 0);
       dashVelocity.set(0, 0, 0);
-      player.group.position.set(0, 0, 9.5);
+      player.group.position.set(7, 0, 9.5);
       player.group.rotation.set(0, Math.PI, 0);
-      ai.group.position.set(0, 0, -10.5);
+      ai.group.position.set(7, 0, -10.5);
       resetMaterials(player);
       resetMaterials(ai);
       pushHud(true, 'AI보다 먼저 4개 부위를 칠하세요!');
@@ -266,7 +311,7 @@ export function ColorBlastersGame({ onExit }: ColorBlastersGameProps) {
         const next = addPaintedZone(aiPainted, zone);
         const isNew = next !== aiPainted;
         aiPainted = next;
-        ai.zones.get(zone)!.material = playerPaintMaterial;
+        applyZoneMaterial(ai, zone, playerPaintMaterial);
         createSplat(hitPosition, PLAYER_COLOR);
         if (isNew) pushHud(true, `${ZONE_LABELS[zone]} 도색 성공!`);
         if (hasWon(aiPainted)) {
@@ -277,7 +322,7 @@ export function ColorBlastersGame({ onExit }: ColorBlastersGameProps) {
         const next = addPaintedZone(playerPainted, zone);
         const isNew = next !== playerPainted;
         playerPainted = next;
-        player.zones.get(zone)!.material = aiPaintMaterial;
+        applyZoneMaterial(player, zone, aiPaintMaterial);
         createSplat(hitPosition, AI_COLOR);
         if (isNew) pushHud(true, `AI가 ${ZONE_LABELS[zone]}을 칠했습니다!`);
         if (hasWon(playerPainted)) {
@@ -396,13 +441,13 @@ export function ColorBlastersGame({ onExit }: ColorBlastersGameProps) {
       const desiredVelocity = movement.clone().multiplyScalar(MOVE_SPEED);
       playerVelocity.lerp(desiredVelocity, 1 - Math.exp(-delta * (movement.lengthSq() > 0 ? 12 : 8)));
       const previousPosition = player.group.position.clone();
-      player.group.position.addScaledVector(playerVelocity, delta);
-      player.group.position.addScaledVector(dashVelocity, delta);
+      const frameMovement = playerVelocity.clone().add(dashVelocity).multiplyScalar(delta);
+      moveAroundCovers(player.group, frameMovement, playerCollisionBounds);
       dashVelocity.multiplyScalar(Math.pow(0.03, delta));
       player.group.position.x = THREE.MathUtils.clamp(player.group.position.x, -10.5, 10.5);
       player.group.position.z = THREE.MathUtils.clamp(player.group.position.z, -13.5, 13.5);
       const playerPoint = new THREE.Vector3(player.group.position.x, 0.8, player.group.position.z);
-      if (coverBoxes.some((cover) => new THREE.Box3().setFromObject(cover).expandByScalar(0.55).containsPoint(playerPoint))) {
+      if (playerCollisionBounds.some((box) => box.containsPoint(playerPoint))) {
         player.group.position.x = previousPosition.x;
         player.group.position.z = previousPosition.z;
         playerVelocity.multiplyScalar(0.15);
@@ -417,6 +462,10 @@ export function ColorBlastersGame({ onExit }: ColorBlastersGameProps) {
         playerPaint = Math.min(maxPlayerPaint, playerPaint + delta * 7.5);
       }
       if (charging && !nearStation) charging = false;
+      inCover = segmentHitsCover(
+        ai.group.position.clone().add(new THREE.Vector3(0, 2.8, 0)),
+        player.group.position.clone().add(new THREE.Vector3(0, 2.8, 0)),
+      );
     };
 
     const updateAi = (elapsed: number, delta: number) => {
@@ -428,13 +477,18 @@ export function ColorBlastersGame({ onExit }: ColorBlastersGameProps) {
       }
       const desiredX = Math.sin(elapsed * 0.72) * 6.6;
       const desiredZ = -8.5 + Math.sin(elapsed * 0.43) * 2.1;
-      ai.group.position.x += (desiredX - ai.group.position.x) * Math.min(1, delta * 1.35);
-      ai.group.position.z += (desiredZ - ai.group.position.z) * Math.min(1, delta * 1.2);
+      moveAroundCovers(ai.group, new THREE.Vector3(
+        (desiredX - ai.group.position.x) * Math.min(1, delta * 1.35),
+        0,
+        (desiredZ - ai.group.position.z) * Math.min(1, delta * 1.2),
+      ), playerCollisionBounds);
       ai.group.rotation.y = Math.atan2(
         player.group.position.x - ai.group.position.x,
         player.group.position.z - ai.group.position.z,
       );
-      if (elapsed - lastAiShot >= AI_FIRE_INTERVAL) {
+      const aiOrigin = ai.group.position.clone().add(new THREE.Vector3(0.7, 2.9, 1.05).applyAxisAngle(new THREE.Vector3(0, 1, 0), ai.group.rotation.y));
+      const playerTorso = player.group.position.clone().add(new THREE.Vector3(0, 2.72, 0));
+      if (elapsed - lastAiShot >= AI_FIRE_INTERVAL && !segmentHitsCover(aiOrigin, playerTorso)) {
         lastAiShot = elapsed;
         aiPaint -= 1;
         const zone = chooseUnpaintedZone(playerPainted);
@@ -474,10 +528,13 @@ export function ColorBlastersGame({ onExit }: ColorBlastersGameProps) {
           }
         }
         if (!hit) {
-          for (const cover of coverBoxes) {
-            const box = new THREE.Box3().setFromObject(cover);
-            if (box.containsPoint(projectile.mesh.position)) {
-              createSplat(projectile.mesh.position.clone(), projectile.owner === 'player' ? PLAYER_COLOR : AI_COLOR);
+          const shotDirection = projectile.mesh.position.clone().sub(previousPosition);
+          const shotDistance = shotDirection.length();
+          const shotRay = new THREE.Ray(previousPosition, shotDirection.normalize());
+          const coverHit = new THREE.Vector3();
+          for (const box of coverBounds) {
+            if (shotRay.intersectBox(box, coverHit) && coverHit.distanceTo(previousPosition) <= shotDistance) {
+              createSplat(coverHit.clone(), projectile.owner === 'player' ? PLAYER_COLOR : AI_COLOR);
               hit = true;
               break;
             }
@@ -523,17 +580,17 @@ export function ColorBlastersGame({ onExit }: ColorBlastersGameProps) {
       aiBlaster.rotation.x = elapsed - lastAiShot < 0.09 ? -0.14 : 0;
       const moveAmount = Number(player.group.userData.moveAmount ?? 0);
       const stride = Math.sin(elapsed * 10.5) * 0.38 * moveAmount;
-      const playerLeftArm = player.group.userData.leftArm as THREE.Mesh;
-      const playerRightArm = player.group.userData.rightArm as THREE.Mesh;
-      const playerLeftLeg = player.group.userData.leftLeg as THREE.Mesh;
-      const playerRightLeg = player.group.userData.rightLeg as THREE.Mesh;
+      const playerLeftArm = player.group.userData.leftArm as THREE.Group;
+      const playerRightArm = player.group.userData.rightArm as THREE.Group;
+      const playerLeftLeg = player.group.userData.leftLeg as THREE.Group;
+      const playerRightLeg = player.group.userData.rightLeg as THREE.Group;
       playerLeftArm.rotation.set(stride * 0.6, 0, -0.12);
       playerRightArm.rotation.set(-stride * 0.35, 0, 0.12);
       playerLeftLeg.rotation.x = -stride;
       playerRightLeg.rotation.x = stride;
       const aiStride = Math.sin(elapsed * 8) * 0.24;
-      (ai.group.userData.leftLeg as THREE.Mesh).rotation.x = -aiStride;
-      (ai.group.userData.rightLeg as THREE.Mesh).rotation.x = aiStride;
+      (ai.group.userData.leftLeg as THREE.Group).rotation.x = -aiStride;
+      (ai.group.userData.rightLeg as THREE.Group).rotation.x = aiStride;
     };
 
     const animate = () => {
@@ -621,6 +678,9 @@ export function ColorBlastersGame({ onExit }: ColorBlastersGameProps) {
       </section>
 
       <div className="cb-message">{hud.message}</div>
+      <div className={`cb-cover-status ${hud.inCover ? 'active' : ''}`} aria-live="polite">
+        {hud.inCover ? '방벽 엄폐 중 · AI 탄도 차단' : '방벽 뒤로 이동하면 엄폐'}
+      </div>
 
       <section className="cb-ammo" aria-label="페인트 잔량">
         <span>페인트</span>
@@ -632,6 +692,7 @@ export function ColorBlastersGame({ onExit }: ColorBlastersGameProps) {
         <span>WASD 이동</span>
         <span>마우스 조준·발사</span>
         <span>Space 회피</span>
+        <span>방벽 뒤 엄폐</span>
         <span>E 충전</span>
       </aside>
 

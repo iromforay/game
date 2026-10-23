@@ -37,7 +37,7 @@ export function AdGameCatalog({ onBack, onSelectGame }: AdGameCatalogProps) {
                 <span className="ad-game-description">{game.description}</span>
               </span>
               <span id={`${game.id}-status`} className="ad-game-status">
-                {isAvailable ? '시작' : '준비 중'}
+                {isAvailable ? (game.id === 'color-blasters' ? '게임 연결' : '시작') : '준비 중'}
               </span>
             </button>
           );

@@ -120,6 +120,8 @@ test('u1이 발사하면 BE가 u2의 피격 부위를 판정하고 4부위 승�
   ]);
   const attacker = match.players.find((player) => player.playerId === 'u1-hit')!;
   const target = match.players.find((player) => player.playerId === 'u2-hit')!;
+  await emitAck(u1, COLOR_BLASTERS_EVENTS.move, { x: 8, z: attacker.position.z, facing: 0 });
+  await emitAck(u2, COLOR_BLASTERS_EVENTS.move, { x: 8, z: target.position.z, facing: Math.PI });
 
   const shots = [
     { x: 0, y: 4.02, expected: 'head' },
@@ -131,8 +133,8 @@ test('u1이 발사하면 BE가 u2의 피격 부위를 판정하고 4부위 승�
   for (const [index, shot] of shots.entries()) {
     if (index > 0) await delay(155);
     const stateEvent = onceEvent<Snapshot>(u2, COLOR_BLASTERS_EVENTS.state);
-    const origin = { x: attacker.position.x + shot.x, y: shot.y, z: attacker.position.z };
-    const direction = { x: target.position.x + shot.x - origin.x, y: 0, z: target.position.z - origin.z };
+    const origin = { x: 8 + shot.x, y: shot.y, z: attacker.position.z };
+    const direction = { x: 0, y: 0, z: target.position.z - origin.z };
     assert.deepEqual(await emitAck(u1, COLOR_BLASTERS_EVENTS.fire, {
       origin,
       direction,
@@ -156,7 +158,7 @@ test('BE가 소켓 연사 조작을 거부하고 상대 이탈 승리를 전파�
   await emitAck(second, COLOR_BLASTERS_EVENTS.queueJoin, { playerId: 'LIMIT-P2' });
   await Promise.all([firstMatched, secondMatched]);
 
-  const payload = { origin: { x: 0, y: 2.72, z: 9.5 }, direction: { x: 0, y: 0, z: -1 } };
+  const payload = { origin: { x: 7, y: 2.72, z: 9.5 }, direction: { x: 0, y: 0, z: -1 } };
   assert.deepEqual(await emitAck(first, COLOR_BLASTERS_EVENTS.fire, payload), { ok: true });
   const errorEvent = onceEvent<{ message: string }>(first, COLOR_BLASTERS_EVENTS.error);
   assert.deepEqual(await emitAck(first, COLOR_BLASTERS_EVENTS.fire, payload), { ok: false, error: 'FIRE_RATE_LIMIT' });

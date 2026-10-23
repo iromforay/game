@@ -144,6 +144,23 @@
 }
 .cb-help span { padding: 6px 9px; color: white; border-radius: 8px; background: rgba(17,24,39,.67); font-size: 11px; font-weight: 800; }
 
+.cb-cover-status {
+  position: absolute;
+  z-index: 8;
+  left: 50%;
+  bottom: 22px;
+  transform: translateX(-50%);
+  padding: 8px 13px;
+  border: 1px solid rgba(255,255,255,.45);
+  border-radius: 999px;
+  color: rgba(255,255,255,.78);
+  background: rgba(17,24,39,.58);
+  font-size: 12px;
+  font-weight: 900;
+  backdrop-filter: blur(8px);
+}
+.cb-cover-status.active { color: #172033; border-color: white; background: #a7f3d0; box-shadow: 0 0 24px rgba(52,211,153,.5); }
+
 .cb-mobile-pad { display: none; }
 
 .cb-actions {
@@ -252,6 +269,7 @@
   .cb-zone-row span { width: 20px; height: 20px; font-size: 9px; border-width: 1px; }
   .cb-message { top: 116px; font-size: 11px; }
   .cb-help { display: none; }
+  .cb-cover-status { bottom: 126px; max-width: 58%; text-align: center; font-size: 10px; }
   .cb-ammo { top: 164px; bottom: auto; min-width: 160px; padding: 7px 10px; }
   .cb-mobile-pad {
     position: absolute;
