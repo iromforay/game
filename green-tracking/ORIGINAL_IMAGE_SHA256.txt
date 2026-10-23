@@ -1,0 +1,5 @@
+File: openai-generated-forest-path.png
+SHA-256: 9ED41CC015926D32294A6981B0A2DB56E11B07A37597A43C48872E4922DA9DF2
+
+This checksum applies only to the PNG file stored in this ZIP archive.
+If the checksum differs, the file bytes were changed, converted, or re-encoded.

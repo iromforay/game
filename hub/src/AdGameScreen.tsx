@@ -2,6 +2,7 @@ import { NumberHeroTowerGame } from 'number-hero-tower';
 import { MyRoomDungeonGame } from 'my-room-dungeon';
 import { SweetShopGame } from 'sweet-shop';
 import { SpinGatherKingGame } from 'spin-gather-king';
+import { GreenTrackingScene } from 'green-tracking';
 import { NumberGateRunnerScreen } from './NumberGateRunnerScreen';
 import type { AdGameId } from './adGames';
 import { GameResultCard } from './scoreboard/GameResultCard';
@@ -15,6 +16,10 @@ interface AdGameScreenProps {
 }
 
 export function AdGameScreen({ gameId, onExit, onOpenRanking }: AdGameScreenProps) {
+  if (gameId === 'green-tracking') {
+    return <div className="ad-game-react-screen"><GreenTrackingScene onExit={onExit} /></div>;
+  }
+
   if (gameId === 'spin-gather-king') {
     return (
       <div className="ad-game-react-screen">

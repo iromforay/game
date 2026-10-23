@@ -1,0 +1,10 @@
+{
+  "name": "green-tracking",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "scripts": { "dev": "vite --port 5188", "build": "tsc && vite build" },
+  "dependencies": { "react": "^19.2.8", "react-dom": "^19.2.8", "three": "^0.180.0" },
+  "devDependencies": { "@types/react": "^19.2.18", "@types/react-dom": "^19.2.4", "@types/three": "^0.180.0", "@vitejs/plugin-react": "^6.1.0", "typescript": "~6.0.2", "vite": "^8.2.2" }
+}
