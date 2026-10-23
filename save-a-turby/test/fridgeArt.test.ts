@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 const here = (rel: string) => fileURLToPath(new URL(rel, import.meta.url));
 
-// [키, 런타임 경로, 너비, 높이, 알파 있음, SHA-256(Codex delivery-v1 manifest)]
+// [키, 런타임 경로, 너비, 높이, 알파 있음, SHA-256(Codex delivery-v1 manifest — 대화 배경은 delivery-v1-fix, 도안 벽은 delivery-v3 교체본)]
 const ASSETS: [string, string, number, number, boolean, string][] = [
   ['fridge-base', 'world/fridge/fridge-base.png', 3200, 2400, false, '097B0BCD85B0A184208F29F8E9CAB3A084CB584352B74729E3E899E2F9B3C07D'],
   ['ganeuri-pinned', 'world/fridge/ganeuri-pinned.png', 512, 512, true, 'B42170A7581411C1D4E8E0B9DBC0CC3241C9611EEAC0BD62751D314D4D290077'],
@@ -15,12 +15,12 @@ const ASSETS: [string, string, number, number, boolean, string][] = [
   ['storage-door-closed', 'world/fridge/storage-door-closed.png', 1536, 1024, true, '7E8BFD225316FA258ECE582BC4BE45B27F26851ADBF829E2B18EFE58DB05AE4F'],
   ['storage-door-open', 'world/fridge/storage-door-open.png', 1536, 1024, true, 'B33D5B3A4FAC7F42C3430606BD60ABAB568540899BA039D67B75680EC147EB31'],
   ['frost-crack-light', 'world/fridge/frost-crack-light.png', 512, 512, true, '8679106F5A1EEBA4FC8541E7DC8BE5916273822BA59A0796D9778AE01C938624'],
-  ['storage-pattern-wall', 'world/fridge/storage-pattern-wall.png', 1200, 440, true, '0D33B686A278BF1F145D05291B46D50D5351AC210B49AAA6417AE95B81DD7E84'],
+  ['storage-pattern-wall', 'world/fridge/storage-pattern-wall.png', 1200, 440, true, 'D3270B5EDC2BABD9A91B56A3E2730FCD55F4B051B3F26D0CF32A6B3C4665FCD2'],
   ['needle-warn', 'world/fridge/needle-warn.png', 384, 640, true, 'E616B75AB73EB27E01086E0CBD6E6A9EA07F4C421157C5ED2AAB786FE01E0DC9'],
   ['needle-strike', 'world/fridge/needle-strike.png', 384, 640, true, '41793A466F557665713D34C49BD9BF34B7B22F0B1868CE38B3475AB7BA79AB32'],
   ['voice-frost', 'fx/story/voice-frost.png', 1280, 720, true, 'B8275F5BE7D8EB8542FCD10E7C076C6F4D2563B217BBD2A9DD156613EFF3DFED'],
   ['storage-pattern', 'fx/story/storage-pattern.png', 768, 768, true, '778122C0A7A93FF56021ECC39AF9AD5151B3869D0BFF39EB06A13513ED6A996C'],
-  ['chapter04-dialogue-bg', 'world/fridge/chapter04-dialogue-bg.png', 1280, 720, false, 'FFC12CB0A66F02C7115D04ED234C98092110451C624E69E9E0BB7A5DA5CB3E09'],
+  ['chapter04-dialogue-bg', 'world/fridge/chapter04-dialogue-bg.png', 1280, 720, false, 'D9C840C5855543FC81FA973CAA449CAAEF520FFACE1178AB02D47B43EE667483'],
 ];
 
 test('1차 에셋 12종: 파일·키(파일명)·크기·알파 유무·해시가 Codex 전달 manifest와 같고 중복 키가 없다', () => {
@@ -49,7 +49,7 @@ test('지역 데이터 표시 계약: 최종 배경, 가느리 124·고백 빛 1
   };
   assert.deepEqual([ICE.greybox, ICE.render.markerMode, ICE.render.background.assetKey], [false, 'final', 'fridge-base']);
   const art = (id: string) => ICE.storyPoints.find((p) => p.id === id)!;
-  assert.deepEqual([art('fridge_ganeuri').assetKey, art('fridge_ganeuri').art!.width, art('fridge_ganeuri').art!.glow], ['ganeuri-pinned', 124, true], 'C4-6 QA-11: 외곽광');
+  assert.deepEqual([art('fridge_ganeuri').assetKey, art('fridge_ganeuri').art!.width, art('fridge_ganeuri').art!.glow], ['ganeuri-pinned', 124, undefined], 'C4-6 QA-11: 외곽광은 실 땀 층에만');
   assert.deepEqual([art('fridge_confession').assetKey, art('fridge_confession').art!.width, art('fridge_confession').art!.glow], ['frost-crack-light', 120, true]);
   const g = ICE.layout.gates[0];
   assert.deepEqual([g.closedAssetKey, g.openAssetKey, g.art.width, g.art.height], ['storage-door-closed', 'storage-door-open', 220, 140]);

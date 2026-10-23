@@ -130,7 +130,7 @@ const POINT_IDS = ['fridge_ganeuri', 'fridge_guard', 'fridge_storage_wall', 'fri
 const art = (w, h, pivot = [0.5, 0.7], extra = {}) => ({ width: w, height: h, pivot, ...extra });
 // 표시 크기는 3장 C3-6 검수 기준(NPC 124, 임무 대상 120~146 + 외곽광)을 처음부터 쓴다
 const storyPoints = [
-  { id: 'fridge_ganeuri', kind: 'npc', assetKey: 'ganeuri-pinned', label: '얼음에 박힌 가느리', prompt: '연결 실을 끊어 주기', art: art(124, 124, [0.5, 0.7], { glow: true }) }, // C4-6 QA-11: 끊어 줄 대상 — 외곽광
+  { id: 'fridge_ganeuri', kind: 'npc', assetKey: 'ganeuri-pinned', label: '얼음에 박힌 가느리', prompt: '연결 실을 끊어 주기', art: art(124, 124, [0.5, 0.7]) }, // C4-6 QA-11: 외곽광은 실 땀 층(overlay_ganeuri_stitches)에만 — 몸 전체에는 주지 않는다
   { id: 'fridge_guard', kind: 'inspect', assetKey: 'frozen-guard-mark', label: '얼어붙은 길목', prompt: '길을 막은 그림자에게 다가가기', art: art(120, 120, [0.5, 0.7]) }, // 그림은 2차 에셋(C4-4)
   { id: 'fridge_storage_wall', kind: 'inspect', assetKey: 'storage-pattern-mark', label: '완성된 도안', prompt: '벽의 도안을 올려다보기' }, // 그림은 도안 벽 오버레이(forPoints)가 대신한다
   { id: 'fridge_confession', kind: 'inspect', assetKey: 'frost-crack-light', label: '얼음 틈의 빛', prompt: '누비 곁에 멈춰 서기', art: art(120, 120, [0.5, 0.6], { glow: true }) },

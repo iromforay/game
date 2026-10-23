@@ -75,7 +75,7 @@ test('지역 데이터: 3200×2400, 시작 지점·지점 좌표가 골격 명�
     assert.ok(look.label && look.prompt && look.assetKey, `${p.id} 표시 정보`);
   }
   // 3장 C3-6 기준: NPC 124, 임무 대상 120(외곽광)
-  assert.deepEqual(ICE.storyPoints!.find((s) => s.id === 'fridge_ganeuri')!.art, { width: 124, height: 124, pivot: [0.5, 0.7], glow: true });
+  assert.deepEqual(ICE.storyPoints!.find((s) => s.id === 'fridge_ganeuri')!.art, { width: 124, height: 124, pivot: [0.5, 0.7] }); // 외곽광은 실 땀 층(overlay_ganeuri_stitches)
   assert.equal(ICE.storyPoints!.find((s) => s.id === 'fridge_confession')!.art!.glow, true);
   assert.equal(ICE.layout!.gates.length, 1);
   assert.equal(ICE.layout!.gates[0].openEvent, 'fridge_frozen_guard_won', '저장고 문은 저장고 앞 전투 승리에서 파생');
