@@ -1,0 +1,25 @@
+{
+  "name": "color-blasters",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "scripts": {
+    "dev": "vite --port 5187",
+    "build": "tsc && vite build"
+  },
+  "dependencies": {
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "socket.io-client": "^4.8.1",
+    "three": "^0.180.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.180.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.1.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.2.2"
+  }
+}
