@@ -1,10 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
-import backdropUrl from './assets/forest-path-backdrop.webp';
-import treeUrl from './assets/photoreal-deciduous-tree.png';
+import backdropUrl from './assets/forest-path-backdrop-v2.webp';
 import grassUrl from './assets/photoreal-wild-grass.png';
-import reedsUrl from './assets/photoreal-reeds.png';
-import willowUrl from './assets/photoreal-willow.png';
 import './styles.css';
 
 interface GreenTrackingSceneProps { onExit?: () => void }
@@ -17,11 +14,9 @@ function makePhotoCard(texture: THREE.Texture, width: number, height: number, x:
   const group = new THREE.Group();
   const geometry = new THREE.PlaneGeometry(width, height);
   geometry.translate(0, height / 2, 0);
-  const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true, alphaTest: .08, side: THREE.DoubleSide, depthWrite: true, toneMapped: false });
-  [-.11, .11].forEach((turn, index) => {
-    const plane = new THREE.Mesh(geometry, index ? material.clone() : material);
-    plane.rotation.y = turn; plane.position.z = index ? -.035 : .035; plane.scale.x = flip ? -1 : 1; group.add(plane);
-  });
+  const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true, opacity: .72, alphaTest: .12, side: THREE.DoubleSide, depthWrite: false, toneMapped: false, fog: true });
+  const plane = new THREE.Mesh(geometry, material);
+  plane.rotation.y = (random() - .5) * .08; plane.scale.x = flip ? -1 : 1; group.add(plane);
   group.position.set(x, 0, z); group.scale.setScalar(scale); group.userData.sway = random() * Math.PI * 2;
   return group;
 }
@@ -42,13 +37,10 @@ export function GreenTrackingScene({ onExit }: GreenTrackingSceneProps) {
     renderer.setPixelRatio(Math.min(devicePixelRatio, 1.7)); renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05; mount.appendChild(renderer.domElement);
     const photoLayers: THREE.Group[] = [];
     const loader = new THREE.TextureLoader(); let disposed = false;
-    Promise.all([treeUrl, grassUrl, reedsUrl, willowUrl].map((url) => loader.loadAsync(url))).then(([treeTexture, grassTexture, reedsTexture, willowTexture]) => {
+    loader.loadAsync(grassUrl).then((grassTexture) => {
       if (disposed) return;
-      [treeTexture, grassTexture, reedsTexture, willowTexture].forEach((texture) => { texture.colorSpace = THREE.SRGBColorSpace; texture.anisotropy = renderer.capabilities.getMaxAnisotropy(); });
-      for (let i = 0; i < 32; i += 1) { const side = i % 2 ? 1 : -1; photoLayers.push(makePhotoCard(treeTexture, 6.4, 10, side * (5.1 + random() * 12), 6 - random() * 132, .72 + random() * .68, random() > .5)); }
-      for (let i = 0; i < 54; i += 1) { const side = i % 2 ? 1 : -1; photoLayers.push(makePhotoCard(reedsTexture, 4.2, 2.8, side * (3.2 + random() * 7), 7 - random() * 135, .72 + random() * .62, random() > .5)); }
-      for (let i = 0; i < 82; i += 1) { const side = i % 2 ? 1 : -1; photoLayers.push(makePhotoCard(grassTexture, 4.6, 2.3, side * (2.4 + random() * 6), 8 - random() * 137, .42 + random() * .5, random() > .5)); }
-      photoLayers.push(makePhotoCard(willowTexture, 11.2, 12, 5.7, -48, 1.08));
+      grassTexture.colorSpace = THREE.SRGBColorSpace; grassTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+      for (let i = 0; i < 28; i += 1) { const side = i % 2 ? 1 : -1; photoLayers.push(makePhotoCard(grassTexture, 4.6, 2.3, side * (3.8 + random() * 4.5), 4 - random() * 132, .3 + random() * .32, random() > .5)); }
       photoLayers.forEach((layer) => scene.add(layer));
     });
     const clock = new THREE.Clock(); let cameraZ = 8; let frame = 0; let lastUpdate = 0;
@@ -59,14 +51,15 @@ export function GreenTrackingScene({ onExit }: GreenTrackingSceneProps) {
       cameraZ -= delta * MODE_SPEED[activeMode]; if (cameraZ < -91) cameraZ = 8;
       const bobRate = activeMode === 'run' ? 9 : 5.2; const bobAmount = activeMode === 'stop' ? 0 : activeMode === 'run' ? .055 : .025;
       camera.position.set(Math.sin(elapsed * .72) * (activeMode === 'stop' ? 0 : .045), 2.05 + Math.sin(elapsed * bobRate) * bobAmount, cameraZ); camera.lookAt(camera.position.x * .3, 1.75, cameraZ - 16);
-      photoLayers.forEach((layer, index) => { layer.rotation.z = Math.sin(elapsed * .72 + (layer.userData.sway as number)) * (index === photoLayers.length - 1 ? .003 : .006); });
+      photoLayers.forEach((layer) => { layer.rotation.z = Math.sin(elapsed * .72 + (layer.userData.sway as number)) * .004; });
       if (elapsed - lastUpdate > .15) { lastUpdate = elapsed; setProgress(Math.round((8 - cameraZ) / 99 * 100)); }
       renderer.render(scene, camera);
     }; animate();
     return () => { disposed = true; cancelAnimationFrame(frame); observer.disconnect(); scene.traverse((object) => { if (object instanceof THREE.Mesh) { object.geometry.dispose(); const materials = Array.isArray(object.material) ? object.material : [object.material]; materials.forEach((material) => { if (material instanceof THREE.MeshBasicMaterial) material.map?.dispose(); material.dispose(); }); } }); renderer.dispose(); mount.removeChild(renderer.domElement); };
   }, []);
 
-  return <main className="green-tracking-shell"><div ref={mountRef} className="forest-scene" style={{ backgroundImage: `url(${backdropUrl})` }} aria-label="수양버들이 있는 3D 숲길 산책 장면" /><div className="forest-vignette" />
+  const backdropScale = 1.035 + progress * .00045;
+  return <main className="green-tracking-shell"><div className="forest-backdrop" style={{ backgroundImage: `url(${backdropUrl})`, transform: `scale(${backdropScale}) translateY(${progress * -.008}%)` }} /><div ref={mountRef} className="forest-scene" aria-label="수양버들이 있는 실사형 2.5D 숲길 산책 장면" /><div className="forest-vignette" />
     <header className="forest-topbar"><button type="button" onClick={onExit ?? (() => history.back())}>← 허브</button><div><small>GAME 08 · VISUAL MVP</small><strong>GREEN TRACKING</strong></div><span>숲속길 · 맑은 낮</span></header>
     <section id="walk-controls" className={`walk-panel${panelExpanded ? ' expanded' : ' collapsed'}`}>
       <button className="walk-panel-toggle" type="button" aria-expanded={panelExpanded} aria-controls="walk-panel-details" onClick={() => setPanelExpanded((expanded) => !expanded)}>

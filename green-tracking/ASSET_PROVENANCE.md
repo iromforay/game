@@ -1,5 +1,15 @@
 # Green Tracking 에셋 출처
 
+## `src/assets/forest-path-backdrop-v2.png` / `.webp`
+
+- 분류: AI 생성 실사형 배경 이미지
+- 생성일: 2026-10-23
+- 생성 도구: Codex에서 제공된 OpenAI 이미지 생성 도구
+- 외부 사진·스톡 사이트·웹 검색 사용: 없음
+- 원본 생성 파일: `C:\Users\foray\.codex\generated_images\01a16662-cc5c-7d42-b81c-95995cfc7af5\exec-bffc207c-8c87-48a1-991d-cab4e8b14b76.png`
+- 실제 게임 적용 파일: `src/assets/forest-path-backdrop-v2.webp`
+- 개선점: 흙길의 자갈·낙엽·습도감, 불규칙한 식생, 단일 광원과 자연스러운 원근을 강화하고 반복 식생을 제거
+
 ## `src/assets/forest-path-backdrop.png`
 
 - 분류: AI 생성 이미지
