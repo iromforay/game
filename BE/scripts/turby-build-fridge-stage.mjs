@@ -130,7 +130,7 @@ const POINT_IDS = ['fridge_ganeuri', 'fridge_guard', 'fridge_storage_wall', 'fri
 const art = (w, h, pivot = [0.5, 0.7], extra = {}) => ({ width: w, height: h, pivot, ...extra });
 // 표시 크기는 3장 C3-6 검수 기준(NPC 124, 임무 대상 120~146 + 외곽광)을 처음부터 쓴다
 const storyPoints = [
-  { id: 'fridge_ganeuri', kind: 'npc', assetKey: 'ganeuri-pinned', label: '얼음에 박힌 가느리', prompt: '연결 실을 끊어 주기', art: art(124, 124, [0.5, 0.7]) },
+  { id: 'fridge_ganeuri', kind: 'npc', assetKey: 'ganeuri-pinned', label: '얼음에 박힌 가느리', prompt: '연결 실을 끊어 주기', art: art(124, 124, [0.5, 0.7], { glow: true }) }, // C4-6 QA-11: 끊어 줄 대상 — 외곽광
   { id: 'fridge_guard', kind: 'inspect', assetKey: 'frozen-guard-mark', label: '얼어붙은 길목', prompt: '길을 막은 그림자에게 다가가기', art: art(120, 120, [0.5, 0.7]) }, // 그림은 2차 에셋(C4-4)
   { id: 'fridge_storage_wall', kind: 'inspect', assetKey: 'storage-pattern-mark', label: '완성된 도안', prompt: '벽의 도안을 올려다보기' }, // 그림은 도안 벽 오버레이(forPoints)가 대신한다
   { id: 'fridge_confession', kind: 'inspect', assetKey: 'frost-crack-light', label: '얼음 틈의 빛', prompt: '누비 곁에 멈춰 서기', art: art(120, 120, [0.5, 0.6], { glow: true }) },
@@ -210,7 +210,8 @@ const doc = {
     background: { assetKey: 'fridge-base' },
     overlays: [
       // 완성된 도안 벽(W04-OVL-01): 저장고 위쪽 벽. 도안 벽 지점의 표식을 대신한다
-      { id: 'overlay_storage_pattern', assetKey: 'storage-pattern-wall', x: SKEL.overlay_regions[0].x, y: SKEL.overlay_regions[0].y, width: SKEL.overlay_regions[0].width, height: SKEL.overlay_regions[0].height, pivot: [0, 0], layer: 'overlay', forPoints: ['fridge_storage_wall'] },
+      // C4-6 QA-05·10: 오른쪽 끝이 미니맵·우측 버튼에 가려져 100px 왼쪽으로, 벽에 박힌 자수처럼 보이게 불투명도 0.88
+      { id: 'overlay_storage_pattern', assetKey: 'storage-pattern-wall', x: SKEL.overlay_regions[0].x - 100, y: SKEL.overlay_regions[0].y, width: SKEL.overlay_regions[0].width, height: SKEL.overlay_regions[0].height, pivot: [0, 0], layer: 'overlay', alpha: 0.88, forPoints: ['fridge_storage_wall'] },
       // 풀려난 가느리(W04-NPC-02): 구조 뒤 바늘 통로 입구에서 길을 알려 준다. 저장고 앞 전투를 이기면 함께 들어가 사라진다
       { id: 'overlay_ganeuri_guide', assetKey: 'ganeuri-freed', x: 1740, y: 1500, width: 124, height: 124, pivot: [0.5, 0.7], layer: 'story', visibleAfter: 'fridge_ganeuri_freed', hiddenAfter: 'fridge_frozen_guard_won' },
     ],

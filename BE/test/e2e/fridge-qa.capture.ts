@@ -117,7 +117,7 @@ test('C4 캡처 ②(1280×720): 바늘 통로(풀려난 가느리·예고·내�
     await g.capture('f05_needle_warn');
     await g.until('needle_1 내려찍기', "s.map.needles.find((n) => n.id === 'needle_1').phase === 'strike'", 5000);
     await g.capture('f06_needle_strike');
-    await moveTo(g, device, { x: 2650, y: 1250 });
+    await moveTo(g, device, { x: 2700, y: 1000 }); // C4-6 QA-06: 길목 표식과 닫힌 문이 한 화면에
     await g.capture('f07_guard_point');
   }, backend, device);
   await g.close();
@@ -179,6 +179,9 @@ test('C4 캡처 ⑤(1280×720): 서리 미싱 시작 → 바늘 예고 → 정�
     await g.capture('b04_boss_start');
     await g.playBattle(300_000, snapHas('(b.snap.needleMarks ?? []).length > 0 && b.snap.currentPlayerId === b.myId'));
     await g.capture('b05_boss_needle');
+    // C4-6 QA-02: 밑실 둘을 끊고 윗실만 남은 장면(승리 패널 전) — 정지 모습은 승리 장면 연출(d01)에서 본다
+    await g.playBattle(300_000, snapHas("b.snap.units.filter((u) => u.unitId.startsWith('lower_thread') && u.stunned).length === 2 && b.snap.currentPlayerId === b.myId"));
+    await g.capture('b05b_boss_upper_only');
     await g.playBattle(300_000, snapHas("b.snap.units.some((u) => u.unitId === 'frost_machine' && u.phase === 'exposed')"));
     await g.capture('b06_boss_stopped');
     await g.until('결과 확정', 's.battle && s.battle.settled === true && s.battle.resultButton', 30_000);

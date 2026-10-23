@@ -53,7 +53,8 @@
         "pivot": [
           0.5,
           0.7
-        ]
+        ],
+        "glow": true
       }
     },
     {
@@ -613,7 +614,7 @@
       {
         "id": "overlay_storage_pattern",
         "assetKey": "storage-pattern-wall",
-        "x": 2350,
+        "x": 2250,
         "y": 220,
         "width": 600,
         "height": 220,
@@ -622,6 +623,7 @@
           0
         ],
         "layer": "overlay",
+        "alpha": 0.88,
         "forPoints": [
           "fridge_storage_wall"
         ]

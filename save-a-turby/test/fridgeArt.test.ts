@@ -49,13 +49,13 @@ test('지역 데이터 표시 계약: 최종 배경, 가느리 124·고백 빛 1
   };
   assert.deepEqual([ICE.greybox, ICE.render.markerMode, ICE.render.background.assetKey], [false, 'final', 'fridge-base']);
   const art = (id: string) => ICE.storyPoints.find((p) => p.id === id)!;
-  assert.deepEqual([art('fridge_ganeuri').assetKey, art('fridge_ganeuri').art!.width], ['ganeuri-pinned', 124]);
+  assert.deepEqual([art('fridge_ganeuri').assetKey, art('fridge_ganeuri').art!.width, art('fridge_ganeuri').art!.glow], ['ganeuri-pinned', 124, true], 'C4-6 QA-11: 외곽광');
   assert.deepEqual([art('fridge_confession').assetKey, art('fridge_confession').art!.width, art('fridge_confession').art!.glow], ['frost-crack-light', 120, true]);
   const g = ICE.layout.gates[0];
   assert.deepEqual([g.closedAssetKey, g.openAssetKey, g.art.width, g.art.height], ['storage-door-closed', 'storage-door-open', 220, 140]);
   assert.deepEqual(g.openPieces.map((p) => [p.width, p.height, p.frame]), [[88, 112, [0, 0, 768, 1024]], [88, 112, [768, 0, 768, 1024]]]);
-  const wall = ICE.render.overlays.find((o) => o.assetKey === 'storage-pattern-wall')!;
-  assert.deepEqual([wall.x, wall.y, wall.width, wall.height, wall.forPoints], [2350, 220, 600, 220, ['fridge_storage_wall']]);
+  const wall = ICE.render.overlays.find((o) => o.assetKey === 'storage-pattern-wall')! as typeof ICE.render.overlays[number] & { alpha?: number };
+  assert.deepEqual([wall.x, wall.y, wall.width, wall.height, wall.alpha, wall.forPoints], [2250, 220, 600, 220, 0.88, ['fridge_storage_wall']], 'C4-6 QA-05·10');
   const guide = ICE.render.overlays.find((o) => o.assetKey === 'ganeuri-freed')!;
   assert.deepEqual([guide.visibleAfter, guide.hiddenAfter], ['fridge_ganeuri_freed', 'fridge_frozen_guard_won']);
   for (const o of ICE.render.overlays) assert.ok(o.x + o.width <= ICE.size.width && o.y + o.height <= ICE.size.height, `${o.id} 지도 안`);

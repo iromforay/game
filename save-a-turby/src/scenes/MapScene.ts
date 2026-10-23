@@ -975,7 +975,7 @@ export class MapScene extends Phaser.Scene {
     this.frostEdge = [];
     if (!frost) return;
     const { width, height } = this.scale;
-    if (this.textures.exists('voice-frost')) this.frostEdge.push(this.add.image(0, 0, 'voice-frost').setOrigin(0, 0).setDisplaySize(width, height).setScrollFactor(0).setAlpha(0.6).setDepth(DEPTH_STORY + 50));
+    if (this.textures.exists('voice-frost')) this.frostEdge.push(this.add.image(0, 0, 'voice-frost').setOrigin(0, 0).setDisplaySize(width, height).setScrollFactor(0).setAlpha(0.8).setDepth(DEPTH_STORY + 50)); // C4-6 QA-13: 둔해짐이 읽히게 0.6 → 0.8
     else {
       // 임시 표시(서리 그림 전): 화면 가장자리 네 변의 옅은 하늘색 띠. 가운데는 비운다
       const band = Math.round(Math.min(width, height) * 0.08);
