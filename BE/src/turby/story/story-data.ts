@@ -246,6 +246,30 @@ export const STORY_EVENTS: StoryEventDef[] = [
   ev({ id: 'fridge_storage_seen', chapter: 4, allowedAt: ['CH04_GANEURI_RESCUED'], requires: ['fridge_frozen_guard_won'], evidence: { kind: 'point', stageCode: 'ice', pointId: 'fridge_storage_wall' }, to: 'CH04_STORAGE_CLEARED' }),
   // 누비의 고백(저장고 중심 앞)
   ev({ id: 'fridge_confession_seen', chapter: 4, allowedAt: ['CH04_STORAGE_CLEARED'], requires: ['fridge_storage_seen'], evidence: { kind: 'point', stageCode: 'ice', pointId: 'fridge_confession' }, to: 'CH04_CONFESSION_SEEN' }),
+  // 10-23 C4-3: 서리 미싱 승리 정산(서버 전용 — 전투 확정만 기록). 한 트랜잭션: 보스 정지 + 극세사 지급 사건 + 얼음 극세사 1개(확률 아님) + CH04_BOSS_DEFEATED.
+  //   보스는 파괴하지 않는다(정지). 장착·성장·장 완료·5장 개방은 아래 장착 사건. 유물은 한 번만 지급된다(grantItem의 relic 1회 규칙)
+  ev({ id: 'fridge_boss_defeated', chapter: 4, allowedAt: ['CH04_CONFESSION_SEEN'], requires: ['fridge_confession_seen'], serverOnly: true, evidence: { kind: 'none' }, alsoComplete: ['fridge_microfiber_granted'], grant: [{ itemCode: 'ice_microfiber', quantity: 1 }], to: 'CH04_BOSS_DEFEATED' }),
+  ev({ id: 'fridge_microfiber_granted', chapter: 4, allowedAt: ['CH04_CONFESSION_SEEN'], requires: ['fridge_confession_seen'], serverOnly: true, evidence: { kind: 'none' } }),
+  // 승리 장면(ch04.boss_victory)을 끝까지 본 뒤 클라이언트가 완료를 요청한다(completesWith). 체크포인트·아이템·성장은 바꾸지 않는다. 장착의 선행 조건
+  ev({ id: 'fridge_boss_aftermath_seen', chapter: 4, allowedAt: ['CH04_BOSS_DEFEATED'], requires: ['fridge_boss_defeated', 'fridge_microfiber_granted'], evidence: { kind: 'none' } }),
+  // 인벤토리 "누비에게 장착"(POST /player/me/story/relics/ice_microfiber/equip)만 기록. 한 트랜잭션: story_4 장착 + 성장 3→4 + 이 사건 + desert_unlocked + CH04_COMPLETE.
+  //   ice_microfiber 보유 레코드는 삭제하지 않는다. 선행: 승리 장면 완료·story_1~3 장착·성장 정확히 3
+  ev({
+    id: 'fridge_microfiber_equipped',
+    chapter: 4,
+    allowedAt: ['CH04_BOSS_DEFEATED'],
+    requires: ['fridge_boss_defeated', 'fridge_microfiber_granted', 'fridge_boss_aftermath_seen'],
+    serverOnly: true,
+    evidence: { kind: 'none' },
+    requireGrowthEq: 3,
+    requireEquipped: ['story_1', 'story_2', 'story_3'],
+    equipRelic: { itemCode: 'ice_microfiber', slotKey: 'story_4', growthStage: 4 },
+    alsoComplete: ['desert_unlocked'],
+    to: 'CH04_COMPLETE',
+  }),
+  ev({ id: 'desert_unlocked', chapter: 4, allowedAt: ['CH04_BOSS_DEFEATED'], requires: ['fridge_boss_aftermath_seen'], serverOnly: true, evidence: { kind: 'none' } }),
+  // '이어진 감각' 장면(ch04.chapter_complete)을 끝까지 본 뒤 클라이언트가 완료를 요청한다. 체크포인트·보상·성장은 다시 바꾸지 않는다
+  ev({ id: 'fridge_chapter_complete_seen', chapter: 4, allowedAt: ['CH04_COMPLETE'], requires: ['fridge_microfiber_equipped', 'desert_unlocked'], evidence: { kind: 'none' } }),
 ];
 
 // 부분 사건이 모두 기록되면 같은 트랜잭션에서 함께 기록하는 집계 사건(C2-3). 이미 기록돼 있으면 다시 만들지 않는다
@@ -433,12 +457,14 @@ export const STORY_TRIGGERS: StoryTriggerDef[] = [
   { id: 'fridge_entry', stageCode: 'ice', evidence: { kind: 'stage', stageCode: 'ice' }, auto: true, repeatable: true, play: 'resume' },
   // 2) 통로 끝의 가느리 — 장면을 끝까지 보면 fridge_ganeuri_freed + CH04_GANEURI_RESCUED. 중간에 끊기면 같은 지점에서 처음부터
   { id: 'fridge_ganeuri', stageCode: 'ice', evidence: { kind: 'point', stageCode: 'ice', pointId: 'fridge_ganeuri' }, activeAt: ['CH04_STARTED'], requires: ['fridge_entry_seen'], unless: ['fridge_ganeuri_freed'], repeatable: true, play: { segmentId: 'ch04.ganeuri', endAfter: 'ch04.ganeuri' } },
-  // 3) 저장고 앞 길목 — 바늘 통로 너머. C4-1은 지문까지, 전투(storyBattle)와 승리 정산은 C4-3
-  { id: 'fridge_guard', stageCode: 'ice', evidence: { kind: 'point', stageCode: 'ice', pointId: 'fridge_guard' }, activeAt: ['CH04_GANEURI_RESCUED'], requires: ['fridge_ganeuri_freed'], unless: ['fridge_frozen_guard_won'], repeatable: true, play: { segmentId: 'ch04.guard', endAfter: 'ch04.guard' } },
+  // 3) 저장고 앞 길목 — 바늘 통로 너머. 지문 뒤 전투(storyBattle). 승리하면 서버가 fridge_frozen_guard_won(저장고 문 열림, 체크포인트 유지)을 기록한다
+  { id: 'fridge_guard', stageCode: 'ice', evidence: { kind: 'point', stageCode: 'ice', pointId: 'fridge_guard' }, activeAt: ['CH04_GANEURI_RESCUED'], requires: ['fridge_ganeuri_freed'], unless: ['fridge_frozen_guard_won'], encounterKey: 'fridge_frozen_guard', repeatable: true, play: { segmentId: 'ch04.guard', endAfter: 'ch04.guard' } },
   // 4) 완성된 도안 벽 — 저장고 문이 열린 뒤. 끝까지 보면 fridge_storage_seen + CH04_STORAGE_CLEARED
   { id: 'fridge_storage_wall', stageCode: 'ice', evidence: { kind: 'point', stageCode: 'ice', pointId: 'fridge_storage_wall' }, activeAt: ['CH04_GANEURI_RESCUED'], requires: ['fridge_frozen_guard_won'], unless: ['fridge_storage_seen'], repeatable: true, play: { segmentId: 'ch04.storage', endAfter: 'ch04.storage' } },
   // 5) 저장고 중심 앞 얼음 틈 — 누비의 고백. 끝까지 보면 fridge_confession_seen + CH04_CONFESSION_SEEN
   { id: 'fridge_confession', stageCode: 'ice', evidence: { kind: 'point', stageCode: 'ice', pointId: 'fridge_confession' }, activeAt: ['CH04_STORAGE_CLEARED'], requires: ['fridge_storage_seen'], unless: ['fridge_confession_seen'], repeatable: true, play: { segmentId: 'ch04.confession', endAfter: 'ch04.confession' } },
+  // 6) 저장고 중심 입구(10-23 C4-3) — 고백 뒤에만. 도입 → 서리 미싱 전투 → (이기면) 승리 장면이 한 재생 범위로 이어진다. 정산 뒤에는 닫힌다
+  { id: 'fridge_boss_entrance', stageCode: 'ice', evidence: { kind: 'point', stageCode: 'ice', pointId: 'fridge_boss_entrance' }, activeAt: ['CH04_CONFESSION_SEEN'], requires: ['fridge_confession_seen'], unless: ['fridge_boss_defeated'], encounterKey: 'fridge_boss_frost_machine', repeatable: true, play: { segmentId: 'ch04.boss_intro', endAfter: 'ch04.boss_victory' } },
 ];
 export const TRIGGER_BY_ID = new Map(STORY_TRIGGERS.map((t) => [t.id, t]));
 
@@ -453,6 +479,7 @@ export const SEGMENT_CHAIN_END: Record<string, string> = {
   'ch01.primordial_knot': 'ch01.primordial_knot',
   'ch02.chapter_complete': 'ch02.chapter_complete',
   'ch03.chapter_complete': 'ch03.chapter_complete',
+  'ch04.chapter_complete': 'ch04.chapter_complete',
 };
 
 // 숲 입구 복귀 범위: 잘린 실을 살펴보기 전까지는 첫 길의 걷는 장면(001~004)만 다시 보여 준다. 그 뒤는 지점이 이어 간다
@@ -463,6 +490,7 @@ export const SEGMENT_AFTER_EVENT: Record<string, string> = {
   forest_first_knot_equipped: 'ch01.first_knot_equipped',
   lake_dye_thread_equipped: 'ch02.chapter_complete', // 장착이 처음 기록되면 '돌아온 색' 장면을 이어 재생
   underfloor_cotton_core_equipped: 'ch03.chapter_complete', // 장착이 처음 기록되면 '돌아온 중심' 장면을 이어 재생
+  fridge_microfiber_equipped: 'ch04.chapter_complete', // 10-23 C4-3: 장착이 처음 기록되면 '이어진 감각' 장면을 이어 재생
 };
 
 // ---- 스토리 전투 조우(M4-B) ----
@@ -488,6 +516,10 @@ export const STORY_ENCOUNTERS: StoryEncounterDef[] = [
   { key: 'underfloor_ambush', chapter: 3, stageCode: 'underground', allowedAt: ['CH03_ELDER_MET'], requires: ['underfloor_items_inspected'], onWinEvents: ['underfloor_ambush_won'] },
   // 10-16 C3-3: 기억 실패굴이. 승리하면 underfloor_boss_defeated(솜심 지급 사건·오래된 솜심 1개·CH03_BOSS_DEFEATED)를 서버가 한 트랜잭션으로 정산한다
   { key: 'underfloor_boss_memory_spool', chapter: 3, stageCode: 'underground', allowedAt: ['CH03_MEMORY_FRAGMENT_SEEN'], requires: ['underfloor_memory_fragment_seen'], onWinEvents: ['underfloor_boss_defeated'] },
+  // 10-23 C4-3: 저장고 앞 길목. 승리하면 저장고 문만 열린다(체크포인트 유지 — Codex 의견 P-01)
+  { key: 'fridge_frozen_guard', chapter: 4, stageCode: 'ice', allowedAt: ['CH04_GANEURI_RESCUED'], requires: ['fridge_ganeuri_freed'], onWinEvents: ['fridge_frozen_guard_won'] },
+  // 10-23 C4-3: 서리 미싱. 승리하면 fridge_boss_defeated(극세사 지급 사건·얼음 극세사 1개·CH04_BOSS_DEFEATED)를 서버가 한 트랜잭션으로 정산한다
+  { key: 'fridge_boss_frost_machine', chapter: 4, stageCode: 'ice', allowedAt: ['CH04_CONFESSION_SEEN'], requires: ['fridge_confession_seen'], onWinEvents: ['fridge_boss_defeated'] },
   { key: 'forest_giant_knot', chapter: 1, stageCode: 'forest', allowedAt: ['CH01_COMPASS_ACQUIRED'], requires: ['forest_compass_granted', 'forest_hidden_path_opened'], onWinEvents: ['forest_giant_knot_defeated'] },
 ];
 

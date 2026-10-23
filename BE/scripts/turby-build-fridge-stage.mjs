@@ -142,6 +142,8 @@ const goals = [
   { id: 'enter_storage', text: '열린 저장고 안으로 들어가 보자.', requires: ['fridge_frozen_guard_won'], unless: ['fridge_storage_seen'] },
   { id: 'to_center', text: '저장고 중심으로 가자.', requires: ['fridge_storage_seen'], unless: ['fridge_confession_seen'] },
   { id: 'stop_machine', text: '바늘 소리가 나는 저장고 중심으로 들어가자.', requires: ['fridge_confession_seen'], unless: ['fridge_boss_defeated'] },
+  { id: 'bring_microfiber', text: '얼음 극세사를 누비에게 감아 주자.', requires: ['fridge_boss_aftermath_seen'], unless: ['fridge_microfiber_equipped'] },
+  { id: 'follow_warmth', text: '뜨거운 바람이 불어오는 보일러 쪽으로 가자.', requires: ['fridge_microfiber_equipped'] },
 ];
 const zones = [
   { id: 'zone_entrance', label: '성에 낀 입구', x: 140, y: 1840, width: 440, height: 340 },

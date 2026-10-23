@@ -63,6 +63,22 @@ export interface BattleUnit {
   carrierOf?: string | null; // 운반 실: 이 실이 끊기면 해당 작은 실패굴이의 방향이 뒤집힌다
   thread?: { order: number | null } | null; // 보스의 기억실. order = 정해진 끊기 순서(1부터), null = 가짜 실
   anchored?: boolean; // 제자리 적(10-16 C3-6): 이동하지 않고 인접한 아군만 공격한다(기억실에 묶인 기억 실패굴이)
+  // 10-23 C4-3(4장): 모두 전투 정의 데이터가 소유한다. 없으면 기존 전투와 같다
+  iceTrail?: boolean; // 얼어붙은 박음이: 움직이고 떠난 칸에 얼음 칸을 남긴다
+  shatter?: ShatterDef | null; // 얼어붙은 박음이: 쓰러지면 검은 실 파편을 흩뿌리고, 제한 라운드 안에 다 끊지 않으면 다시 일어난다
+  shardOf?: string | null; // 검은 실 파편: 흩뿌린 박음이
+  reviveRound?: number | null; // 쓰러진 박음이: 이 라운드가 시작될 때까지 파편이 남아 있으면 다시 일어난다(null = 완전히 쓰러짐)
+  guardedBy?: string | null; // 골무막이 곁(8방향 이웃)에 있는 동안, 골무막이 실밥이 남아 있으면 피해 0
+  needleMachine?: NeedleMachineDef | null; // 서리 미싱: 바늘 예고 → 다음 적 차례에 내려찍기(고정 + 연결 실)
+  rescuer?: boolean; // 가느리(중립): 혼자 하는 전투에서 다음 아군 차례 전에 연결 실을 끊어 준다
+  linkFor?: string | null; // 연결 실: 이 실이 묶은 아군 유닛(끊으면 풀린다)
+}
+
+// 10-23 C4-3: 얼어붙은 박음이 파편
+export interface ShatterDef {
+  shards: number; // 흩뿌리는 파편 수(빈 이웃 칸이 모자라면 그만큼만)
+  reviveRounds: number; // 쓰러진 라운드 + 이 값의 라운드가 시작될 때 파편이 남아 있으면 다시 일어난다
+  reviveHpPercent: number; // 다시 일어날 때의 HP(최대 HP 대비 %)
 }
 
 // 10-16 C3-3: 작은 실패굴이 규칙
@@ -73,7 +89,7 @@ export interface SpoolFleeDef {
 
 // 지속 턴 상태 이상(M4-A). bind = 지속 턴 동안 이동력 감소. wet_bind(10-13 C2-3 젖은 속박) = 다음 이동 행동 한 번의 이동 가능 거리만 1칸 줄고(최소 1칸) 즉시 해제 —
 // 중첩·지속 시간 갱신 없음. 수치는 전투 정의 데이터에서 온다(wet_bind는 turns·movePenalty를 쓰지 않는다)
-export type StatusKind = 'bind' | 'wet_bind' | 'confused'; // confused(10-16 C3-3 혼란): 걸린 유닛의 이동·공격 대상이 서버가 정한 다른 칸·대상으로 바뀐다
+export type StatusKind = 'bind' | 'wet_bind' | 'confused' | 'pinned'; // pinned(10-23 C4-3 고정): 행동할 수 없다 — 연결 실을 끊으면 풀린다(시간으로 풀리지 않는다) // confused(10-16 C3-3 혼란): 걸린 유닛의 이동·공격 대상이 서버가 정한 다른 칸·대상으로 바뀐다
 export interface StatusEffectDef {
   kind: StatusKind;
   turns: number; // 걸린 뒤 라운드가 몇 번 시작될 때까지 유지
@@ -122,6 +138,15 @@ export interface BattleUnitDefinition extends UnitStatsInput {
   flee?: SpoolFleeDef;
   carrierOf?: string;
   thread?: { order: number | null };
+  iceTrail?: boolean;
+  shatter?: ShatterDef;
+  guardedBy?: string;
+  needleMachine?: NeedleMachineDef;
+  rescuer?: boolean;
+}
+// 10-23 C4-3: 서리 미싱 바늘. 예고 칸 수 = 끊기지 않은 밑실(breakOrder = lowerOrder 부위) 수(최소 1)
+export interface NeedleMachineDef {
+  lowerOrder: number; // 밑실 부위의 breakOrder
 }
 
 // 10-14 C2-5A: 보스전 전용 규칙(모두 전투 정의 데이터가 소유한다 — 전투 밖 C2-2 물살과 상태를 공유하지 않는다)
@@ -138,6 +163,13 @@ export interface BattleCurrentDef {
 export interface BattleHintDef {
   zeroDamage?: string; // 보호된 중심부를 처음 공격했을 때 한 번 보여 줄 안내
   threadHint?: string; // 10-16 C3-3: 매 라운드 시작에 알리는 "다음 기억실" 안내(표시 대상은 스냅샷 hinted)
+  // 10-23 C4-3: 기믹이 처음 나올 때 한 번씩(Codex 의견 P-03 — 첫 등장 한 줄 안내)
+  iceTrail?: string;
+  shatter?: string;
+  guarded?: string;
+  needle?: string;
+  pinned?: string;
+  rescue?: string;
 }
 
 export interface BattleDefinition {
@@ -198,6 +230,11 @@ export interface BattleState {
   telegraphed?: { direction: 'east' | 'west'; round: number } | null; // round = 이 물살이 적용될 라운드
   lastCurrent?: { round: number; direction: 'east' | 'west'; moved: string[]; skipped: string[] } | null;
   hintsShown?: { code: string; text: string }[];
+  // 10-23 C4-3
+  ice?: string[]; // 얼음 칸 "col,row"
+  needleMarks?: string[]; // 다음 적 차례에 바늘이 내려올 칸
+  lastPinnedId?: string | null; // 직전 내려찍기에서 고정된 아군(연속 고정 금지)
+  linkSeq?: number; // 연결 실 ID 일련번호
 }
 
 export type BattleEvent =
@@ -220,7 +257,16 @@ export type BattleEvent =
   | { version: number; type: 'wrong_thread'; unitId: string; targetId: string } // 정해진 순서가 아닌 기억실(또는 가짜 실)을 끊으려 했다 — 행동은 쓰지만 진행 없음, 공격한 유닛이 혼란
   | { version: number; type: 'confused_action'; unitId: string; action: 'move' | 'attack' } // 혼란 때문에 목표가 바뀌었거나 행동이 헛돌았다
   | { version: number; type: 'carrier_cut'; unitId: string; spoolId: string } // 운반 실이 끊겨 작은 실패굴이의 방향이 뒤집혔다
-  | { version: number; type: 'empower'; unitId: string; targets: string[]; attack: number }; // 작은 실패굴이가 기억실을 전달해 박음이를 강화하고 사라졌다
+  | { version: number; type: 'empower'; unitId: string; targets: string[]; attack: number } // 작은 실패굴이가 기억실을 전달해 박음이를 강화하고 사라졌다
+  // 10-23 C4-3
+  | { version: number; type: 'ice'; cells: string[] } // 얼음 칸이 바뀌었다(전체 목록)
+  | { version: number; type: 'slide'; unitId: string; fromCol: number; fromRow: number; toCol: number; toRow: number } // 얼음 칸에서 한 칸 더 미끄러졌다(행동력 없음)
+  | { version: number; type: 'shatter'; unitId: string; shardIds: string[]; reviveRound: number } // 쓰러진 박음이가 파편을 흩뿌렸다
+  | { version: number; type: 'shatter_cleared'; unitId: string } // 파편을 모두 끊어 박음이가 완전히 쓰러졌다
+  | { version: number; type: 'revive'; unitId: string; hp: number } // 파편이 남아 박음이가 다시 일어났다
+  | { version: number; type: 'needle_telegraph'; cells: string[] } // 다음 적 차례에 바늘이 내려올 칸
+  | { version: number; type: 'needle_strike'; cells: string[]; pinned: string[]; linkIds: string[] } // 바늘이 내려찍었다(고정된 아군과 생긴 연결 실)
+  | { version: number; type: 'freed'; unitId: string; linkId: string; byUnitId: string | null }; // 연결 실이 끊겨 고정이 풀렸다(byUnitId = 끊은 유닛, 가느리 자동 해제 포함)
 
 export type ActionRequest =
   | { type: 'move'; unitId: unknown; targetCol: unknown; targetRow: unknown }
@@ -277,6 +323,13 @@ export interface BattleUnitDto {
   reversed?: boolean; // 작은 실패굴이: 운반 실이 끊김
   thread?: boolean; // 보스의 기억실(진짜·가짜 구분은 알리지 않는다)
   hinted?: boolean; // 오래된 폭신이가 지금 가리키는 "다음 기억실"
+  // 10-23 C4-3
+  shardOf?: string; // 검은 실 파편
+  reviving?: boolean; // 쓰러졌지만 파편이 남아 다시 일어날 수 있는 박음이
+  reviveRound?: number;
+  guardedBy?: string; // 골무막이 보호를 받을 수 있는 유닛
+  guarded?: boolean; // 지금 보호받는 중(피해 0)
+  linkFor?: string; // 연결 실
 }
 
 export interface BattleSnapshotDto {
@@ -306,4 +359,6 @@ export interface BattleSnapshotDto {
   telegraphedCurrent?: { direction: 'east' | 'west'; round: number } | null;
   lastCurrent?: { round: number; direction: 'east' | 'west'; moved: string[]; skipped: string[] } | null;
   hintsShown?: { code: string; text: string }[];
+  ice?: string[]; // 10-23 C4-3: 얼음 칸(정의 전투만)
+  needleMarks?: string[]; // 10-23 C4-3: 다음 적 차례에 바늘이 내려올 칸
 }

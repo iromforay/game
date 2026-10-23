@@ -258,6 +258,11 @@ function addDefinitionUnits(state: BattleState, def: BattleDefinition) {
       ...(d.maxHitPercent !== undefined ? { maxHitPercent: d.maxHitPercent } : {}),
       ...(d.flat ? { flat: true } : {}),
       ...(d.anchored ? { anchored: true } : {}),
+      ...(d.iceTrail ? { iceTrail: true } : {}),
+      ...(d.shatter ? { shatter: { ...d.shatter }, reviveRound: null } : {}),
+      ...(d.guardedBy ? { guardedBy: d.guardedBy } : {}),
+      ...(d.needleMachine ? { needleMachine: { ...d.needleMachine } } : {}),
+      ...(d.rescuer ? { rescuer: true } : {}),
       ...(d.flee ? { flee: { ...d.flee }, reversed: false } : {}),
       ...(d.carrierOf ? { carrierOf: d.carrierOf } : {}),
       ...(d.thread ? { thread: { order: d.thread.order } } : {}),
@@ -324,6 +329,11 @@ const hasLiveParts = (state: BattleState, core: BattleUnit) => state.units.some(
 const hasParts = (state: BattleState, core: BattleUnit) => state.units.some((p) => p.partOf === core.unitId);
 
 // ---------- 10-16 C3-3: 3장 규칙(모두 전투 정의 데이터가 켠 경우만) ----------
+// 10-23 C4-3: 골무막이 보호가 지금 걸려 있는가(공격 판정·화면 표시가 같은 조건)
+function guardActive(state: BattleState, target: BattleUnit): boolean {
+  const g = target.guardedBy ? state.units.find((x) => x.unitId === target.guardedBy) : undefined;
+  return !!g && isLive(g) && hasLiveParts(state, g) && Math.max(Math.abs(g.col - target.col), Math.abs(g.row - target.row)) <= 1;
+}
 const isConfused = (u: BattleUnit) => (u.statuses ?? []).some((s) => s.kind === 'confused');
 // 보스의 기억실: 진짜 실 중 아직 끊지 않은 가장 앞 순서(오래된 폭신이가 가리키는 실). 없으면 null
 function nextThread(state: BattleState): BattleUnit | null {
@@ -336,6 +346,34 @@ function emitThreadHint(state: BattleState, ctx: Ctx) {
   if (text && nextThread(state)) emit(state, ctx, { type: 'hint', code: 'thread_hint', text });
 }
 const clampTo = (v: number, max: number) => Math.min(Math.max(v, 0), max);
+
+// 10-23 C4-3: 정의의 안내 문구를 전투당 한 번만 낸다(기믹 첫 등장 — Codex 의견 P-03)
+function hintOnce(state: BattleState, ctx: Ctx, code: 'iceTrail' | 'shatter' | 'guarded' | 'needle' | 'pinned' | 'rescue') {
+  const text = state.definition?.hints?.[code];
+  const shown = (state.hintsShown ??= []);
+  if (!text || shown.some((h) => h.code === code)) return;
+  shown.push({ code, text });
+  emit(state, ctx, { type: 'hint', code, text });
+}
+const isPinned = (u: BattleUnit) => (u.statuses ?? []).some((s) => s.kind === 'pinned');
+// 이웃 빈 칸(동·서·남·북 순서 — 결정적). 막힌 칸·점유 칸·격자 밖은 뺀다
+function freeNeighbors(state: BattleState, at: { col: number; row: number }): { col: number; row: number }[] {
+  const out: { col: number; row: number }[] = [];
+  for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    const col = at.col + dc;
+    const row = at.row + dr;
+    if (col < 0 || row < 0 || col >= state.rules.gridCols || row >= state.rules.gridRows || isBlockedCell(state, col, row)) continue;
+    if (state.units.some((u) => isLive(u) && u.col === col && u.row === row)) continue;
+    out.push({ col, row });
+  }
+  return out;
+}
+// 전투 중에 새로 생기는 표적(파편·연결 실): 행동하지 않고 한 번에 끊긴다
+function spawnTarget(state: BattleState, unitId: string, characterCode: string, name: string, at: { col: number; row: number }, extra: Partial<BattleUnit>): BattleUnit {
+  const u: BattleUnit = { unitId, side: 'wild', ownerPlayerId: null, participantSlot: 0, partyOrder: 0, turbyId: null, characterCode, name, col: at.col, row: at.row, hp: 1, maxHp: 1, ap: 0, maxAp: 0, attack: 0, defense: 0, stunned: false, inactive: false, statuses: [], targetable: true, threatened: false, canAct: false, partOf: null, breakOrder: null, onHit: null, exitOnDefeat: null, fled: false, protectMode: 'reject', ...extra };
+  state.units.push(u);
+  return u;
+}
 
 function corners(rules: BattleRules) {
   const c = rules.gridCols - 1;
@@ -443,6 +481,19 @@ function moveTo(state: BattleState, unit: BattleUnit, col: number, row: number, 
     unit.statuses = unit.statuses.filter((s) => s.kind !== 'wet_bind');
     emit(state, ctx, { type: 'status', unitId: unit.unitId, statuses: unit.statuses.map((s) => ({ ...s })) });
   }
+  // 10-23 C4-3: 얼음 칸에 들어선 아군은 같은 방향(마지막 이동의 큰 축)으로 한 칸 더 미끄러진다 — 갈 수 없으면 그 자리(행동력 없음)
+  if (unit.side === 'party' && state.ice?.includes(cellKey(col, row))) {
+    const dx = col - fromCol;
+    const dy = row - fromRow;
+    const [sc, sr] = Math.abs(dx) >= Math.abs(dy) ? [Math.sign(dx), 0] : [0, Math.sign(dy)];
+    const nc = col + sc;
+    const nr = row + sr;
+    if ((sc !== 0 || sr !== 0) && nc >= 0 && nr >= 0 && nc < state.rules.gridCols && nr < state.rules.gridRows && !isBlockedCell(state, nc, nr) && !isOccupied(state, nc, nr, unit)) {
+      unit.col = nc;
+      unit.row = nr;
+      emit(state, ctx, { type: 'slide', unitId: unit.unitId, fromCol: col, fromRow: row, toCol: nc, toRow: nr });
+    }
+  }
   if (cornerEscapeOn(state) && atCorner(state, unit)) resolve(state, ctx, 'draw');
 }
 
@@ -475,6 +526,26 @@ function strike(state: BattleState, attacker: BattleUnit, defender: BattleUnit, 
     }
   }
   if (defender.stunned) {
+    // 10-23 C4-3: 얼어붙은 박음이가 쓰러지면 파편을 흩뿌린다(파편을 다 끊어야 완전히 쓰러진 것)
+    if (defender.shatter && defender.reviveRound == null && !defender.shardOf) {
+      const cells = freeNeighbors(state, defender).slice(0, defender.shatter.shards);
+      if (cells.length > 0) {
+        // 다시 일어났다가 또 쓰러지면 새 파편이 생긴다 — ID는 그 박음이의 파편 수에 이어 붙여 겹치지 않게 한다
+        const before = state.units.filter((x) => x.shardOf === defender.unitId).length;
+        const ids = cells.map((c, i) => spawnTarget(state, defender.unitId + '_shard_' + (before + i + 1), 'ice_shard', '검은 실 파편', c, { shardOf: defender.unitId }).unitId);
+        defender.reviveRound = state.round + defender.shatter.reviveRounds;
+        emit(state, ctx, { type: 'shatter', unitId: defender.unitId, shardIds: ids, reviveRound: defender.reviveRound });
+        hintOnce(state, ctx, 'shatter');
+      }
+    }
+    if (defender.shardOf) {
+      const doll = state.units.find((x) => x.unitId === defender.shardOf);
+      if (doll && doll.reviveRound != null && !state.units.some((x) => x.shardOf === doll.unitId && isLive(x))) {
+        doll.reviveRound = null;
+        emit(state, ctx, { type: 'shatter_cleared', unitId: doll.unitId });
+      }
+    }
+    if (defender.linkFor) freeLinked(state, defender, attacker.unitId, ctx);
     if (defender.exitOnDefeat === 'flee') {
       defender.fled = true; // 연출 표시만 — 승패는 "쓰러짐"으로 이미 판정된다
       emit(state, ctx, { type: 'unit_exit', unitId: defender.unitId, mode: 'flee' });
@@ -512,7 +583,10 @@ function applyStatus(state: BattleState, target: BattleUnit, def: StatusEffectDe
 
 // 승패: 패배 조건을 먼저 본다. 정의가 없으면 기존 규칙(야생 전원 쓰러짐 = 승리, 아군 전원 기절 = 패배)과 같다.
 function objectiveMet(state: BattleState, o: BattleObjective): boolean {
-  const down = (id: string) => !!state.units.find((u) => u.unitId === id)?.stunned;
+  const down = (id: string) => {
+    const u = state.units.find((x) => x.unitId === id);
+    return !!u?.stunned && u.reviveRound == null; // 10-23 C4-3: 파편이 남은 박음이는 아직 쓰러진 것이 아니다
+  };
   switch (o.kind) {
     case 'defeat_all':
       return enemyUnits(state).every((u) => u.stunned || u.inactive);
@@ -575,6 +649,15 @@ function attack(state: BattleState, unit: BattleUnit, targetRaw: unknown, ctx: C
   if (target.partOf) {
     const firstOrder = Math.min(...state.units.filter((p) => p.partOf === target.partOf && !p.stunned).map((p) => p.breakOrder ?? 0));
     if ((target.breakOrder ?? 0) !== firstOrder) throw new BattleError('PART_ORDER', '먼저 끊어야 할 부위가 남아 있습니다.');
+  }
+  // 10-23 C4-3: 골무막이 곁(8방향 이웃)의 박음이 — 골무막이 실밥이 남아 있으면 피해 0(행동은 쓴다)
+  if (guardActive(state, target)) {
+    if (unit.ap < 1) throw new BattleError('NO_ACTION_POWER', '행동력이 없습니다.');
+    if (dist(unit, target) !== 1) throw new BattleError('OUT_OF_RANGE', '인접한 대상만 공격할 수 있습니다.');
+    unit.ap -= 1;
+    emit(state, ctx, { type: 'attack', attackerId: unit.unitId, targetId: target.unitId, damage: 0, targetHp: target.hp, targetStunned: false });
+    hintOnce(state, ctx, 'guarded');
+    return;
   }
   const protectedCore = hasLiveParts(state, target);
   if (protectedCore && target.protectMode !== 'zero') throw new BattleError('TARGET_PROTECTED', '바깥 부위가 남아 있어 피해를 줄 수 없습니다.');
@@ -641,6 +724,10 @@ function runOneEnemy(state: BattleState, wild: BattleUnit, ctx: Ctx): boolean {
     runSpool(state, wild, ctx);
     return true;
   }
+  if (wild.needleMachine) {
+    runNeedleMachine(state, wild, ctx);
+    return state.phase === 'wild_turn';
+  }
   while (wild.ap > 0 && !wild.stunned) {
     const target = nearestTarget(state, wild);
     if (!target) return state.phase === 'wild_turn'; // 아군이 없으면 이미 lose/cancelled로 끝났어야 함
@@ -668,6 +755,14 @@ function runOneEnemy(state: BattleState, wild: BattleUnit, ctx: Ctx): boolean {
       wild.col = nextCol;
       wild.row = nextRow;
       emit(state, ctx, { type: 'move', unitId: wild.unitId, fromCol, fromRow, toCol: nextCol, toRow: nextRow, apLeft: wild.ap });
+      if (wild.iceTrail) {
+        // 10-23 C4-3: 떠난 칸에 얼음 칸이 남는다
+        const ice = new Set(state.ice ?? []);
+        ice.add(cellKey(fromCol, fromRow));
+        state.ice = [...ice];
+        emit(state, ctx, { type: 'ice', cells: [...state.ice] });
+        hintOnce(state, ctx, 'iceTrail');
+      }
       if (cornerEscapeOn(state) && atCorner(state, wild)) {
         resolve(state, ctx, 'draw');
         return false;
@@ -707,6 +802,84 @@ function runSpool(state: BattleState, spool: BattleUnit, ctx: Ctx) {
   }
 }
 
+// 10-23 C4-3 서리 미싱(제자리). 적 차례마다 ① 지난 예고 칸을 내려찍고 ② 다음 칸을 예고한다.
+//   내려찍기: 예고 칸에 선 아군 하나를 고정하고 옆 빈 칸에 연결 실을 만든다. 연결 실이 남아 있거나, 직전에 고정된 아군이면 고정하지 않는다(Codex 의견 P-04 — 교착 방지).
+//   예고 칸 수 = 끊기지 않은 밑실 수(최소 1). 고정되지 않은 생존 아군의 칸부터 슬롯 순서로 고른다(결정적)
+function runNeedleMachine(state: BattleState, machine: BattleUnit, ctx: Ctx) {
+  const order = (a: BattleUnit, b: BattleUnit) => a.participantSlot - b.participantSlot || a.partyOrder - b.partyOrder || (a.unitId < b.unitId ? -1 : 1);
+  const marks = state.needleMarks ?? [];
+  if (marks.length > 0) {
+    const pinned: string[] = [];
+    const linkIds: string[] = [];
+    const linkAlive = state.units.some((u) => u.linkFor && isLive(u));
+    if (!linkAlive) {
+      const victim = partyUnits(state)
+        .filter((u) => isLive(u) && !isPinned(u) && u.unitId !== state.lastPinnedId && marks.includes(cellKey(u.col, u.row)))
+        .sort(order)[0];
+      const at = victim ? freeNeighbors(state, victim)[0] : undefined;
+      if (victim && at) {
+        state.linkSeq = (state.linkSeq ?? 0) + 1;
+        const link = spawnTarget(state, 'link_' + state.linkSeq, 'link_thread', '연결 실', at, { linkFor: victim.unitId });
+        (victim.statuses ??= []).push({ kind: 'pinned', turnsLeft: 99, movePenalty: 0, sourceUnitId: machine.unitId, appliedRound: state.round });
+        victim.ap = 0;
+        emit(state, ctx, { type: 'status', unitId: victim.unitId, statuses: victim.statuses.map((x) => ({ ...x })) });
+        pinned.push(victim.unitId);
+        linkIds.push(link.unitId);
+      }
+    }
+    state.lastPinnedId = pinned[0] ?? null;
+    emit(state, ctx, { type: 'needle_strike', cells: [...marks], pinned, linkIds });
+    if (pinned.length > 0) hintOnce(state, ctx, 'pinned');
+  }
+  const lower = machine.needleMachine!.lowerOrder;
+  const count = Math.max(1, state.units.filter((p) => p.partOf === machine.unitId && p.breakOrder === lower && !p.stunned).length);
+  const cells = partyUnits(state)
+    .filter((u) => isLive(u) && !isPinned(u))
+    .sort(order)
+    .slice(0, count)
+    .map((u) => cellKey(u.col, u.row));
+  state.needleMarks = cells;
+  emit(state, ctx, { type: 'needle_telegraph', cells: [...cells] });
+  if (cells.length > 0) hintOnce(state, ctx, 'needle');
+}
+
+// 연결 실이 끊겼다: 묶인 아군의 고정을 푼다(이 라운드에 남은 행동력은 되살리지 않는다 — 다음 아군 차례에 다시 찬다)
+function freeLinked(state: BattleState, link: BattleUnit, byUnitId: string | null, ctx: Ctx) {
+  link.fled = true; // 끊긴 연결 실은 화면에서 숨긴다
+  const u = state.units.find((x) => x.unitId === link.linkFor);
+  if (!u || !isPinned(u)) return;
+  u.statuses = (u.statuses ?? []).filter((x) => x.kind !== 'pinned');
+  emit(state, ctx, { type: 'status', unitId: u.unitId, statuses: u.statuses.map((x) => ({ ...x })) });
+  emit(state, ctx, { type: 'freed', unitId: u.unitId, linkId: link.unitId, byUnitId });
+}
+
+// 10-23 C4-3: 라운드 시작 — 파편이 남은 박음이는 제한 라운드가 되면 다시 일어난다(남은 파편은 함께 녹아 사라진다)
+function applyRevives(state: BattleState, ctx: Ctx) {
+  for (const doll of state.units) {
+    if (doll.reviveRound == null || !doll.stunned || state.round < doll.reviveRound) continue;
+    for (const sh of state.units.filter((x) => x.shardOf === doll.unitId && isLive(x))) {
+      sh.stunned = true;
+      sh.fled = true;
+    }
+    doll.stunned = false;
+    doll.hp = Math.max(1, Math.ceil((doll.maxHp * (doll.shatter?.reviveHpPercent ?? 50)) / 100));
+    doll.reviveRound = null;
+    emit(state, ctx, { type: 'revive', unitId: doll.unitId, hp: doll.hp });
+  }
+}
+
+// 10-23 C4-3: 혼자 하는 전투 — 가느리(rescuer)가 다음 아군 차례가 시작되기 전에 남은 연결 실을 끊는다(사용자 행동 소모 없음, Codex 의견 P-04)
+function applyRescue(state: BattleState, ctx: Ctx) {
+  const rescuer = state.units.find((u) => u.rescuer && !u.inactive);
+  if (!rescuer || state.participants.filter((p) => p.active).length !== 1) return;
+  for (const link of state.units.filter((u) => u.linkFor && isLive(u))) {
+    link.stunned = true;
+    link.hp = 0;
+    freeLinked(state, link, rescuer.unitId, ctx);
+    hintOnce(state, ctx, 'rescue');
+  }
+}
+
 // 작은 실패굴이를 N라운드 안에 잡지 못하면 기억실을 전달해 살아 있는 납작 병사(눌린 박음이) 전원의 공격이 오르고, 실패굴이는 사라진다(도주 연출 — 승패에서는 쓰러진 것으로 센다)
 function applyEmpower(state: BattleState, ctx: Ctx) {
   for (const spool of state.units) {
@@ -725,12 +898,14 @@ function startNextRound(state: BattleState, ctx: Ctx) {
   state.round += 1;
   tickStatuses(state, endedRound, ctx);
   applyEmpower(state, ctx);
+  applyRevives(state, ctx);
   evaluateOutcome(state, ctx);
   if (state.phase === 'resolved') return;
   applyTerrainRules(state, ctx);
   applyCurrent(state, ctx);
   telegraphCurrent(state, ctx);
-  for (const u of partyUnits(state)) if (isLive(u)) u.ap = u.maxAp;
+  applyRescue(state, ctx);
+  for (const u of partyUnits(state)) if (isLive(u)) u.ap = isPinned(u) ? 0 : u.maxAp; // 고정된 아군은 행동할 수 없다
   state.phase = 'player_subturn';
   state.subturnIndex = roundStartIndex(state);
   emit(state, ctx, { type: 'subturn', phase: state.phase, round: state.round, currentPlayerId: currentPlayerId(state) });
@@ -743,7 +918,7 @@ function tickStatuses(state: BattleState, endedRound: number, ctx: Ctx) {
     if (!unit.statuses || unit.statuses.length === 0) continue;
     let changed = false;
     for (const s of unit.statuses) {
-      if (s.kind !== 'wet_bind' && s.appliedRound < endedRound) { // 젖은 속박은 시간으로 풀리지 않는다(다음 이동 한 번에 소비)
+      if (s.kind !== 'wet_bind' && s.kind !== 'pinned' && s.appliedRound < endedRound) { // 고정은 연결 실을 끊어야 풀린다 // 젖은 속박은 시간으로 풀리지 않는다(다음 이동 한 번에 소비)
         s.turnsLeft -= 1;
         changed = true;
       }
@@ -923,6 +1098,10 @@ export function toSnapshot(state: BattleState): BattleSnapshotDto {
             ...(u.flat !== undefined ? { flat: u.flat } : {}),
             ...(u.flee ? { reversed: !!u.reversed } : {}),
             ...(u.thread ? { thread: true, hinted: nextThread(state)?.unitId === u.unitId } : {}),
+            ...(u.shardOf ? { shardOf: u.shardOf } : {}),
+            ...(u.reviveRound != null ? { reviving: true, reviveRound: u.reviveRound } : {}),
+            ...(u.guardedBy ? { guardedBy: u.guardedBy, guarded: guardActive(state, u) } : {}),
+            ...(u.linkFor ? { linkFor: u.linkFor } : {}),
           }
         : {}),
     })),
@@ -933,5 +1112,7 @@ export function toSnapshot(state: BattleState): BattleSnapshotDto {
       : {}),
     ...(state.definition?.current ? { telegraphedCurrent: state.telegraphed ?? null, lastCurrent: state.lastCurrent ?? null } : {}),
     ...(state.hintsShown && state.hintsShown.length > 0 ? { hintsShown: state.hintsShown.map((h) => ({ ...h })) } : {}),
+    ...(state.ice && state.ice.length > 0 ? { ice: [...state.ice] } : {}),
+    ...(state.needleMarks && state.needleMarks.length > 0 ? { needleMarks: [...state.needleMarks] } : {}),
   };
 }

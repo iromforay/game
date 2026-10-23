@@ -1,6 +1,6 @@
 // docs/scene/4장.md → BE/story-data/save-a-turby/dialogue/ch04.json 변환(문구는 MD 줄에서 그대로 가져온다 — 손으로 옮기지 않음).
 // 실행: node BE/story-data/save-a-turby/tools/build-ch04.js
-// 범위(C4-1): 소리 없는 냉기 · 얼음에 박힌 가느리 · 얼어붙은 저장고(길목 지문·완성된 도안) · 누비의 고백. 서리 미싱·이어진 감각은 C4-3에서 더한다.
+// 범위: 소리 없는 냉기 · 얼음에 박힌 가느리 · 얼어붙은 저장고(길목 지문·전투·완성된 도안) · 누비의 고백 · 서리 미싱(도입·전투·승리) · 이어진 감각(C4-3).
 // 연출 지시문(발동 조건·저장점 안내·전투 진행 설명)은 대사가 아니라 트리거·전이표가 대신하므로 옮기지 않는다 — EXCLUDED에 근거와 함께 둔다.
 const fs = require('fs');
 const path = require('path');
@@ -22,9 +22,9 @@ const unbacktick = (s) => (/^`[^`]+`$/.test(s) ? s.slice(1, -1) : s);
 const unbullet = (s) => s.replace(/^-\s+/, '');
 const unbold = (s) => s.replace(/^\*\*(.+)\*\*$/, '$1');
 
-// 화자 표기 → 화자 키. 가느리는 초상화 에셋이 없어 portrait null(오래된 폭신이와 같은 방식)
-const SPEAKER = { '{playerName}': 'player', 누비: 'nubi', 가느리: 'ganeuri' };
-const PORTRAIT = { player: 'player', nubi: 'nubi', ganeuri: null };
+// 화자 표기 → 화자 키. 가느리·서리 미싱은 초상화 에셋이 없어 portrait null(오래된 폭신이와 같은 방식)
+const SPEAKER = { '{playerName}': 'player', 누비: 'nubi', 가느리: 'ganeuri', '서리 미싱': 'frost_machine' };
+const PORTRAIT = { player: 'player', nubi: 'nubi', ganeuri: null, frost_machine: null };
 
 // 연출 지시문(옮기지 않음): 줄 번호 → 근거
 const EXCLUDED = {
@@ -37,6 +37,11 @@ const EXCLUDED = {
   106: '중간 저장점 안내(CH04_STORAGE_CLEARED — 전이표)',
   131: '중간 저장점 안내(CH04_CONFESSION_SEEN — 전이표)',
   132: '중간 저장점 안내(CH04_CONFESSION_SEEN — 전이표)',
+  148: '보스 전투 진행 설명 → storyBattle fridge_boss_frost_machine와 전투 정의(바늘 예고·고정·연결 실·밑실→윗실)',
+  159: '중간 저장점 안내(CH04_BOSS_DEFEATED — 전이표)',
+  160: '중간 저장점 안내(CH04_BOSS_DEFEATED — 전이표)',
+  174: '중간 저장점 안내(CH04_COMPLETE — 전이표)',
+  175: '중간 저장점 안내(CH04_COMPLETE — 전이표)',
 };
 
 // 한 줄에 서술과 조작 설명이 섞인 줄: 서술 문장만 원문 그대로 옮긴다(문장 번호는 0부터)
@@ -64,6 +69,7 @@ function l(seg, labelLine, textLine, expression) {
 }
 // 누비에게만 들리는 목소리(대본의 `…` 한 줄): 화자 없는 지문 + voice-frost 연출(화면 가장자리 서리·은색 글자)
 const voice = (seg, line) => n(seg, line, { cameraCue: 'voice-frost' });
+const battle = (seg, encounterKey) => ({ kind: 'storyBattle', dialogueId: id(seg), encounterKey });
 
 function segment(segmentId, resumeFrom, replayOnResume, completesWith, build) {
   return { segmentId, resumeFrom, replayOnResume, completesWith, entries: build(segmentId) };
@@ -98,12 +104,13 @@ const file = {
       n(s, 77),
       l(s, 79, 80, 'neutral'),
     ]),
-    // 바늘 통로 너머 저장고 앞 길목: 지문까지. 전투(storyBattle)는 C4-3에서 이 구간 끝에 붙는다
+    // 바늘 통로 너머 저장고 앞 길목: 지문 → 전투. 승리하면 서버가 fridge_frozen_guard_won(저장고 문 열림) 기록
     segment('ch04.guard', 'CH04_GANEURI_RESCUED', false, null, (s) => [
       t(s, 85),
       ns(s, 87, 0),
       ns(s, 87, 2),
       ns(s, 89, 0),
+      battle(s, 'fridge_frozen_guard'),
     ]),
     // 열린 저장고의 완성된 도안 → fridge_storage_seen + CH04_STORAGE_CLEARED
     segment('ch04.storage', 'CH04_GANEURI_RESCUED', true, 'fridge_storage_seen', (s) => [
@@ -125,6 +132,31 @@ const file = {
       l(s, 123, 124, 'weak'),
       l(s, 126, 127, 'neutral'),
       n(s, 129),
+    ]),
+    // 저장고 중심 입구: 보스 도입 → 전투 → (이기면 이어서) 승리 장면. 한 재생 범위로 이어진다
+    segment('ch04.boss_intro', 'CH04_CONFESSION_SEEN', false, null, (s) => [
+      t(s, 134),
+      n(s, 136),
+      n(s, 138),
+      l(s, 140, 141, 'neutral'),
+      n(s, 143),
+      l(s, 145, 146, 'neutral'),
+      battle(s, 'fridge_boss_frost_machine'), // 승리 시 서버가 fridge_boss_defeated(극세사 지급 사건·얼음 극세사·CH04_BOSS_DEFEATED) 기록
+    ]),
+    // 승리 장면을 끝까지 보면 fridge_boss_aftermath_seen(체크포인트·보상·성장 변화 없음). 재접속하면 이 장면부터
+    segment('ch04.boss_victory', 'CH04_BOSS_DEFEATED', true, 'fridge_boss_aftermath_seen', (s) => [
+      n(s, 150),
+      l(s, 152, 153, 'neutral'),
+      n(s, 155),
+      n(s, 157, { cameraCue: 'frost-machine-scar' }), // 2차 에셋: 몸체의 평행한 두 날 흠집(가위는 그리지 않는다)
+    ]),
+    // 인벤토리에서 "누비에게 장착"(fridge_microfiber_equipped) 성공 직후 — 장면을 끝까지 보면 fridge_chapter_complete_seen
+    segment('ch04.chapter_complete', 'CH04_COMPLETE', true, 'fridge_chapter_complete_seen', (s) => [
+      t(s, 162),
+      n(s, 164, { cameraCue: 'sense-restore' }),
+      l(s, 166, 167, 'relieved'),
+      n(s, 169, { cameraCue: 'warm-gold' }), // 2차 에셋: 따뜻한 금빛(5장 단서) — 이번 장에서 금빛은 여기에만
+      l(s, 171, 172, 'neutral'),
     ]),
   ],
 };

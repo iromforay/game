@@ -69,6 +69,7 @@ export function targetState(snap: BattleSnapshot, target: BattleUnit): TargetSta
     if ((target.breakOrder ?? 0) !== first) return 'part_order';
   }
   if (target.invulnerable) return target.zeroDamage ? 'zero' : 'protected'; // zero = 공격은 되지만 피해 0(서버가 안내를 한 번 낸다)
+  if (target.guarded) return 'zero'; // 10-23 C4-3: 골무막이 곁의 박음이 — 공격은 되지만 피해 0(서버 안내)
   return 'ok';
 }
 
@@ -110,6 +111,8 @@ export function unitTags(u: BattleUnit): string[] {
   if (u.flat === true) tags.push('납작');
   else if (u.flat === false) tags.push('재봉선 노출');
   if (u.reversed) tags.push('운반 실 끊김');
+  if (u.reviving) tags.push('파편 남음'); // 10-23 C4-3: 파편을 다 끊어야 완전히 쓰러진다
+  if (u.guarded) tags.push('골무 보호');
   if (u.phase === 'bound') tags.push('결박');
   else if (u.phase === 'exposed') tags.push('약점 노출');
   else if (u.invulnerable) tags.push('부위 먼저');
@@ -117,6 +120,7 @@ export function unitTags(u: BattleUnit): string[] {
     if (s.kind === 'bind') tags.push(`속박 ${s.turnsLeft}`);
     else if (s.kind === 'wet_bind') tags.push('젖은 속박');
     else if (s.kind === 'confused') tags.push('혼란');
+    else if (s.kind === 'pinned') tags.push('고정');
   }
   return tags;
 }

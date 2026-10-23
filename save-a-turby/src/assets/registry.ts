@@ -95,5 +95,9 @@ export const ENEMY_SHEET_OF: Record<string, string> = {
   pressed_sewn_doll: 'pressed-sewn-doll-idle',
   small_spool: 'small-spool-idle',
   memory_spool: 'memory-spool-idle',
+  // 10-23 C4-3 4장(2차 에셋 C4-4 — 파일이 오기 전에는 임시 도형)
+  frozen_sewn_doll: 'frozen-sewn-doll-idle',
+  thimble_guard: 'thimble-guard-idle',
+  frost_machine: 'frost-machine-idle',
 };
 

@@ -147,8 +147,9 @@ test('4장 C4-1 ①(1280×720): 냉장고 입장 → 도입(누비만 듣는 목
     const n1 = ICE.needleFields[0];
     await g.until('needle_1 쉼', "s.map.needles.find((n) => n.id === 'needle_1').phase === 'idle'", 5000);
     await g.until('needle_1 예고', "s.map.needles.find((n) => n.id === 'needle_1').phase === 'warn'", 5000);
-    await g.walkDirect('Map', { x: n1.x + n1.width / 2, y: 1560 }, 'keys');
-    await g.capture('fridge_04_needle_warn');
+    // 걷는 도중에 내려찍혀 돌아가면 그 자리에서 멈춘다(돌아간 뒤 다시 칸으로 걸어 들어가지 않게)
+    await g.walkDirect('Map', { x: n1.x + n1.width / 2, y: 1560 }, 'keys', 's.map.needleReturns >= 1');
+    if ((await map(g)).needleReturns === 0) await g.capture('fridge_04_needle_warn');
     await g.until('바늘 복귀', 's.map.needleReturns >= 1', 5000);
     m = await map(g);
     const west = ICE.safeAnchors.find((a) => a.id === 'anchor_needle_west')!;
@@ -209,7 +210,7 @@ test('4장 C4-1 ②(640×360): 길목 승리(시드) 뒤 열린 저장고 → �
     assert.deepEqual([once(db.events, 'fridge_storage_seen'), once(db.events, 'fridge_confession_seen')], [1, 1]);
     s = await story(g);
     assert.equal(s.goalShown, GOAL_MACHINE);
-    assert.deepEqual(s.points, [], '서리 미싱 입구는 C4-3에서 열린다');
+    assert.deepEqual(s.points, ['fridge_boss_entrance'], '고백 뒤 서리 미싱 입구가 열린다(C4-3)');
     await g.capture('fridge_s03_after_confession');
 
     // 새로고침: CH04_CONFESSION_SEEN 복원, 장면 반복 없음

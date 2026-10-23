@@ -114,6 +114,10 @@ export function resumeOf(snap: StorySnapshot): { segmentId: string | null; tutor
         return has('lake_boss_aftermath_seen') ? null : 'ch02.boss_victory'; // 정산은 끝났고 장면을 끝까지 보기 전 — 보스전·보상은 반복하지 않고 승리 장면만 처음부터
       case 'CH03_COMPLETE':
         return has('underfloor_chapter_complete_seen') ? (has('fridge_entry_seen') ? null : 'ch04.entry') : 'ch03.chapter_complete'; // 장착은 끝났고 장면을 끝까지 보기 전 — 장착·성장은 반복하지 않고 장면만 처음부터
+      case 'CH04_COMPLETE':
+        return has('fridge_chapter_complete_seen') ? null : 'ch04.chapter_complete'; // 10-23 C4-3: 장착은 끝났고 장면을 끝까지 보기 전 — 장면만 처음부터
+      case 'CH04_BOSS_DEFEATED':
+        return has('fridge_boss_aftermath_seen') ? null : 'ch04.boss_victory'; // 정산은 끝났고 승리 장면을 끝까지 보기 전 — 장면만 처음부터
       case 'CH03_BOSS_DEFEATED':
         return has('underfloor_boss_aftermath_seen') ? null : 'ch03.boss_victory'; // 정산은 끝났고 장면을 끝까지 보기 전 — 보스전·보상은 반복하지 않고 승리 장면만 처음부터
       case 'CH01_COMPLETE':

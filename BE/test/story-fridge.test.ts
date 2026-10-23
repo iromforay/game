@@ -78,20 +78,25 @@ test('이벤트·지점 정의: 이름·체크포인트 전이·서버 전용 �
   assert.deepEqual(sig('fridge_frozen_guard_won'), [['CH04_GANEURI_RESCUED'], null, true]);
   assert.deepEqual(sig('fridge_storage_seen'), [['CH04_GANEURI_RESCUED'], 'CH04_STORAGE_CLEARED', false]);
   assert.deepEqual(sig('fridge_confession_seen'), [['CH04_STORAGE_CLEARED'], 'CH04_CONFESSION_SEEN', false]);
-  for (const d of STORY_EVENTS.filter((x) => x.id.startsWith('fridge_') && x.id !== 'fridge_unlocked')) {
+  // 보상·장착은 보스 정산(grant)과 장착 사건(equipRelic) 둘뿐이다(10-23 C4-3). 나머지 4장 사건에는 아이템·통화·성장이 없다
+  const REWARD = ['fridge_boss_defeated', 'fridge_microfiber_equipped'];
+  for (const d of STORY_EVENTS.filter((x) => x.id.startsWith('fridge_') && x.id !== 'fridge_unlocked' && !REWARD.includes(x.id))) {
     assert.equal(d.chapter, 4, d.id);
-    assert.deepEqual([d.grant, d.consume, d.equipRelic, d.grantStoryNubi], [undefined, undefined, undefined, undefined], `${d.id}: 아이템·통화·성장 없음(C4-1)`);
+    assert.deepEqual([d.grant, d.consume, d.equipRelic, d.grantStoryNubi], [undefined, undefined, undefined, undefined], `${d.id}: 아이템·통화·성장 없음`);
   }
+  assert.deepEqual(e('fridge_boss_defeated').grant, [{ itemCode: 'ice_microfiber', quantity: 1 }]);
+  assert.deepEqual(e('fridge_microfiber_equipped').equipRelic, { itemCode: 'ice_microfiber', slotKey: 'story_4', growthStage: 4 });
+  assert.deepEqual(e('fridge_microfiber_equipped').alsoComplete, ['desert_unlocked']);
   assert.deepEqual(
     STORY_TRIGGERS.filter((t) => t.stageCode === 'ice').map((t) => t.id),
-    ['fridge_entry', 'fridge_ganeuri', 'fridge_guard', 'fridge_storage_wall', 'fridge_confession'],
+    ['fridge_entry', 'fridge_ganeuri', 'fridge_guard', 'fridge_storage_wall', 'fridge_confession', 'fridge_boss_entrance'],
   );
   for (const t of STORY_TRIGGERS.filter((x) => x.stageCode === 'ice' && x.evidence.kind === 'point')) assert.ok(pointOf((t.evidence as { pointId: string }).pointId), `${t.id}의 지점이 지역 데이터에 있다`);
   const idx = (c: string) => (CHECKPOINTS as readonly string[]).indexOf(c);
   assert.ok(idx('CH03_COMPLETE') < idx('CH04_STARTED') && idx('CH04_STARTED') < idx('CH04_GANEURI_RESCUED') && idx('CH04_GANEURI_RESCUED') < idx('CH04_STORAGE_CLEARED') && idx('CH04_STORAGE_CLEARED') < idx('CH04_CONFESSION_SEEN'));
 });
 
-test('대화 데이터: 구간 5개의 시작 체크포인트·완료 이벤트와 재생 범위가 전이표·트리거와 같고, 목소리는 voice-frost 지문, 가느리는 정본 라벨이다', () => {
+test('대화 데이터: 구간 8개의 시작 체크포인트·완료 이벤트와 재생 범위가 전이표·트리거와 같고, 목소리는 voice-frost 지문, 가느리·서리 미싱은 정본 라벨이다', () => {
   assert.deepEqual(
     CH04.segments.map((s) => [s.segmentId, s.resumeFrom, s.completesWith]),
     [
@@ -100,16 +105,26 @@ test('대화 데이터: 구간 5개의 시작 체크포인트·완료 이벤트�
       ['ch04.guard', 'CH04_GANEURI_RESCUED', null],
       ['ch04.storage', 'CH04_GANEURI_RESCUED', 'fridge_storage_seen'],
       ['ch04.confession', 'CH04_STORAGE_CLEARED', 'fridge_confession_seen'],
+      ['ch04.boss_intro', 'CH04_CONFESSION_SEEN', null],
+      ['ch04.boss_victory', 'CH04_BOSS_DEFEATED', 'fridge_boss_aftermath_seen'],
+      ['ch04.chapter_complete', 'CH04_COMPLETE', 'fridge_chapter_complete_seen'],
     ],
   );
+  // 전투 항목은 서버 스토리 전투 키와 같고 해당 트리거가 같은 키를 연다
+  const battles = CH04.segments.flatMap((x) => x.entries.filter((e) => e.kind === 'storyBattle').map((e) => [x.segmentId, (e as { encounterKey?: string }).encounterKey]));
+  assert.deepEqual(battles, [['ch04.guard', 'fridge_frozen_guard'], ['ch04.boss_intro', 'fridge_boss_frost_machine']]);
+  for (const [, key] of battles) assert.ok(STORY_TRIGGERS.some((t) => t.encounterKey === key), `${key} 트리거`);
+  const machine = CH04.segments.flatMap((x) => x.entries).filter((e) => e.kind === 'line' && e.speaker === 'frost_machine');
+  assert.ok(machine.length === 3 && machine.every((x) => x.speakerLabel === '서리 미싱' && x.portrait === null));
+  assert.deepEqual(CH04.segments.flatMap((x) => x.entries).map((e) => e.cameraCue).filter((c) => c && c !== 'voice-frost'), ['storage-pattern', 'frost-machine-scar', 'sense-restore', 'warm-gold'], '금빛은 장 마무리에만');
   const ids = new Set(CH04.segments.map((s) => s.segmentId));
   for (const t of STORY_TRIGGERS.filter((x) => x.stageCode === 'ice' && typeof x.play === 'object')) assert.ok(ids.has((t.play as { segmentId: string }).segmentId), `${t.id} 재생 구간`);
   for (const s of CH04.segments) if (s.completesWith) assert.ok(EVENT_BY_ID.get(s.completesWith), `${s.segmentId} 완료 이벤트`);
   // 누비만 듣는 목소리 두 줄: 화자 없는 지문 + voice-frost
   const voices = CH04.segments.flatMap((s) => s.entries.filter((e) => e.cameraCue === 'voice-frost'));
   assert.deepEqual(voices.map((e) => [e.kind, e.text]), [['narration', '돌아와.'], ['narration', '네가 돌아오면 길이 열린다.']]);
-  const g = CH04.segments[1].entries.filter((x) => x.kind === 'line' && x.speaker === 'ganeuri');
-  assert.ok(g.length === 4 && g.every((x) => x.speakerLabel === '가느리' && x.portrait === null));
+  const g = CH04.segments.flatMap((x) => x.entries).filter((x) => x.kind === 'line' && x.speaker === 'ganeuri');
+  assert.ok(g.length === 6 && g.every((x) => x.speakerLabel === '가느리' && x.portrait === null), `가느리 대사 ${g.length}`);
   assert.equal(CH04.segments[3].entries[0].cameraCue, 'storage-pattern', '도안 벽 클로즈업');
   // 고백의 약속 대사(사용자 확정 10-22: 장면 대본대로)
   assert.equal(CH04.segments[4].entries.find((e) => e.speakerLabel === '{playerName}' && e.text!.startsWith('어떤 기억이'))!.text, '어떤 기억이 돌아와도 지금 여기 있는 널 혼자 두지 않을게.');
@@ -203,7 +218,7 @@ test('지역 화면 데이터: 서리 구역·바늘 칸이 표시용으로 내�
 
 // ---------- MD 대본 대조 ----------
 
-test('ch04 대화(C4-1 구간): 장면 문서와 서술·대사가 같은 순서·화자·문구이고, 빠진 줄은 제외 목록·부분 줄뿐이다', () => {
+test('ch04 대화(4장 전체): 장면 문서와 서술·대사가 같은 순서·화자·문구이고, 빠진 줄은 제외 목록·부분 줄뿐이다', () => {
   const ROOT = resolve(__dirname, '../..');
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const DOCS = (require(join(ROOT, 'BE/story-data/save-a-turby/tools/docs-root.js')) as { docsRoot: (root: string) => string }).docsRoot(ROOT);
@@ -211,7 +226,7 @@ test('ch04 대화(C4-1 구간): 장면 문서와 서술·대사가 같은 순서
   const { EXCLUDED, PARTIAL, sentences } = require(join(ROOT, 'BE/story-data/save-a-turby/tools/build-ch04.js')) as { EXCLUDED: Record<number, string>; PARTIAL: Record<number, { keep: number[] }>; sentences: (s: string) => string[] };
   const raw = readFileSync(join(DOCS, 'docs/scene/4장.md'), 'utf8').split(/\r?\n/);
   const from = raw.findIndex((l) => l.trim() === '## 소리 없는 냉기');
-  const to = raw.findIndex((l) => l.trim() === '## 서리 미싱'); // C4-1 범위: 소리 없는 냉기 ~ 누비의 고백
+  const to = raw.length; // 4장 전체(소리 없는 냉기 ~ 이어진 감각)
   assert.ok(from >= 0 && to > from);
   const md: { who: string | null; text: string }[] = [];
   let speaker: string | null = null;
