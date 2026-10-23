@@ -213,6 +213,8 @@ const doc = {
       // C4-6 QA-05·10: 오른쪽 끝이 미니맵·우측 버튼에 가려져 100px 왼쪽으로, 벽에 박힌 자수처럼 보이게 불투명도 0.88
       { id: 'overlay_storage_pattern', assetKey: 'storage-pattern-wall', x: SKEL.overlay_regions[0].x - 100, y: SKEL.overlay_regions[0].y, width: SKEL.overlay_regions[0].width, height: SKEL.overlay_regions[0].height, pivot: [0, 0], layer: 'overlay', alpha: 0.88, forPoints: ['fridge_storage_wall'] },
       // 풀려난 가느리(W04-NPC-02): 구조 뒤 바늘 통로 입구에서 길을 알려 준다. 저장고 앞 전투를 이기면 함께 들어가 사라진다
+      // C4-6 QA-11: 박힌 가느리의 검은 실 땀만 분리한 층(Codex `ganeuri-pinned-stitches.png`, 가느리와 같은 캔버스·크기·피벗) — 이 층에만 외곽광. 파일이 오기 전에는 그리지 않는다
+      { id: 'overlay_ganeuri_stitches', assetKey: 'ganeuri-pinned-stitches', x: P.fridge_ganeuri.x, y: P.fridge_ganeuri.y, width: 124, height: 124, pivot: [0.5, 0.7], layer: 'story', glow: true, hiddenAfter: 'fridge_ganeuri_freed' },
       { id: 'overlay_ganeuri_guide', assetKey: 'ganeuri-freed', x: 1740, y: 1500, width: 124, height: 124, pivot: [0.5, 0.7], layer: 'story', visibleAfter: 'fridge_ganeuri_freed', hiddenAfter: 'fridge_frozen_guard_won' },
     ],
   },

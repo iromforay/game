@@ -629,6 +629,21 @@
         ]
       },
       {
+        "id": "overlay_ganeuri_stitches",
+        "assetKey": "ganeuri-pinned-stitches",
+        "x": 1680,
+        "y": 1600,
+        "width": 124,
+        "height": 124,
+        "pivot": [
+          0.5,
+          0.7
+        ],
+        "layer": "story",
+        "glow": true,
+        "hiddenAfter": "fridge_ganeuri_freed"
+      },
+      {
         "id": "overlay_ganeuri_guide",
         "assetKey": "ganeuri-freed",
         "x": 1740,

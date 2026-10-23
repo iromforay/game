@@ -487,7 +487,12 @@ export class MapScene extends Phaser.Scene {
         keep(this.add.sprite(o.x, o.y, o.assetKey).setOrigin(o.pivot[0], o.pivot[1]).setDisplaySize(o.width, o.height).setAngle(o.rotation).setAlpha(o.alpha).setDepth(o.depth).play(animKey));
         continue;
       }
-      keep(this.add.image(o.x, o.y, o.assetKey).setOrigin(o.pivot[0], o.pivot[1]).setDisplaySize(o.width, o.height).setAngle(o.rotation).setAlpha(o.alpha).setDepth(o.depth));
+      const img = keep(this.add.image(o.x, o.y, o.assetKey).setOrigin(o.pivot[0], o.pivot[1]).setDisplaySize(o.width, o.height).setAngle(o.rotation).setAlpha(o.alpha).setDepth(o.depth));
+      // 10-23 C4-6 QA-11: 겹쳐 그리는 층(박힌 가느리의 실 땀 등)에만 외곽광
+      if (o.glow && img.preFX) {
+        img.preFX.setPadding(12);
+        img.preFX.addGlow(MAP_TARGET_GLOW, 3, 0, false, 0.1, 12);
+      }
     }
     for (const g of plan.gates) {
       const gate = view!.gates.find((x) => x.id === g.id)!;

@@ -106,6 +106,7 @@ export interface StageOverlayData {
   hiddenAfter?: string; // 이 이벤트 뒤에는 사라진다
   rotation?: number; // 도(°), 시계 방향(화면 좌표). 안내 파문처럼 방향이 있는 그림(10-13 v1c)
   alpha?: number; // 0 초과 1 이하(기본 1)
+  glow?: boolean; // 10-23 C4-6: 이 그림에만 임무 대상 외곽광(예: 박힌 가느리의 실 땀 층)
 }
 
 // 지역 데이터의 render·문 그림 블록 검증 — 잘못되면 서버가 뜨지 않는다(geometry 계약과 같은 원칙)
@@ -139,6 +140,7 @@ export function validateRender(data: StageStoryData, stageCode: string): void {
       if (o.forPoints !== undefined && !(Array.isArray(o.forPoints) && o.forPoints.every((x) => typeof x === 'string'))) bad.push(`${at}.forPoints: 지점 ID 배열`);
       if (o.rotation !== undefined && !(num(o.rotation) && Math.abs(o.rotation) <= 360)) bad.push(`${at}.rotation: -360~360 숫자(도)`);
       if (o.alpha !== undefined && !(num(o.alpha) && o.alpha > 0 && o.alpha <= 1)) bad.push(`${at}.alpha: 0 초과 1 이하`);
+      if (o.glow !== undefined && typeof o.glow !== 'boolean') bad.push(`${at}.glow: true/false`);
       for (const f of ['visibleAfter', 'hiddenAfter'] as const) if (o[f] !== undefined && typeof o[f] !== 'string') bad.push(`${at}.${f}: 이벤트 이름이 아니다`);
     });
   }
