@@ -313,7 +313,8 @@ class RoomClient {
   selfOnEnter: { x: number; y: number; corrected: boolean } | null = null;
 
   async enterMap(dir: Facing): Promise<MapPlayer[]> {
-    const res = await this.request<{ self: { x: number; y: number }; corrected?: boolean; players: MapPlayer[]; wilds: WildInfo[]; encounterRadiusPx?: number; story?: { play: StoryPlay | null; delivery: StoryDelivery | null } | null }>('map:enter', { dir });
+    const res = await this.request<{ self: { x: number; y: number }; corrected?: boolean; players: MapPlayer[]; wilds: WildInfo[]; encounterRadiusPx?: number; story?: { play: StoryPlay | null; delivery: StoryDelivery | null } | null; serverNow?: number }>('map:enter', { dir });
+    this.observeServerTime(res.serverNow); // 10-23 C4-1: 바늘 칸 주기 표시용 시계 보정(판정은 서버)
     this.selfOnEnter = res.self ? { x: res.self.x, y: res.self.y, corrected: res.corrected === true } : null;
     this.storyOnEnter = res.story ?? null;
     this.setWilds(res.wilds);

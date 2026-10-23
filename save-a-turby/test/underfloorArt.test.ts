@@ -94,6 +94,6 @@ test('기억 비침: cameraCue 다섯 종(1차 3 + 2차 기억 조각·은빛 �
   const seg = (cue: string) => dialogue.segments.find((s) => s.entries.some((e) => e.cameraCue === cue))!.segmentId;
   assert.deepEqual([seg('memory-fragment'), seg('silver-thread')], ['ch03.fragment', 'ch03.chapter_complete']);
   const scene = readFileSync(here('../src/scenes/OpeningScene.ts'), 'utf8');
-  assert.match(scene, /MEMORY_GLIMPSE_KEYS = \['memory-glove', 'memory-blanket', 'memory-doll', 'memory-fragment', 'silver-thread'\]/);
+  assert.match(scene, /MEMORY_GLIMPSE_KEYS = \['memory-glove', 'memory-blanket', 'memory-doll', 'memory-fragment', 'silver-thread', 'storage-pattern'\]/); // 10-23 C4-1: 4장 도안 벽 클로즈업이 같은 원형 연출을 쓴다
   for (const k of ['memory-glove', 'memory-blanket', 'memory-doll', 'memory-fragment', 'silver-thread']) assert.ok(existsSync(here(`../src/assets/fx/story/${k}.png`)), `${k} 파일`);
 });

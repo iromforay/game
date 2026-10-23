@@ -235,6 +235,17 @@ export const STORY_EVENTS: StoryEventDef[] = [
   ev({ id: 'fridge_unlocked', chapter: 3, allowedAt: ['CH03_BOSS_DEFEATED'], requires: ['underfloor_boss_aftermath_seen'], serverOnly: true, evidence: { kind: 'none' } }),
   // '돌아온 중심' 장면(ch03.chapter_complete)을 끝까지 본 뒤 클라이언트가 완료를 요청한다(대화 구간 completesWith). 체크포인트·보상·성장은 다시 바꾸지 않는다
   ev({ id: 'underfloor_chapter_complete_seen', chapter: 3, allowedAt: ['CH03_COMPLETE'], requires: ['underfloor_cotton_core_equipped', 'fridge_unlocked'], evidence: { kind: 'none' } }),
+  // ---- 4장 냉장고 속(C4-1) ----
+  // 소리 없는 냉기: 지역에 들어서면 도입(누비만 듣는 첫 목소리)을 끝까지 본 뒤 클라이언트가 완료를 요청한다. 4장 개방(fridge_unlocked)은 3장 장착 때 이미 기록됐다
+  ev({ id: 'fridge_entry_seen', chapter: 4, allowedAt: ['CH03_COMPLETE'], requires: ['fridge_unlocked'], evidence: { kind: 'stage', stageCode: 'ice' }, to: 'CH04_STARTED' }),
+  // 얼음에 박힌 가느리: 통로 끝 지점에서 장면을 끝까지 보면(연결 실을 끊음) 기록
+  ev({ id: 'fridge_ganeuri_freed', chapter: 4, allowedAt: ['CH04_STARTED'], requires: ['fridge_entry_seen'], evidence: { kind: 'point', stageCode: 'ice', pointId: 'fridge_ganeuri' }, to: 'CH04_GANEURI_RESCUED' }),
+  // 저장고 앞 전투(C4-3에서 전투 연결) 승리 정산: 저장고 문만 연다. 체크포인트는 바꾸지 않는다(10-23 Codex 의견 P-01 — 도안 벽을 본 시점이 저장고 완료). 서버 전용
+  ev({ id: 'fridge_frozen_guard_won', chapter: 4, allowedAt: ['CH04_GANEURI_RESCUED'], requires: ['fridge_ganeuri_freed'], serverOnly: true, evidence: { kind: 'none' } }),
+  // 완성된 도안 벽과 두 번째 목소리를 끝까지 보면 저장고 완료
+  ev({ id: 'fridge_storage_seen', chapter: 4, allowedAt: ['CH04_GANEURI_RESCUED'], requires: ['fridge_frozen_guard_won'], evidence: { kind: 'point', stageCode: 'ice', pointId: 'fridge_storage_wall' }, to: 'CH04_STORAGE_CLEARED' }),
+  // 누비의 고백(저장고 중심 앞)
+  ev({ id: 'fridge_confession_seen', chapter: 4, allowedAt: ['CH04_STORAGE_CLEARED'], requires: ['fridge_storage_seen'], evidence: { kind: 'point', stageCode: 'ice', pointId: 'fridge_confession' }, to: 'CH04_CONFESSION_SEEN' }),
 ];
 
 // 부분 사건이 모두 기록되면 같은 트랜잭션에서 함께 기록하는 집계 사건(C2-3). 이미 기록돼 있으면 다시 만들지 않는다
@@ -417,6 +428,17 @@ export const STORY_TRIGGERS: StoryTriggerDef[] = [
   // 6) 기억 실패굴이(C3-3) — 기억 조각 장면을 본 뒤에만 보인다. 대화 구간의 storyBattle이 서버 스토리 전투를 연다(지점 반경 증거).
   //    승리하면 서버가 underfloor_boss_defeated를 정산하고, 같은 재생 범위가 정본 승리 장면(ch03.boss_victory)으로 이어진다. 정산 뒤에는 입장 지점이 닫힌다
   { id: 'underfloor_boss_entrance', stageCode: 'underground', evidence: { kind: 'point', stageCode: 'underground', pointId: 'underfloor_boss_entrance' }, activeAt: ['CH03_MEMORY_FRAGMENT_SEEN'], requires: ['underfloor_memory_fragment_seen'], unless: ['underfloor_boss_defeated'], encounterKey: 'underfloor_boss_memory_spool', repeatable: true, play: { segmentId: 'ch03.boss_intro', endAfter: 'ch03.boss_victory' } },
+  // ---- 4장 냉장고 속(C4-1) ----
+  // 1) 성에 낀 입구 — 지역에 들어서면 서버가 실행. 도입(소리 없는 냉기)을 끝까지 본 뒤 fridge_entry_seen(completesWith)
+  { id: 'fridge_entry', stageCode: 'ice', evidence: { kind: 'stage', stageCode: 'ice' }, auto: true, repeatable: true, play: 'resume' },
+  // 2) 통로 끝의 가느리 — 장면을 끝까지 보면 fridge_ganeuri_freed + CH04_GANEURI_RESCUED. 중간에 끊기면 같은 지점에서 처음부터
+  { id: 'fridge_ganeuri', stageCode: 'ice', evidence: { kind: 'point', stageCode: 'ice', pointId: 'fridge_ganeuri' }, activeAt: ['CH04_STARTED'], requires: ['fridge_entry_seen'], unless: ['fridge_ganeuri_freed'], repeatable: true, play: { segmentId: 'ch04.ganeuri', endAfter: 'ch04.ganeuri' } },
+  // 3) 저장고 앞 길목 — 바늘 통로 너머. C4-1은 지문까지, 전투(storyBattle)와 승리 정산은 C4-3
+  { id: 'fridge_guard', stageCode: 'ice', evidence: { kind: 'point', stageCode: 'ice', pointId: 'fridge_guard' }, activeAt: ['CH04_GANEURI_RESCUED'], requires: ['fridge_ganeuri_freed'], unless: ['fridge_frozen_guard_won'], repeatable: true, play: { segmentId: 'ch04.guard', endAfter: 'ch04.guard' } },
+  // 4) 완성된 도안 벽 — 저장고 문이 열린 뒤. 끝까지 보면 fridge_storage_seen + CH04_STORAGE_CLEARED
+  { id: 'fridge_storage_wall', stageCode: 'ice', evidence: { kind: 'point', stageCode: 'ice', pointId: 'fridge_storage_wall' }, activeAt: ['CH04_GANEURI_RESCUED'], requires: ['fridge_frozen_guard_won'], unless: ['fridge_storage_seen'], repeatable: true, play: { segmentId: 'ch04.storage', endAfter: 'ch04.storage' } },
+  // 5) 저장고 중심 앞 얼음 틈 — 누비의 고백. 끝까지 보면 fridge_confession_seen + CH04_CONFESSION_SEEN
+  { id: 'fridge_confession', stageCode: 'ice', evidence: { kind: 'point', stageCode: 'ice', pointId: 'fridge_confession' }, activeAt: ['CH04_STORAGE_CLEARED'], requires: ['fridge_storage_seen'], unless: ['fridge_confession_seen'], repeatable: true, play: { segmentId: 'ch04.confession', endAfter: 'ch04.confession' } },
 ];
 export const TRIGGER_BY_ID = new Map(STORY_TRIGGERS.map((t) => [t.id, t]));
 

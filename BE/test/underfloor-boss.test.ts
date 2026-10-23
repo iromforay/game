@@ -290,7 +290,7 @@ test('장착 성공: story_3 장착 + 성장 2→3 + 사건 둘 + CH03_COMPLETE�
   assert.equal((await s.story.completeEvent(P, 'underfloor_chapter_complete_seen')).alreadyCompleted, false);
   assert.equal((await s.story.completeEvent(P, 'underfloor_chapter_complete_seen')).alreadyCompleted, true);
   assert.equal(count(s, 'underfloor_chapter_complete_seen'), 1);
-  assert.equal((await s.story.getState(P)).resume.segmentId, null);
+  assert.equal((await s.story.getState(P)).resume.segmentId, 'ch04.entry', '10-23 C4-1: 장면을 끝까지 본 뒤에는 4장 도입이 냉장고 입구(지역 진입 트리거)에서 이어진다');
   assert.deepEqual(state(s), { cp: 'CH03_COMPLETE', growth: 3, slot3: 1, events: 2 }, '장면 완료는 상태를 바꾸지 않는다');
   // 4장(냉장고 속) 개방
   const stages = (await s.story.getState(P)).stages;

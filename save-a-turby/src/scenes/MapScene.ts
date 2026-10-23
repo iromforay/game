@@ -31,7 +31,8 @@ import { MAP_DEPTH, planStageRender, type StageRenderPlan } from '../story/mapRe
 import { recoverUnackedResult } from '../state/unackedResult';
 import { deferredRestore } from '../state/restoreAttempt';
 import { resumeBattle } from './VillageScene';
-import { DEEP_WATER_TEXT, NoticeGate, POSITION_CORRECTED_TEXT, WILD_HINT_ENGAGED, WILD_HINT_NEAR, WILD_NOTICE_REPEAT_MS, wildNoticeKey, wildUnreachableText } from '../story/mapNotices';
+import { frostFactorAt, needlePhaseAt, needleUnder, type NeedlePhase } from '../story/fridgeHazards';
+import { DEEP_WATER_TEXT, FROST_ZONE_TEXT, NEEDLE_RETURN_TEXT, NoticeGate, POSITION_CORRECTED_TEXT, WILD_HINT_ENGAGED, WILD_HINT_NEAR, WILD_NOTICE_REPEAT_MS, wildNoticeKey, wildUnreachableText } from '../story/mapNotices';
 
 // 배치된 자리 바로 옆(조우 반경 안)의 야생은 반경의 이 배수 밖으로 벗어난 뒤에야 다시 조우한다. 서버 반경이 크게 바뀌어도 같은 비율로 동작한다
 const THICKET_KEY = 'hidden-area-thicket-locked'; // 개방 전 숨은 구역을 가리는 수풀 오버레이(미니맵 썸네일에도 같이 그린다)
@@ -108,7 +109,11 @@ export class MapScene extends Phaser.Scene {
   private lastCorrectionReason: string | null = null;
   private trapSlowUntil = 0; // 검은 실 덫에 묶인 시각까지 이동 속도 50%(서버가 알려 준 시간 — 서버도 같은 상한을 건다)
   private pushRemain: { x: number; y: number } | null = null; // 물살에 밀린 거리 중 아직 화면에 반영하지 않은 만큼(10-13 C2-2: 짧은 보간 — 입력은 그대로 이어진다)
-  private waterEvents = { currentPushes: 0, deepReturns: 0, trapSnares: 0, lastCurrentFieldId: null as string | null };
+  private waterEvents = { currentPushes: 0, deepReturns: 0, trapSnares: 0, lastCurrentFieldId: null as string | null, needleReturns: 0, lastNeedleId: null as string | null };
+  // 10-23 C4-1 4장: 서리 구역(이동 0.7배 + 화면 가장자리 서리)·바늘 칸(서버 시각 주기 표시). 판정은 서버
+  private inFrost = false;
+  private frostEdge: Phaser.GameObjects.GameObject[] = [];
+  private needleViews: { id: string; warn: Phaser.GameObjects.Image | Phaser.GameObjects.Rectangle; strike: Phaser.GameObjects.Image | Phaser.GameObjects.Rectangle; phase: NeedlePhase | null }[] = [];
   private unreachableWilds = 0; // 서버가 가로막힘으로 거부한 조우 요청 수(진단용)
   private notices = new NoticeGate(); // 안내 반복 억제(같은 야생·같은 사유 3초, 위치 보정 안내는 한 번)
   private noticeLog: string[] = []; // 띄운 안내(진단용)
@@ -145,6 +150,10 @@ export class MapScene extends Phaser.Scene {
     this.positioned = false;
     this.notices = new NoticeGate();
     this.noticeLog = [];
+    this.inFrost = false;
+    this.frostEdge = [];
+    this.needleViews = [];
+    this.waterEvents = { currentPushes: 0, deepReturns: 0, trapSnares: 0, lastCurrentFieldId: null, needleReturns: 0, lastNeedleId: null };
     this.legacyTarget = null;
     this.capturedShown = -1;
     this.quietWilds = new Set();
@@ -339,6 +348,9 @@ export class MapScene extends Phaser.Scene {
     for (const a of L.anchors ?? []) {
       g.fillStyle(0xd9c58f, 0.92).fillCircle(a.x, a.y, a.radius).lineStyle(3, 0x8a7440, 1).strokeCircle(a.x, a.y, a.radius);
     }
+    // 4장(10-23 C4-1): 서리 구역은 옅은 하늘색, 바늘 칸은 줄무늬 테두리(회색상자 단계의 임시 표시 — 최종 배경이 오면 그림이 대신한다)
+    for (const z of L.frost ?? []) g.fillStyle(0xbfe3f2, 0.35).fillRect(z.x, z.y, z.width, z.height);
+    for (const n of L.needles ?? []) g.lineStyle(3, 0x9fb8cc, 0.8).strokeRect(n.x, n.y, n.width, n.height);
     g.lineStyle(10, 0x9aa59c, 0.45);
     for (const path of L.paths) for (let i = 1; i < path.length; i++) g.lineBetween(path[i - 1][0], path[i - 1][1], path[i][0], path[i][1]);
     for (const b of L.blockers) {
@@ -831,7 +843,7 @@ export class MapScene extends Phaser.Scene {
   get debugPosition() {
     return {
       positioned: this.positioned, corrections: this.corrections, lastCorrection: this.lastCorrectionReason, unreachableWilds: this.unreachableWilds,
-      ...this.waterEvents, pushing: this.pushRemain !== null,
+      ...this.waterEvents, pushing: this.pushRemain !== null, inFrost: this.inFrost, needles: this.needleViews.map((n) => ({ id: n.id, phase: n.phase })),
       notices: [...this.noticeLog], size: { width: this.stageWidth, height: this.stageHeight }, captured: this.capturedCount(),
       // 화면에 놓인 야생 마커(서버 마커 ID·화면 좌표·상태)
       wilds: this.markers.map((m) => ({ index: m.index, characterCode: m.info.characterCode, x: m.gfx.x, y: m.gfx.y, state: m.state, visible: m.gfx.visible })),
@@ -873,6 +885,16 @@ export class MapScene extends Phaser.Scene {
       this.waterBubbles(this.avatar.x, this.avatar.y);
       return;
     }
+    // 10-23 C4-1: 내려찍는 바늘 칸 → 서버가 정한 안전 앵커로 돌아간다(피해·진행 손실 없음)
+    if (pos.reason === 'needle') {
+      this.waterEvents.needleReturns++;
+      this.waterEvents.lastNeedleId = pos.currentFieldId ?? null;
+      this.lastCorrectionReason = 'needle';
+      this.pushRemain = null;
+      this.avatar.setPosition(pos.x, pos.y);
+      this.needleHint();
+      return;
+    }
     if (pos.reason === 'deep_water') {
       this.waterEvents.deepReturns++;
       this.lastCorrectionReason = 'deep_water';
@@ -911,9 +933,65 @@ export class MapScene extends Phaser.Scene {
     this.tweens.add({ targets: ring, scaleX: 0.5, scaleY: 0.5, alpha: 0, duration: TRAP_SLOW_MS, onComplete: () => ring.destroy() });
   }
 
+  // ---------- 4장 서리 구역·바늘 칸(10-23 C4-1) ----------
+  // 지역 화면 데이터가 바뀔 때 바늘 칸 표식을 다시 만든다. 그림(needle-warn·needle-strike)이 있으면 그것을, 없으면 임시 사각형을 쓴다
+  private buildNeedleViews() {
+    this.needleViews.forEach((n) => {
+      n.warn.destroy();
+      n.strike.destroy();
+    });
+    this.needleViews = (this.stageView?.layout?.needles ?? []).map((f) => {
+      const make = (key: string, color: number, alpha: number) =>
+        (this.textures.exists(key) ? this.add.image(f.x, f.y, key).setOrigin(0, 0).setDisplaySize(f.width, f.height) : this.add.rectangle(f.x, f.y, f.width, f.height, color, alpha).setOrigin(0, 0)).setDepth(DEPTH_STORY - 0.5).setVisible(false);
+      return { id: f.id, warn: make('needle-warn', 0x9fb8cc, 0.35), strike: make('needle-strike', 0xf2fbff, 0.75), phase: null };
+    });
+  }
+
+  // 매 프레임: 바늘 칸 단계(서버 시각 보정)를 그리고, 내려찍기가 시작될 때 아바타가 그 칸 안에 서 있으면 위치를 한 번 다시 보고해 서버가 판정하게 한다.
+  // 서리 구역에 들어서면 화면 가장자리에 서리를 두르고 처음 한 번 안내한다(안내 버튼은 지연하지 않는다 — 10-23 Codex 의견 P-02)
+  private updateFridgeHazards() {
+    const L = this.stageView?.layout;
+    if (L?.needles && L.needles.length > 0) {
+      if (this.needleViews.length !== L.needles.length) this.buildNeedleViews();
+      const now = roomClient.now();
+      const under = needleUnder(L.needles, this.avatar);
+      for (const f of L.needles) {
+        const v = this.needleViews.find((x) => x.id === f.id)!;
+        const phase = needlePhaseAt(f, now);
+        if (phase === 'strike' && v.phase !== 'strike' && under?.id === f.id && this.inRoomMap) {
+          roomClient.sendMove(this.avatar.x, this.avatar.y, this.facing);
+          this.lastSent = { x: this.avatar.x, y: this.avatar.y };
+          this.lastSentAt = 0;
+        }
+        v.phase = phase;
+        v.warn.setVisible(phase === 'warn');
+        v.strike.setVisible(phase === 'strike');
+      }
+    }
+    const frost = frostFactorAt(L?.frost, this.avatar) < 1;
+    if (frost === this.inFrost) return;
+    this.inFrost = frost;
+    this.frostEdge.forEach((o) => o.destroy());
+    this.frostEdge = [];
+    if (!frost) return;
+    const { width, height } = this.scale;
+    if (this.textures.exists('voice-frost')) this.frostEdge.push(this.add.image(0, 0, 'voice-frost').setOrigin(0, 0).setDisplaySize(width, height).setScrollFactor(0).setAlpha(0.6).setDepth(DEPTH_STORY + 50));
+    else {
+      // 임시 표시(서리 그림 전): 화면 가장자리 네 변의 옅은 하늘색 띠. 가운데는 비운다
+      const band = Math.round(Math.min(width, height) * 0.08);
+      for (const [x, y, w, h] of [[0, 0, width, band], [0, height - band, width, band], [0, 0, band, height], [width - band, 0, band, height]]) this.frostEdge.push(this.add.rectangle(x, y, w, h, 0xdff3fb, 0.22).setOrigin(0, 0).setScrollFactor(0).setDepth(DEPTH_STORY + 50));
+    }
+    if (this.notices.once('frost-zone')) this.notice(FROST_ZONE_TEXT);
+  }
+
   // 깊은 물에서 돌아왔을 때의 안내 — 한 탐험 세션(이 화면)에서 처음 한 번만
   private deepWaterHint() {
     if (this.notices.once('deep-water')) this.notice(DEEP_WATER_TEXT);
+  }
+
+  // 바늘에 닿아 돌아왔을 때의 안내 — 한 화면에서 처음 한 번만
+  private needleHint() {
+    if (this.notices.once('needle-return')) this.notice(NEEDLE_RETURN_TEXT);
   }
 
   private slotColor(slot: number) {
@@ -1130,7 +1208,7 @@ export class MapScene extends Phaser.Scene {
     }
     if (len > 0.05) {
       const dt = delta / 1000;
-      const speed = AVATAR_SPEED * (this.time.now < this.trapSlowUntil ? 0.5 : 1);
+      const speed = AVATAR_SPEED * (this.time.now < this.trapSlowUntil ? 0.5 : 1) * frostFactorAt(this.stageView?.layout?.frost, this.avatar); // 서리 구역: 서버와 같은 배율
       const to = { x: Phaser.Math.Clamp(this.avatar.x + x * speed * dt, 0, this.stageWidth), y: Phaser.Math.Clamp(this.avatar.y + y * speed * dt, 0, this.stageHeight) };
       const next = stepWithSolids(this.solids, { x: this.avatar.x, y: this.avatar.y }, to, AVATAR_HALF);
       this.avatar.setPosition(next.x, next.y);
@@ -1146,6 +1224,7 @@ export class MapScene extends Phaser.Scene {
       this.avatar.setPosition(Phaser.Math.Clamp(this.avatar.x + step.x, 0, this.stageWidth), Phaser.Math.Clamp(this.avatar.y + step.y, 0, this.stageHeight));
     }
     this.syncRoom(delta);
+    this.updateFridgeHazards();
     this.miniMap.update(this.avatar.x, this.avatar.y, this.moveAngle);
 
     // 가까이 있는 수집 오브젝트·이야기 지점: 안내 버튼을 보이고, 키(E·스페이스·엔터)로도 누를 수 있다
