@@ -260,16 +260,19 @@ export function resultLayout(scale: number, rowCount: number, framed = false): R
 
 // 작은 화면의 유닛 라벨: 이름 한 줄 + "HP/최대 · 상태" 한 줄(상태는 짧은 UI 표기 — 대본 문구가 아님). 10-22 C3-6 R1-01: 이름과 HP가 한 줄에서 쪼개지지 않게 두 줄 고정
 const SHORT_TAG: Record<string, string> = { '보호 대상': '보호', '부위 먼저': '부위 먼저' };
+// 10-23 C4-6 RQA-08: 작은 화면에서 긴 이름은 줄인 이름으로(라벨이 옆 유닛·보스 그림을 덮지 않게). 큰 화면·목표 문구는 원래 이름
+const COMPACT_NAME: Record<string, string> = { frozen_sewn_doll: '박음이', upper_thread: '윗실', lower_thread: '밑실' };
+const nameOf = (u: BattleUnit, compact: boolean) => (compact ? (COMPACT_NAME[u.characterCode] ?? u.name) : u.name);
 export function unitLabel(u: BattleUnit, compact: boolean): string {
   // 10-14 v1a: 검은 재봉실은 A/B/C 글자로 구분하고 모바일에서는 "검은 실 A" 한 줄(HP 1/1은 생략)
   if (u.thread) return compact ? `${u.name} ${threadNumber(u)}${u.hinted ? ' ▶' : ''}` : `${u.name} ${threadNumber(u)}${u.hinted ? ' (다음 실)' : ''}`;
   if (isSeam(u)) return compact ? `검은 실 ${seamLetter(u)}` : `${u.name} ${seamLetter(u)} HP ${u.hp}/${u.maxHp}`;
   const tags = unitTags(u);
   // 10-23 C4-3: 공격 대상이 아닌 적(서리 미싱 본체 — 부위를 끊어 멈춘다)은 HP를 보이지 않는다
-  if (u.side === 'wild' && u.targetable === false) return tags.length === 0 ? u.name : compact ? `${u.name}\n${tags.join(' · ')}` : `${u.name} (${tags.join(' · ')})`;
+  if (u.side === 'wild' && u.targetable === false) return tags.length === 0 ? nameOf(u, compact) : compact ? `${nameOf(u, compact)}\n${tags.join(' · ')}` : `${u.name} (${tags.join(' · ')})`;
   if (!compact) return `${u.name} HP ${u.hp}/${u.maxHp}${tags.length > 0 ? ` (${tags.join(' · ')})` : ''}`;
   const short = tags.map((t) => SHORT_TAG[t] ?? t);
-  return `${u.name}\n${[`${u.hp}/${u.maxHp}`, ...short].join(' · ')}`;
+  return `${nameOf(u, true)}\n${[`${u.hp}/${u.maxHp}`, ...short].join(' · ')}`;
 }
 
 // ---------- 10-14 C2-5A 시각 보완(v1a) ----------
@@ -305,26 +308,32 @@ export interface LabelBox {
   h: number;
   pref: 'above' | 'below';
 }
-export function resolveLabels(boxes: LabelBox[], bounds: { x: number; y: number; w: number; h: number }, gap: number): Map<string, { cx: number; top: number }> {
+export type LabelObstacle = { id: string; x0: number; y0: number; x1: number; y1: number };
+// obstacles(10-23 C4-6 RQA-08): 라벨이 덮지 않았으면 하는 다른 유닛 그림 영역(같은 id는 자기 그림이라 무시). 그림까지 피할 자리가 없으면 라벨끼리만 피한다
+export function resolveLabels(boxes: LabelBox[], bounds: { x: number; y: number; w: number; h: number }, gap: number, obstacles: LabelObstacle[] = []): Map<string, { cx: number; top: number }> {
   const placed: { x0: number; y0: number; x1: number; y1: number }[] = [];
   const out = new Map<string, { cx: number; top: number }>();
   const overlap = (a: { x0: number; y0: number; x1: number; y1: number }, b: { x0: number; y0: number; x1: number; y1: number }) => a.x0 < b.x1 + 2 && a.x1 + 2 > b.x0 && a.y0 < b.y1 + 2 && a.y1 + 2 > b.y0;
   for (const b of boxes) {
     const sides: ('above' | 'below')[] = b.pref === 'above' ? ['above', 'below'] : ['below', 'above'];
     const shifts = [0, b.w / 2 + 4, -(b.w / 2 + 4), b.w + 8, -(b.w + 8)];
+    const others = obstacles.filter((o) => o.id !== b.id);
     let best: { cx: number; top: number; rect: { x0: number; y0: number; x1: number; y1: number } } | null = null;
     let chosen = false;
-    for (const side of sides) {
-      for (const dx of shifts) {
-        const top = side === 'above' ? b.anchorY - gap - b.h : b.anchorY + gap;
-        const c = clampLabel(b.cx + dx, top, b.w, b.h, bounds);
-        const rect = { x0: c.cx - b.w / 2, y0: c.top, x1: c.cx + b.w / 2, y1: c.top + b.h };
-        if (!best) best = { ...c, rect };
-        if (!placed.some((p) => overlap(p, rect))) {
-          best = { ...c, rect };
-          chosen = true;
-          break;
+    for (const avoidArt of others.length > 0 ? [true, false] : [false]) {
+      for (const side of sides) {
+        for (const dx of shifts) {
+          const top = side === 'above' ? b.anchorY - gap - b.h : b.anchorY + gap;
+          const c = clampLabel(b.cx + dx, top, b.w, b.h, bounds);
+          const rect = { x0: c.cx - b.w / 2, y0: c.top, x1: c.cx + b.w / 2, y1: c.top + b.h };
+          if (!best) best = { ...c, rect };
+          if (!placed.some((p) => overlap(p, rect)) && !(avoidArt && others.some((o) => overlap(o, rect)))) {
+            best = { ...c, rect };
+            chosen = true;
+            break;
+          }
         }
+        if (chosen) break;
       }
       if (chosen) break;
     }

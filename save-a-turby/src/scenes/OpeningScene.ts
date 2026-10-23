@@ -42,6 +42,7 @@ export class OpeningScene extends Phaser.Scene {
   private layer!: Phaser.GameObjects.Container;
   private advanceResolver: ((a: Advance) => void) | null = null;
   private typing: Phaser.Time.TimerEvent | null = null;
+  private glimpse: Phaser.GameObjects.Image | null = null; // 지금 떠 있는 기억 비침(연속 큐면 앞 것을 먼저 걷는다)
   private fullText = '';
   private textObj!: Phaser.GameObjects.Text;
 
@@ -53,7 +54,7 @@ export class OpeningScene extends Phaser.Scene {
     this.opts = data;
     this.advanceResolver = null;
     this.typing = null;
-    this.fxState = { glimpseShown: [], glimpseBounds: null, drainPlayed: 0, saturation: 1, bounds: null, relicShown: 0, relicBounds: null, restorePlayed: 0, voiceShown: 0 }; // 같은 장면 객체를 다시 쓸 때 연출 상태를 비운다
+    this.fxState = { glimpseShown: [], glimpseBounds: null, drainPlayed: 0, saturation: 1, bounds: null, relicShown: 0, relicBounds: null, restorePlayed: 0, voiceShown: 0 }; this.glimpse = null; // 같은 장면 객체를 다시 쓸 때 연출 상태를 비운다
     this.fxNubi = undefined;
     this.fxRelic = undefined;
     this.satTween = undefined;
@@ -303,9 +304,15 @@ export class OpeningScene extends Phaser.Scene {
     const cy = 300;
     this.fxState.glimpseBounds = { x: cx - 160, y: cy - 160, w: 320, h: 320 };
     if (!this.textures.exists(key)) return;
+    const prev = this.glimpse;
+    if (prev?.active) {
+      this.tweens.killTweensOf(prev);
+      this.tweens.add({ targets: prev, alpha: 0, duration: 300, onComplete: () => prev.destroy() });
+    }
     const img = this.add.image(cx, cy, key).setDisplaySize(320, 320).setAlpha(0).setDepth(6);
+    this.glimpse = img;
     this.tweens.add({ targets: img, alpha: 0.95, duration: 700, ease: 'Sine.easeOut', yoyo: false });
-    this.tweens.add({ targets: img, alpha: 0, delay: 3800, duration: 900, onComplete: () => img.destroy() });
+    this.tweens.add({ targets: img, alpha: 0, delay: 3800, duration: 900, onComplete: () => { img.destroy(); if (this.glimpse === img) this.glimpse = null; } });
   }
 
   // ---------- 누비에게만 들리는 목소리(10-23 C4-1) ----------

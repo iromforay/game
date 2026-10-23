@@ -71,6 +71,10 @@ const voiceShown = (n: number) => fx(`sc.fxState.voiceShown >= ${n}`);
 async function waitFx(g: Game, key: string) {
   await g.page.waitForFunction((k) => (window as any).__game.scene.getScenes(true).some((s: any) => s.children.list.some((o: any) => o.texture && o.texture.key === k && o.alpha >= 0.8)), key, { timeout: 8000, polling: 50 }); // eslint-disable-line @typescript-eslint/no-explicit-any
 }
+// 앞 연출 그림이 화면에서 걷힐 때까지(연속 기억 비침이 겹쳐 찍히지 않게)
+async function waitFxGone(g: Game, key: string) {
+  await g.page.waitForFunction((k) => !(window as any).__game.scene.getScenes(true).some((s: any) => s.children.list.some((o: any) => o.texture && o.texture.key === k && o.alpha > 0.02)), key, { timeout: 8000, polling: 50 }); // eslint-disable-line @typescript-eslint/no-explicit-any
+}
 async function enterBattle(g: Game, id: string, route: Pt[], how: 'keys' | 'joystick' = 'keys') {
   for (const p of route) await g.walkDirect('Map', p, how, 'false', 30);
   await g.until(`${id} 안내`, `s.map.story.prompt === '${id}' && !!s.map.story.promptText`, 20_000);
@@ -188,6 +192,7 @@ test('C4 캡처 ⑤(1280×720): 서리 미싱 시작 → 바늘 예고 → 정�
     await g.clickLabel('이야기 계속하기', { exact: true });
     await g.until('승리 장면', "s.scenes.includes('StoryDialogue')", 30_000);
     await g.advanceDialogue(glimpseShown('frost-machine-scar'));
+    await waitFx(g, 'frost-machine-scar');
     await g.capture('d01_machine_scar');
     await g.advanceDialogue("s.scenes.includes('Map') && !s.scenes.includes('StoryDialogue')");
     await g.until('냉장고 지도', MAP_READY, 30_000);
@@ -200,8 +205,11 @@ test('C4 캡처 ⑤(1280×720): 서리 미싱 시작 → 바늘 예고 → 정�
     await g.clickLabel('누비에게 장착', { exact: true });
     await g.waitScene('StoryDialogue');
     await g.advanceDialogue(glimpseShown('sense-restore'));
+    await waitFx(g, 'sense-restore');
     await g.capture('d02_sense_restore');
     await g.advanceDialogue(glimpseShown('warm-gold'));
+    await waitFx(g, 'warm-gold');
+    await waitFxGone(g, 'sense-restore');
     await g.capture('d03_warm_gold');
   }, backend, device);
   await g.close();

@@ -10,7 +10,7 @@ import { showToast, feltPanel, pillButton, TEXT } from '../ui/kit';
 import { loadWorldImages } from '../assets/loader';
 import { ENEMY_SHEET_OF, SPRITESHEET_FRAMES } from '../assets/registry';
 import coopSlots from '../data/coop-slots.json';
-import { actionHint, battleHudLayout, goalSummary, isHiddenUnit, resolveLabels, resultLayout, threadNumber, unitLabel, zoneFootprintOrigin, zoneRegion, ZONE_ALPHA, ZONE_FOOTPRINT, type BattleHudLayout, type LabelBox } from '../battle/battleView';
+import { actionHint, battleHudLayout, goalSummary, isHiddenUnit, resolveLabels, resultLayout, threadNumber, unitLabel, zoneFootprintOrigin, zoneRegion, ZONE_ALPHA, ZONE_FOOTPRINT, type BattleHudLayout, type LabelBox, type LabelObstacle } from '../battle/battleView';
 import { watchLayout } from '../ui/relayout';
 import { displayScaleOf } from '../ui/responsive';
 import { ackFailureAllowsExit, RESULT_ACK_RETRY_TEXT } from '../state/restoreAttempt';
@@ -33,6 +33,7 @@ interface UnitView {
 
 const RETRY_LIMIT = 3;
 const LABEL_GAP = 30; // 유닛 중심에서 라벨까지
+const COMPACT_LABEL_BOTTOM = 630; // 작은 화면 라벨 아래끝 한계(알림 y 660·도움말 줄과 같은 줄을 쓰지 않게)
 const asDepth = (o: Phaser.GameObjects.GameObject, depth: number) => (o as unknown as Phaser.GameObjects.Components.Depth).setDepth(depth);
 const slotHex = (slot: number) => coopSlots.find((c) => c.slot === slot)?.main ?? '#888888';
 const slotNum = (slot: number) => Phaser.Display.Color.HexStringToColor(slotHex(slot)).color;
@@ -285,7 +286,19 @@ export class BattleScene extends Phaser.Scene {
       if (below) boxes.push({ id: u.unitId, cx: x, anchorY: y + below - LABEL_GAP, w: v.hpText.width, h: v.hpText.height, pref: 'below' });
       else boxes.push({ id: u.unitId, cx: x, anchorY: y, w: v.hpText.width, h: v.hpText.height, pref });
     }
-    const spots = resolveLabels(boxes, { x: this.offsetX, y: this.offsetY, w: this.gridW, h: this.gridH }, LABEL_GAP);
+    // 10-23 C4-6 RQA-08: 작은 화면은 글자가 커서 라벨이 옆 유닛 그림·보스를 덮는다 — 그림 영역을 피하고, 아래 알림·도움말 줄은 쓰지 않는다
+    const compact = this.hud?.mode === 'compact';
+    const obstacles: LabelObstacle[] = [];
+    if (compact) {
+      for (const u of this.snap.units) {
+        if (!this.views.has(u.unitId) || isHiddenUnit(u)) continue;
+        const { x, y } = this.tileToWorld(u.col, u.row);
+        const half = BOSS_SHEETS[u.characterCode] ? BOSS_DISPLAY_PX * 0.32 : BATTLE_TILE_SIZE * 0.36;
+        obstacles.push({ id: u.unitId, x0: x - half, y0: y - half, x1: x + half, y1: y + half });
+      }
+    }
+    const bottom = compact ? Math.min(this.offsetY + this.gridH, COMPACT_LABEL_BOTTOM) : this.offsetY + this.gridH;
+    const spots = resolveLabels(boxes, { x: this.offsetX, y: this.offsetY, w: this.gridW, h: bottom - this.offsetY }, LABEL_GAP, obstacles);
     for (const [id, p] of spots) this.views.get(id)!.hpText.setOrigin(0.5, 0).setPosition(p.cx, p.top);
   }
 
