@@ -49,12 +49,15 @@ async function enterFridge(g: Game) {
   await g.walkTo('Village', { x: exit.zone.x + exit.zone.w / 2, y: exit.zone.y + exit.zone.h / 2 }, 'keys', "s.village && s.village.prompt === 'exit'");
   await g.clickLabel(exit.prompt);
   await g.waitScene('StageSelect');
+  // 작은 화면은 한 쪽에 카드 3장 — 4장은 둘째 쪽
+  await g.until('지역 카드', 's.stageSelect && s.stageSelect.cards && s.stageSelect.cards.length >= 1');
+  if ((await g.state()).stageSelect.mode === 'compact') await g.clickLabel('▶', { exact: true, expect: 's.stageSelect.page === 1' });
   await g.clickLabel('4장 — 냉장고 속', { exact: true });
   await g.until('냉장고 지도', MAP_READY, 30_000);
 }
 // 지점까지 걸어가 안내 버튼 → (대화) → 파티 선택 → 전투 화면
-async function enterBattle(g: Game, id: string, route: Pt[]) {
-  for (const p of route) await g.walkDirect('Map', p, 'keys', 'false', 30);
+async function enterBattle(g: Game, id: string, route: Pt[], how: 'keys' | 'joystick' = 'keys') {
+  for (const p of route) await g.walkDirect('Map', p, how, 'false', 30);
   await g.until(`${id} 안내`, `s.map.story.prompt === '${id}' && !!s.map.story.promptText`, 20_000);
   const at = (await story(g)).interact;
   await g.clickAt(at.x, at.y, "s.scenes.includes('StoryDialogue') || s.scenes.includes('PartySelect') || s.scenes.includes('Battle')");
@@ -154,6 +157,35 @@ test('4장 C4-3 ②(1280×720): 서리 미싱 — 도입 → 전투(바늘 예�
     await g.until('냉장고 지도', `(${MAP_READY}) || s.scenes.includes('StoryDialogue')`, 30_000);
     assert.equal((await g.state()).scenes.includes('StoryDialogue'), false, '장 완료 장면이 반복됨');
     assert.deepEqual([progressOf(device).checkpoint, progressOf(device).nubi_growth_stage, fiberQty(device)], ['CH04_COMPLETE', 4, [1]]);
+  }, backend, device);
+  await g.close();
+});
+
+test('4장 C4-3 ③(640×360): 서리 미싱 전투 도중 새로고침 → 끊은 밑실·바늘 예고 칸이 그대로 복원 → 승리', async () => {
+  const device = 'e2e-fridge-boss-640';
+  await backend.start(seedFridge(device, 'confessed'), { 'story.stageAccessV2': true });
+  const g = await Game.open(browser, `${vite.url}/?device=${device}`, device, { width: 640, height: 360 });
+  await withDiagnosis(g, 'fridge-boss-640', async () => {
+    await enterFridge(g);
+    backend.displace(device, { x: 2050, y: 495 });
+    await g.reload();
+    await g.until('냉장고 지도', MAP_READY, 30_000);
+    await enterBattle(g, 'fridge_boss_entrance', [{ x: 1900, y: 480 }, { x: 1800, y: 470 }], 'joystick');
+    assert.equal(((await g.state()).battle as unknown as { hudMode: string }).hudMode, 'compact');
+    await g.playBattle(300_000, "s.battle && s.battle.units.some((u) => u.id.startsWith('lower_thread') && u.stunned)");
+    const marks = () => g.page.evaluate(() => (window as any).__game.scene.getScene('Battle').snap.needleMarks ?? []) as Promise<string[]>; // eslint-disable-line
+    let b = await battle(g);
+    const cut = b.units.filter((u) => u.id.startsWith('lower_thread') && u.stunned).map((u) => u.id).sort();
+    const before = (await marks()).sort();
+    await g.capture('fridge_boss_s01_progress');
+    await g.reload();
+    await g.until('전투 복원', "s.scenes.includes('Battle') && s.battle && s.battle.units && s.battle.units.length > 0", 30_000);
+    b = await battle(g);
+    assert.deepEqual(b.units.filter((u) => u.id.startsWith('lower_thread') && u.stunned).map((u) => u.id).sort(), cut, '끊은 밑실이 그대로');
+    assert.deepEqual((await marks()).sort(), before, '바늘 예고 칸이 그대로');
+    await winAndSettle(g);
+    assert.equal(progressOf(device).checkpoint, 'CH04_BOSS_DEFEATED');
+    assert.deepEqual(fiberQty(device), [1]);
   }, backend, device);
   await g.close();
 });

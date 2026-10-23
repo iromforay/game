@@ -85,6 +85,12 @@ export const SPRITESHEET_FRAMES: Record<string, { size: number; frames: number; 
   'memory-spool-idle': { size: 256, frames: 4, fps: 4 }, // 기억 실패굴이(결박)
   'memory-spool-exposed': { size: 256, frames: 4, fps: 4 }, // 기억 실패굴이(약점 노출)
   'memory-thread': { size: 128, frames: 5, fps: 0 }, // 기억실 5가닥 — 재생하지 않고 프레임 = 가닥 번호(1 분홍·2 청록·3 금색·4 보라·5 산호)
+  // 10-23 C4-3 4장 2차 에셋(C4-4 지시서 규격 — 파일이 오면 그대로 재생)
+  'frozen-sewn-doll-idle': { size: 160, frames: 4, fps: 5 }, // 얼어붙은 박음이
+  'thimble-guard-idle': { size: 160, frames: 4, fps: 5 }, // 골무막이(골무를 쓴 상태)
+  'thimble-guard-exposed': { size: 160, frames: 4, fps: 5 }, // 골무막이(벗겨진 상태)
+  'frost-machine-idle': { size: 256, frames: 4, fps: 4 }, // 서리 미싱(작동)
+  'frost-machine-stopped': { size: 256, frames: 4, fps: 4 }, // 서리 미싱(정지)
 };
 
 // 전투 정의의 characterCode → 전투·지도에서 쓰는 적 시트 키(없으면 기존 터비 그림/임시 도형)
