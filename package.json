@@ -5,6 +5,9 @@
   "scripts": {
     "build:shared": "npm run build -w turby-stage-geometry && npm run build -w sweet-shop-contracts",
     "test:spin-gather-king": "node --experimental-strip-types --no-warnings --test test/spin-gather-king/*.test.ts",
+    "test:color-blasters": "node --experimental-strip-types --no-warnings --test test/color-blasters/*.test.ts",
+    "test:color-blasters:socket": "npm run test:color-blasters -w BE",
+    "test:color-blasters:production": "npm run test:color-blasters:production -w BE",
     "verify:spin-gather-king": "npm run test:spin-gather-king && npm run build -w spin-gather-king",
     "test:my-room-dungeon": "node --experimental-strip-types --no-warnings --test test/my-room-dungeon/*.test.ts",
     "test:sweet-shop": "node --experimental-strip-types --no-warnings --test test/sweet-shop/*.test.ts",
@@ -32,6 +35,7 @@
     "number-hero-tower",
     "my-room-dungeon",
     "sweet-shop",
+    "color-blasters",
     "spin-gather-king",
     "save-a-turby",
     "steal_a_kirby",

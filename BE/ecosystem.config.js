@@ -72,5 +72,17 @@ module.exports = {
         SPIN_GATHER_PORT: process.env.SPIN_GATHER_PORT || 3006,
       },
     },
+    {
+      // 컬러 블래스터즈 전용 Socket.IO 대전 서버
+      name: 'color-blasters-be',
+      cwd: __dirname,
+      script: 'dist/color-blasters-main.js',
+      instances: 1,
+      exec_mode: 'fork',
+      env: {
+        NODE_ENV: 'production',
+        COLOR_BLASTERS_PORT: process.env.COLOR_BLASTERS_PORT || 3007,
+      },
+    },
   ],
 };

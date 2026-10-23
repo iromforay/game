@@ -48,7 +48,6 @@ const STORM_BASE_LEVEL_3_COST = { lightning: 120 } as const;
 const EAST_UNLOCK_COST = { wood: 200, log: 100 } as const;
 const SNOW_UNLOCK_COST = { stone: 200, iron: 100 } as const;
 const STORM_UNLOCK_COST = { crystal: 200, oil: 100 } as const;
-const TURRET_COSTS = { 1: { primary: 50, rare: 20 }, 2: { primary: 50, rare: 20 }, 3: { primary: 50, rare: 20 }, 4: { primary: 50, rare: 20 } } as const;
 const TURRET_RANGE = 1900;
 const TURRET_STATS: Record<1 | 2 | 3, { name: string; cooldownMs: number; splashDamage: number; directBonus: number; splashRadius: number }> = {
   1: { name: '기본 포탑', cooldownMs: 1100, splashDamage: 1, directBonus: 0, splashRadius: 560 },

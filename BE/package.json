@@ -19,6 +19,7 @@
     "dev:sweet-shop": "ts-node --transpile-only src/sweet-shop-main.ts",
     "dev:my-room-dungeon": "ts-node --transpile-only src/my-room-dungeon-main.ts",
     "dev:spin-gather": "ts-node --transpile-only src/spin-gather-main.ts",
+    "dev:color-blasters": "ts-node --transpile-only src/color-blasters-main.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/main.js",
     "start:turby": "node dist/turby-main.js",
@@ -26,7 +27,10 @@
     "start:sweet-shop": "node dist/sweet-shop-main.js",
     "start:my-room-dungeon": "node dist/my-room-dungeon-main.js",
     "start:spin-gather": "node dist/spin-gather-main.js",
+    "start:color-blasters": "node dist/color-blasters-main.js",
     "test": "node --experimental-strip-types --no-warnings --test -r ts-node/register/transpile-only test/*.test.ts",
+    "test:color-blasters": "node --experimental-strip-types --no-warnings --test -r ts-node/register/transpile-only test/color-blasters.service.test.ts test/color-blasters.socket.test.ts",
+    "test:color-blasters:production": "node --experimental-strip-types --no-warnings --test -r ts-node/register/transpile-only test/color-blasters.production-smoke.ts",
     "test:e2e": "node --no-warnings --test --test-concurrency=1 -r ts-node/register/transpile-only test/e2e/*.e2e.ts",
     "test:e2e:smoke": "npm run build -w turby-stage-geometry --prefix .. && node scripts/run-e2e-group.mjs smoke",
     "test:e2e:story": "npm run build -w turby-stage-geometry --prefix .. && node scripts/run-e2e-group.mjs story",
@@ -56,6 +60,7 @@
     "@types/node": "^24.13.3",
     "playwright-core": "^1.63.0",
     "prisma": "^6.2.1",
+    "socket.io-client": "^4.8.1",
     "ts-node": "^10.9.2",
     "typescript": "~5.7.3"
   }
