@@ -152,7 +152,7 @@ const gap = SKEL.overlay_regions.find((o) => o.id === 'core_gap');
 
 const doc = {
   stageCode: 'home_core',
-  greybox: true, // 1차 에셋 배경(home-core-base) 연결 전까지 회색상자
+  greybox: false, // 10-26 F-2: 1차 에셋 배경 home-core-base 연결(codex/turby-final-assets 9e64b65)
   note: '종장 집의 중심 길 골격 v1(10-26 F-1). 좌표는 BE/scripts/data/home-core-skeleton.json에서 BE/scripts/turby-build-home-core-stage.mjs로 만든다(blockers는 생성물 — 손으로 고치지 않는다). 사건·지점 ID는 바뀌지 않는다.',
   size: SKEL.size,
   regions: [],

@@ -1,6 +1,6 @@
 {
   "stageCode": "home_core",
-  "greybox": true,
+  "greybox": false,
   "note": "종장 집의 중심 길 골격 v1(10-26 F-1). 좌표는 BE/scripts/data/home-core-skeleton.json에서 BE/scripts/turby-build-home-core-stage.mjs로 만든다(blockers는 생성물 — 손으로 고치지 않는다). 사건·지점 ID는 바뀌지 않는다.",
   "size": {
     "width": 3200,
