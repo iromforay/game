@@ -181,7 +181,7 @@ export class StoryContentService implements OnModuleInit {
 
   // 없으면 null — 파일이 준비되지 않은 장·지역은 호출 쪽이 오류로 바꾼다
   dialogue(chapterCode: string): unknown | null {
-    if (!/^(opening|ch0[1-5]|finale)$/.test(chapterCode)) return null;
+    if (!/^(opening|ch0[1-5]|final)$/.test(chapterCode)) return null; // 종장 = final(정본 chapter_final.md·CHFINAL_*, 10-26)
     return this.load(join('dialogue', `${chapterCode}.json`));
   }
 
