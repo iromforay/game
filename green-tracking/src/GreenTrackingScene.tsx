@@ -1,28 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import * as THREE from 'three';
 import backdropUrl from './assets/forest-path-backdrop-v2.webp';
-import grassUrl from './assets/photoreal-wild-grass.png';
 import './styles.css';
 
 interface GreenTrackingSceneProps { onExit?: () => void }
 type MoveMode = 'stop' | 'walk' | 'run';
 const MODE_SPEED: Record<MoveMode, number> = { stop: 0, walk: 4.1, run: 8.2 };
 
-const random = (() => { let seed = 8217; return () => { seed = seed * 16807 % 2147483647; return (seed - 1) / 2147483646; }; })();
-
-function makePhotoCard(texture: THREE.Texture, width: number, height: number, x: number, z: number, scale = 1, flip = false) {
-  const group = new THREE.Group();
-  const geometry = new THREE.PlaneGeometry(width, height);
-  geometry.translate(0, height / 2, 0);
-  const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true, opacity: .72, alphaTest: .12, side: THREE.DoubleSide, depthWrite: false, toneMapped: false, fog: true });
-  const plane = new THREE.Mesh(geometry, material);
-  plane.rotation.y = (random() - .5) * .08; plane.scale.x = flip ? -1 : 1; group.add(plane);
-  group.position.set(x, 0, z); group.scale.setScalar(scale); group.userData.sway = random() * Math.PI * 2;
-  return group;
-}
-
 export function GreenTrackingScene({ onExit }: GreenTrackingSceneProps) {
-  const mountRef = useRef<HTMLDivElement>(null);
   const modeRef = useRef<MoveMode>('walk');
   const [mode, setMode] = useState<MoveMode>('walk');
   const [progress, setProgress] = useState(0);
@@ -30,36 +14,19 @@ export function GreenTrackingScene({ onExit }: GreenTrackingSceneProps) {
   useEffect(() => { modeRef.current = mode; }, [mode]);
 
   useEffect(() => {
-    const mount = mountRef.current; if (!mount) return;
-    const scene = new THREE.Scene(); scene.background = null; scene.fog = new THREE.FogExp2(0xc7dcca, .018);
-    const camera = new THREE.PerspectiveCamera(58, 1, .1, 180); camera.position.set(0, 2.05, 8);
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
-    renderer.setPixelRatio(Math.min(devicePixelRatio, 1.7)); renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05; mount.appendChild(renderer.domElement);
-    const photoLayers: THREE.Group[] = [];
-    const loader = new THREE.TextureLoader(); let disposed = false;
-    loader.loadAsync(grassUrl).then((grassTexture) => {
-      if (disposed) return;
-      grassTexture.colorSpace = THREE.SRGBColorSpace; grassTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
-      for (let i = 0; i < 28; i += 1) { const side = i % 2 ? 1 : -1; photoLayers.push(makePhotoCard(grassTexture, 4.6, 2.3, side * (3.8 + random() * 4.5), 4 - random() * 132, .3 + random() * .32, random() > .5)); }
-      photoLayers.forEach((layer) => scene.add(layer));
-    });
-    const clock = new THREE.Clock(); let cameraZ = 8; let frame = 0; let lastUpdate = 0;
-    const resize = () => { const { clientWidth, clientHeight } = mount; renderer.setSize(clientWidth, clientHeight, false); camera.aspect = clientWidth / Math.max(1, clientHeight); camera.updateProjectionMatrix(); };
-    const observer = new ResizeObserver(resize); observer.observe(mount); resize();
-    const animate = () => {
-      frame = requestAnimationFrame(animate); const delta = Math.min(clock.getDelta(), .04); const elapsed = clock.elapsedTime; const activeMode = modeRef.current;
-      cameraZ -= delta * MODE_SPEED[activeMode]; if (cameraZ < -91) cameraZ = 8;
-      const bobRate = activeMode === 'run' ? 9 : 5.2; const bobAmount = activeMode === 'stop' ? 0 : activeMode === 'run' ? .055 : .025;
-      camera.position.set(Math.sin(elapsed * .72) * (activeMode === 'stop' ? 0 : .045), 2.05 + Math.sin(elapsed * bobRate) * bobAmount, cameraZ); camera.lookAt(camera.position.x * .3, 1.75, cameraZ - 16);
-      photoLayers.forEach((layer) => { layer.rotation.z = Math.sin(elapsed * .72 + (layer.userData.sway as number)) * .004; });
-      if (elapsed - lastUpdate > .15) { lastUpdate = elapsed; setProgress(Math.round((8 - cameraZ) / 99 * 100)); }
-      renderer.render(scene, camera);
-    }; animate();
-    return () => { disposed = true; cancelAnimationFrame(frame); observer.disconnect(); scene.traverse((object) => { if (object instanceof THREE.Mesh) { object.geometry.dispose(); const materials = Array.isArray(object.material) ? object.material : [object.material]; materials.forEach((material) => { if (material instanceof THREE.MeshBasicMaterial) material.map?.dispose(); material.dispose(); }); } }); renderer.dispose(); mount.removeChild(renderer.domElement); };
+    let frame = 0; let routeProgress = 0; let lastTime = performance.now(); let lastUpdate = lastTime;
+    const animate = (now: number) => {
+      frame = requestAnimationFrame(animate);
+      const delta = Math.min((now - lastTime) / 1000, .05); lastTime = now;
+      routeProgress = (routeProgress + delta * MODE_SPEED[modeRef.current]) % 100;
+      if (now - lastUpdate > 120) { lastUpdate = now; setProgress(Math.round(routeProgress)); }
+    };
+    frame = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(frame);
   }, []);
 
   const backdropScale = 1.035 + progress * .00045;
-  return <main className="green-tracking-shell"><div className="forest-backdrop" style={{ backgroundImage: `url(${backdropUrl})`, transform: `scale(${backdropScale}) translateY(${progress * -.008}%)` }} /><div ref={mountRef} className="forest-scene" aria-label="수양버들이 있는 실사형 2.5D 숲길 산책 장면" /><div className="forest-vignette" />
+  return <main className={`green-tracking-shell mode-${mode}`}><div className="forest-backdrop" role="img" aria-label="수양버들이 있는 실사형 숲길 산책 장면" style={{ backgroundImage: `url(${backdropUrl})`, transform: `scale(${backdropScale}) translateY(${progress * -.008}%)` }} /><div className="forest-vignette" />
     <header className="forest-topbar"><button type="button" onClick={onExit ?? (() => history.back())}>← 허브</button><div><small>GAME 08 · VISUAL MVP</small><strong>GREEN TRACKING</strong></div><span>숲속길 · 맑은 낮</span></header>
     <section id="walk-controls" className={`walk-panel${panelExpanded ? ' expanded' : ' collapsed'}`}>
       <button className="walk-panel-toggle" type="button" aria-expanded={panelExpanded} aria-controls="walk-panel-details" onClick={() => setPanelExpanded((expanded) => !expanded)}>

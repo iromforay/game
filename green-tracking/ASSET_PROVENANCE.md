@@ -9,6 +9,7 @@
 - 원본 생성 파일: `C:\Users\foray\.codex\generated_images\01a16662-cc5c-7d42-b81c-95995cfc7af5\exec-bffc207c-8c87-48a1-991d-cab4e8b14b76.png`
 - 실제 게임 적용 파일: `src/assets/forest-path-backdrop-v2.webp`
 - 개선점: 흙길의 자갈·낙엽·습도감, 불규칙한 식생, 단일 광원과 자연스러운 원근을 강화하고 반복 식생을 제거
+- 표시 방식: 배경 자체만 사용하며 별도의 나무·갈대·잡풀 오브젝트를 중첩하지 않는다.
 
 ## `src/assets/forest-path-backdrop.png`
 
