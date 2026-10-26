@@ -13,7 +13,7 @@ const src = process.argv[2];
 const doCopy = process.argv.includes('--copy');
 if (!src) throw new Error('Codex chapter-final-home 폴더 경로가 필요하다');
 
-// [전달 폴더, 파일 키, 런타임 경로, 너비, 높이, 알파] — to_codex/2026-10-26 v7(1차)·v9(2차) 지시서 계약
+// [전달 폴더, 파일 키, 런타임 경로, 너비, 높이, 알파] — to_codex/2026-10-26 v7(1차)·v9(2차)·v10(3차) 지시서 계약
 const CONTRACT = [
   ['delivery-v1', 'home-core-base', 'world/home-core', 3200, 2400, false],
   ['delivery-v1', 'core-gap', 'world/home-core', 1280, 480, true],
@@ -39,6 +39,13 @@ const CONTRACT = [
   ['delivery-v2', 'scissors-final-reveal', 'fx/story', 1280, 720, true],
   ['delivery-v2', 'five-knot-bind', 'fx/story', 768, 768, true],
   ['delivery-v2', 'core-joined', 'world/home-core', 1280, 480, true],
+  // to_codex/2026-10-26 v10(F-3b 3차 — 엔딩)
+  ['delivery-v3', 'five-unravel', 'fx/story', 768, 768, true],
+  ['delivery-v3', 'thread-path', 'fx/story', 1280, 720, true],
+  ['delivery-v3', 'real-world-bg', 'world/home-core', 1280, 720, false],
+  ['delivery-v3', 'real-yarn-knot', 'fx/story', 768, 768, true],
+  ['delivery-v3', 'mother-hand', 'fx/story', 768, 768, true],
+  ['delivery-v3', 'title-card-bg', 'world/home-core', 1280, 720, false],
 ];
 const SHEETS = { 'scissors-open-idle': 256, 'scissors-bound': 256 };
 

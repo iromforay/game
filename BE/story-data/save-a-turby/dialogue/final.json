@@ -624,7 +624,7 @@
           "kind": "narration",
           "dialogueId": "final.unravel.002",
           "text": "누비가 몸 가장자리의 금빛 마감실을 스스로 푼다.",
-          "cameraCue": null,
+          "cameraCue": "five-unravel",
           "soundCue": null
         },
         {
@@ -702,7 +702,7 @@
           "kind": "narration",
           "dialogueId": "final.unravel.012",
           "text": "풀린 실이 단수링이 표시한 이음매를 통과한다. 실은 어둠 속을 여러 번 오가며 두 세계 사이에 길을 짠다. 이야기 장식에 스며들었던 동료들의 실과 기억도 누비의 실에 함께 엮인다. 현실까지 닿는 중심 실은 누비의 몸 전체로 만들어지지만, 그것은 더 이상 과거의 태초의 실타래와 같지 않다. 주인공과 동료들이 함께한 기억을 품은 새로운 태초의 실타래가 되어 길을 완성한다.",
-          "cameraCue": null,
+          "cameraCue": "thread-path",
           "soundCue": null
         },
         {
@@ -775,7 +775,7 @@
           "kind": "narration",
           "dialogueId": "final.real_world.007",
           "text": "엄마가 탁자 위의 뜨개실을 집으려다 손을 멈춘다. 털실 한쪽에는 작은 고리 모양의 단수링이 끼워져 있다.",
-          "cameraCue": null,
+          "cameraCue": "mother-hand",
           "soundCue": null
         },
         {
@@ -793,7 +793,7 @@
           "kind": "narration",
           "dialogueId": "final.real_world.009",
           "text": "주인공은 탁자 위의 털실을 바라본다. 실 끝에는 처음 누비에게 묶어 주었던 작은 크림색 매듭이 남아 있다.",
-          "cameraCue": null,
+          "cameraCue": "real-yarn-knot",
           "soundCue": null
         },
         {

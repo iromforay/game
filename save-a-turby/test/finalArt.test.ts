@@ -33,9 +33,16 @@ const ASSETS: [string, string, number, number, boolean, string][] = [
   ['scissors-final-reveal', 'fx/story', 1280, 720, true, '55E0C1D030BD2A9BDA8BFEC4423DB0E0827B399462BB551B88AEF6B7E5C0817D'],
   ['five-knot-bind', 'fx/story', 768, 768, true, '4B70C77EBABD8DC96D025756062765FFFADC8BB8D5292CF3577B9A3FD9FEB364'],
   ['core-joined', 'world/home-core', 1280, 480, true, '0C8F95BF0FECADD60548863AFB961B9366BD0F0A53BB0F816EEE71C30C2E59A2'],
+  // F-3b 3차(엔딩, codex/turby-final-assets 950e3c2)
+  ['five-unravel', 'fx/story', 768, 768, true, 'FC04AC27E16B8A657ED7585D4D8194DB73D5CE46FEC310EDC57114722CD22800'],
+  ['thread-path', 'fx/story', 1280, 720, true, '8FA72E3214EF0994B8B539BA1B719C355175274AD23EF8D44D5F7EFFE2EFB743'],
+  ['real-world-bg', 'world/home-core', 1280, 720, false, '64EA93A60200D08B4831F30763672C677444607CFFC4C4F38C8E33924588DD00'],
+  ['real-yarn-knot', 'fx/story', 768, 768, true, '9C9AC6662B89D2FF8ABD9780FC79580BBE2A5591C5E6678EBBA6B0456CA246EF'],
+  ['mother-hand', 'fx/story', 768, 768, true, 'E5D4141086381B01E180959EDD81CA4384E193A0A5325609D4CB9920F80ACC60'],
+  ['title-card-bg', 'world/home-core', 1280, 720, false, '3C4E0D107932B552084EC59B1FED8169BAD6D60B1ECD84AD0A6C940AD616B184'],
 ];
 
-test('종장 에셋 23종(1차 6 + 2차 17): 파일·키(파일명)·크기·투명·해시가 Codex manifest와 같다', () => {
+test('종장 에셋 29종(1차 6 + 2차 17 + 3차 6): 파일·키(파일명)·크기·투명·해시가 Codex manifest와 같다', () => {
   for (const [key, dir, w, h, alpha, hash] of ASSETS) {
     const file = here(`../src/assets/${dir}/${key}.png`);
     assert.ok(existsSync(file), `${key} 파일`);

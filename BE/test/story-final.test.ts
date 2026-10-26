@@ -244,7 +244,7 @@ test('대화 데이터: 구간 7개의 시작 저장점·완료 사건, 화자 �
   const flat = FINAL.segments.flatMap((s) => s.entries);
   const speakers = [...new Set(flat.filter((e) => e.kind === 'line').map((e) => `${e.speakerLabel}=${e.speaker}/${e.portrait}`))].sort();
   assert.deepEqual(speakers, ['가느리=ganeuri/null', '가위=scissors/null', '누비=nubi/nubi', '단수링=dansuring/dansuring', '물들이=muldeuli/null', '보풀이=bopuli/bopuli', '엄마=mother/null', '오래된 폭신이=old_pokshini/null', '{playerName}=player/player'].sort());
-  assert.deepEqual(flat.filter((e) => e.cameraCue).map((e) => e.cameraCue), ['five-relics', 'five-bind', 'origin-fall', 'scissors-final-reveal', 'five-knot-bind']);
+  assert.deepEqual(flat.filter((e) => e.cameraCue).map((e) => e.cameraCue), ['five-relics', 'five-bind', 'origin-fall', 'scissors-final-reveal', 'five-knot-bind', 'five-unravel', 'thread-path', 'mother-hand', 'real-yarn-knot']);
   assert.deepEqual(flat.filter((e) => e.kind === 'storyBattle').map((e) => e.encounterKey), ['final_boss_scissors']);
 });
 

@@ -157,7 +157,7 @@ const file = {
     // 다섯 실이 풀리다(역순 해체) — 현실 세계로 이어진다
     segment('final.unravel', 'CHFINAL_COST_ACCEPTED', true, null, (s) => [
       t(s, 237),
-      n(s, 239),
+      n(s, 239, { cameraCue: 'five-unravel' }), // 3차 에셋 WF-FX-03(역순으로 풀리는 다섯 실)
       n(s, 241),
       n(s, 243),
       n(s, 245),
@@ -167,7 +167,7 @@ const file = {
       l(s, 253, 254, 'neutral'),
       l(s, 256, 257, 'neutral'),
       n(s, 259),
-      n(s, 261),
+      n(s, 261, { cameraCue: 'thread-path' }), // 3차 에셋 WF-FX-04(두 세계 사이에 짜이는 실의 길)
       n(s, 263),
       n(s, 265),
     ]),
@@ -179,9 +179,9 @@ const file = {
       n(s, 273),
       l(s, 275, 276, 'neutral'),
       n(s, 278),
-      n(s, 280),
+      n(s, 280, { cameraCue: 'mother-hand' }), // 3차 에셋 WF-FX-06(엄마의 손 — 손·팔까지)
       l(s, 282, 283, 'neutral'),
-      n(s, 285),
+      n(s, 285, { cameraCue: 'real-yarn-knot' }), // 3차 에셋 WF-FX-05(크림색 매듭·단수링이 달린 털실 — 움직이지 않는다)
       n(s, 287),
       l(s, 289, 290, 'neutral'),
       n(s, 292),

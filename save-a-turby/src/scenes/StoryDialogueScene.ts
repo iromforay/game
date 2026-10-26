@@ -76,7 +76,8 @@ export class StoryDialogueScene extends OpeningScene {
       show: (line) => base.show(this.segmentNow && ORIGIN_SEGMENTS.has(this.segmentNow) && line.entry.kind === 'line' && line.entry.speaker === 'nubi' ? { ...line, label: ORIGIN_NAME } : line),
       onSegment: (id) => {
         this.segmentNow = id;
-        this.setBackdrop(BACKDROP_OF_CHAPTER[chapterOfSegment(id)] ?? 'forest'); // 장 전용 대화 배경(3장 C3-6 R1-04, 4장 C4-3, 5장 C5-1)
+        if (id === 'final.real_world') this.clearEdgeGlimpse(); // 정본: 빛이 사라진다 — 실의 길 연출을 걷고 현실로
+        this.setBackdrop(id === 'final.real_world' ? 'real_world' : (BACKDROP_OF_CHAPTER[chapterOfSegment(id)] ?? 'forest')); // 장 전용 대화 배경(3장 C3-6 R1-04, 4장 C4-3, 5장 C5-1). F-3b: 현실 세계는 거실
       },
       startBattle: (key) => this.startBattle(key),
     };
@@ -87,9 +88,11 @@ export class StoryDialogueScene extends OpeningScene {
     this.clearLayer();
     this.fxState.endingShown = true;
     const cover = this.add.rectangle(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT, 0x000000, 1).setOrigin(0, 0).setDepth(5000);
+    const cardBg = this.textures.exists('title-card-bg') ? this.add.image(0, 0, 'title-card-bg').setOrigin(0, 0).setDisplaySize(CANVAS_WIDTH, CANVAS_HEIGHT).setDepth(5000).setAlpha(0) : null; // 3차 에셋: 거의 검은 실 결 바탕(암전 뒤 떠오른다)
     const title = this.add.text(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - 40, ENDING_TITLE, { fontSize: '56px', color: '#f7e9d2' }).setOrigin(0.5).setDepth(5001).setAlpha(0);
     const line = this.add.text(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 40, ENDING_LINE, { fontSize: '24px', color: '#d8cbe8', align: 'center', wordWrap: { width: CANVAS_WIDTH - 160 } }).setOrigin(0.5).setDepth(5001).setAlpha(0);
     await new Promise<void>((resolve) => this.time.delayedCall(ENDING_BLACK_MS, resolve));
+    if (cardBg) this.tweens.add({ targets: cardBg, alpha: 1, duration: ENDING_FADE_MS });
     this.tweens.add({ targets: title, alpha: 1, duration: ENDING_FADE_MS });
     this.tweens.add({ targets: line, alpha: 1, duration: ENDING_FADE_MS, delay: ENDING_FADE_MS / 2 });
     await new Promise<void>((resolve) => this.time.delayedCall(ENDING_FADE_MS * 1.5, resolve));
@@ -103,7 +106,7 @@ export class StoryDialogueScene extends OpeningScene {
       this.input.once('pointerdown', done);
       this.input.keyboard?.once('keydown', done);
     });
-    [cover, title, line].forEach((o) => o.destroy());
+    [cover, cardBg, title, line].forEach((o) => o?.destroy());
   }
 
   private async startBattle(encounterKey: string): Promise<StoryBattleResult> {
