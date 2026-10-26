@@ -31,8 +31,8 @@ import { MAP_DEPTH, planStageRender, type StageRenderPlan } from '../story/mapRe
 import { recoverUnackedResult } from '../state/unackedResult';
 import { deferredRestore } from '../state/restoreAttempt';
 import { resumeBattle } from './VillageScene';
-import { frostFactorAt, needlePhaseAt, needleUnder, type NeedlePhase } from '../story/fridgeHazards';
-import { DEEP_WATER_TEXT, FROST_ZONE_TEXT, NEEDLE_RETURN_TEXT, NoticeGate, POSITION_CORRECTED_TEXT, WILD_HINT_ENGAGED, WILD_HINT_NEAR, WILD_NOTICE_REPEAT_MS, wildNoticeKey, wildUnreachableText } from '../story/mapNotices';
+import { frostFactorAt, mirageAlphaAt, needlePhaseAt, needleUnder, slowZoneKindAt, type NeedlePhase } from '../story/fridgeHazards';
+import { DEEP_WATER_TEXT, FROST_ZONE_TEXT, HEAT_ZONE_TEXT, NEEDLE_RETURN_TEXT, NoticeGate, POSITION_CORRECTED_TEXT, WILD_HINT_ENGAGED, WILD_HINT_NEAR, WILD_NOTICE_REPEAT_MS, wildNoticeKey, wildUnreachableText } from '../story/mapNotices';
 
 // 배치된 자리 바로 옆(조우 반경 안)의 야생은 반경의 이 배수 밖으로 벗어난 뒤에야 다시 조우한다. 서버 반경이 크게 바뀌어도 같은 비율로 동작한다
 const THICKET_KEY = 'hidden-area-thicket-locked'; // 개방 전 숨은 구역을 가리는 수풀 오버레이(미니맵 썸네일에도 같이 그린다)
@@ -43,6 +43,12 @@ const DEPTH_GROUND = MAP_DEPTH.greybox;
 const TRAP_SLOW_MS = 1200; // 서버 덫 지속 시간(lake.json blackThreadTraps.slowMs)과 같은 값 — 연출 길이용이며 판정은 서버
 const MAP_TARGET_GLOW = 0xf6dfa8; // 임무 대상 외곽광 색(크림)
 const DEPTH_STORY = MAP_DEPTH.story; // 이야기 지점·오브젝트 표식·문(아바타·야생 터비보다 아래)
+// 10-26 C5-6 QA-05 아지랑이: 가장 짙을 때 투명도, 좌우 흔들림(px), 위아래 늘어남 비율
+const MIRAGE_PEAK_ALPHA = 0.5;
+const MIRAGE_SWAY_PX = 6;
+const MIRAGE_STRETCH = 0.06;
+// 10-26 C5-6 QA-06 열린 틈 다리 보정: 그림 색 곱하기(tint), 가운데 안내선 색(guide)
+const GATE_ART_TUNE: Record<string, { tint?: number; guide?: number }> = { 'ridge-gap-scent': { tint: 0xe6b08a }, 'ridge-gap-thread': { guide: 0xf2c75c } };
 
 interface WildMarker {
   info: WildInfo; // 서버가 내려 준 마커(위치·종류) — 클라이언트 설정에는 야생 좌표가 없다
@@ -113,6 +119,7 @@ export class MapScene extends Phaser.Scene {
   // 10-23 C4-1 4장: 서리 구역(이동 0.7배 + 화면 가장자리 서리)·바늘 칸(서버 시각 주기 표시). 판정은 서버
   private inFrost = false;
   private frostEdge: Phaser.GameObjects.GameObject[] = [];
+  private mirageViews: { id: string; view: Phaser.GameObjects.Image | Phaser.GameObjects.Rectangle; alpha: number }[] = []; // 10-26 C5-1: 아지랑이 가짜 길
   private needleViews: { id: string; warn: Phaser.GameObjects.Image | Phaser.GameObjects.Rectangle; strike: Phaser.GameObjects.Image | Phaser.GameObjects.Rectangle; phase: NeedlePhase | null }[] = [];
   private unreachableWilds = 0; // 서버가 가로막힘으로 거부한 조우 요청 수(진단용)
   private notices = new NoticeGate(); // 안내 반복 억제(같은 야생·같은 사유 3초, 위치 보정 안내는 한 번)
@@ -153,6 +160,7 @@ export class MapScene extends Phaser.Scene {
     this.inFrost = false;
     this.frostEdge = [];
     this.needleViews = [];
+    this.mirageViews = [];
     this.waterEvents = { currentPushes: 0, deepReturns: 0, trapSnares: 0, lastCurrentFieldId: null, needleReturns: 0, lastNeedleId: null };
     this.legacyTarget = null;
     this.capturedShown = -1;
@@ -349,7 +357,7 @@ export class MapScene extends Phaser.Scene {
       g.fillStyle(0xd9c58f, 0.92).fillCircle(a.x, a.y, a.radius).lineStyle(3, 0x8a7440, 1).strokeCircle(a.x, a.y, a.radius);
     }
     // 4장(10-23 C4-1): 서리 구역은 옅은 하늘색, 바늘 칸은 줄무늬 테두리(회색상자 단계의 임시 표시 — 최종 배경이 오면 그림이 대신한다)
-    for (const z of L.frost ?? []) g.fillStyle(0xbfe3f2, 0.35).fillRect(z.x, z.y, z.width, z.height);
+    for (const z of L.frost ?? []) g.fillStyle(z.kind === 'heat' ? 0xf2a65a : 0xbfe3f2, 0.35).fillRect(z.x, z.y, z.width, z.height); // 10-26 C5-1: 뜨거운 모래는 옅은 주황
     for (const n of L.needles ?? []) g.lineStyle(3, 0x9fb8cc, 0.8).strokeRect(n.x, n.y, n.width, n.height);
     g.lineStyle(10, 0x9aa59c, 0.45);
     for (const path of L.paths) for (let i = 1; i < path.length; i++) g.lineBetween(path[i - 1][0], path[i - 1][1], path[i][0], path[i][1]);
@@ -496,7 +504,19 @@ export class MapScene extends Phaser.Scene {
     }
     for (const g of plan.gates) {
       const gate = view!.gates.find((x) => x.id === g.id)!;
-      if (g.art) keep(this.add.image(g.art.x, g.art.y, g.art.assetKey).setOrigin(g.art.pivot[0], g.art.pivot[1]).setDisplaySize(g.art.width, g.art.height).setDepth(DEPTH_STORY));
+      if (g.art) {
+        const img = keep(this.add.image(g.art.x, g.art.y, g.art.assetKey).setOrigin(g.art.pivot[0], g.art.pivot[1]).setDisplaySize(g.art.width, g.art.height).setDepth(DEPTH_STORY));
+        // 10-26 C5-6 QA-06: 표시 크기에서 비슷해 보이는 열린 틈 다리를 구분한다(묻힌 실 다리는 붉은 갈색, 금빛 실 다리는 가운데 금빛 안내선)
+        const tune = GATE_ART_TUNE[g.art.assetKey];
+        if (tune?.tint) img.setTint(tune.tint);
+        if (tune?.guide) {
+          const cx = g.art.x + (0.5 - g.art.pivot[0]) * g.art.width;
+          const cy = g.art.y + (0.5 - g.art.pivot[1]) * g.art.height;
+          const h = g.art.height * 0.86;
+          const line = keep(this.add.graphics().fillStyle(tune.guide, 0.9).fillRect(cx - 1.5, cy - h / 2, 3, h).setDepth(DEPTH_STORY + 0.01)); // 임시 문 사각형(Rectangle) 집계와 섞이지 않게 Graphics
+          line.postFX?.addGlow(tune.guide, 2, 0, false, 0.1, 8);
+        }
+      }
       for (const q of g.pieces) {
         // 열림 그림의 일부(원본 px 사각형)를 이름 붙은 프레임으로 한 번 등록해 그 프레임만 그린다(PNG는 그대로)
         const tex = this.textures.get(q.assetKey);
@@ -848,7 +868,7 @@ export class MapScene extends Phaser.Scene {
   get debugPosition() {
     return {
       positioned: this.positioned, corrections: this.corrections, lastCorrection: this.lastCorrectionReason, unreachableWilds: this.unreachableWilds,
-      ...this.waterEvents, pushing: this.pushRemain !== null, inFrost: this.inFrost, needles: this.needleViews.map((n) => ({ id: n.id, phase: n.phase })),
+      ...this.waterEvents, pushing: this.pushRemain !== null, inFrost: this.inFrost, slowZone: slowZoneKindAt(this.stageView?.layout?.frost, this.avatar), needles: this.needleViews.map((n) => ({ id: n.id, phase: n.phase })), mirages: this.mirageViews.map((m) => ({ id: m.id, alpha: m.alpha })),
       notices: [...this.noticeLog], size: { width: this.stageWidth, height: this.stageHeight }, captured: this.capturedCount(),
       // 화면에 놓인 야생 마커(서버 마커 ID·화면 좌표·상태)
       wilds: this.markers.map((m) => ({ index: m.index, characterCode: m.info.characterCode, x: m.gfx.x, y: m.gfx.y, state: m.state, visible: m.gfx.visible })),
@@ -973,6 +993,7 @@ export class MapScene extends Phaser.Scene {
         v.strike.setVisible(phase === 'strike');
       }
     }
+    this.updateMirages(L?.mirages);
     const frost = frostFactorAt(L?.frost, this.avatar) < 1;
     if (frost === this.inFrost) return;
     this.inFrost = frost;
@@ -980,13 +1001,46 @@ export class MapScene extends Phaser.Scene {
     this.frostEdge = [];
     if (!frost) return;
     const { width, height } = this.scale;
-    if (this.textures.exists('voice-frost')) this.frostEdge.push(this.add.image(0, 0, 'voice-frost').setOrigin(0, 0).setDisplaySize(width, height).setScrollFactor(0).setAlpha(0.8).setDepth(DEPTH_STORY + 50)); // C4-6 QA-13: 둔해짐이 읽히게 0.6 → 0.8
+    // 10-26 C5-1: 5장 뜨거운 모래(kind heat)는 같은 규칙에 가장자리 열기·안내 문구만 다르다
+    const heat = slowZoneKindAt(L?.frost, this.avatar) === 'heat';
+    const edgeKey = heat ? 'heat-haze' : 'voice-frost';
+    if (this.textures.exists(edgeKey)) this.frostEdge.push(this.add.image(0, 0, edgeKey).setOrigin(0, 0).setDisplaySize(width, height).setScrollFactor(0).setAlpha(0.8).setDepth(DEPTH_STORY + 50)); // C4-6 QA-13: 둔해짐이 읽히게 0.6 → 0.8
     else {
-      // 임시 표시(서리 그림 전): 화면 가장자리 네 변의 옅은 하늘색 띠. 가운데는 비운다
+      // 임시 표시(그림 전): 화면 가장자리 네 변의 옅은 띠(서리 하늘색·열기 주황). 가운데는 비운다
       const band = Math.round(Math.min(width, height) * 0.08);
-      for (const [x, y, w, h] of [[0, 0, width, band], [0, height - band, width, band], [0, 0, band, height], [width - band, 0, band, height]]) this.frostEdge.push(this.add.rectangle(x, y, w, h, 0xdff3fb, 0.22).setOrigin(0, 0).setScrollFactor(0).setDepth(DEPTH_STORY + 50));
+      for (const [x, y, w, h] of [[0, 0, width, band], [0, height - band, width, band], [0, 0, band, height], [width - band, 0, band, height]]) this.frostEdge.push(this.add.rectangle(x, y, w, h, heat ? 0xf7c48a : 0xdff3fb, 0.22).setOrigin(0, 0).setScrollFactor(0).setDepth(DEPTH_STORY + 50));
     }
-    if (this.notices.once('frost-zone')) this.notice(FROST_ZONE_TEXT);
+    if (heat ? this.notices.once('heat-zone') : this.notices.once('frost-zone')) this.notice(heat ? HEAT_ZONE_TEXT : FROST_ZONE_TEXT);
+  }
+
+  // 아지랑이 그림: 흐리게 번지게 한다(10-26 C5-6 QA-05 — 또렷한 천 길처럼 보이지 않게)
+  private mirageImage(f: { x: number; y: number; width: number; height: number }) {
+    const img = this.add.image(f.x, f.y, 'mirage-path').setOrigin(0, 0).setDisplaySize(f.width, f.height);
+    img.preFX?.addBlur(0, 2, 2, 1.2);
+    return img;
+  }
+
+  // 10-26 C5-1: 아지랑이 가짜 길 — 서버 시각 주기로 떠올랐다 사라진다(판정 없음). 그림(mirage-path)이 없으면 옅은 모래색 사각형(임시)
+  private updateMirages(fields: NonNullable<NonNullable<StageView['layout']>['mirages']> | undefined) {
+    if (!fields || fields.length === 0) return;
+    if (this.mirageViews.length !== fields.length) {
+      this.mirageViews.forEach((m) => m.view.destroy());
+      this.mirageViews = fields.map((f) => ({
+        id: f.id,
+        view: (this.textures.exists('mirage-path') ? this.mirageImage(f) : this.add.rectangle(f.x, f.y, f.width, f.height, 0xf3d9a4, 0.9).setOrigin(0, 0)).setDepth(DEPTH_STORY - 0.6).setAlpha(0),
+        alpha: 0,
+      }));
+    }
+    const now = roomClient.now();
+    fields.forEach((f, i) => {
+      const m = this.mirageViews.find((x) => x.id === f.id)!;
+      m.alpha = mirageAlphaAt(f, now);
+      m.view.setAlpha(m.alpha * MIRAGE_PEAK_ALPHA);
+      // 10-26 C5-6 QA-05: 열기에 일렁이게(좌우로 조금 흔들리고 위아래로 늘었다 줄었다) — 단단한 길·다리로 읽히지 않게
+      const sway = Math.sin(now / 260 + i * 1.7) * MIRAGE_SWAY_PX;
+      const stretch = 1 + Math.sin(now / 170 + i) * MIRAGE_STRETCH;
+      m.view.setPosition(f.x + sway, f.y - (f.height * (stretch - 1)) / 2).setDisplaySize(f.width, f.height * stretch);
+    });
   }
 
   // 깊은 물에서 돌아왔을 때의 안내 — 한 탐험 세션(이 화면)에서 처음 한 번만

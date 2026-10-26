@@ -72,6 +72,36 @@ export interface BattleUnit {
   needleMachine?: NeedleMachineDef | null; // 서리 미싱: 바늘 예고 → 다음 적 차례에 내려찍기(고정 + 연결 실)
   rescuer?: boolean; // 가느리(중립): 혼자 하는 전투에서 다음 아군 차례 전에 연결 실을 끊어 준다
   linkFor?: string | null; // 연결 실: 이 실이 묶은 아군 유닛(끊으면 풀린다)
+  // 10-26 C5-3(5장): 모두 전투 정의 데이터가 소유한다. 없으면 기존 전투와 같다
+  ember?: EmberDef | null; // 그을린 박음이: 차례를 마칠 때 가장 가까운 아군 칸에 불씨(지연 뒤 그 칸·이웃 칸 피해). 젖은 칸에서 차례를 시작하면 쓰지 않는다
+  mirageOnHit?: boolean; // 그을린 박음이: 처음 맞으면 곁에 열기 환영을 만든다(젖은 칸 위면 만들지 않는다)
+  mirageUsed?: boolean;
+  mirageOf?: string | null; // 열기 환영: 만든 박음이. 맞으면 사라지고, expireRound 라운드가 시작될 때도 사라진다
+  expireRound?: number | null;
+  wetter?: boolean; // 물들이(중립): 아군 차례 전에 그을린 박음이 하나의 발밑을 적신다
+  cutter?: CutterDef | null; // 재단 실밥이: 아군 곁 칸 하나를 끊을 칸으로 예고하고 연결 매듭을 둔다(다음 차례에 매듭이 남아 있으면 끊긴다)
+  knotOf?: string | null; // 연결 매듭: 지키는 예고 칸 "col,row"(끊으면 예고 취소)
+  lineCut?: LineCutDef | null; // 황금 재단인형: 가로 한 줄 예고 → 다음 적 차례에 끊기(서 있는 아군은 끊기지 않고 피해)
+  restorer?: boolean; // 동료(중립): 아군 차례 전에 끊긴 칸 하나를 다시 붙잡는다
+  regen?: RegenDef | null; // 금빛 연결점: 같은 중심부의 다른 연결점이 남아 있으면 끊긴 뒤 N라운드가 시작될 때 다시 꿰매진다
+  nubiOnly?: boolean; // 안쪽 검은 연결: 이야기 누비만 끊을 수 있다(다른 유닛의 공격은 행동만 쓰고 피해 0)
+}
+
+// 10-26 C5-3: 5장 규칙 수치(전투 정의)
+export interface EmberDef {
+  delayRounds: number; // 놓은 라운드 + 이 값의 라운드가 시작될 때 터진다
+  damage: number; // 그 칸·동서남북 이웃 칸의 아군에게
+}
+export interface CutterDef {
+  limit: number; // 이 전투에서 실밥이들이 끊을 수 있는 칸 합계(갇힘 방지)
+}
+export interface LineCutDef {
+  length: number; // 예고하는 가로 칸 수(가장 가까운 아군 칸을 가운데로)
+  damage: number; // 끊는 순간 그 줄에 서 있던 아군에게
+  maxCut: number; // 끊긴 칸 상한 — 넘으면 피해만 준다(갇힘 방지)
+}
+export interface RegenDef {
+  rounds: number;
 }
 
 // 10-23 C4-3: 얼어붙은 박음이 파편
@@ -143,6 +173,14 @@ export interface BattleUnitDefinition extends UnitStatsInput {
   guardedBy?: string;
   needleMachine?: NeedleMachineDef;
   rescuer?: boolean;
+  ember?: EmberDef;
+  mirageOnHit?: boolean;
+  wetter?: boolean;
+  cutter?: CutterDef;
+  lineCut?: LineCutDef;
+  restorer?: boolean;
+  regen?: RegenDef;
+  nubiOnly?: boolean;
 }
 // 10-23 C4-3: 서리 미싱 바늘. 예고 칸 수 = 끊기지 않은 밑실(breakOrder = lowerOrder 부위) 수(최소 1)
 export interface NeedleMachineDef {
@@ -170,6 +208,15 @@ export interface BattleHintDef {
   needle?: string;
   pinned?: string;
   rescue?: string;
+  // 10-26 C5-3
+  ember?: string;
+  mirage?: string;
+  wet?: string;
+  cutWarn?: string;
+  lineCut?: string;
+  restore?: string;
+  regen?: string;
+  nubiOnly?: string;
 }
 
 export interface BattleDefinition {
@@ -224,7 +271,7 @@ export interface BattleState {
   pendingParties: Record<string, PartyEntry[]>; // 파티 선택 중 제출된 목록(playerId → 파티). 전투 시작 후 비운다
   definition?: BattleDefinition | null; // 있으면 야생 1마리 대신 정의 데이터로 적·NPC·목표·지형을 만든다
   blocked?: string[]; // 현재 통행 불가 칸 "col,row"
-  story?: { encounterKey: string } | null; // 스토리 전투 표식
+  story?: { encounterKey: string; nubiTurbyId?: string | null } | null; // 스토리 전투 표식. nubiTurbyId(10-26 C5-3): 이야기 누비(누비 전용 행동 판정)
   // 10-14 C2-5A
   currentSeq?: number; // 지금까지 예고한 횟수(방향 순서의 위치)
   telegraphed?: { direction: 'east' | 'west'; round: number } | null; // round = 이 물살이 적용될 라운드
@@ -235,6 +282,14 @@ export interface BattleState {
   needleMarks?: string[]; // 다음 적 차례에 바늘이 내려올 칸
   lastPinnedId?: string | null; // 직전 내려찍기에서 고정된 아군(연속 고정 금지)
   linkSeq?: number; // 연결 실 ID 일련번호
+  // 10-26 C5-3
+  embers?: { cell: string; explodeRound: number; damage: number; by: string }[]; // 불씨(터질 라운드)
+  wet?: { cell: string; untilRound: number }[]; // 젖은 칸(이 라운드가 시작될 때 마른다)
+  cutWarns?: { cell: string; knotId: string; by: string }[]; // 실밥이가 예고한 칸과 그 칸의 연결 매듭
+  lineWarns?: string[]; // 재단인형이 예고한 줄(다음 적 차례에 끊긴다)
+  cut?: string[]; // 끊긴 칸(blocked에도 들어 있다)
+  cutCount?: number; // 실밥이가 끊은 칸 수(CutterDef.limit와 비교)
+  spawnSeq?: number; // 전투 중에 생기는 표적(환영·매듭) ID 일련번호
 }
 
 export type BattleEvent =
@@ -266,7 +321,16 @@ export type BattleEvent =
   | { version: number; type: 'revive'; unitId: string; hp: number } // 파편이 남아 박음이가 다시 일어났다
   | { version: number; type: 'needle_telegraph'; cells: string[] } // 다음 적 차례에 바늘이 내려올 칸
   | { version: number; type: 'needle_strike'; cells: string[]; pinned: string[]; linkIds: string[] } // 바늘이 내려찍었다(고정된 아군과 생긴 연결 실)
-  | { version: number; type: 'freed'; unitId: string; linkId: string; byUnitId: string | null }; // 연결 실이 끊겨 고정이 풀렸다(byUnitId = 끊은 유닛, 가느리 자동 해제 포함)
+  | { version: number; type: 'freed'; unitId: string; linkId: string; byUnitId: string | null } // 연결 실이 끊겨 고정이 풀렸다(byUnitId = 끊은 유닛, 가느리 자동 해제 포함)
+  // 10-26 C5-3
+  | { version: number; type: 'embers'; cells: string[] } // 불씨 칸(전체 목록)
+  | { version: number; type: 'ember_burst'; cell: string; hits: { unitId: string; damage: number; hp: number; stunned: boolean }[] } // 불씨가 터졌다
+  | { version: number; type: 'wet'; cells: string[] } // 젖은 칸(전체 목록)
+  | { version: number; type: 'mirage'; unitId: string; mirageId: string } // 그을린 박음이가 열기 환영을 만들었다
+  | { version: number; type: 'cut_warn'; cells: string[] } // 곧 끊어질 칸(실밥이 예고 + 재단인형 줄 예고, 전체 목록)
+  | { version: number; type: 'cut'; cells: string[]; hits: { unitId: string; damage: number; hp: number; stunned: boolean }[] } // 칸이 끊겼다(새로 끊긴 칸·맞은 아군)
+  | { version: number; type: 'restored'; cell: string; byUnitId: string } // 동료가 끊긴 칸을 다시 붙잡았다
+  | { version: number; type: 'regen'; unitId: string; reviveRound: number }; // 금빛 연결점이 끊겼지만 다른 연결점이 남아 다시 꿰매질 예정
 
 export type ActionRequest =
   | { type: 'move'; unitId: unknown; targetCol: unknown; targetRow: unknown }
@@ -330,6 +394,12 @@ export interface BattleUnitDto {
   guardedBy?: string; // 골무막이 보호를 받을 수 있는 유닛
   guarded?: boolean; // 지금 보호받는 중(피해 0)
   linkFor?: string; // 연결 실
+  // 10-26 C5-3
+  mirageOf?: string; // 열기 환영
+  knotOf?: string; // 연결 매듭(지키는 예고 칸)
+  regen?: boolean; // 금빛 연결점(다시 꿰매지는 부위)
+  nubiOnly?: boolean; // 누비만 끊을 수 있는 안쪽 연결
+  storyNubi?: boolean; // 10-26 C5-3: 이야기 누비(스토리 전투 파티)
 }
 
 export interface BattleSnapshotDto {
@@ -361,4 +431,9 @@ export interface BattleSnapshotDto {
   hintsShown?: { code: string; text: string }[];
   ice?: string[]; // 10-23 C4-3: 얼음 칸(정의 전투만)
   needleMarks?: string[]; // 10-23 C4-3: 다음 적 차례에 바늘이 내려올 칸
+  // 10-26 C5-3(정의가 켠 경우만)
+  embers?: { cell: string; explodeRound: number }[];
+  wet?: string[];
+  cutWarns?: string[]; // 실밥이 예고 + 재단인형 줄 예고
+  cut?: string[];
 }

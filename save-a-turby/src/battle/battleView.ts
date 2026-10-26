@@ -61,7 +61,8 @@ export function reachableCells(snap: BattleSnapshot, u: BattleUnit): { col: numb
 // 대상 상태: ok / 공격 대상 아님(아군·중립·기절) / 부위 순서 아님 / 부위가 남은 중심부
 export type TargetState = 'ok' | 'not_target' | 'part_order' | 'protected' | 'zero';
 
-export function targetState(snap: BattleSnapshot, target: BattleUnit): TargetState {
+// attacker(10-26 C5-3): 주면 누비 전용 대상(안쪽 검은 연결)을 이야기 누비가 아닌 유닛이 칠 때 'zero'(공격은 되지만 피해 0 — 서버 안내)
+export function targetState(snap: BattleSnapshot, target: BattleUnit, attacker?: BattleUnit): TargetState {
   if (target.side !== 'wild' || !isLive(target) || target.targetable === false) return 'not_target';
   if (target.partOf && !target.thread) {
     // (기억실은 순서가 아닌 실을 눌러도 서버가 받는다 — 혼란 규칙) 살아 있는 부위 중 가장 작은 순서만 공격할 수 있다(엔진 attack()과 같은 판정)
@@ -70,6 +71,7 @@ export function targetState(snap: BattleSnapshot, target: BattleUnit): TargetSta
   }
   if (target.invulnerable) return target.zeroDamage ? 'zero' : 'protected'; // zero = 공격은 되지만 피해 0(서버가 안내를 한 번 낸다)
   if (target.guarded) return 'zero'; // 10-23 C4-3: 골무막이 곁의 박음이 — 공격은 되지만 피해 0(서버 안내)
+  if (target.nubiOnly && attacker && !attacker.storyNubi) return 'zero';
   return 'ok';
 }
 
@@ -79,7 +81,7 @@ export const TARGET_HINT: Record<Exclude<TargetState, 'ok' | 'not_target' | 'zer
 };
 
 export function canAttack(snap: BattleSnapshot, attacker: BattleUnit, target: BattleUnit) {
-  const st = targetState(snap, target);
+  const st = targetState(snap, target, attacker);
   return isLive(attacker) && attacker.ap >= 1 && dist(attacker, target) === 1 && (st === 'ok' || st === 'zero');
 }
 
@@ -100,6 +102,9 @@ function winText(snap: BattleSnapshot, o: BattleObjective) {
   return '';
 }
 
+// 10-26 C5-5: 부위를 다 끊는 순간 이기는 보스는 '약점 노출' 대신 그 보스의 끝 모습으로 적는다
+const EXPOSED_TAG: Record<string, string> = { golden_doll: '풀림' };
+
 // 유닛 이름표 뒤에 붙는 상태 표식
 export function unitTags(u: BattleUnit): string[] {
   const tags: string[] = [];
@@ -111,10 +116,11 @@ export function unitTags(u: BattleUnit): string[] {
   if (u.flat === true) tags.push('납작');
   else if (u.flat === false) tags.push('재봉선 노출');
   if (u.reversed) tags.push('운반 실 끊김');
-  if (u.reviving) tags.push('파편 남음'); // 10-23 C4-3: 파편을 다 끊어야 완전히 쓰러진다
+  if (u.reviving) tags.push(u.regen ? '다시 꿰매짐' : '파편 남음'); // 10-23 C4-3: 파편을 다 끊어야 완전히 쓰러진다. 10-26 C5-3: 금빛 연결점은 다른 연결점이 남으면 다시 꿰매진다
+  if (u.nubiOnly && !u.stunned) tags.push('누비만');
   if (u.guarded) tags.push('골무 보호');
   if (u.phase === 'bound') tags.push('결박');
-  else if (u.phase === 'exposed') tags.push('약점 노출');
+  else if (u.phase === 'exposed') tags.push(EXPOSED_TAG[u.characterCode] ?? '약점 노출');
   else if (u.invulnerable) tags.push('부위 먼저');
   for (const s of u.statuses ?? []) {
     if (s.kind === 'bind') tags.push(`속박 ${s.turnsLeft}`);
@@ -261,18 +267,27 @@ export function resultLayout(scale: number, rowCount: number, framed = false): R
 // 작은 화면의 유닛 라벨: 이름 한 줄 + "HP/최대 · 상태" 한 줄(상태는 짧은 UI 표기 — 대본 문구가 아님). 10-22 C3-6 R1-01: 이름과 HP가 한 줄에서 쪼개지지 않게 두 줄 고정
 const SHORT_TAG: Record<string, string> = { '보호 대상': '보호', '부위 먼저': '부위 먼저' };
 // 10-23 C4-6 RQA-08: 작은 화면에서 긴 이름은 줄인 이름으로(라벨이 옆 유닛·보스 그림을 덮지 않게). 큰 화면·목표 문구는 원래 이름
-const COMPACT_NAME: Record<string, string> = { frozen_sewn_doll: '박음이', upper_thread: '윗실', lower_thread: '밑실' };
+const COMPACT_NAME: Record<string, string> = { frozen_sewn_doll: '박음이', upper_thread: '윗실', lower_thread: '밑실', scorched_sewn_doll: '박음이', cutting_stitch: '실밥이', golden_doll: '재단인형', gold_point: '연결점', inner_link: '안쪽 연결' }; // 10-26 C5-3: 5장
 const nameOf = (u: BattleUnit, compact: boolean) => (compact ? (COMPACT_NAME[u.characterCode] ?? u.name) : u.name);
 export function unitLabel(u: BattleUnit, compact: boolean): string {
   // 10-14 v1a: 검은 재봉실은 A/B/C 글자로 구분하고 모바일에서는 "검은 실 A" 한 줄(HP 1/1은 생략)
   if (u.thread) return compact ? `${u.name} ${threadNumber(u)}${u.hinted ? ' ▶' : ''}` : `${u.name} ${threadNumber(u)}${u.hinted ? ' (다음 실)' : ''}`;
   if (isSeam(u)) return compact ? `검은 실 ${seamLetter(u)}` : `${u.name} ${seamLetter(u)} HP ${u.hp}/${u.maxHp}`;
   const tags = unitTags(u);
+  // 10-26 C5-6 QA-03: 끊긴 부위(금빛 연결점 등)는 HP 없이 남은 상태만 적고, 남은 상태가 없으면(완전히 끊김) 라벨을 숨긴다(빈 문자열)
+  if (u.partOf && u.stunned) {
+    const rest = tags.filter((t) => t !== '기절');
+    if (rest.length === 0) return '';
+    return compact ? `${nameOf(u, true)}\n${rest.join(' · ')}` : `${u.name} (${rest.join(' · ')})`;
+  }
   // 10-23 C4-3: 공격 대상이 아닌 적(서리 미싱 본체 — 부위를 끊어 멈춘다)은 HP를 보이지 않는다
   if (u.side === 'wild' && u.targetable === false) return tags.length === 0 ? nameOf(u, compact) : compact ? `${nameOf(u, compact)}\n${tags.join(' · ')}` : `${u.name} (${tags.join(' · ')})`;
   if (!compact) return `${u.name} HP ${u.hp}/${u.maxHp}${tags.length > 0 ? ` (${tags.join(' · ')})` : ''}`;
   const short = tags.map((t) => SHORT_TAG[t] ?? t);
-  return `${nameOf(u, true)}\n${[`${u.hp}/${u.maxHp}`, ...short].join(' · ')}`;
+  // 10-26 C5-6 QA-04: 작은 화면에서 한 번에 끊기는 부위(HP 1)는 HP를 적지 않는다
+  const hp = u.partOf && u.maxHp === 1 ? [] : [`${u.hp}/${u.maxHp}`];
+  const second = [...hp, ...short];
+  return second.length > 0 ? `${nameOf(u, true)}\n${second.join(' · ')}` : nameOf(u, true);
 }
 
 // ---------- 10-14 C2-5A 시각 보완(v1a) ----------
@@ -317,25 +332,26 @@ export function resolveLabels(boxes: LabelBox[], bounds: { x: number; y: number;
   for (const b of boxes) {
     const sides: ('above' | 'below')[] = b.pref === 'above' ? ['above', 'below'] : ['below', 'above'];
     const shifts = [0, b.w / 2 + 4, -(b.w / 2 + 4), b.w + 8, -(b.w + 8)];
+    // 10-26 C5-6 QA-03: 바로 위·아래가 다 찼으면 한 줄 더 바깥(라벨 높이만큼)까지 찾는다
+    const rings = [0, b.h + gap];
     const others = obstacles.filter((o) => o.id !== b.id);
     let best: { cx: number; top: number; rect: { x0: number; y0: number; x1: number; y1: number } } | null = null;
-    let chosen = false;
-    for (const avoidArt of others.length > 0 ? [true, false] : [false]) {
-      for (const side of sides) {
-        for (const dx of shifts) {
-          const top = side === 'above' ? b.anchorY - gap - b.h : b.anchorY + gap;
-          const c = clampLabel(b.cx + dx, top, b.w, b.h, bounds);
-          const rect = { x0: c.cx - b.w / 2, y0: c.top, x1: c.cx + b.w / 2, y1: c.top + b.h };
-          if (!best) best = { ...c, rect };
-          if (!placed.some((p) => overlap(p, rect)) && !(avoidArt && others.some((o) => overlap(o, rect)))) {
-            best = { ...c, rect };
-            chosen = true;
-            break;
+    // 가까운 줄부터: 그림까지 피한 자리 → 라벨끼리만 피한 자리 순으로 찾고, 없으면 바깥 줄로
+    search: for (const ring of rings) {
+      for (const avoidArt of others.length > 0 ? [true, false] : [false]) {
+        for (const side of sides) {
+          for (const dx of shifts) {
+            const top = side === 'above' ? b.anchorY - gap - b.h - ring : b.anchorY + gap + ring;
+            const c = clampLabel(b.cx + dx, top, b.w, b.h, bounds);
+            const rect = { x0: c.cx - b.w / 2, y0: c.top, x1: c.cx + b.w / 2, y1: c.top + b.h };
+            if (!best) best = { ...c, rect };
+            if (!placed.some((p) => overlap(p, rect)) && !(avoidArt && others.some((o) => overlap(o, rect)))) {
+              best = { ...c, rect };
+              break search;
+            }
           }
         }
-        if (chosen) break;
       }
-      if (chosen) break;
     }
     placed.push(best!.rect);
     out.set(b.id, { cx: best!.cx, top: best!.top });

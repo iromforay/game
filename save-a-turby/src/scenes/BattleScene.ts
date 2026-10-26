@@ -38,6 +38,8 @@ const asDepth = (o: Phaser.GameObjects.GameObject, depth: number) => (o as unkno
 const slotHex = (slot: number) => coopSlots.find((c) => c.slot === slot)?.main ?? '#888888';
 const slotNum = (slot: number) => Phaser.Display.Color.HexStringToColor(slotHex(slot)).color;
 const wait = (scene: Phaser.Scene, ms: number) => new Promise<void>((resolve) => scene.time.delayedCall(ms, resolve));
+const CORE_EXPOSED_TOAST: Record<string, string> = { golden_doll: '안쪽 연결이 끊겨 재단인형이 풀렸어요' };
+const BOSS_FINAL_HOLD_MS = 1400; // 마지막 일격으로 바뀐 보스 그림을 결과창 전에 보여 주는 시간
 
 // 4-B: 서버 권위 전투의 렌더러 겸 입력기. 규칙(이동·공격·AI·승패)은 전부 서버가 계산하고,
 // 이 씬은 서버 snapshot을 그리고 이동/공격/턴 종료 "의도"만 보낸다. 임시 도형 UI(디자인 확정 전)는 그대로 유지한다.
@@ -46,11 +48,12 @@ const wait = (scene: Phaser.Scene, ms: number) => new Promise<void>((resolve) =>
 const BOSS_SHEETS: Record<string, { idle: string; exposed: string; labelBelow?: number }> = {
   waterlogged_sewn_doll: { idle: 'waterlogged-sewn-doll-idle', exposed: 'waterlogged-sewn-doll-exposed' },
   memory_spool: { idle: 'memory-spool-idle', exposed: 'memory-spool-exposed', labelBelow: 118 },
-  frost_machine: { idle: 'frost-machine-idle', exposed: 'frost-machine-stopped', labelBelow: 118 }, // 10-23 C4-3 서리 미싱(작동 → 정지, 파괴 없음) // 10-16 3장 기억 실패굴이(결박 → 약점 노출). C3-6 QA-08: 라벨이 솜심 약점을 가리지 않게 그림 아래로
+  frost_machine: { idle: 'frost-machine-idle', exposed: 'frost-machine-stopped', labelBelow: 118 }, // 10-23 C4-3 서리 미싱(작동 → 정지, 파괴 없음)
+  golden_doll: { idle: 'golden-doll-idle', exposed: 'golden-doll-unraveled', labelBelow: 118 }, // 10-26 C5-3 황금 재단인형(작동 → 풀려 무너짐, 파괴 없음) // 10-16 3장 기억 실패굴이(결박 → 약점 노출). C3-6 QA-08: 라벨이 솜심 약점을 가리지 않게 그림 아래로
 };
 const BOSS_DISPLAY_PX = 240;
 // 10-16 3장: 일반 적 시트의 표시 크기(기본 64). 원본 투명 여백을 감안했다. C3-6 QA-06: 전투판 대비 작아 박음이 88→104, 실패굴이 80→88
-const SHEET_DISPLAY_PX: Record<string, number> = { 'pressed-sewn-doll-idle': 104, 'pressed-sewn-doll-exposed': 104, 'small-spool-idle': 88, 'frozen-sewn-doll-idle': 104, 'thimble-guard-idle': 104, 'thimble-guard-exposed': 104 };
+const SHEET_DISPLAY_PX: Record<string, number> = { 'pressed-sewn-doll-idle': 104, 'pressed-sewn-doll-exposed': 104, 'small-spool-idle': 88, 'frozen-sewn-doll-idle': 104, 'thimble-guard-idle': 104, 'thimble-guard-exposed': 104, 'scorched-sewn-doll-idle': 104, 'cutting-stitch-idle': 96 };
 // 눌린 박음이: 납작(flat=true) → 재봉선 노출(flat=false). 같은 프레임 인덱스·같은 중심에서 텍스처만 바꾼다(서버 스냅샷 상태 — 화면이 정하지 않는다)
 const FLAT_SHEETS: Record<string, { flat: string; exposed: string }> = { pressed_sewn_doll: { flat: 'pressed-sewn-doll-idle', exposed: 'pressed-sewn-doll-exposed' } };
 // 10-23 C4-3 골무막이: 실밥이 남은 동안(phase bound) 골무를 쓴 그림, 끊기면(exposed) 벗겨진 그림 — 일반 적 크기(보스 아님)
@@ -62,10 +65,22 @@ const TARGET_IMAGES: Record<string, { key: string; px: number }> = {
   lower_thread: { key: 'lower-thread', px: 80 },
   upper_thread: { key: 'upper-thread', px: 80 },
   link_thread: { key: 'link-thread', px: 72 },
+  // 10-26 C5-3 5장(열기 환영·연결 매듭·금빛 연결점·안쪽 검은 연결)
+  heat_mirage: { key: 'heat-mirage', px: 96 },
+  cut_knot: { key: 'cut-knot', px: 72 },
+  gold_point: { key: 'gold-point', px: 80 },
+  inner_link: { key: 'inner-link', px: 80 },
 };
+const TOAST_ABOVE_HINT = 64; // 작은 화면 사건 안내 가운데 ~ 조작 안내 줄 위끝 거리
+const MIRAGE_GLOW = 0xffa64d; // 10-26 C5-6 QA-02 열기 환영 외곽광·고리(따뜻한 주황)
 const ICE_KEY = 'ice-cell';
 const NEEDLE_MARK_KEY = 'battle-needle-mark';
 const PINNED_KEY = 'pinned-stitch';
+// 10-26 C5-3 5장 바닥 칸(불씨·젖은 칸·곧 끊어질 칸)과 끊긴 칸
+const EMBER_KEY = 'ember-cell';
+const WET_KEY = 'wet-cell';
+const CUT_WARN_KEY = 'cut-warn';
+const CUT_KEY = 'cut-cell';
 // 보스 부위·표적 그림: 운반 실(한 장), 기억실(5가닥 시트의 프레임 = 가닥 번호), 폭신이가 가리키는 다음 실 표시(기억실 위에 중첩)
 const CARRIER_KEY = 'carrier-thread';
 const THREAD_SHEET = 'memory-thread';
@@ -276,7 +291,7 @@ export class BattleScene extends Phaser.Scene {
     const rank = (u: BattleUnit) => (u.side === 'party' ? 0 : u.phase ? 1 : 2);
     for (const u of [...this.snap.units].sort((a, b) => rank(a) - rank(b))) {
       const v = this.views.get(u.unitId);
-      if (!v || isHiddenUnit(u)) continue;
+      if (!v || isHiddenUnit(u) || !v.hpText.visible) continue;
       const { x, y } = this.tileToWorld(u.col, u.row);
       let pref = labelPlacement(this.snap, u);
       if (u.row === 0) pref = 'below';
@@ -302,6 +317,11 @@ export class BattleScene extends Phaser.Scene {
     for (const [id, p] of spots) this.views.get(id)!.hpText.setOrigin(0.5, 0).setPosition(p.cx, p.top);
   }
 
+  // 사건 안내(토스트) 높이: 작은 화면은 글자가 커서 아래 조작 안내 줄과 붙으므로 그 위로 띄운다(10-26 C5-6 QA-04)
+  private get toastY() {
+    return this.hud?.mode === 'compact' ? this.hud.rects.hint.y - TOAST_ABOVE_HINT : 660;
+  }
+
   private hpLabel(u: BattleUnit) {
     return unitLabel(u, this.hud?.mode === 'compact');
   }
@@ -312,9 +332,12 @@ export class BattleScene extends Phaser.Scene {
     if (key === this.blockedDrawn) return;
     this.blockedDrawn = key;
     this.blockedObjs.forEach((o) => o.destroy());
+    const cut = new Set(this.snap.cut ?? []);
     this.blockedObjs = blocked.map((k) => {
       const [col, row] = k.split(',').map(Number);
       const { x, y } = this.tileToWorld(col, row);
+      // 10-26 C5-3: 실밥이·재단인형이 끊은 칸은 끊긴 칸 그림(없으면 다른 막힌 칸과 같은 임시 사각형)
+      if (cut.has(k) && this.textures.exists(CUT_KEY)) return this.add.image(x, y, CUT_KEY).setDisplaySize(BATTLE_TILE_SIZE, BATTLE_TILE_SIZE).setDepth(5);
       return this.add.rectangle(x, y, BATTLE_TILE_SIZE - 4, BATTLE_TILE_SIZE - 4, 0x0d0818, 0.85).setStrokeStyle(2, 0x6a5a8a, 0.9).setDepth(5);
     });
   }
@@ -396,13 +419,19 @@ export class BattleScene extends Phaser.Scene {
     } else if (TARGET_IMAGES[u.characterCode] && this.textures.exists(TARGET_IMAGES[u.characterCode].key)) {
       const t = TARGET_IMAGES[u.characterCode];
       body = this.add.image(0, 0, t.key).setDisplaySize(t.px, t.px);
+      // 10-26 C5-6 QA-02: 열기 환영은 어두운 배경에 묻히지 않게 따뜻한 굴절 외곽광을 두른다
+      if (u.characterCode === 'heat_mirage' && (body as Phaser.GameObjects.Image).preFX) {
+        const img = body as Phaser.GameObjects.Image;
+        img.preFX!.setPadding(10);
+        img.preFX!.addGlow(MIRAGE_GLOW, 4, 0, false, 0.1, 10);
+      }
     } else if (u.characterCode === 'carrier_thread' && this.textures.exists(CARRIER_KEY)) {
       body = this.add.image(0, 0, CARRIER_KEY).setDisplaySize(TARGET_DISPLAY_PX, TARGET_DISPLAY_PX);
     } else {
       body = hasImage ? this.add.image(0, 0, `turby-${u.characterCode}`).setDisplaySize(52, 52) : this.add.circle(0, 0, u.partOf ? 16 : 24, fill);
     }
     const selectRing = this.add.circle(0, 0, 29).setStrokeStyle(3, 0x9fe58a, 0);
-    const ring = this.add.circle(0, 0, 26).setStrokeStyle(3, u.side === 'party' ? slotNum(u.participantSlot) : u.side === 'neutral' ? 0x4a9a4a : 0x2d6fa3);
+    const ring = this.add.circle(0, 0, 26).setStrokeStyle(3, u.side === 'party' ? slotNum(u.participantSlot) : u.side === 'neutral' ? 0x4a9a4a : u.mirageOf ? MIRAGE_GLOW : 0x2d6fa3);
     container.add([selectRing, ring, body]);
     container.setDepth(10);
     // 라벨은 줄이지 않고 두 칸 폭 안에서 줄바꿈(이웃 라벨은 위·아래로 엇갈려 겹치지 않음 — labelPlacement)
@@ -428,7 +457,8 @@ export class BattleScene extends Phaser.Scene {
       // 끊어진 검은 재봉실(보스 부위)은 스프라이트·HP·이름표를 숨긴다(서버 스냅샷 상태는 그대로 — 표시만)
       const hidden = isHiddenUnit(u);
       view.container.setPosition(x, y).setAlpha(u.stunned || u.inactive ? 0.4 : 1).setVisible(!hidden);
-      view.hpText.setText(this.hpLabel(u)).setAlpha(u.stunned || u.inactive ? 0.6 : 1).setVisible(!hidden);
+      const label = this.hpLabel(u);
+      view.hpText.setText(label).setAlpha(u.stunned || u.inactive ? 0.6 : 1).setVisible(!hidden && label !== '');
       // 쓰러진·이탈한 유닛의 그림은 입력을 받지 않는다 — 그 칸으로 이동하려는 누름이 그림에 가로막히지 않게(부서진 거대 매듭의 실 칸 등)
       for (const o of view.container.list) if (o.input) o.input.enabled = !(u.stunned || u.inactive);
     }
@@ -458,7 +488,7 @@ export class BattleScene extends Phaser.Scene {
     if (this.resultShown || this.snap.phase === 'resolved' || !me || me.active || this.leavingRemoved) return;
     this.leavingRemoved = true;
     const why = me.leftReason === 'timeout' ? '접속이 오래 끊겨 전투에서 제외되었어요.' : '전투에서 빠졌어요.';
-    showToast(this, why, { y: 660, error: true });
+    showToast(this, why, { y: this.toastY, error: true });
     // 스토리 전투는 불러낸 대화 화면으로(재도전) — 대화가 잠든 채로 남지 않게
     this.time.delayedCall(1800, () => (this.initData.returnTo ? this.exitTo('cancelled') : this.scene.start(roomClient.room ? 'Map' : 'StageSelect', { stageCode: this.initData.stageCode, capturedIndices: this.initData.capturedIndices, removedIndices: this.initData.removedIndices })));
   }
@@ -647,6 +677,9 @@ export class BattleScene extends Phaser.Scene {
   private needleObjs: Phaser.GameObjects.GameObject[] = [];
   private iceDrawn = '';
   private needleDrawn = '';
+  // 10-26 C5-3: 불씨·젖은 칸·곧 끊어질 칸(서버 스냅샷 그대로)
+  private desertObjs: Phaser.GameObjects.GameObject[] = [];
+  private desertDrawn = '';
   private syncFloorMarks() {
     const draw = (cells: string[], key: string, color: number, alpha: number, depth: number) =>
       cells.map((k) => {
@@ -666,6 +699,14 @@ export class BattleScene extends Phaser.Scene {
       this.needleObjs.forEach((o) => o.destroy());
       // 이동 가능 칸(깊이 4) 위·유닛(10) 아래 — 내 유닛이 서 있는 칸의 예고도 가려지지 않게
       this.needleObjs = draw(this.snap.needleMarks ?? [], NEEDLE_MARK_KEY, 0xf2fbff, 0.55, 5);
+    }
+    const embers = (this.snap.embers ?? []).map((e) => e.cell);
+    const desert = [embers.join('|'), (this.snap.wet ?? []).join('|'), (this.snap.cutWarns ?? []).join('|')].join('/');
+    if (desert !== this.desertDrawn) {
+      this.desertDrawn = desert;
+      this.desertObjs.forEach((o) => o.destroy());
+      // 젖은 칸(바닥, 깊이 3) → 곧 끊어질 칸·불씨(깊이 5 — 유닛 아래, 내 유닛이 선 칸의 표시도 보이게)
+      this.desertObjs = [...draw(this.snap.wet ?? [], WET_KEY, 0x7fc8ff, 0.4, 3), ...draw(this.snap.cutWarns ?? [], CUT_WARN_KEY, 0xffd27f, 0.4, 5), ...draw(embers, EMBER_KEY, 0xff9a52, 0.5, 5)];
     }
   }
   private syncStates() {
@@ -794,7 +835,7 @@ export class BattleScene extends Phaser.Scene {
     for (const h of shown) {
       if (this.hintsSeen.has(h.code)) continue;
       this.hintsSeen.add(h.code);
-      showToast(this, h.text, { y: 660 });
+      showToast(this, h.text, { y: this.toastY });
     }
   }
 
@@ -802,10 +843,10 @@ export class BattleScene extends Phaser.Scene {
     const u = this.unit(this.selectedUnitId);
     const target = this.unit(targetId);
     if (this.busy || !this.isMyTurn || !u || !this.actionable(u) || !target) return;
-    const st = targetState(this.snap, target);
+    const st = targetState(this.snap, target, u);
     if (st === 'not_target') return;
     if (st !== 'ok' && st !== 'zero') {
-      showToast(this, TARGET_HINT[st], { y: 660 }); // 부위 순서·중심부 보호 — 서버도 같은 규칙(PART_ORDER/TARGET_PROTECTED)
+      showToast(this, TARGET_HINT[st], { y: this.toastY }); // 부위 순서·중심부 보호 — 서버도 같은 규칙(PART_ORDER/TARGET_PROTECTED)
       return;
     }
     if (Math.abs(u.col - target.col) + Math.abs(u.row - target.row) !== 1) return;
@@ -876,7 +917,7 @@ export class BattleScene extends Phaser.Scene {
         } catch (err) {
           if (err instanceof RoomApiError) throw err;
           if (attempt === RETRY_LIMIT) throw err;
-          showToast(this, '연결이 불안정해요. 다시 시도하는 중...', { y: 660, error: true });
+          showToast(this, '연결이 불안정해요. 다시 시도하는 중...', { y: this.toastY, error: true });
           await wait(this, 1000);
         }
       }
@@ -892,20 +933,20 @@ export class BattleScene extends Phaser.Scene {
 
   private async handleError(err: unknown) {
     if (!(err instanceof RoomApiError)) {
-      showToast(this, '서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.', { y: 660, error: true });
+      showToast(this, '서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.', { y: this.toastY, error: true });
       return;
     }
     if (err.code === 'STATE_MISMATCH' && err.snapshot) {
       this.snap = err.snapshot; // 서버 상태가 기준 — 최신으로 맞춘다
-      showToast(this, '전투 상태가 달라져 화면을 맞췄어요.', { y: 660 });
+      showToast(this, '전투 상태가 달라져 화면을 맞췄어요.', { y: this.toastY });
     } else if (err.code === 'BATTLE_EXPIRED' || err.code === 'NOT_PARTICIPANT') {
-      showToast(this, '전투가 사라졌어요. 지역 선택으로 돌아갑니다.', { y: 660, error: true });
+      showToast(this, '전투가 사라졌어요. 지역 선택으로 돌아갑니다.', { y: this.toastY, error: true });
       this.time.delayedCall(1800, () => (this.initData.returnTo ? this.exitTo('cancelled') : this.scene.start('StageSelect')));
     } else if (err.code === 'BATTLE_RESOLVED') {
       const res = await battleClient.snapshot(this.snap.battleId).catch(() => null);
       if (res) await this.playResponse(res);
     } else {
-      showToast(this, err.message, { y: 660, error: true });
+      showToast(this, err.message, { y: this.toastY, error: true });
     }
   }
 
@@ -989,9 +1030,13 @@ export class BattleScene extends Phaser.Scene {
 
   private async playResponse(res: BattleResponse) {
     if (res.version < this.snap.version) return; // 오래된 응답은 무시
-    for (const ev of res.events) if (ev.version > this.snap.version) await this.playEvent(ev);
+    const fresh = res.events.filter((ev) => ev.version > this.snap.version);
+    for (const ev of fresh) await this.playEvent(ev);
     this.snap = res.snapshot;
     this.syncFromSnapshot();
+    // 10-26 C5-5: 마지막 일격에 보스 그림이 바뀌면(풀려 무너짐·정지 등) 결과창 전에 그 모습을 잠깐 보여 준다
+    const bossTurned = fresh.some((ev) => ev.type === 'phase' && !!BOSS_SHEETS[this.unit(ev.unitId)?.characterCode ?? '']);
+    if (this.snap.phase === 'resolved' && bossTurned) await wait(this, BOSS_FINAL_HOLD_MS);
     if (this.snap.phase === 'resolved') await this.showResult(res.ended);
   }
 
@@ -1020,32 +1065,33 @@ export class BattleScene extends Phaser.Scene {
         await wait(this, 320);
       }
     } else if (ev.type === 'part_broken') {
-      showToast(this, ev.coreExposed ? '바깥 부위를 모두 끊었어요! 이제 중심을 노릴 수 있어요' : '부위 하나를 끊었어요', { y: 660 });
+      const finalText = ev.coreExposed ? CORE_EXPOSED_TOAST[this.unit(ev.coreId)?.characterCode ?? ''] : undefined; // 10-26 C5-5: 부위가 곧 승리 조건인 보스
+      showToast(this, finalText ?? (ev.coreExposed ? '바깥 부위를 모두 끊었어요! 이제 중심을 노릴 수 있어요' : '부위 하나를 끊었어요'), { y: this.toastY });
       await wait(this, 250);
     } else if (ev.type === 'terrain') {
       this.drawBlocked(ev.blocked);
       await wait(this, 200);
     } else if (ev.type === 'current') {
       // 예고된 물살 적용: 서버가 정한 이동만 그린다(스냅샷으로 곧 같은 위치가 확정된다)
-      showToast(this, `물살이 ${ev.direction === 'east' ? '→' : '←'} 방향으로 밀었어요`, { y: 660 });
+      showToast(this, `물살이 ${ev.direction === 'east' ? '→' : '←'} 방향으로 밀었어요`, { y: this.toastY });
       await wait(this, 350);
     } else if (ev.type === 'wrong_thread') {
-      showToast(this, '이 실이 아니에요! 혼란에 빠졌어요', { y: 660, error: true });
+      showToast(this, '이 실이 아니에요! 혼란에 빠졌어요', { y: this.toastY, error: true });
       await wait(this, 350);
     } else if (ev.type === 'confused_action') {
-      showToast(this, '혼란 때문에 엉뚱하게 움직였어요', { y: 660 });
+      showToast(this, '혼란 때문에 엉뚱하게 움직였어요', { y: this.toastY });
       await wait(this, 250);
     } else if (ev.type === 'carrier_cut') {
-      showToast(this, '운반 실이 끊겼어요! 실패굴이가 이쪽으로 굴러와요', { y: 660 });
+      showToast(this, '운반 실이 끊겼어요! 실패굴이가 이쪽으로 굴러와요', { y: this.toastY });
       await wait(this, 300);
     } else if (ev.type === 'empower') {
-      showToast(this, '작은 실패굴이가 기억실을 전달했어요! 박음이가 강해졌어요', { y: 660, error: true });
+      showToast(this, '작은 실패굴이가 기억실을 전달했어요! 박음이가 강해졌어요', { y: this.toastY, error: true });
       await wait(this, 450);
     } else if (ev.type === 'hint' && ev.code === 'thread_hint') {
-      showToast(this, ev.text, { y: 660 });
+      showToast(this, ev.text, { y: this.toastY });
       await wait(this, 200);
     } else if (ev.type === 'phase' && this.unit(ev.unitId)?.flat !== undefined) {
-      showToast(this, '재봉선이 드러났어요', { y: 660 });
+      showToast(this, '재봉선이 드러났어요', { y: this.toastY });
       await wait(this, 200);
     } else if (ev.type === 'slide') {
       // 10-23 C4-3: 얼음 칸에서 한 칸 더 미끄러진다(서버가 정한 칸)
@@ -1056,20 +1102,34 @@ export class BattleScene extends Phaser.Scene {
         await wait(this, 180);
       }
     } else if (ev.type === 'shatter') {
-      showToast(this, '박음이가 검은 실 파편을 흩뿌렸어요!', { y: 660 });
+      showToast(this, '박음이가 검은 실 파편을 흩뿌렸어요!', { y: this.toastY });
       await wait(this, 300);
     } else if (ev.type === 'shatter_cleared') {
-      showToast(this, '파편을 모두 끊었어요. 박음이가 다시 일어나지 못해요', { y: 660 });
+      showToast(this, '파편을 모두 끊었어요. 박음이가 다시 일어나지 못해요', { y: this.toastY });
       await wait(this, 250);
     } else if (ev.type === 'revive') {
-      showToast(this, '파편이 다시 붙어 박음이가 일어났어요', { y: 660, error: true });
+      showToast(this, this.unit(ev.unitId)?.regen ? '금빛 연결점이 다시 꿰매졌어요' : '파편이 다시 붙어 박음이가 일어났어요', { y: this.toastY, error: true });
       await wait(this, 400);
+    } else if (ev.type === 'ember_burst') {
+      // 10-26 C5-3: 불씨가 터졌다(맞은 아군이 있을 때만 알린다 — 피해·쓰러짐은 스냅샷이 확정한다)
+      if (ev.hits.length > 0) {
+        this.cameras.main.shake(100, 0.002);
+        showToast(this, '불씨가 터졌어요!', { y: this.toastY, error: true });
+        await wait(this, 350);
+      }
+    } else if (ev.type === 'cut') {
+      if (ev.hits.length > 0) showToast(this, '재단인형의 팔에 맞았어요! 표시된 줄에서 비켜요', { y: this.toastY, error: true });
+      else if (ev.cells.length > 0) showToast(this, '길이 끊겼어요', { y: this.toastY, error: true });
+      await wait(this, ev.cells.length + ev.hits.length > 0 ? 350 : 0);
+    } else if (ev.type === 'restored') {
+      showToast(this, `${this.unit(ev.byUnitId)?.name ?? '동료'}가 끊긴 길을 다시 붙잡았어요`, { y: this.toastY });
+      await wait(this, 250);
     } else if (ev.type === 'needle_strike') {
       this.cameras.main.shake(120, 0.002);
-      if (ev.pinned.length > 0) showToast(this, '바늘에 박혀 움직일 수 없어요! 옆의 연결 실을 끊어요', { y: 660, error: true });
+      if (ev.pinned.length > 0) showToast(this, '바늘에 박혀 움직일 수 없어요! 옆의 연결 실을 끊어요', { y: this.toastY, error: true });
       await wait(this, 350);
     } else if (ev.type === 'freed') {
-      showToast(this, ev.byUnitId === 'ganeuri' ? '가느리가 연결 실을 끊어 줬어요' : '연결 실을 끊어 풀려났어요', { y: 660 });
+      showToast(this, ev.byUnitId === 'ganeuri' ? '가느리가 연결 실을 끊어 줬어요' : '연결 실을 끊어 풀려났어요', { y: this.toastY });
       await wait(this, 250);
     } else if (ev.type === 'subturn' && ev.phase === 'wild_turn') {
       this.statusText.setText('야생 터비 차례...');
@@ -1123,7 +1183,7 @@ export class BattleScene extends Phaser.Scene {
     } catch (err) {
       if (!ackFailureAllowsExit(err instanceof RoomApiError ? err.code : undefined)) {
         this.resultAcking = false;
-        if (this.scene.isActive() && gen === this.generation) showToast(this, RESULT_ACK_RETRY_TEXT, { y: 660, error: true, fixed: true });
+        if (this.scene.isActive() && gen === this.generation) showToast(this, RESULT_ACK_RETRY_TEXT, { y: this.toastY, error: true, fixed: true });
         return;
       }
     }

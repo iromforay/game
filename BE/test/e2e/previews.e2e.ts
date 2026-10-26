@@ -28,13 +28,15 @@ async function smoke(path: string, expectScene: string) {
   const pageErrors: string[] = [];
   page.on('pageerror', (e) => pageErrors.push(String(e).slice(0, 200)));
   await page.goto(`${vite.url}${path}`);
+  // 전투 미리보기는 Battle이 그림을 다 읽은(preload) 뒤 파티 선택으로 넘긴다 — 첫 목록이 아니라 기대한 화면이 뜰 때까지 기다린다(10-26: 5장 그림이 늘어 읽기가 길어졌다)
   const scenes = await page
-    .waitForFunction(() => {
+    .waitForFunction((key) => {
       const g = (window as any).__game ?? (window as any).game; // eslint-disable-line @typescript-eslint/no-explicit-any
       const list = g?.scene?.getScenes(true).map((s: any) => s.scene.key) ?? []; // eslint-disable-line @typescript-eslint/no-explicit-any
-      return list.length ? list : null;
-    }, null, { timeout: 20_000, polling: 100 })
-    .then((h) => h.jsonValue() as Promise<string[]>);
+      return list.includes(key) ? list : null;
+    }, expectScene, { timeout: 30_000, polling: 100 })
+    .catch(() => null)
+    .then(async (h) => (h ? ((await h.jsonValue()) as string[]) : ((await page.evaluate(() => ((window as any).__game ?? (window as any).game)?.scene?.getScenes(true).map((s: any) => s.scene.key) ?? [])) as string[]))); // eslint-disable-line @typescript-eslint/no-explicit-any
   assert.ok(scenes.includes(expectScene), `${path}: 첫 화면 ${JSON.stringify(scenes)}`);
   assert.equal(await page.locator('canvas').count(), 1);
   // 화면에 무언가 그려질 때까지(빈 화면이 아님): 그 씬에 표시 객체가 있고, 컨테이너 안까지 포함해 글자가 하나 이상 있다

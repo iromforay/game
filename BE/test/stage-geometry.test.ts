@@ -181,7 +181,7 @@ test('검증: 잘못된 지역 JSON은 계약 오류로 거부한다(모양·숫
 
 test('검증: 서버는 시작 단계(모듈 초기화)와 지역 로드에서 잘못된 지역 JSON을 거부한다 — 실제 데이터 폴더는 통과한다', () => {
   const real = new StoryContentService();
-  assert.deepEqual(real.validateStages().sort(), ['forest', 'ice', 'lake', 'underground'], '실제 지역 데이터 전부 통과(10-13: 2장 호수, 10-16: 3장 마루바닥 밑, 10-23: 4장 냉장고 속 추가)');
+  assert.deepEqual(real.validateStages().sort(), ['desert', 'forest', 'ice', 'lake', 'underground'], '실제 지역 데이터 전부 통과(10-13: 2장 호수, 10-16: 3장 마루바닥 밑, 10-23: 4장 냉장고 속, 10-26: 5장 보일러 옆 사막 추가)');
   assert.doesNotThrow(() => real.onModuleInit());
 
   const dir = mkdtempSync(join(tmpdir(), 'turby-stage-'));

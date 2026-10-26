@@ -43,9 +43,18 @@ export interface BlackThreadTrap {
   extraPushPx: number;
 }
 // 서리 구역(10-23 C4-1 4장 냉장고): 승인된 위치가 이 안이면 이동 속도 상한이 slowFactor배가 된다(감각 둔화). 위치를 옮기지 않는다
+// 10-26 C5-1: 5장 뜨거운 모래도 같은 규칙(kind heat — 화면 가장자리 연출·안내 문구만 다르다)
 export interface FrostZone extends Rect {
   id: string;
   slowFactor: number;
+  kind: 'frost' | 'heat';
+}
+// 아지랑이(10-26 C5-1 5장 사막): 서버 시각 주기로 가짜 길 그림이 보였다 사라진다. 판정 없음(충돌·위치와 무관) — 화면이 같은 시계로 그리도록 수치만 검증해 내려 준다
+export interface MirageField extends Rect {
+  id: string;
+  periodMs: number;
+  showMs: number;
+  offsetMs: number;
 }
 // 바늘 칸(10-23 C4-1): 서버 시각으로 도는 주기(periodMs) — 시작부터 warnMs 동안 예고, 이어서 strikeMs 동안 내려찍기, 나머지는 쉼.
 // 내려찍는 동안 몸이 칸 안에 있으면 마지막 안전 앵커로 돌아간다(피해·진행 손실 없음, 깊은 물과 같은 복귀). offsetMs로 칸마다 순서를 어긋나게 한다
@@ -65,6 +74,7 @@ export interface StageWater {
   traps: BlackThreadTrap[];
   frost: FrostZone[];
   needles: NeedleField[];
+  mirages: MirageField[];
 }
 
 // 지역 JSON 원본(StageStoryData의 같은 이름 필드)
@@ -75,6 +85,7 @@ export interface RawWater {
   blackThreadTraps?: unknown;
   frostZones?: unknown;
   needleFields?: unknown;
+  mirages?: unknown;
 }
 
 type Raw = Record<string, unknown>;
@@ -86,7 +97,7 @@ const deepOf = (w: StageWater) => w.areas.filter((a) => a.kind === 'deep');
 
 // 지역 데이터 → 계약. 없으면 null(물 규칙이 없는 지역). 잘못되면 Error — 서버는 시작 단계에서 멈춘다(geometry 계약과 같은 원칙)
 export function parseStageWater(raw: RawWater, geo: StageGeometry, stageCode: string): StageWater | null {
-  if (raw.waterAreas === undefined && raw.currentFields === undefined && raw.safeAnchors === undefined && raw.blackThreadTraps === undefined && raw.frostZones === undefined && raw.needleFields === undefined) return null;
+  if (raw.waterAreas === undefined && raw.currentFields === undefined && raw.safeAnchors === undefined && raw.blackThreadTraps === undefined && raw.frostZones === undefined && raw.needleFields === undefined && raw.mirages === undefined) return null;
   const bad: string[] = [];
   const ids = new Set<string>();
   const idOf = (r: Raw, at: string) => {
@@ -186,7 +197,9 @@ export function parseStageWater(raw: RawWater, geo: StageGeometry, stageCode: st
     const id = idOf(r, at);
     const b = rect(r, `${at}(${id})`);
     if (!num(r.slowFactor) || r.slowFactor < 0.3 || r.slowFactor > 1) return void bad.push(`${at}(${id}): slowFactor는 0.3~1`);
-    if (b) frost.push({ id, ...b, slowFactor: r.slowFactor });
+    const kind = r.kind ?? 'frost';
+    if (kind !== 'frost' && kind !== 'heat') return void bad.push(`${at}(${id}): kind는 frost 또는 heat`);
+    if (b) frost.push({ id, ...b, slowFactor: r.slowFactor, kind });
   });
   const needles: NeedleField[] = [];
   list(raw.needleFields, 'needleFields').forEach((r, i) => {
@@ -203,10 +216,21 @@ export function parseStageWater(raw: RawWater, geo: StageGeometry, stageCode: st
     if (r.unless !== undefined && !strs(r.unless)) bad.push(`${at}(${id}): unless는 이벤트 이름 배열`);
     if (b) needles.push({ id, ...b, periodMs: r.periodMs, warnMs: r.warnMs, strikeMs: r.strikeMs, offsetMs, requires: (r.requires as string[] | undefined) ?? [], unless: (r.unless as string[] | undefined) ?? [] });
   });
+  const mirages: MirageField[] = [];
+  list(raw.mirages, 'mirages').forEach((r, i) => {
+    const at = `mirages[${i}]`;
+    const id = idOf(r, at);
+    const b = rect(r, `${at}(${id})`);
+    if (!num(r.periodMs) || r.periodMs < 1000 || r.periodMs > 10_000) return void bad.push(`${at}(${id}): periodMs는 1000~10000`);
+    if (!num(r.showMs) || r.showMs < 300 || r.showMs >= r.periodMs) return void bad.push(`${at}(${id}): showMs는 300 이상 periodMs 미만`);
+    const offsetMs = r.offsetMs ?? 0;
+    if (!num(offsetMs) || offsetMs < 0 || offsetMs >= r.periodMs) return void bad.push(`${at}(${id}): offsetMs는 0 이상 periodMs 미만`);
+    if (b) mirages.push({ id, ...b, periodMs: r.periodMs, showMs: r.showMs, offsetMs });
+  });
   if (needles.length > 0 && anchors.length === 0) bad.push('바늘 칸이 있는데 safeAnchors가 없다');
   for (const a of anchors) if (needles.some((f) => insideRect(f, a, SERVER_BODY_HALF))) bad.push(`safeAnchors(${a.id}): 바늘 칸과 겹친다`);
   if (bad.length > 0) throw new Error(`지역 데이터(${stageCode}) 물 규칙 검증 실패: ${bad.join(' / ')}`);
-  return { areas, currents, anchors, traps, frost, needles };
+  return { areas, currents, anchors, traps, frost, needles, mirages };
 }
 
 // ---------- 플레이어별 상태 ----------

@@ -1,0 +1,661 @@
+{
+  "stageCode": "desert",
+  "greybox": false,
+  "note": "5장 보일러 옆 사막 길 골격 v1(10-26 C5-1). 좌표는 BE/scripts/data/desert-skeleton.json에서 BE/scripts/turby-build-desert-stage.mjs로 만든다(blockers는 생성물 — 손으로 고치지 않는다). 사건·지점 ID는 바뀌지 않는다.",
+  "size": {
+    "width": 3200,
+    "height": 2400
+  },
+  "regions": [],
+  "points": [
+    {
+      "id": "desert_clues",
+      "x": 1150,
+      "y": 1885,
+      "radius": 90
+    },
+    {
+      "id": "desert_scorched",
+      "x": 1640,
+      "y": 1690,
+      "radius": 110
+    },
+    {
+      "id": "desert_ridge_pad",
+      "x": 2150,
+      "y": 1590,
+      "radius": 90
+    },
+    {
+      "id": "desert_ridge_scent",
+      "x": 2650,
+      "y": 1170,
+      "radius": 90
+    },
+    {
+      "id": "desert_ridge_thread",
+      "x": 2950,
+      "y": 830,
+      "radius": 80
+    },
+    {
+      "id": "desert_cut_face",
+      "x": 2950,
+      "y": 470,
+      "radius": 100
+    },
+    {
+      "id": "desert_boss_entrance",
+      "x": 2380,
+      "y": 470,
+      "radius": 90
+    }
+  ],
+  "objects": [],
+  "storyPoints": [
+    {
+      "id": "desert_clues",
+      "kind": "inspect",
+      "assetKey": "desert-clues-mark",
+      "label": "금빛 실이 가리키는 길",
+      "prompt": "동료들과 함께 걸어가기"
+    },
+    {
+      "id": "desert_scorched",
+      "kind": "inspect",
+      "assetKey": "scorched-mark",
+      "label": "그을린 실 더미",
+      "prompt": "실을 나르는 그림자에게 다가가기",
+      "art": {
+        "width": 120,
+        "height": 120,
+        "pivot": [
+          0.5,
+          0.7
+        ]
+      }
+    },
+    {
+      "id": "desert_ridge_pad",
+      "kind": "npc",
+      "assetKey": "turby-muldeuli",
+      "label": "물들이",
+      "prompt": "물들이에게 길을 부탁하기",
+      "art": {
+        "width": 124,
+        "height": 124,
+        "pivot": [
+          0.5,
+          0.7
+        ]
+      }
+    },
+    {
+      "id": "desert_ridge_scent",
+      "kind": "npc",
+      "assetKey": "elder-pokshini",
+      "label": "오래된 폭신이",
+      "prompt": "오래된 폭신이에게 길을 부탁하기",
+      "art": {
+        "width": 124,
+        "height": 124,
+        "pivot": [
+          0.5,
+          0.7
+        ]
+      }
+    },
+    {
+      "id": "desert_ridge_thread",
+      "kind": "npc",
+      "assetKey": "ganeuri-freed",
+      "label": "가느리",
+      "prompt": "가느리에게 길을 부탁하기",
+      "art": {
+        "width": 124,
+        "height": 124,
+        "pivot": [
+          0.5,
+          0.7
+        ]
+      }
+    },
+    {
+      "id": "desert_cut_face",
+      "kind": "inspect",
+      "assetKey": "cut-face",
+      "label": "거대한 절단면",
+      "prompt": "잘린 실의 끝을 살펴보기",
+      "art": {
+        "width": 146,
+        "height": 146,
+        "pivot": [
+          0.5,
+          0.7
+        ],
+        "glow": true
+      }
+    },
+    {
+      "id": "desert_boss_entrance",
+      "kind": "inspect",
+      "assetKey": "golden-doll-mark",
+      "label": "금빛 마감실이 잠든 자리",
+      "prompt": "금빛 실이 내려온 곳으로 들어가기",
+      "art": {
+        "width": 120,
+        "height": 120,
+        "pivot": [
+          0.5,
+          0.7
+        ]
+      }
+    }
+  ],
+  "goals": [
+    {
+      "id": "follow_gold",
+      "text": "금빛 실이 가리키는 쪽으로 동료들과 걸어가자.",
+      "requires": [
+        "desert_entry_seen"
+      ],
+      "unless": [
+        "desert_clues_seen"
+      ]
+    },
+    {
+      "id": "clear_scorched",
+      "text": "끊어진 실을 나르는 그을린 박음이들을 막자.",
+      "requires": [
+        "desert_clues_seen"
+      ],
+      "unless": [
+        "desert_scorched_won"
+      ]
+    },
+    {
+      "id": "ridge_pad",
+      "text": "능선의 틈 앞에서 물들이에게 길을 부탁하자.",
+      "requires": [
+        "desert_scorched_won"
+      ],
+      "unless": [
+        "desert_ridge_pad"
+      ]
+    },
+    {
+      "id": "ridge_scent",
+      "text": "다음 틈 앞에서 오래된 폭신이에게 길을 부탁하자.",
+      "requires": [
+        "desert_ridge_pad"
+      ],
+      "unless": [
+        "desert_ridge_scent"
+      ]
+    },
+    {
+      "id": "ridge_thread",
+      "text": "마지막 틈 앞에서 가느리에게 길을 부탁하자.",
+      "requires": [
+        "desert_ridge_scent"
+      ],
+      "unless": [
+        "desert_ridge_thread"
+      ]
+    },
+    {
+      "id": "to_cut_face",
+      "text": "능선 끝의 커다란 절단면으로 가 보자.",
+      "requires": [
+        "desert_ridge_thread"
+      ],
+      "unless": [
+        "desert_ridge_crossed"
+      ]
+    },
+    {
+      "id": "to_last_knot",
+      "text": "금빛 마감실이 잠든 자리로 가자.",
+      "requires": [
+        "desert_ridge_crossed"
+      ],
+      "unless": [
+        "desert_boss_defeated"
+      ]
+    }
+  ],
+  "layout": {
+    "zones": [
+      {
+        "id": "zone_entrance",
+        "label": "사막 초입",
+        "x": 150,
+        "y": 1840,
+        "width": 460,
+        "height": 340
+      },
+      {
+        "id": "zone_clues",
+        "label": "단서 길",
+        "x": 600,
+        "y": 1760,
+        "width": 900,
+        "height": 240
+      },
+      {
+        "id": "zone_scorched",
+        "label": "능선 앞",
+        "x": 1450,
+        "y": 1560,
+        "width": 460,
+        "height": 320
+      },
+      {
+        "id": "zone_ridge",
+        "label": "뜨거운 모래 능선",
+        "x": 1950,
+        "y": 600,
+        "width": 1100,
+        "height": 1200
+      },
+      {
+        "id": "zone_cut_face",
+        "label": "절단면",
+        "x": 2750,
+        "y": 350,
+        "width": 400,
+        "height": 280
+      },
+      {
+        "id": "zone_last_knot",
+        "label": "금빛 마감실이 잠든 자리",
+        "x": 1660,
+        "y": 200,
+        "width": 680,
+        "height": 520
+      }
+    ],
+    "paths": [
+      {
+        "points": [
+          [
+            400,
+            2000
+          ],
+          [
+            900,
+            1900
+          ],
+          [
+            1300,
+            1880
+          ],
+          [
+            1500,
+            1760
+          ],
+          [
+            1850,
+            1700
+          ],
+          [
+            2150,
+            1700
+          ],
+          [
+            2150,
+            1250
+          ],
+          [
+            2650,
+            1250
+          ],
+          [
+            2650,
+            880
+          ],
+          [
+            2950,
+            880
+          ],
+          [
+            2950,
+            600
+          ],
+          [
+            2950,
+            470
+          ],
+          [
+            2800,
+            470
+          ],
+          [
+            2300,
+            470
+          ]
+        ]
+      }
+    ],
+    "blockers": [
+      {"id":"wall_000","x":0,"y":0,"width":3200,"height":200},
+      {"id":"wall_001","x":0,"y":0,"width":152,"height":2400},
+      {"id":"wall_002","x":0,"y":0,"width":160,"height":1968},
+      {"id":"wall_003","x":0,"y":0,"width":168,"height":1952},
+      {"id":"wall_004","x":0,"y":0,"width":176,"height":1936},
+      {"id":"wall_005","x":0,"y":0,"width":184,"height":1928},
+      {"id":"wall_006","x":0,"y":0,"width":192,"height":1920},
+      {"id":"wall_007","x":0,"y":0,"width":208,"height":1904},
+      {"id":"wall_008","x":0,"y":0,"width":216,"height":1896},
+      {"id":"wall_009","x":0,"y":0,"width":224,"height":1888},
+      {"id":"wall_010","x":0,"y":0,"width":240,"height":1880},
+      {"id":"wall_011","x":0,"y":0,"width":256,"height":1872},
+      {"id":"wall_012","x":0,"y":0,"width":272,"height":1864},
+      {"id":"wall_013","x":0,"y":0,"width":296,"height":1856},
+      {"id":"wall_014","x":0,"y":0,"width":328,"height":1848},
+      {"id":"wall_015","x":0,"y":0,"width":552,"height":1840},
+      {"id":"wall_016","x":0,"y":0,"width":1944,"height":208},
+      {"id":"wall_017","x":2128,"y":0,"width":1072,"height":224},
+      {"id":"wall_018","x":0,"y":0,"width":1896,"height":216},
+      {"id":"wall_019","x":0,"y":0,"width":1872,"height":224},
+      {"id":"wall_020","x":0,"y":0,"width":1848,"height":232},
+      {"id":"wall_021","x":2192,"y":0,"width":1008,"height":248},
+      {"id":"wall_022","x":0,"y":0,"width":1824,"height":240},
+      {"id":"wall_023","x":0,"y":0,"width":1808,"height":248},
+      {"id":"wall_024","x":0,"y":0,"width":1792,"height":256},
+      {"id":"wall_025","x":2232,"y":0,"width":968,"height":272},
+      {"id":"wall_026","x":0,"y":0,"width":1784,"height":264},
+      {"id":"wall_027","x":0,"y":0,"width":1768,"height":272},
+      {"id":"wall_028","x":0,"y":0,"width":1760,"height":280},
+      {"id":"wall_029","x":2256,"y":0,"width":944,"height":296},
+      {"id":"wall_030","x":0,"y":0,"width":1752,"height":288},
+      {"id":"wall_031","x":0,"y":0,"width":1744,"height":296},
+      {"id":"wall_032","x":0,"y":0,"width":1736,"height":304},
+      {"id":"wall_033","x":2280,"y":0,"width":920,"height":320},
+      {"id":"wall_034","x":0,"y":0,"width":1728,"height":312},
+      {"id":"wall_035","x":0,"y":0,"width":1720,"height":320},
+      {"id":"wall_036","x":0,"y":0,"width":1712,"height":328},
+      {"id":"wall_037","x":2304,"y":0,"width":896,"height":352},
+      {"id":"wall_038","x":0,"y":0,"width":1704,"height":336},
+      {"id":"wall_039","x":0,"y":0,"width":1696,"height":352},
+      {"id":"wall_040","x":0,"y":0,"width":1688,"height":368},
+      {"id":"wall_041","x":2320,"y":0,"width":520,"height":376},
+      {"id":"wall_042","x":3056,"y":0,"width":144,"height":376},
+      {"id":"wall_043","x":0,"y":0,"width":1680,"height":384},
+      {"id":"wall_044","x":3096,"y":0,"width":104,"height":400},
+      {"id":"wall_045","x":0,"y":0,"width":1672,"height":400},
+      {"id":"wall_046","x":0,"y":0,"width":1664,"height":456},
+      {"id":"wall_047","x":3128,"y":0,"width":72,"height":432},
+      {"id":"wall_048","x":3152,"y":0,"width":48,"height":2400},
+      {"id":"wall_049","x":0,"y":0,"width":1656,"height":1208},
+      {"id":"wall_050","x":872,"y":536,"width":808,"height":1024},
+      {"id":"wall_051","x":3128,"y":552,"width":72,"height":1848},
+      {"id":"wall_052","x":2304,"y":568,"width":256,"height":592},
+      {"id":"wall_053","x":2304,"y":576,"width":496,"height":216},
+      {"id":"wall_054","x":3104,"y":576,"width":96,"height":1824},
+      {"id":"wall_055","x":872,"y":584,"width":832,"height":976},
+      {"id":"wall_056","x":2280,"y":600,"width":280,"height":560},
+      {"id":"wall_057","x":2280,"y":600,"width":552,"height":192},
+      {"id":"wall_058","x":3064,"y":600,"width":136,"height":1800},
+      {"id":"wall_059","x":872,"y":608,"width":856,"height":952},
+      {"id":"wall_060","x":2256,"y":624,"width":304,"height":536},
+      {"id":"wall_061","x":2256,"y":624,"width":600,"height":168},
+      {"id":"wall_062","x":3040,"y":616,"width":160,"height":1784},
+      {"id":"wall_063","x":1728,"y":632,"width":24,"height":936},
+      {"id":"wall_064","x":2232,"y":648,"width":328,"height":512},
+      {"id":"wall_065","x":1728,"y":656,"width":56,"height":912},
+      {"id":"wall_066","x":2192,"y":672,"width":368,"height":488},
+      {"id":"wall_067","x":1768,"y":680,"width":56,"height":896},
+      {"id":"wall_068","x":2128,"y":696,"width":432,"height":464},
+      {"id":"wall_069","x":1824,"y":704,"width":72,"height":896},
+      {"id":"wall_070","x":0,"y":720,"width":2120,"height":448},
+      {"id":"wall_071","x":0,"y":720,"width":2560,"height":440},
+      {"id":"wall_072","x":0,"y":720,"width":2616,"height":80},
+      {"id":"wall_073","x":0,"y":720,"width":2600,"height":88},
+      {"id":"wall_074","x":0,"y":720,"width":2592,"height":96},
+      {"id":"wall_075","x":0,"y":720,"width":2584,"height":104},
+      {"id":"wall_076","x":3016,"y":936,"width":184,"height":1464},
+      {"id":"wall_077","x":2984,"y":960,"width":216,"height":1440},
+      {"id":"wall_078","x":2744,"y":968,"width":456,"height":1432},
+      {"id":"wall_079","x":1840,"y":720,"width":216,"height":888},
+      {"id":"wall_080","x":776,"y":720,"width":1288,"height":528},
+      {"id":"wall_081","x":704,"y":720,"width":1368,"height":496},
+      {"id":"wall_082","x":0,"y":720,"width":2104,"height":456},
+      {"id":"wall_083","x":0,"y":720,"width":2096,"height":464},
+      {"id":"wall_084","x":0,"y":0,"width":656,"height":1216},
+      {"id":"wall_085","x":0,"y":0,"width":624,"height":1224},
+      {"id":"wall_086","x":760,"y":720,"width":1304,"height":520},
+      {"id":"wall_087","x":0,"y":0,"width":608,"height":1232},
+      {"id":"wall_088","x":0,"y":0,"width":600,"height":1240},
+      {"id":"wall_089","x":0,"y":0,"width":584,"height":1248},
+      {"id":"wall_090","x":0,"y":0,"width":576,"height":1256},
+      {"id":"wall_091","x":800,"y":720,"width":1256,"height":568},
+      {"id":"wall_092","x":824,"y":720,"width":1232,"height":736},
+      {"id":"wall_093","x":2720,"y":1304,"width":480,"height":1096},
+      {"id":"wall_094","x":2688,"y":1328,"width":512,"height":1072},
+      {"id":"wall_095","x":816,"y":720,"width":1240,"height":720},
+      {"id":"wall_096","x":2240,"y":1344,"width":960,"height":1056},
+      {"id":"wall_097","x":808,"y":720,"width":1248,"height":704},
+      {"id":"wall_098","x":520,"y":1384,"width":56,"height":496},
+      {"id":"wall_099","x":504,"y":1408,"width":104,"height":464},
+      {"id":"wall_100","x":488,"y":1424,"width":168,"height":440},
+      {"id":"wall_101","x":848,"y":720,"width":1208,"height":784},
+      {"id":"wall_102","x":464,"y":1472,"width":216,"height":384},
+      {"id":"wall_103","x":464,"y":1520,"width":240,"height":336},
+      {"id":"wall_104","x":888,"y":0,"width":616,"height":1624},
+      {"id":"wall_105","x":872,"y":0,"width":760,"height":1568},
+      {"id":"wall_106","x":432,"y":1568,"width":296,"height":280},
+      {"id":"wall_107","x":880,"y":0,"width":712,"height":1576},
+      {"id":"wall_108","x":880,"y":0,"width":688,"height":1584},
+      {"id":"wall_109","x":880,"y":0,"width":672,"height":1592},
+      {"id":"wall_110","x":880,"y":0,"width":656,"height":1600},
+      {"id":"wall_111","x":912,"y":0,"width":520,"height":1704},
+      {"id":"wall_112","x":912,"y":0,"width":536,"height":1696},
+      {"id":"wall_113","x":896,"y":0,"width":592,"height":1640},
+      {"id":"wall_114","x":0,"y":1632,"width":752,"height":208},
+      {"id":"wall_115","x":896,"y":0,"width":584,"height":1648},
+      {"id":"wall_116","x":904,"y":0,"width":568,"height":1656},
+      {"id":"wall_117","x":936,"y":0,"width":368,"height":1784},
+      {"id":"wall_118","x":920,"y":0,"width":504,"height":1712},
+      {"id":"wall_119","x":0,"y":1712,"width":776,"height":128},
+      {"id":"wall_120","x":920,"y":0,"width":488,"height":1720},
+      {"id":"wall_121","x":920,"y":0,"width":472,"height":1728},
+      {"id":"wall_122","x":920,"y":0,"width":464,"height":1736},
+      {"id":"wall_123","x":928,"y":0,"width":440,"height":1744},
+      {"id":"wall_124","x":928,"y":0,"width":424,"height":1752},
+      {"id":"wall_125","x":928,"y":0,"width":416,"height":1760},
+      {"id":"wall_126","x":2216,"y":1760,"width":984,"height":640},
+      {"id":"wall_127","x":944,"y":0,"width":344,"height":1792},
+      {"id":"wall_128","x":2168,"y":1784,"width":1032,"height":616},
+      {"id":"wall_129","x":0,"y":1792,"width":800,"height":40},
+      {"id":"wall_130","x":1664,"y":1792,"width":112,"height":56},
+      {"id":"wall_131","x":1872,"y":1800,"width":1328,"height":600},
+      {"id":"wall_132","x":1840,"y":1832,"width":1360,"height":568},
+      {"id":"wall_133","x":1496,"y":1856,"width":72,"height":544},
+      {"id":"wall_134","x":1792,"y":1856,"width":1408,"height":544},
+      {"id":"wall_135","x":1456,"y":1880,"width":1744,"height":520},
+      {"id":"wall_136","x":1416,"y":1904,"width":1784,"height":496},
+      {"id":"wall_137","x":1376,"y":1928,"width":1824,"height":472},
+      {"id":"wall_138","x":1336,"y":1952,"width":1864,"height":448},
+      {"id":"wall_139","x":1000,"y":1976,"width":2200,"height":424},
+      {"id":"wall_140","x":816,"y":2000,"width":2384,"height":400},
+      {"id":"wall_141","x":696,"y":2024,"width":2504,"height":376},
+      {"id":"wall_142","x":600,"y":2048,"width":2600,"height":352},
+      {"id":"wall_143","x":0,"y":2080,"width":176,"height":320},
+      {"id":"wall_144","x":576,"y":2096,"width":2624,"height":304},
+      {"id":"wall_145","x":0,"y":2112,"width":200,"height":288},
+      {"id":"wall_146","x":552,"y":2120,"width":2648,"height":280},
+      {"id":"wall_147","x":0,"y":2136,"width":232,"height":264},
+      {"id":"wall_148","x":512,"y":2144,"width":2688,"height":256},
+      {"id":"wall_149","x":0,"y":2160,"width":280,"height":240},
+      {"id":"wall_150","x":448,"y":2168,"width":2752,"height":232},
+      {"id":"wall_151","x":0,"y":2184,"width":3200,"height":216}
+    ],
+    "gates": [
+      {
+        "id": "gate_ridge_gap_1",
+        "label": "물들이가 식힌 발판",
+        "x": 2060,
+        "y": 1460,
+        "width": 180,
+        "height": 40,
+        "openEvent": "desert_ridge_pad",
+        "closedAssetKey": "ridge-gap-closed",
+        "openAssetKey": "ridge-gap-pad",
+        "art": {
+          "x": 2150,
+          "y": 1480,
+          "width": 240,
+          "height": 120,
+          "pivot": [
+            0.5,
+            0.5
+          ]
+        }
+      },
+      {
+        "id": "gate_ridge_gap_2",
+        "label": "냄새로 찾은 진짜 길",
+        "x": 2560,
+        "y": 1045,
+        "width": 180,
+        "height": 40,
+        "openEvent": "desert_ridge_scent",
+        "closedAssetKey": "ridge-gap-closed",
+        "openAssetKey": "ridge-gap-scent",
+        "art": {
+          "x": 2650,
+          "y": 1065,
+          "width": 240,
+          "height": 120,
+          "pivot": [
+            0.5,
+            0.5
+          ]
+        }
+      },
+      {
+        "id": "gate_ridge_gap_3",
+        "label": "금빛 실을 따라 놓인 실 다리",
+        "x": 2860,
+        "y": 720,
+        "width": 180,
+        "height": 40,
+        "openEvent": "desert_ridge_thread",
+        "closedAssetKey": "ridge-gap-closed",
+        "openAssetKey": "ridge-gap-thread",
+        "art": {
+          "x": 2950,
+          "y": 740,
+          "width": 240,
+          "height": 120,
+          "pivot": [
+            0.5,
+            0.5
+          ]
+        }
+      }
+    ]
+  },
+  "spawnPoint": {
+    "x": 400,
+    "y": 2020
+  },
+  "frostZones": [
+    {
+      "id": "hot_sand",
+      "x": 2050,
+      "y": 1150,
+      "width": 700,
+      "height": 620,
+      "slowFactor": 0.7,
+      "kind": "heat"
+    }
+  ],
+  "mirages": [
+    {
+      "id": "mirage_a",
+      "x": 1760,
+      "y": 1340,
+      "width": 380,
+      "height": 120,
+      "periodMs": 4000,
+      "showMs": 1600,
+      "offsetMs": 0
+    },
+    {
+      "id": "mirage_b",
+      "x": 2180,
+      "y": 1660,
+      "width": 400,
+      "height": 120,
+      "periodMs": 4000,
+      "showMs": 1600,
+      "offsetMs": 2000
+    }
+  ],
+  "render": {
+    "markerMode": "final",
+    "background": {
+      "assetKey": "desert-base"
+    },
+    "overlays": [
+      {
+        "id": "overlay_companion_muldeuli",
+        "assetKey": "turby-muldeuli",
+        "x": 560,
+        "y": 1900,
+        "width": 124,
+        "height": 124,
+        "pivot": [
+          0.5,
+          0.7
+        ],
+        "layer": "story",
+        "hiddenAfter": "desert_clues_seen"
+      },
+      {
+        "id": "overlay_companion_pokshini",
+        "assetKey": "elder-pokshini",
+        "x": 660,
+        "y": 2010,
+        "width": 124,
+        "height": 124,
+        "pivot": [
+          0.5,
+          0.7
+        ],
+        "layer": "story",
+        "hiddenAfter": "desert_clues_seen"
+      },
+      {
+        "id": "overlay_companion_ganeuri",
+        "assetKey": "ganeuri-freed",
+        "x": 560,
+        "y": 2110,
+        "width": 124,
+        "height": 124,
+        "pivot": [
+          0.5,
+          0.7
+        ],
+        "layer": "story",
+        "hiddenAfter": "desert_clues_seen"
+      },
+      {
+        "id": "overlay_boss_floor_cut",
+        "assetKey": "boss-floor-cut",
+        "x": 1760,
+        "y": 400,
+        "width": 480,
+        "height": 120,
+        "pivot": [
+          0,
+          0
+        ],
+        "layer": "overlay",
+        "visibleAfter": "desert_scissors_seen"
+      }
+    ]
+  }
+}

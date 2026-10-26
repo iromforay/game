@@ -17,6 +17,7 @@ const realContent = new StoryContentService();
 const FOREST = realContent.stage('forest') as StageStoryData;
 const C = collisionOf(FOREST, 3200, 2400);
 const SPAWN = FOREST.spawnPoint!;
+const NO_DATA_STAGE = 'desert';
 const pointOf = (id: string) => FOREST.points.find((p) => p.id === id)!;
 const P = '1';
 const BASE = ['opening_fall_completed', 'opening_name_saved', 'story_nubi_granted', 'forest_first_path_started', 'forest_cut_thread_inspected', 'forest_stitchling_battle_won', 'forest_bopul_rescued', 'forest_dansuring_clue_learned'];
@@ -115,7 +116,8 @@ function setup(events: string[] = BASE, checkpoint = 'CH01_BOPUL_RESCUED', extra
   for (const e of events) db.seed('player_story_event', { player_id: 1n, event_id: e });
   // 지역 데이터: 실제 숲 + (시험에 따라) 덧붙인 막힌 곳
   const stage: StageStoryData = { ...FOREST, layout: { ...FOREST.layout!, blockers: [...FOREST.layout!.blockers, ...extraBlockers] } };
-  const content = Object.assign(Object.create(realContent) as StoryContentService, { stage: (code: string) => (code === 'forest' ? stage : realContent.stage(code)) });
+  // 10-26: 5장 사막도 지역 데이터가 생겨 실제로 데이터가 없는 지역이 더 없다 — 시험에서는 사막의 지역 데이터·물 규칙을 비워 "데이터 없는 지역" 역할을 맡긴다
+  const content = Object.assign(Object.create(realContent) as StoryContentService, { stage: (code: string) => (code === 'forest' ? stage : code === NO_DATA_STAGE ? null : realContent.stage(code)), water: (code: string) => (code === NO_DATA_STAGE ? null : realContent.water(code)) });
   const settings = { numberOr: (_k: string, d: number) => d, flag: (_k: string, d: boolean) => d, number: (k: string) => NUMBERS[k] };
   const access = new StageAccessService(db.client(), settings as never);
   const session = new SessionService(db.client(), settings as never);
@@ -300,7 +302,7 @@ test('위치 증거: 거부된 이동의 좌표는 쓰지 않는다 — 수집�
 });
 
 test('지역 데이터가 없는 지역(사막 등)은 한가운데에서 시작하고 충돌 판정 없이 경계만 지킨다', async () => {
-  // 10-13: 호수는 2장 기능 맵 데이터가 생겨 이 시험의 "데이터 없는 지역" 예시를 지하로 바꿨다. 10-16: 지하도 3장 기능 맵이 생겨 얼음으로, 10-23: 얼음도 4장 기능 맵이 생겨 사막으로 바꿨다(역할은 같다)
+  // 10-13: 호수는 2장 기능 맵 데이터가 생겨 이 시험의 "데이터 없는 지역" 예시를 지하로 바꿨다. 10-16: 지하도 3장 기능 맵이 생겨 얼음으로, 10-23: 얼음도 4장 기능 맵이 생겨 사막으로 바꿨다(역할은 같다). 10-26: 사막도 데이터가 생겨 setup이 사막 데이터를 비운다(NO_DATA_STAGE)
   const s = setup([...COMPASS, 'lake_unlocked', 'underfloor_unlocked', 'fridge_unlocked', 'desert_unlocked', 'legacy_access_desert'], 'CH01_COMPLETE');
   s.db.seed('story_chapter', { chapter_order: 3, stage_code: 'underground', clear_character_code: 'pokshini', title: '3장 — 지하', map_width: 3200, map_height: 2400 });
   s.db.seed('story_chapter', { chapter_order: 4, stage_code: 'ice', clear_character_code: 'ganeuri', title: '4장 — 얼음', map_width: 3200, map_height: 2400 });

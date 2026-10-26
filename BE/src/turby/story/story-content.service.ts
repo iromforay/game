@@ -62,6 +62,7 @@ export interface StageStoryData {
   // 10-23 C4-1: 서리 구역(속도 배율)·바늘 칸(서버 시각 주기, 내려찍으면 안전 앵커로 복귀). 같은 모듈이 해석·검증한다
   frostZones?: unknown[];
   needleFields?: unknown[];
+  mirages?: unknown[]; // 10-26 C5-1: 아지랑이 가짜 길(표시 전용 주기)
   layout?: { zones: StageZone[]; paths: StagePath[]; blockers: (StageRect & { visibleAfter?: string })[]; gates: StageGateData[] };
   // 10-06 v2(최종 에셋 연결 계약): 대형 배경과 진행 상태별 오버레이의 런타임 에셋 키. 에셋이 없으면 화면이 회색상자·임시 도형을 그대로 쓴다
   render?: { markerMode?: 'fallback' | 'final'; background?: { assetKey: string }; backgroundLocked?: string; unlockedBy?: string; overlays?: StageOverlayData[] }; // backgroundLocked+unlockedBy: 이벤트 전에 쓰는 잠금 배경(둘 다 있어야 한다)
@@ -180,7 +181,7 @@ export class StoryContentService implements OnModuleInit {
 
   // 없으면 null — 파일이 준비되지 않은 장·지역은 호출 쪽이 오류로 바꾼다
   dialogue(chapterCode: string): unknown | null {
-    if (!/^(opening|ch0[1-5]|finale)$/.test(chapterCode)) return null;
+    if (!/^(opening|ch0[1-5]|final)$/.test(chapterCode)) return null; // 종장 = final(정본 chapter_final.md·CHFINAL_*, 10-26)
     return this.load(join('dialogue', `${chapterCode}.json`));
   }
 

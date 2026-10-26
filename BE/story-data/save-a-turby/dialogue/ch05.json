@@ -1,0 +1,580 @@
+{
+  "schemaVersion": 1,
+  "chapterCode": "ch05",
+  "source": "docs/scene/5장.md",
+  "segments": [
+    {
+      "segmentId": "ch05.entry",
+      "resumeFrom": "CH04_COMPLETE",
+      "replayOnResume": true,
+      "completesWith": "desert_entry_seen",
+      "entries": [
+        {
+          "kind": "title",
+          "dialogueId": "ch05.entry.001",
+          "text": "뜨거운 침묵"
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch05.entry.002",
+          "text": "모래처럼 쌓인 먼지 위로 열기가 흔들린다. 사막 입구에는 물들이, 오래된 폭신이와 가느리가 먼저 와 있다. 각 지역에서 금빛 실이 움직였고, 모두 같은 장소를 가리켰다고 한다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch05.entry.003",
+          "text": "누비가 다가오자 세 동료의 시선이 누비 몸의 장식에 머문다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch05.entry.004",
+          "speaker": "muldeuli",
+          "speakerLabel": "물들이",
+          "text": "호수의 실도…….",
+          "portrait": null,
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch05.entry.005",
+          "text": "물들이는 말을 끝내지 못한다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch05.entry.006",
+          "speaker": "old_pokshini",
+          "speakerLabel": "오래된 폭신이",
+          "text": "아직은 우리가 해야 할 일을 먼저 하자꾸나.",
+          "portrait": null,
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch05.entry.007",
+          "text": "누비도 그들이 무슨 결론을 삼켰는지 묻지 않는다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch05.entry.008",
+          "text": "멀리 금빛 실 한 가닥이 하늘로 이어져 있다. 그 실 양옆으로 거대한 두 날이 지나간 듯 모래가 길게 갈라져 있다.",
+          "cameraCue": null,
+          "soundCue": null
+        }
+      ]
+    },
+    {
+      "segmentId": "ch05.clues",
+      "resumeFrom": "CH05_STARTED",
+      "replayOnResume": true,
+      "completesWith": "desert_clues_seen",
+      "entries": [
+        {
+          "kind": "title",
+          "dialogueId": "ch05.clues.001",
+          "text": "말하지 못한 결론"
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch05.clues.002",
+          "text": "동료들은 사막을 건너며 지금까지의 단서를 맞춰 본다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch05.clues.003",
+          "speaker": "muldeuli",
+          "speakerLabel": "물들이",
+          "text": "물빛 염색실은 누비에게만 반응했어.",
+          "portrait": null,
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch05.clues.004",
+          "speaker": "old_pokshini",
+          "speakerLabel": "오래된 폭신이",
+          "text": "누비에게서는 모든 실이 하나였을 때의 냄새가 났지.",
+          "portrait": null,
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch05.clues.005",
+          "speaker": "ganeuri",
+          "speakerLabel": "가느리",
+          "text": "미싱은 누비를 보고 태초의 실이라고 했어.",
+          "portrait": null,
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch05.clues.006",
+          "text": "모두가 누비를 바라본다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch05.clues.007",
+          "speaker": "nubi",
+          "speakerLabel": "누비",
+          "text": "마지막 실을 찾으면 알게 되겠지. 지금은 그걸로 충분해.",
+          "portrait": "nubi",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch05.clues.008",
+          "text": "누비는 앞장서 걷는다. 주인공은 따라가면서도 아무 말도 하지 못한다.",
+          "cameraCue": null,
+          "soundCue": null
+        }
+      ]
+    },
+    {
+      "segmentId": "ch05.scorched",
+      "resumeFrom": "CH05_CLUES_JOINED",
+      "replayOnResume": false,
+      "completesWith": null,
+      "entries": [
+        {
+          "kind": "narration",
+          "dialogueId": "ch05.scorched.001",
+          "text": "모래 아래에서는 그을린 박음이들이 끊어진 실을 모아 어디론가 운반하고 있다. 이들을 물리치면 모든 실이 금빛 능선 너머로 이어진다는 사실을 확인할 수 있다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "storyBattle",
+          "dialogueId": "ch05.scorched.002",
+          "encounterKey": "desert_scorched_ambush"
+        }
+      ]
+    },
+    {
+      "segmentId": "ch05.ridge_pad",
+      "resumeFrom": "CH05_CLUES_JOINED",
+      "replayOnResume": false,
+      "completesWith": "desert_ridge_pad",
+      "entries": [
+        {
+          "kind": "title",
+          "dialogueId": "ch05.ridge_pad.001",
+          "text": "뜨거운 모래 능선"
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch05.ridge_pad.002",
+          "text": "열기로 시야가 주기적으로 왜곡된다. 실제 길과 아지랑이 속 가짜 길이 겹쳐 보이고, 재단인형이 잘라 놓은 틈 때문에 이동 경로가 계속 바뀐다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch05.ridge_pad.003",
+          "text": "동료들이 각자의 힘으로 길을 만든다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch05.ridge_pad.004",
+          "text": "물들이가 뜨거운 모래를 식혀 발판을 만든다.",
+          "cameraCue": null,
+          "soundCue": null
+        }
+      ]
+    },
+    {
+      "segmentId": "ch05.ridge_scent",
+      "resumeFrom": "CH05_CLUES_JOINED",
+      "replayOnResume": false,
+      "completesWith": "desert_ridge_scent",
+      "entries": [
+        {
+          "kind": "narration",
+          "dialogueId": "ch05.ridge_scent.001",
+          "text": "오래된 폭신이가 묻힌 실의 냄새로 진짜 길을 찾는다.",
+          "cameraCue": null,
+          "soundCue": null
+        }
+      ]
+    },
+    {
+      "segmentId": "ch05.ridge_thread",
+      "resumeFrom": "CH05_CLUES_JOINED",
+      "replayOnResume": false,
+      "completesWith": "desert_ridge_thread",
+      "entries": [
+        {
+          "kind": "narration",
+          "dialogueId": "ch05.ridge_thread.001",
+          "text": "가느리가 열기 속에서 미세하게 떨리는 금빛 실을 감지한다.",
+          "cameraCue": null,
+          "soundCue": null
+        }
+      ]
+    },
+    {
+      "segmentId": "ch05.cut_face",
+      "resumeFrom": "CH05_CLUES_JOINED",
+      "replayOnResume": true,
+      "completesWith": "desert_ridge_crossed",
+      "entries": [
+        {
+          "kind": "narration",
+          "dialogueId": "ch05.cut_face.001",
+          "text": "능선 중간에서 거대한 절단면을 발견한다. 잘린 실의 끝은 단순히 끊어진 것이 아니라 연결되었던 방향 자체가 사라진 것처럼 허공을 향한다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch05.cut_face.002",
+          "speaker": "ganeuri",
+          "speakerLabel": "가느리",
+          "text": "미싱이 남긴 자국이 아니야.",
+          "portrait": null,
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch05.cut_face.003",
+          "speaker": "old_pokshini",
+          "speakerLabel": "오래된 폭신이",
+          "text": "실을 박는 자보다 먼저, 어디를 자를지 정하는 자가 있었던 게다.",
+          "portrait": null,
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch05.cut_face.004",
+          "text": "화면 가장자리의 아지랑이 속에서 두 개의 긴 날이 닫혔다가 사라진다. 등장인물들은 보지 못하고 플레이어에게만 잠깐 보인다.",
+          "cameraCue": "scissors-glimpse",
+          "soundCue": null
+        }
+      ]
+    },
+    {
+      "segmentId": "ch05.boss_intro",
+      "resumeFrom": "CH05_RIDGE_CROSSED",
+      "replayOnResume": false,
+      "completesWith": null,
+      "entries": [
+        {
+          "kind": "title",
+          "dialogueId": "ch05.boss_intro.001",
+          "text": "황금 재단인형"
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch05.boss_intro.002",
+          "text": "금빛 마감실이 잠든 자리에는 길고 날카로운 팔을 가진 재단인형이 서 있다. 몸 가장자리를 두른 금빛 실 때문에 상처 입은 천 조각이 즉시 다시 꿰매진다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch05.boss_intro.003",
+          "speaker": "nubi",
+          "speakerLabel": "누비",
+          "text": "저 금빛 실이 마지막 조각이야.",
+          "portrait": "nubi",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "storyBattle",
+          "dialogueId": "ch05.boss_intro.004",
+          "encounterKey": "desert_boss_golden_doll"
+        }
+      ]
+    },
+    {
+      "segmentId": "ch05.boss_victory",
+      "resumeFrom": "CH05_BOSS_DEFEATED",
+      "replayOnResume": true,
+      "completesWith": "desert_boss_aftermath_seen",
+      "entries": [
+        {
+          "kind": "narration",
+          "dialogueId": "ch05.boss_victory.001",
+          "text": "누비가 스스로 보스의 실 안으로 들어가 자신의 첫 매듭과 금빛 실을 연결한다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch05.boss_victory.002",
+          "speaker": "player",
+          "speakerLabel": "{playerName}",
+          "text": "누비, 위험해!",
+          "portrait": "player",
+          "expression": "worried",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch05.boss_victory.003",
+          "speaker": "nubi",
+          "speakerLabel": "누비",
+          "text": "끊어야 할 실과 이어야 할 실이 이제 보여.",
+          "portrait": "nubi",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch05.boss_victory.004",
+          "text": "누비가 잘못 연결된 검은 실만 풀어낸다. 재생이 멈추고 재단인형은 천 조각으로 무너진다. 금빛 마감실은 잘리지 않은 채 누비의 손에 남는다.",
+          "cameraCue": null,
+          "soundCue": null
+        }
+      ]
+    },
+    {
+      "segmentId": "ch05.scissors",
+      "resumeFrom": "CH05_BOSS_DEFEATED",
+      "replayOnResume": true,
+      "completesWith": "desert_scissors_seen",
+      "entries": [
+        {
+          "kind": "title",
+          "dialogueId": "ch05.scissors.001",
+          "text": "가위"
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch05.scissors.002",
+          "text": "금빛 마감실을 누비에게 장착하려는 순간, 공간을 가르는 날카로운 소리가 울린다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch05.scissors.003",
+          "text": "서걱.",
+          "cameraCue": null,
+          "soundCue": "scissors-snip"
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch05.scissors.004",
+          "text": "주인공과 누비 사이의 바닥이 반듯하게 갈라진다. 다섯째 유물이 깨어나면서 사막의 이 지점과 집의 중심의 경계가 잠시 겹친다. 가위는 집의 중심을 떠나 사막까지 온 것이 아니라, 겹쳐진 경계 너머로 자신의 형상과 목소리만 내민다. 아지랑이 너머에 나타난 거대한 두 날에는 숲과 호수, 마루 밑에서 보았던 모든 절단면과 같은 빛이 맺혀 있다.",
+          "cameraCue": "scissors-reveal",
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch05.scissors.005",
+          "speaker": "scissors",
+          "speakerLabel": "가위",
+          "text": "마지막 유물까지 깨웠구나.",
+          "portrait": null,
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch05.scissors.006",
+          "speaker": "player",
+          "speakerLabel": "{playerName}",
+          "text": "네가 계속 우리 앞에 검정실을 남긴 거야?",
+          "portrait": "player",
+          "expression": "worried",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch05.scissors.007",
+          "speaker": "scissors",
+          "speakerLabel": "가위",
+          "text": "내가 갈 수 없는 곳을 너희가 대신 걸었다. 흩어 두었던 조각을 하나도 빠짐없이 찾아냈군.",
+          "portrait": null,
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch05.scissors.008",
+          "text": "가위는 누비를 바라본다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch05.scissors.009",
+          "speaker": "scissors",
+          "speakerLabel": "가위",
+          "text": "그 실을 두르면 네가 무엇이었는지 기억하게 될 거다. 그리고 나를 현실로 데려갈 길도 완성되지.",
+          "portrait": null,
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch05.scissors.010",
+          "speaker": "nubi",
+          "speakerLabel": "누비",
+          "text": "그게 무서워도 여기서 멈추지는 않을 거야.",
+          "portrait": "nubi",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch05.scissors.011",
+          "speaker": "scissors",
+          "speakerLabel": "가위",
+          "text": "그 아이가 돌아갈 길이 무엇으로 만들어지는지 알고도?",
+          "portrait": null,
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch05.scissors.012",
+          "text": "가위는 답을 주지 않는다. 날을 한 번 닫아 금빛 마감실로 이어지는 바깥길을 끊은 뒤 열기 속으로 사라진다. 동료들이 각자의 실을 보태 끊어진 길이 무너지지 않게 붙잡는다.",
+          "cameraCue": null,
+          "soundCue": null
+        }
+      ]
+    },
+    {
+      "segmentId": "ch05.chapter_complete",
+      "resumeFrom": "CH05_COMPLETE",
+      "replayOnResume": true,
+      "completesWith": "desert_chapter_complete_seen",
+      "entries": [
+        {
+          "kind": "title",
+          "dialogueId": "ch05.chapter_complete.001",
+          "text": "마지막 마감"
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch05.chapter_complete.002",
+          "text": "주인공이 금빛 마감실을 누비의 몸 가장자리에 두른다. 다섯 실의 유물이 처음으로 동시에 빛나지만 아직 하나로 결속되지는 않는다.",
+          "cameraCue": "five-relics",
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch05.chapter_complete.003",
+          "text": "누비는 화려해진 자신의 몸을 내려다본다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch05.chapter_complete.004",
+          "speaker": "nubi",
+          "speakerLabel": "누비",
+          "text": "기억날 것 같아. 내가 무엇이었는지, 왜 네 이야기를 처음부터 알고 있었는지.",
+          "portrait": "nubi",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch05.chapter_complete.005",
+          "speaker": "player",
+          "speakerLabel": "{playerName}",
+          "text": "지금 말하지 않아도 돼.",
+          "portrait": "player",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch05.chapter_complete.006",
+          "text": "누비는 조용히 고개를 끄덕인다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch05.chapter_complete.007",
+          "text": "다섯 빛이 사막 위에서 하나의 방향을 가리킨다. 집 안의 모든 실이 시작된 곳, 집의 중심이다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch05.chapter_complete.008",
+          "speaker": "old_pokshini",
+          "speakerLabel": "오래된 폭신이",
+          "text": "이제 마지막 매듭을 지을 때가 왔구나.",
+          "portrait": null,
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch05.chapter_complete.009",
+          "text": "누비가 주인공에게 손을 내민다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch05.chapter_complete.010",
+          "speaker": "nubi",
+          "speakerLabel": "누비",
+          "text": "끝까지 같이 가 줄 거지?",
+          "portrait": "nubi",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch05.chapter_complete.011",
+          "speaker": "player",
+          "speakerLabel": "{playerName}",
+          "text": "처음부터 그렇게 약속했잖아.",
+          "portrait": "player",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        }
+      ]
+    }
+  ]
+}

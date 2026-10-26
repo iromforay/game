@@ -41,6 +41,12 @@ export interface BattleUnit {
   guardedBy?: string;
   guarded?: boolean; // 지금 골무막이 보호(피해 0)
   linkFor?: string; // 연결 실(묶인 아군)
+  // 10-26 C5-3(5장)
+  mirageOf?: string; // 열기 환영(만든 박음이)
+  knotOf?: string; // 연결 매듭(지키는 예고 칸)
+  regen?: boolean; // 금빛 연결점(끊겨도 다시 꿰매질 수 있는 부위 — reviving이면 다시 꿰매지는 중)
+  nubiOnly?: boolean; // 이야기 누비만 풀 수 있는 안쪽 연결
+  storyNubi?: boolean; // 이야기 누비
 }
 
 export interface StatusEffect {
@@ -95,6 +101,11 @@ export interface BattleSnapshot {
   hintsShown?: { code: string; text: string }[];
   ice?: string[]; // 10-23 C4-3: 얼음 칸 "col,row"
   needleMarks?: string[]; // 10-23 C4-3: 다음 적 차례에 바늘이 내려올 칸
+  // 10-26 C5-3
+  embers?: { cell: string; explodeRound: number }[]; // 불씨 칸(터질 라운드)
+  wet?: string[]; // 물들이가 적신 칸
+  cutWarns?: string[]; // 곧 끊어질 칸(실밥이 예고·재단인형 줄 예고)
+  cut?: string[]; // 끊긴 칸(blocked에도 있다)
 }
 
 export type BattleEvent =
@@ -125,7 +136,16 @@ export type BattleEvent =
   | { version: number; type: 'revive'; unitId: string; hp: number }
   | { version: number; type: 'needle_telegraph'; cells: string[] }
   | { version: number; type: 'needle_strike'; cells: string[]; pinned: string[]; linkIds: string[] }
-  | { version: number; type: 'freed'; unitId: string; linkId: string; byUnitId: string | null };
+  | { version: number; type: 'freed'; unitId: string; linkId: string; byUnitId: string | null }
+  // 10-26 C5-3
+  | { version: number; type: 'embers'; cells: string[] }
+  | { version: number; type: 'ember_burst'; cell: string; hits: { unitId: string; damage: number; hp: number; stunned: boolean }[] }
+  | { version: number; type: 'wet'; cells: string[] }
+  | { version: number; type: 'mirage'; unitId: string; mirageId: string }
+  | { version: number; type: 'cut_warn'; cells: string[] }
+  | { version: number; type: 'cut'; cells: string[]; hits: { unitId: string; damage: number; hp: number; stunned: boolean }[] }
+  | { version: number; type: 'restored'; cell: string; byUnitId: string }
+  | { version: number; type: 'regen'; unitId: string; reviveRound: number };
 
 export interface BattleReward {
   playerId: string;

@@ -113,6 +113,8 @@ test('3장 C3-3 ①(1280×720): 매복 — 기계음 장면 → 전투(납작·�
     await g.clickResult("s.scenes.includes('Map') || s.scenes.includes('StoryDialogue')");
     if ((await g.state()).scenes.includes('StoryDialogue')) await g.advanceDialogue("s.scenes.includes('Map') && !s.scenes.includes('StoryDialogue')");
     await g.until('마루 밑 지도', MAP_READY, 30_000);
+    // 지도는 전투에서 돌아온 뒤 지역 화면 데이터를 다시 받는다(받기 전에는 전투 전 문 상태) — 갱신을 기다린다
+    await g.until('먼지 실타래 문 열림 반영', 's.map.story.gates.gate_dust_yarn === true', 10_000);
     const s = await story(g);
     assert.equal(s.gates.gate_dust_yarn, true, '먼지 실타래 문이 열린다');
     assert.deepEqual(s.points, ['underfloor_fragment']);

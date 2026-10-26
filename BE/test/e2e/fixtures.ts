@@ -221,3 +221,39 @@ export function seedFridge(device: string, stage: 'entry' | 'started' | 'rescued
     }
   };
 }
+
+// 10-26 C5-1: 4장을 마치고 5장 사막 입구에 서기 직전(CH04_COMPLETE, 성장 4) — 극세사 장착·장 완료 장면·5장 개방까지 기록된 계정.
+// stage = 'entry'(도입 직전) | 'started'(도입을 본 뒤 CH05_STARTED, 단서 길 전) | 'joined'(단서 길까지 본 CH05_CLUES_JOINED — 능선 앞 전투 전) |
+//         'won'(능선 앞 전투 승리 시드. 물들이 지점 열림, 체크포인트는 그대로) | 'thread'(동료 셋이 틈을 모두 이음 — 절단면 앞) | 'crossed'(절단면까지 본 CH05_RIDGE_CROSSED — 보스 앞)
+export function seedDesert(device: string, stage: 'entry' | 'started' | 'joined' | 'won' | 'thread' | 'crossed' = 'entry') {
+  const base = seedFridge(device, 'confessed');
+  return (db: FakeDb) => {
+    base(db);
+    const player = db.rows('player', { device_uuid: `dev-device-${device}-account` })[0] as { id: bigint };
+    const progress = db.rows('player_story_progress', { player_id: player.id })[0] as { checkpoint: string; nubi_growth_stage: number };
+    const add = (list: string[]) => list.forEach((e) => db.seed('player_story_event', { player_id: player.id, event_id: e }));
+    add(['fridge_boss_defeated', 'fridge_microfiber_granted', 'fridge_boss_aftermath_seen', 'fridge_microfiber_equipped', 'desert_unlocked', 'fridge_chapter_complete_seen']);
+    progress.checkpoint = 'CH04_COMPLETE';
+    progress.nubi_growth_stage = 4;
+    const def = (code: string) => (db.rows('item_definition', { code })[0] as { id: number }).id;
+    const at = new Date();
+    db.seed('player_item', { player_id: player.id, item_definition_id: def('ice_microfiber'), quantity: 1, is_new: false, is_locked: true, first_acquired_at: at, last_acquired_at: at });
+    const nubi = db.rows('turby_instance', { owner_player_id: player.id, is_story_companion: true })[0] as { id: bigint };
+    if (db.rows('turby_equipment', { turby_instance_id: nubi.id, slot_key: 'story_4' }).length === 0) db.seed('turby_equipment', { turby_instance_id: nubi.id, slot_key: 'story_4', item_definition_id: def('ice_microfiber') });
+    const desert = db.rows('story_chapter', { stage_code: 'desert' })[0] as { title: string } | undefined;
+    if (desert) desert.title = '5장 — 보일러 옆 사막';
+    else db.seed('story_chapter', { chapter_order: 5, stage_code: 'desert', clear_character_code: 'geumbiti', title: '5장 — 보일러 옆 사막', map_width: 3200, map_height: 2400 });
+    const steps: [typeof stage, string[], string][] = [
+      ['started', ['desert_entry_seen'], 'CH05_STARTED'],
+      ['joined', ['desert_clues_seen'], 'CH05_CLUES_JOINED'],
+      ['won', ['desert_scorched_won'], 'CH05_CLUES_JOINED'],
+      ['thread', ['desert_ridge_pad', 'desert_ridge_scent', 'desert_ridge_thread'], 'CH05_CLUES_JOINED'],
+      ['crossed', ['desert_ridge_crossed'], 'CH05_RIDGE_CROSSED'],
+    ];
+    const upto = steps.findIndex(([s]) => s === stage);
+    for (let i = 0; i <= upto; i++) {
+      add(steps[i][1]);
+      progress.checkpoint = steps[i][2];
+    }
+  };
+}

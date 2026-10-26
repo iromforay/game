@@ -10,7 +10,7 @@ import { NAME_RULE_TEXT, nameReasonMessage, precheckName } from '../story/nameRu
 import type { OpeningStoryState, StoryClient } from '../story/storyClient';
 
 // 장 전용 대화 배경(한 장 그림, 화면 크기). 없으면 bg-<code> 타일(1·2장 숲·집)
-const DIALOGUE_BACKDROPS: Record<string, { key: string; alpha: number }> = { underfloor: { key: 'chapter03-dialogue-bg', alpha: 0.8 }, fridge: { key: 'chapter04-dialogue-bg', alpha: 0.8 } };
+const DIALOGUE_BACKDROPS: Record<string, { key: string; alpha: number }> = { underfloor: { key: 'chapter03-dialogue-bg', alpha: 0.8 }, fridge: { key: 'chapter04-dialogue-bg', alpha: 0.8 }, desert: { key: 'chapter05-dialogue-bg', alpha: 0.8 } };
 
 // M3 오프닝 — 서버 체크포인트가 지정한 구간부터 공용 대사 재생기(story/dialogueRunner.ts)로 재생한다.
 // 이 씬은 그리기와 입력만 맡는다. 진행·보상·체크포인트는 전부 서버가 판정한다.
@@ -29,9 +29,12 @@ const WORLD_SATURATION_STEADY = 0.65; // 이름을 기억한 뒤 일부만 안�
 
 // 대사 표시·입력은 1장 대화 화면(StoryDialogueScene)도 그대로 쓴다(상속) — 재생 범위와 전투 연결만 다르다
 // 3장 기억 비침 cameraCue = 에셋 키(fx/story/<키>.png). 10-16 2차: 기억 조각(내 것이 아닌 기억)·은빛 실(장 마무리)도 같은 원형 연출
-const MEMORY_GLIMPSE_KEYS = ['memory-glove', 'memory-blanket', 'memory-doll', 'memory-fragment', 'silver-thread', 'storage-pattern', 'frost-machine-scar', 'sense-restore', 'warm-gold'];
+const MEMORY_GLIMPSE_KEYS = ['memory-glove', 'memory-blanket', 'memory-doll', 'memory-fragment', 'silver-thread', 'storage-pattern', 'frost-machine-scar', 'sense-restore', 'warm-gold', 'five-relics']; // 10-26 C5-3: 다섯 유물이 동시에 빛남(5장 마지막 마감)
 // 10-23 C4-1 4장: 누비에게만 들리는 목소리 — 화자 없는 지문을 차가운 은색 글자로, 화면 가장자리에 서리(voice-frost)를 두른다
 const VOICE_CUE = 'voice-frost';
+// 10-26 C5-1: 5장 절단면 — 화면 가장자리 아지랑이 속 두 긴 날이 잠깐 닫혔다 사라진다(플레이어에게만). 가운데는 가리지 않는다. 그림이 없으면 그리지 않는다
+const SCISSORS_GLIMPSE = 'scissors-glimpse';
+const SCISSORS_REVEAL = 'scissors-reveal'; // 10-26 C5-3: 가위 첫 등장(아지랑이 너머 두 날, 아래 대화창 자리는 투명)
 const VOICE_TEXT_COLOR = '#6f8aa3';
 
 export class OpeningScene extends Phaser.Scene {
@@ -250,6 +253,7 @@ export class OpeningScene extends Phaser.Scene {
     else if (cam === 'nubi-color-restore') this.playNubiColorRestore();
     else if (cam && MEMORY_GLIMPSE_KEYS.includes(cam)) this.playMemoryGlimpse(cam);
     else if (cam === VOICE_CUE) this.playVoiceFrost();
+    else if (cam === SCISSORS_GLIMPSE || cam === SCISSORS_REVEAL) this.playEdgeGlimpse(cam);
   }
 
   // ---------- 누비 색 빠짐 연출(10-13 C2-4) ----------
@@ -313,6 +317,16 @@ export class OpeningScene extends Phaser.Scene {
     this.glimpse = img;
     this.tweens.add({ targets: img, alpha: 0.95, duration: 700, ease: 'Sine.easeOut', yoyo: false });
     this.tweens.add({ targets: img, alpha: 0, delay: 3800, duration: 900, onComplete: () => { img.destroy(); if (this.glimpse === img) this.glimpse = null; } });
+  }
+
+  // ---------- 가장자리 연출 한 번(10-26 C5-1 가위 그림자) ----------
+  // 0.4초에 걸쳐 떠올랐다가 1.6초 뒤 0.6초에 걸쳐 사라진다. 섬광·흔들림 없음. 그림이 없으면 기록만 남긴다(오류 아님)
+  private playEdgeGlimpse(key: string) {
+    this.fxState.glimpseShown.push(key);
+    if (!this.textures.exists(key)) return;
+    const img = this.add.image(0, 0, key).setOrigin(0, 0).setDisplaySize(CANVAS_WIDTH, CANVAS_HEIGHT).setAlpha(0).setDepth(7);
+    this.tweens.add({ targets: img, alpha: 0.9, duration: 400, ease: 'Sine.easeOut' });
+    this.tweens.add({ targets: img, alpha: 0, delay: 2000, duration: 600, onComplete: () => img.destroy() });
   }
 
   // ---------- 누비에게만 들리는 목소리(10-23 C4-1) ----------

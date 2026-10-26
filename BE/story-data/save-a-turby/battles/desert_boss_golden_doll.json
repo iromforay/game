@@ -1,0 +1,29 @@
+{
+  "key": "desert_boss_golden_doll",
+  "_note": "임시 전투 정의(기능 검증용 수치, 밸런스 정본 아님 — C5-3). 황금 재단인형(제자리, 공격 대상 아님): 적 차례마다 지난 예고 줄을 끊고(그 줄에 서 있던 아군은 피해 3, 그 칸은 끊기지 않는다) 가장 가까운 아군의 가로 줄 3칸을 다시 예고한다. 부위 바로 옆 칸은 끊지 않는다(닿을 길 보장), 끊긴 칸은 6칸까지. 동료 셋(물들이·오래된 폭신이·가느리)이 라운드마다 돌아가며 끊긴 칸 하나를 다시 붙잡는다. 금빛 연결점 3개(순서 1, 안쪽 연결을 위·왼쪽·아래에서 감싼다 — 혼자서도 2라운드 안에 닿는 거리): 하나를 끊어도 다른 연결점이 남아 있으면 2라운드 뒤 다시 꿰매진다 — 2라운드 안에 셋을 모두 끊어야 한다. 안쪽 검은 연결(순서 2)은 이야기 누비만 풀 수 있다(다른 유닛 공격은 피해 0). 풀면 재단인형이 천 조각으로 풀리고 승리 — 파괴하지 않는다. 승리하면 금빛 마감실 1회 지급(desert_boss_defeated).",
+  "cornerEscape": false,
+  "objectives": {
+    "win": [
+      {
+        "kind": "defeat_units",
+        "unitIds": ["inner_link"]
+      }
+    ]
+  },
+  "hints": {
+    "lineCut": "재단인형이 자를 줄이 표시됐어요. 그 줄에서 비켜요",
+    "restore": "동료가 끊긴 길을 다시 붙잡았어요",
+    "regen": "금빛 연결점이 다시 꿰매지려 해요. 2라운드 안에 셋을 모두 끊어요",
+    "nubiOnly": "안쪽 검은 연결은 누비만 풀 수 있어요"
+  },
+  "units": [
+    { "unitId": "golden_doll", "side": "wild", "characterCode": "golden_doll", "name": "황금 재단인형", "col": 10, "row": 3, "attack": 0, "defense": 0, "actionPower": 1, "maxHp": 1, "targetable": false, "anchored": true, "protectMode": "reject", "lineCut": { "length": 3, "damage": 3, "maxCut": 6 } },
+    { "unitId": "gold_point_1", "side": "wild", "characterCode": "gold_point", "name": "금빛 연결점", "col": 7, "row": 2, "attack": 0, "defense": 0, "actionPower": 0, "maxHp": 1, "canAct": false, "partOf": "golden_doll", "breakOrder": 1, "regen": { "rounds": 2 } },
+    { "unitId": "gold_point_2", "side": "wild", "characterCode": "gold_point", "name": "금빛 연결점", "col": 6, "row": 3, "attack": 0, "defense": 0, "actionPower": 0, "maxHp": 1, "canAct": false, "partOf": "golden_doll", "breakOrder": 1, "regen": { "rounds": 2 } },
+    { "unitId": "gold_point_3", "side": "wild", "characterCode": "gold_point", "name": "금빛 연결점", "col": 7, "row": 4, "attack": 0, "defense": 0, "actionPower": 0, "maxHp": 1, "canAct": false, "partOf": "golden_doll", "breakOrder": 1, "regen": { "rounds": 2 } },
+    { "unitId": "inner_link", "side": "wild", "characterCode": "inner_link", "name": "안쪽 검은 연결", "col": 7, "row": 3, "attack": 0, "defense": 0, "actionPower": 0, "maxHp": 1, "canAct": false, "partOf": "golden_doll", "breakOrder": 2, "nubiOnly": true },
+    { "unitId": "muldeuli", "side": "neutral", "characterCode": "muldeuli", "name": "물들이", "col": 0, "row": 0, "attack": 0, "defense": 0, "actionPower": 0, "maxHp": 10, "canAct": false, "targetable": false, "restorer": true },
+    { "unitId": "old_pokshini", "side": "neutral", "characterCode": "pokshini", "name": "오래된 폭신이", "col": 0, "row": 3, "attack": 0, "defense": 0, "actionPower": 0, "maxHp": 10, "canAct": false, "targetable": false, "restorer": true },
+    { "unitId": "ganeuri", "side": "neutral", "characterCode": "ganeuri", "name": "가느리", "col": 0, "row": 7, "attack": 0, "defense": 0, "actionPower": 0, "maxHp": 10, "canAct": false, "targetable": false, "restorer": true }
+  ]
+}

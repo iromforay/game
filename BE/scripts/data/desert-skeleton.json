@@ -1,0 +1,47 @@
+{
+  "version": "desert-layout-v1",
+  "size": { "width": 3200, "height": 2400 },
+  "corridors": [
+    { "id": "entry_path", "width": 170, "points": [[400, 2000], [900, 1900], [1300, 1880], [1500, 1760]], "note": "사막 초입 → 단서 길(모래 먼지 위 발자국)" },
+    { "id": "side_branch", "width": 140, "points": [[900, 1900], [800, 1560], [700, 1360]], "note": "막다른 갈래(그을린 천 더미 틈)" },
+    { "id": "ridge_1", "width": 180, "points": [[1850, 1700], [2150, 1700], [2150, 1250]], "note": "능선 첫 구간 — 세로 구간 가운데에 첫 번째 틈" },
+    { "id": "ridge_2", "width": 180, "points": [[2150, 1250], [2650, 1250], [2650, 880]], "note": "능선 둘째 구간 — 세로 구간 가운데에 두 번째 틈" },
+    { "id": "ridge_3", "width": 180, "points": [[2650, 880], [2950, 880], [2950, 600]], "note": "능선 셋째 구간 — 세로 구간 가운데에 세 번째 틈" },
+    { "id": "to_boss", "width": 180, "points": [[2800, 470], [2300, 470]], "note": "절단면 → 금빛 마감실이 잠든 자리" }
+  ],
+  "areas": [
+    { "id": "desert_entrance", "kind": "ellipse", "cx": 380, "cy": 2010, "rx": 230, "ry": 170 },
+    { "id": "side_pocket", "kind": "ellipse", "cx": 680, "cy": 1320, "rx": 130, "ry": 110 },
+    { "id": "scorched_front", "kind": "ellipse", "cx": 1680, "cy": 1720, "rx": 230, "ry": 160 },
+    { "id": "cut_face", "kind": "ellipse", "cx": 2950, "cy": 490, "rx": 200, "ry": 140 },
+    { "id": "boss_floor", "kind": "ellipse", "cx": 2000, "cy": 460, "rx": 340, "ry": 260, "note": "황금 재단인형이 있는 넓고 빈 모래 바닥 — 하늘로 이어지는 금빛 실 한 가닥의 뿌리" }
+  ],
+  "islands": [
+    { "id": "scorched_heap", "kind": "ellipse", "cx": 1720, "cy": 1820, "rx": 70, "ry": 45, "note": "그을린 천 더미(섬)" }
+  ],
+  "gates": [
+    { "id": "gate_ridge_gap_1", "x": 2060, "y": 1460, "width": 180, "height": 40, "orientation": "horizontal", "openEvent": "desert_ridge_pad", "note": "첫 번째 틈 — 물들이가 모래를 식혀 발판을 만든다" },
+    { "id": "gate_ridge_gap_2", "x": 2560, "y": 1045, "width": 180, "height": 40, "orientation": "horizontal", "openEvent": "desert_ridge_scent", "note": "두 번째 틈 — 오래된 폭신이가 묻힌 실 냄새로 진짜 길을 찾는다" },
+    { "id": "gate_ridge_gap_3", "x": 2860, "y": 720, "width": 180, "height": 40, "orientation": "horizontal", "openEvent": "desert_ridge_thread", "note": "세 번째 틈 — 가느리가 떨리는 금빛 실을 감지해 실 다리를 놓는다" }
+  ],
+  "zones": [
+    { "id": "hot_sand", "kind": "rect", "x": 2050, "y": 1150, "width": 700, "height": 620, "effect": "hot", "note": "뜨거운 모래 — 이동 0.7배(4장 서리 구역 규칙 재사용), 배경의 모래가 더 붉고 일렁인다" }
+  ],
+  "mirages": [
+    { "id": "mirage_a", "x": 1760, "y": 1340, "width": 380, "height": 120, "note": "아지랑이 가짜 길(걸을 수 없는 모래 위에 주기적으로 겹쳐 보인다 — 판정 없음)" },
+    { "id": "mirage_b", "x": 2180, "y": 1660, "width": 400, "height": 120, "note": "아지랑이 가짜 길" }
+  ],
+  "points": [
+    { "id": "spawn", "x": 400, "y": 2020 },
+    { "id": "desert_clues", "x": 1150, "y": 1885, "radius": 90, "what": "동료들이 단서를 맞춰 보다 멈추는 자리(말하지 못한 결론)" },
+    { "id": "desert_scorched", "x": 1640, "y": 1690, "radius": 110, "what": "능선 앞 전투(그을린 박음이·재단 실밥이)" },
+    { "id": "desert_ridge_pad", "x": 2150, "y": 1590, "radius": 90, "what": "물들이 — 첫 번째 틈 앞" },
+    { "id": "desert_ridge_scent", "x": 2650, "y": 1170, "radius": 90, "what": "오래된 폭신이 — 두 번째 틈 앞" },
+    { "id": "desert_ridge_thread", "x": 2950, "y": 830, "radius": 80, "what": "가느리 — 세 번째 틈 앞" },
+    { "id": "desert_cut_face", "x": 2950, "y": 470, "radius": 100, "what": "방향 자체가 사라진 거대한 절단면" },
+    { "id": "desert_boss_entrance", "x": 2380, "y": 470, "radius": 90, "what": "황금 재단인형 입구" }
+  ],
+  "overlay_regions": [
+    { "id": "boss_floor_cut", "x": 1760, "y": 400, "width": 480, "height": 120, "note": "가위 장면 뒤 바닥이 반듯하게 갈라진 자국(월드 좌표, 보스 바닥 가운데)" }
+  ]
+}

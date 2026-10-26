@@ -111,6 +111,8 @@ test('4장 C4-1 ①(1280×720): 냉장고 입장 → 도입(누비만 듣는 목
     assert.equal(db.checkpoint, 'CH04_STARTED');
     assert.equal(once(db.events, 'fridge_entry_seen'), 1);
     assert.deepEqual([db.growth, db.items], [before.growth, before.items], '보상·성장 변화 없음');
+    // 지도는 장면에서 돌아온 뒤 지역 화면 데이터를 다시 받는다(받기 전에는 장면 전 목표) — 갱신을 기다린다
+    await g.until('도입 뒤 목표', `s.map.story.goalShown === '${GOAL_CORRIDOR}'`, 10_000);
     let s = await story(g);
     assert.equal(s.goalShown, GOAL_CORRIDOR);
     assert.deepEqual(s.points, ['fridge_ganeuri'], '도입 뒤 가느리만 표시됨');

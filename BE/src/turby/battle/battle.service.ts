@@ -192,7 +192,7 @@ export class BattleService implements OnModuleInit {
       rules: this.rules(),
       participants: [{ playerId, nickname: member.nickname, slot: 1, connected: member.connected }],
       definition,
-      story: { encounterKey: key },
+      story: { encounterKey: key, nubiTurbyId: available.storyNubiId.toString() }, // 10-26 C5-3: 누비 전용 행동(안쪽 검은 연결) 판정
     });
     const record: BattleRecord = { state, responses: new Map(), ended: null, settled: false, queue: Promise.resolve(), cleanup: null, timer: null, timerKey: null, story: { encounterKey: key, onWinEvents: available.def.onWinEvents, storyNubiId: available.storyNubiId.toString() }, acknowledged: new Set() };
     this.battles.set(state.battleId, record);

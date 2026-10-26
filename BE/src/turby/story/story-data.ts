@@ -270,6 +270,47 @@ export const STORY_EVENTS: StoryEventDef[] = [
   ev({ id: 'desert_unlocked', chapter: 4, allowedAt: ['CH04_BOSS_DEFEATED'], requires: ['fridge_boss_aftermath_seen'], serverOnly: true, evidence: { kind: 'none' } }),
   // '이어진 감각' 장면(ch04.chapter_complete)을 끝까지 본 뒤 클라이언트가 완료를 요청한다. 체크포인트·보상·성장은 다시 바꾸지 않는다
   ev({ id: 'fridge_chapter_complete_seen', chapter: 4, allowedAt: ['CH04_COMPLETE'], requires: ['fridge_microfiber_equipped', 'desert_unlocked'], evidence: { kind: 'none' } }),
+
+  // ---- 5장 보일러 옆 사막(C5-1) ----
+  // 뜨거운 침묵: 사막에 들어서면 도입(동료 셋 합류)을 끝까지 본 뒤 클라이언트가 완료를 요청한다. 5장 개방(desert_unlocked)은 4장 장착 때 이미 기록됐다
+  ev({ id: 'desert_entry_seen', chapter: 5, allowedAt: ['CH04_COMPLETE'], requires: ['desert_unlocked'], evidence: { kind: 'stage', stageCode: 'desert' }, to: 'CH05_STARTED' }),
+  // 말하지 못한 결론: 단서 길 지점에서 장면을 끝까지 보면 기록(정본 CH05_CLUES_JOINED — 단서를 거의 완성했지만 정체를 말하지 않은 장면)
+  ev({ id: 'desert_clues_seen', chapter: 5, allowedAt: ['CH05_STARTED'], requires: ['desert_entry_seen'], evidence: { kind: 'point', stageCode: 'desert', pointId: 'desert_clues' }, to: 'CH05_CLUES_JOINED' }),
+  // 능선 앞 전투(C5-3에서 전투 연결) 승리 정산: 능선 첫 틈 앞 물들이 지점만 연다. 체크포인트는 바꾸지 않는다(4장 P-01 방식). 서버 전용
+  ev({ id: 'desert_scorched_won', chapter: 5, allowedAt: ['CH05_CLUES_JOINED'], requires: ['desert_clues_seen'], serverOnly: true, evidence: { kind: 'none' } }),
+  // 뜨거운 모래 능선: 동료 셋이 차례로 틈을 잇는다(각 틈 앞 지점에서 장면을 끝까지 보면 그 틈이 열린다). 체크포인트 유지
+  ev({ id: 'desert_ridge_pad', chapter: 5, allowedAt: ['CH05_CLUES_JOINED'], requires: ['desert_scorched_won'], evidence: { kind: 'point', stageCode: 'desert', pointId: 'desert_ridge_pad' } }),
+  ev({ id: 'desert_ridge_scent', chapter: 5, allowedAt: ['CH05_CLUES_JOINED'], requires: ['desert_ridge_pad'], evidence: { kind: 'point', stageCode: 'desert', pointId: 'desert_ridge_scent' } }),
+  ev({ id: 'desert_ridge_thread', chapter: 5, allowedAt: ['CH05_CLUES_JOINED'], requires: ['desert_ridge_scent'], evidence: { kind: 'point', stageCode: 'desert', pointId: 'desert_ridge_thread' } }),
+  // 능선 끝 절단면: 장면(두 긴 날은 플레이어에게만)을 끝까지 보면 능선 통과
+  ev({ id: 'desert_ridge_crossed', chapter: 5, allowedAt: ['CH05_CLUES_JOINED'], requires: ['desert_ridge_thread'], evidence: { kind: 'point', stageCode: 'desert', pointId: 'desert_cut_face' }, to: 'CH05_RIDGE_CROSSED' }),
+  // 10-26 C5-3: 황금 재단인형 승리 정산(서버 전용 — 전투 확정만 기록). 한 트랜잭션: 마감실 지급 사건 + 금빛 마감실 1개(확률 아님) + CH05_BOSS_DEFEATED.
+  //   재단인형은 파괴하지 않는다(천 조각으로 풀림). 장착·성장·장 완료·종장 개방은 아래 장착 사건. 유물은 한 번만 지급된다(grantItem의 relic 1회 규칙)
+  ev({ id: 'desert_boss_defeated', chapter: 5, allowedAt: ['CH05_RIDGE_CROSSED'], requires: ['desert_ridge_crossed'], serverOnly: true, evidence: { kind: 'none' }, alsoComplete: ['desert_finish_thread_granted'], grant: [{ itemCode: 'golden_finish_thread', quantity: 1 }], to: 'CH05_BOSS_DEFEATED' }),
+  ev({ id: 'desert_finish_thread_granted', chapter: 5, allowedAt: ['CH05_RIDGE_CROSSED'], requires: ['desert_ridge_crossed'], serverOnly: true, evidence: { kind: 'none' } }),
+  // 승리 장면(ch05.boss_victory)을 끝까지 본 뒤 클라이언트가 완료를 요청한다(completesWith). 체크포인트·아이템·성장은 바꾸지 않는다
+  ev({ id: 'desert_boss_aftermath_seen', chapter: 5, allowedAt: ['CH05_BOSS_DEFEATED'], requires: ['desert_boss_defeated', 'desert_finish_thread_granted'], evidence: { kind: 'none' } }),
+  // 가위(정본: 금빛 마감실을 장착하려는 순간) — 승리 장면에 이어지는 장면을 끝까지 보면 CH05_SCISSORS_REVEALED. 장착의 선행 조건
+  ev({ id: 'desert_scissors_seen', chapter: 5, allowedAt: ['CH05_BOSS_DEFEATED'], requires: ['desert_boss_aftermath_seen'], evidence: { kind: 'none' }, to: 'CH05_SCISSORS_REVEALED' }),
+  // 인벤토리 "누비에게 장착"(POST /player/me/story/relics/golden_finish_thread/equip)만 기록. 한 트랜잭션: story_5 장착 + 성장 4→5 + 이 사건 + final_unlocked + CH05_COMPLETE.
+  //   golden_finish_thread 보유 레코드는 삭제하지 않는다. 선행: 가위 장면 완료·story_1~4 장착·성장 정확히 4
+  ev({
+    id: 'desert_finish_thread_equipped',
+    chapter: 5,
+    allowedAt: ['CH05_SCISSORS_REVEALED'],
+    requires: ['desert_boss_defeated', 'desert_finish_thread_granted', 'desert_boss_aftermath_seen', 'desert_scissors_seen'],
+    serverOnly: true,
+    evidence: { kind: 'none' },
+    requireGrowthEq: 4,
+    requireEquipped: ['story_1', 'story_2', 'story_3', 'story_4'],
+    equipRelic: { itemCode: 'golden_finish_thread', slotKey: 'story_5', growthStage: 5 },
+    alsoComplete: ['final_unlocked'],
+    to: 'CH05_COMPLETE',
+  }),
+  // 종장(집의 중심) 개방 기록. 종장 지역 코드는 종장 계획에서 정한다(STAGE_UNLOCK_EVENTS 연결은 그때)
+  ev({ id: 'final_unlocked', chapter: 5, allowedAt: ['CH05_SCISSORS_REVEALED'], requires: ['desert_scissors_seen'], serverOnly: true, evidence: { kind: 'none' } }),
+  // '마지막 마감' 장면(ch05.chapter_complete)을 끝까지 본 뒤 클라이언트가 완료를 요청한다. 체크포인트·보상·성장은 다시 바꾸지 않는다
+  ev({ id: 'desert_chapter_complete_seen', chapter: 5, allowedAt: ['CH05_COMPLETE'], requires: ['desert_finish_thread_equipped', 'final_unlocked'], evidence: { kind: 'none' } }),
 ];
 
 // 부분 사건이 모두 기록되면 같은 트랜잭션에서 함께 기록하는 집계 사건(C2-3). 이미 기록돼 있으면 다시 만들지 않는다
@@ -465,6 +506,21 @@ export const STORY_TRIGGERS: StoryTriggerDef[] = [
   { id: 'fridge_confession', stageCode: 'ice', evidence: { kind: 'point', stageCode: 'ice', pointId: 'fridge_confession' }, activeAt: ['CH04_STORAGE_CLEARED'], requires: ['fridge_storage_seen'], unless: ['fridge_confession_seen'], repeatable: true, play: { segmentId: 'ch04.confession', endAfter: 'ch04.confession' } },
   // 6) 저장고 중심 입구(10-23 C4-3) — 고백 뒤에만. 도입 → 서리 미싱 전투 → (이기면) 승리 장면이 한 재생 범위로 이어진다. 정산 뒤에는 닫힌다
   { id: 'fridge_boss_entrance', stageCode: 'ice', evidence: { kind: 'point', stageCode: 'ice', pointId: 'fridge_boss_entrance' }, activeAt: ['CH04_CONFESSION_SEEN'], requires: ['fridge_confession_seen'], unless: ['fridge_boss_defeated'], encounterKey: 'fridge_boss_frost_machine', repeatable: true, play: { segmentId: 'ch04.boss_intro', endAfter: 'ch04.boss_victory' } },
+  // ---- 5장 보일러 옆 사막(C5-1) ----
+  // 1) 사막 초입 — 지역에 들어서면 서버가 실행. 도입(뜨거운 침묵)을 끝까지 본 뒤 desert_entry_seen(completesWith)
+  { id: 'desert_entry', stageCode: 'desert', evidence: { kind: 'stage', stageCode: 'desert' }, auto: true, repeatable: true, play: 'resume' },
+  // 2) 단서 길 — 끝까지 보면 desert_clues_seen + CH05_CLUES_JOINED
+  { id: 'desert_clues', stageCode: 'desert', evidence: { kind: 'point', stageCode: 'desert', pointId: 'desert_clues' }, activeAt: ['CH05_STARTED'], requires: ['desert_entry_seen'], unless: ['desert_clues_seen'], repeatable: true, play: { segmentId: 'ch05.clues', endAfter: 'ch05.clues' } },
+  // 3~5) 능선의 세 틈 앞 동료 — 차례로 하나씩. 끝까지 보면 그 틈이 열린다(체크포인트 유지)
+  { id: 'desert_ridge_pad', stageCode: 'desert', evidence: { kind: 'point', stageCode: 'desert', pointId: 'desert_ridge_pad' }, activeAt: ['CH05_CLUES_JOINED'], requires: ['desert_scorched_won'], unless: ['desert_ridge_pad'], repeatable: true, play: { segmentId: 'ch05.ridge_pad', endAfter: 'ch05.ridge_pad' } },
+  { id: 'desert_ridge_scent', stageCode: 'desert', evidence: { kind: 'point', stageCode: 'desert', pointId: 'desert_ridge_scent' }, activeAt: ['CH05_CLUES_JOINED'], requires: ['desert_ridge_pad'], unless: ['desert_ridge_scent'], repeatable: true, play: { segmentId: 'ch05.ridge_scent', endAfter: 'ch05.ridge_scent' } },
+  { id: 'desert_ridge_thread', stageCode: 'desert', evidence: { kind: 'point', stageCode: 'desert', pointId: 'desert_ridge_thread' }, activeAt: ['CH05_CLUES_JOINED'], requires: ['desert_ridge_scent'], unless: ['desert_ridge_thread'], repeatable: true, play: { segmentId: 'ch05.ridge_thread', endAfter: 'ch05.ridge_thread' } },
+  // 2-1) 능선 앞 — 단서 길 뒤. 지문 뒤 전투(storyBattle). 승리하면 서버가 desert_scorched_won(물들이 지점 열림, 체크포인트 유지)을 기록한다(C5-3)
+  { id: 'desert_scorched', stageCode: 'desert', evidence: { kind: 'point', stageCode: 'desert', pointId: 'desert_scorched' }, activeAt: ['CH05_CLUES_JOINED'], requires: ['desert_clues_seen'], unless: ['desert_scorched_won'], encounterKey: 'desert_scorched_ambush', repeatable: true, play: { segmentId: 'ch05.scorched', endAfter: 'ch05.scorched' } },
+  // 6) 능선 끝 절단면 — 끝까지 보면 desert_ridge_crossed + CH05_RIDGE_CROSSED
+  { id: 'desert_cut_face', stageCode: 'desert', evidence: { kind: 'point', stageCode: 'desert', pointId: 'desert_cut_face' }, activeAt: ['CH05_CLUES_JOINED'], requires: ['desert_ridge_thread'], unless: ['desert_ridge_crossed'], repeatable: true, play: { segmentId: 'ch05.cut_face', endAfter: 'ch05.cut_face' } },
+  // 7) 금빛 마감실이 잠든 자리 — 보스 도입 → 전투 → (이기면 이어서) 승리 장면 → 가위(C5-3)
+  { id: 'desert_boss_entrance', stageCode: 'desert', evidence: { kind: 'point', stageCode: 'desert', pointId: 'desert_boss_entrance' }, activeAt: ['CH05_RIDGE_CROSSED'], requires: ['desert_ridge_crossed'], unless: ['desert_boss_defeated'], encounterKey: 'desert_boss_golden_doll', repeatable: true, play: { segmentId: 'ch05.boss_intro', endAfter: 'ch05.scissors' } },
 ];
 export const TRIGGER_BY_ID = new Map(STORY_TRIGGERS.map((t) => [t.id, t]));
 
@@ -480,6 +536,8 @@ export const SEGMENT_CHAIN_END: Record<string, string> = {
   'ch02.chapter_complete': 'ch02.chapter_complete',
   'ch03.chapter_complete': 'ch03.chapter_complete',
   'ch04.chapter_complete': 'ch04.chapter_complete',
+  'ch05.boss_victory': 'ch05.scissors', // 10-26 C5-3: 승리 장면에 가위 장면이 이어진다(정본 — 장착하려는 순간)
+  'ch05.chapter_complete': 'ch05.chapter_complete',
 };
 
 // 숲 입구 복귀 범위: 잘린 실을 살펴보기 전까지는 첫 길의 걷는 장면(001~004)만 다시 보여 준다. 그 뒤는 지점이 이어 간다
@@ -491,6 +549,7 @@ export const SEGMENT_AFTER_EVENT: Record<string, string> = {
   lake_dye_thread_equipped: 'ch02.chapter_complete', // 장착이 처음 기록되면 '돌아온 색' 장면을 이어 재생
   underfloor_cotton_core_equipped: 'ch03.chapter_complete', // 장착이 처음 기록되면 '돌아온 중심' 장면을 이어 재생
   fridge_microfiber_equipped: 'ch04.chapter_complete', // 10-23 C4-3: 장착이 처음 기록되면 '이어진 감각' 장면을 이어 재생
+  desert_finish_thread_equipped: 'ch05.chapter_complete', // 10-26 C5-3: 장착이 처음 기록되면 '마지막 마감' 장면을 이어 재생
 };
 
 // ---- 스토리 전투 조우(M4-B) ----
@@ -520,6 +579,10 @@ export const STORY_ENCOUNTERS: StoryEncounterDef[] = [
   { key: 'fridge_frozen_guard', chapter: 4, stageCode: 'ice', allowedAt: ['CH04_GANEURI_RESCUED'], requires: ['fridge_ganeuri_freed'], onWinEvents: ['fridge_frozen_guard_won'] },
   // 10-23 C4-3: 서리 미싱. 승리하면 fridge_boss_defeated(극세사 지급 사건·얼음 극세사 1개·CH04_BOSS_DEFEATED)를 서버가 한 트랜잭션으로 정산한다
   { key: 'fridge_boss_frost_machine', chapter: 4, stageCode: 'ice', allowedAt: ['CH04_CONFESSION_SEEN'], requires: ['fridge_confession_seen'], onWinEvents: ['fridge_boss_defeated'] },
+  // 10-26 C5-3: 능선 앞. 승리하면 물들이 지점만 열린다(체크포인트 유지 — 4장 P-01 방식)
+  { key: 'desert_scorched_ambush', chapter: 5, stageCode: 'desert', allowedAt: ['CH05_CLUES_JOINED'], requires: ['desert_clues_seen'], onWinEvents: ['desert_scorched_won'] },
+  // 10-26 C5-3: 황금 재단인형. 승리하면 desert_boss_defeated(마감실 지급 사건·금빛 마감실 1개·CH05_BOSS_DEFEATED)를 서버가 한 트랜잭션으로 정산한다
+  { key: 'desert_boss_golden_doll', chapter: 5, stageCode: 'desert', allowedAt: ['CH05_RIDGE_CROSSED'], requires: ['desert_ridge_crossed'], onWinEvents: ['desert_boss_defeated'] },
   { key: 'forest_giant_knot', chapter: 1, stageCode: 'forest', allowedAt: ['CH01_COMPASS_ACQUIRED'], requires: ['forest_compass_granted', 'forest_hidden_path_opened'], onWinEvents: ['forest_giant_knot_defeated'] },
 ];
 

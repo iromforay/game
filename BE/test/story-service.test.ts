@@ -204,7 +204,7 @@ test('숲 첫 진입: 탐험 세션 밖·다른 지역 거부, 숲 입장 시 1�
   assert.equal(await codeOf(s.service.trigger(P1, 'forest_entry')), 'STORY_EVIDENCE_INVALID', '탐험 세션 밖');
   s.moveTo({ stageCode: 'desert', x: 120, y: 120 });
   assert.equal(await codeOf(s.service.trigger(P1, 'forest_entry')), 'STORY_EVIDENCE_INVALID', '다른 지역');
-  assert.equal(await s.service.onStageEntered(P1, 'desert'), null, '진입 트리거가 없는 지역(10-13: 호수는 2장 입구 트리거가 생겨 지하로, 10-16: 지하도 3장 입구 트리거가 생겨 얼음으로, 10-23: 얼음도 4장 입구 트리거가 생겨 사막으로 바꿨다)');
+  assert.equal((await s.service.onStageEntered(P1, 'desert'))?.play ?? null, null, '진입 장면이 열리지 않는 지역(10-13~10-23: 장마다 입구 트리거가 생겨 예시를 옮겼다. 10-26: 사막도 5장 입구 트리거가 생겼지만 4장 완료 전이라 재생하지 않는다)');
   s.moveTo({ stageCode: 'forest', x: 400, y: 400 }); // 숲 어디로 들어와도(입구 지점은 탐험 세션 진입 자체)
   const results = await Promise.all([1, 2, 3].map(() => s.service.onStageEntered(P1, 'forest')));
   for (const r of results) assert.deepEqual(r!.play, INTRO, '전투·보풀이 장면은 숲 안의 지점이 연다');
