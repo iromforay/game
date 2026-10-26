@@ -18,7 +18,8 @@ const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 헷갈리는 0/O/1/
 export type MoveResult =
   | { kind: 'ok'; x: number; y: number; dir: Facing }
   // 10-13 C2-2: 서버가 승인한 위치를 물 규칙으로 옮겼다 — current = 물살에 밀림(currentFieldId), deep_water = 깊은 물에서 마지막 안전 앵커로 복귀(currentFieldId null)
-  | { kind: 'adjusted'; x: number; y: number; dir: Facing; reason: 'current' | 'deep_water' | 'trap'; currentFieldId: string | null }
+  // 10-23 C4-1: needle = 내려찍는 바늘 칸에서 마지막 안전 앵커로 복귀(currentFieldId = 바늘 칸 ID)
+  | { kind: 'adjusted'; x: number; y: number; dir: Facing; reason: 'current' | 'deep_water' | 'trap' | 'needle'; currentFieldId: string | null }
   | { kind: 'dropped' } | { kind: 'corrected'; x: number; y: number; reason: 'speed' | Exclude<MoveVerdict, 'ok'> };
 
 // 4-A: 방 생성·입장·퇴장·호스트 승계·재접속 유예·맵 위치 동기화(docs/save_a_turby_coop_spec.md 2, 3절).
@@ -250,7 +251,8 @@ export class RoomsService {
 
     // 경과 시간 × 최대 속도 + 여유 안에서만 이동을 인정(순간이동으로 야생 터비를 가로채는 것 방지)
     // 검은 실 덫에 묶인 동안은 서버가 속도 상한을 배율만큼 낮춘다(여유 거리도 같은 배율). 클라이언트도 같은 시간 동안 스스로 느려진다
-    const slow = speedFactor(member.water, now);
+    // 10-23 C4-1: 마지막 승인 위치가 서리 구역이면 같은 방식으로 상한이 낮아진다(감각 둔화). 클라이언트도 그 구역에서 스스로 느려진다
+    const slow = speedFactor(member.water, now, room.water, { x: member.x, y: member.y });
     const allowed = ((this.settings.number('move.maxSpeedPxPerSec') * dt) / 1000 + this.settings.number('move.slackPx')) * slow;
     const dist = Math.hypot(x - member.x, y - member.y);
     member.lastMoveAt = now;
@@ -277,7 +279,7 @@ export class RoomsService {
       member.x = water.x;
       member.y = water.y;
       member.water.anchorId = water.anchorId ?? member.water.anchorId;
-      return { room, result: { kind: 'adjusted', x: water.x, y: water.y, dir, reason: 'deep_water', currentFieldId: null } };
+      return { room, result: { kind: 'adjusted', x: water.x, y: water.y, dir, reason: water.cause === 'needle' ? 'needle' : 'deep_water', currentFieldId: water.needleId ?? null } };
     }
     return { room, result: { kind: 'ok', x, y, dir } };
   }

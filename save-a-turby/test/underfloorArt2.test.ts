@@ -112,5 +112,5 @@ test('C3-6 R1-04: 3장 대화 배경(delivery-v3 1280×720 불투명) — 3장 �
   assert.deepEqual([bytes.readUInt32BE(16), bytes.readUInt32BE(20)], [1280, 720]);
   assert.equal(createHash('sha256').update(bytes).digest('hex').toUpperCase(), '9BF315C88CCE38D6D3A58950EFF8CB159A333F740F9C7EBC698E78EB226A4F6F');
   assert.match(readFileSync(here('../src/scenes/OpeningScene.ts'), 'utf8'), /underfloor: \{ key: 'chapter03-dialogue-bg', alpha: 0\.8 \}/);
-  assert.match(readFileSync(here('../src/scenes/StoryDialogueScene.ts'), 'utf8'), /chapterOfSegment\(id\) === 'ch03' \? 'underfloor' : 'forest'/);
+  assert.match(readFileSync(here('../src/scenes/StoryDialogueScene.ts'), 'utf8'), /BACKDROP_OF_CHAPTER: Record<string, string> = \{ ch03: 'underfloor'/); // 10-23 C4-3: 장 코드 → 배경 표(4장 추가)
 });

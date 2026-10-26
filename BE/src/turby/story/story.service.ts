@@ -108,8 +108,8 @@ export interface StageViewDto {
   // 문: open은 서버가 openEvent로 한 번만 정한 값 — 화면의 그림(닫힘/열림 키)과 클라이언트 충돌 예측이 모두 이 값을 쓴다
   gates: { id: string; label: string; x: number; y: number; width: number; height: number; open: boolean; closedAssetKey: string | null; openAssetKey: string | null; art: { x: number; y: number; width: number; height: number; pivot?: [number, number] } | null; openPieces?: StageGatePiece[] }[];
   // 최종 에셋 연결: 대형 배경 키와 지금 보이는 오버레이·월드 오브젝트(진행 상태별). 없으면 회색상자·임시 도형 유지. markerMode final = 에셋이 연결된 대상의 임시 표식(고리·마름모·라벨)을 없앤다
-  render: { markerMode: 'fallback' | 'final'; background: { assetKey: string } | null; backgroundLocked?: string; unlockedBy?: string; backgroundUnlocked?: boolean; overlays: { id: string; assetKey: string; x: number; y: number; width: number; height: number; pivot?: [number, number]; layer: 'overlay' | 'story'; forPoints: string[]; rotation?: number; alpha?: number }[] };
-  layout: { zones: StageRect[]; paths: number[][][]; blockers: StageRect[]; water?: { id: string; kind: 'shallow' | 'deep'; x: number; y: number; width: number; height: number }[]; anchors?: { id: string; x: number; y: number; radius: number }[]; currents?: { id: string; x: number; y: number; width: number; height: number; dx: number; dy: number }[]; traps?: { id: string; x: number; y: number; radius: number }[] } | null; // water·anchors·currents·traps: 표시 전용(판정은 서버)
+  render: { markerMode: 'fallback' | 'final'; background: { assetKey: string } | null; backgroundLocked?: string; unlockedBy?: string; backgroundUnlocked?: boolean; overlays: { id: string; assetKey: string; x: number; y: number; width: number; height: number; pivot?: [number, number]; layer: 'overlay' | 'story'; forPoints: string[]; rotation?: number; alpha?: number; glow?: boolean }[] };
+  layout: { zones: StageRect[]; paths: number[][][]; blockers: StageRect[]; water?: { id: string; kind: 'shallow' | 'deep'; x: number; y: number; width: number; height: number }[]; anchors?: { id: string; x: number; y: number; radius: number }[]; currents?: { id: string; x: number; y: number; width: number; height: number; dx: number; dy: number }[]; traps?: { id: string; x: number; y: number; radius: number }[]; frost?: { id: string; x: number; y: number; width: number; height: number; slowFactor: number }[]; needles?: { id: string; x: number; y: number; width: number; height: number; periodMs: number; warnMs: number; strikeMs: number; offsetMs: number }[] } | null; // water·anchors·currents·traps·frost·needles: 표시 전용(판정은 서버)
   objectives: { key: string; collected: number; required: number; active: boolean }[];
   goal: { id: string; text: string } | null; // 이야기 목표 문구(지역 데이터 goals에서 지금 진행에 맞는 첫 항목)
 }
@@ -496,7 +496,7 @@ export class StoryService {
         // 잠금 배경 전환(10-08 v2): 두 필드가 모두 있을 때만 내려 주고, 해제 여부는 같은 스냅샷의 이벤트로 한 번만 정한다
         ...(data.render?.backgroundLocked && data.render?.unlockedBy ? { backgroundLocked: data.render.backgroundLocked, unlockedBy: data.render.unlockedBy, backgroundUnlocked: snap.events.has(data.render.unlockedBy) } : {}),
         // 오버레이도 같은 스냅샷의 이벤트로 판정한다 — 숨은 길의 그림·문·충돌이 한 번에 바뀐다
-        overlays: (data.render?.overlays ?? []).filter((o) => (!o.visibleAfter || snap.events.has(o.visibleAfter)) && !(o.hiddenAfter && snap.events.has(o.hiddenAfter))).map((o) => ({ id: o.id, assetKey: o.assetKey, x: o.x, y: o.y, width: o.width, height: o.height, ...(o.pivot ? { pivot: o.pivot } : {}), layer: o.layer ?? 'overlay', forPoints: o.forPoints ?? [], ...(o.rotation !== undefined ? { rotation: o.rotation } : {}), ...(o.alpha !== undefined ? { alpha: o.alpha } : {}) })),
+        overlays: (data.render?.overlays ?? []).filter((o) => (!o.visibleAfter || snap.events.has(o.visibleAfter)) && !(o.hiddenAfter && snap.events.has(o.hiddenAfter))).map((o) => ({ id: o.id, assetKey: o.assetKey, x: o.x, y: o.y, width: o.width, height: o.height, ...(o.pivot ? { pivot: o.pivot } : {}), layer: o.layer ?? 'overlay', forPoints: o.forPoints ?? [], ...(o.rotation !== undefined ? { rotation: o.rotation } : {}), ...(o.alpha !== undefined ? { alpha: o.alpha } : {}), ...(o.glow ? { glow: true } : {}) })),
       },
       layout: layout
         ? {
@@ -504,6 +504,9 @@ export class StoryService {
             paths: layout.paths.filter(shown).map((path) => path.points),
             blockers: layout.blockers.filter(shown).map((b) => ({ id: b.id, label: b.label, x: b.x, y: b.y, width: b.width, height: b.height })),
             ...(water ? { water: water.areas.map((a) => ({ id: a.id, kind: a.kind, x: a.x, y: a.y, width: a.width, height: a.height })), anchors: water.anchors.map((a) => ({ id: a.id, x: a.x, y: a.y, radius: a.radius })), currents: water.currents.map((c) => ({ id: c.id, x: c.x, y: c.y, width: c.width, height: c.height, dx: c.direction.x, dy: c.direction.y })), traps: water.traps.map((t) => ({ id: t.id, x: t.x, y: t.y, radius: t.radius })) } : {}),
+            // 10-23 C4-1: 서리 구역·바늘 칸(주기는 서버 시각 기준 — 화면은 map:enter의 serverNow로 보정해 같은 단계를 그린다)
+            ...(water && water.frost.length > 0 ? { frost: water.frost.map((z) => ({ id: z.id, x: z.x, y: z.y, width: z.width, height: z.height, slowFactor: z.slowFactor })) } : {}),
+            ...(water && water.needles.length > 0 ? { needles: water.needles.filter((f) => f.requires.every((e) => snap.events.has(e)) && !(f.unless.length > 0 && f.unless.every((e) => snap.events.has(e)))).map((f) => ({ id: f.id, x: f.x, y: f.y, width: f.width, height: f.height, periodMs: f.periodMs, warnMs: f.warnMs, strikeMs: f.strikeMs, offsetMs: f.offsetMs })) } : {}),
           }
         : null,
       objectives: defs.map((d) => ({ key: d.key, collected: snap.objectives.get(d.key)?.size ?? 0, required: d.objectIds.length, active: checkObjective(d, snap) === null })),

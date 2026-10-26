@@ -1,0 +1,92 @@
+{
+  "key": "fridge_frozen_guard",
+  "_note": "임시 전투 정의(기능 검증용 수치, 밸런스 정본 아님 — C4-3). 얼어붙은 박음이 2(떠난 칸에 얼음 칸 — 들어선 아군은 같은 방향으로 한 칸 더 미끄러진다. 쓰러지면 검은 실 파편 2개를 흩뿌리고, 3라운드 안에 다 끊지 않으면 HP 절반으로 다시 일어난다) + 골무막이 1(제자리. 정면 공격은 골무가 막아 피해 0, 등 뒤(동쪽) 검은 실밥을 끊으면 골무가 벗겨진다. 실밥이 남아 있는 동안 곁(8방향 이웃)의 박음이도 피해 0). 기믹마다 첫 등장 때 한 줄 안내(10-23 Codex 의견 P-03). 포획·보상 없음 — 승리하면 저장고 문만 열린다(fridge_frozen_guard_won, 체크포인트 유지).",
+  "cornerEscape": false,
+  "objectives": {
+    "win": [
+      {
+        "kind": "defeat_units",
+        "unitIds": [
+          "frozen_doll_a",
+          "frozen_doll_b",
+          "thimble_guard"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "zeroDamage": "골무가 공격을 막았어요. 등 뒤의 검은 실밥을 먼저 끊어요",
+    "iceTrail": "얼음 칸에 들어가면 같은 방향으로 한 칸 더 미끄러져요",
+    "shatter": "박음이가 검은 실 파편을 흩뿌렸어요. 3라운드 안에 파편을 모두 끊어요",
+    "guarded": "골무막이 곁의 박음이는 보호받고 있어요. 등 뒤 실밥부터 끊어요"
+  },
+  "units": [
+    {
+      "unitId": "frozen_doll_a",
+      "side": "wild",
+      "characterCode": "frozen_sewn_doll",
+      "name": "얼어붙은 박음이",
+      "col": 7,
+      "row": 2,
+      "attack": 4,
+      "defense": 1,
+      "actionPower": 1,
+      "maxHp": 8,
+      "iceTrail": true,
+      "shatter": {
+        "shards": 2,
+        "reviveRounds": 3,
+        "reviveHpPercent": 50
+      },
+      "guardedBy": "thimble_guard"
+    },
+    {
+      "unitId": "frozen_doll_b",
+      "side": "wild",
+      "characterCode": "frozen_sewn_doll",
+      "name": "얼어붙은 박음이",
+      "col": 7,
+      "row": 5,
+      "attack": 4,
+      "defense": 1,
+      "actionPower": 1,
+      "maxHp": 8,
+      "iceTrail": true,
+      "shatter": {
+        "shards": 2,
+        "reviveRounds": 3,
+        "reviveHpPercent": 50
+      },
+      "guardedBy": "thimble_guard"
+    },
+    {
+      "unitId": "thimble_guard",
+      "side": "wild",
+      "characterCode": "thimble_guard",
+      "name": "골무막이",
+      "col": 8,
+      "row": 3,
+      "attack": 3,
+      "defense": 2,
+      "actionPower": 1,
+      "maxHp": 10,
+      "anchored": true,
+      "protectMode": "zero"
+    },
+    {
+      "unitId": "black_stitch",
+      "side": "wild",
+      "characterCode": "black_stitch",
+      "name": "검은 실밥",
+      "col": 9,
+      "row": 3,
+      "attack": 0,
+      "defense": 0,
+      "actionPower": 0,
+      "maxHp": 1,
+      "canAct": false,
+      "partOf": "thimble_guard",
+      "breakOrder": 1
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "version": "fridge-layout-v1",
+  "size": { "width": 3200, "height": 2400 },
+  "corridors": [
+    { "id": "entry_path", "width": 160, "points": [[360, 2000], [800, 1900], [1250, 1900], [1520, 1680]], "note": "성에 통로 — 가운데 구간이 서리 구역" },
+    { "id": "side_branch", "width": 140, "points": [[800, 1900], [700, 1560], [600, 1360]], "note": "막다른 갈래(얼어붙은 반찬통 틈)" },
+    { "id": "needle_corridor", "width": 200, "points": [[1800, 1560], [2480, 1560]], "note": "바늘 통로 — 바늘 칸 3개가 주기적으로 내려찍힌다" },
+    { "id": "to_storage_front", "width": 170, "points": [[2480, 1560], [2650, 1380], [2700, 1180]] },
+    { "id": "storage_door_path", "width": 170, "points": [[2700, 1050], [2700, 760]], "note": "저장고 문(가로로 막음)이 이 길 가운데" },
+    { "id": "to_boss", "width": 170, "points": [[2260, 520], [1820, 470]], "note": "저장고 중심으로 — 고백 지점" }
+  ],
+  "areas": [
+    { "id": "frost_entrance", "kind": "ellipse", "cx": 360, "cy": 2010, "rx": 220, "ry": 170 },
+    { "id": "side_pocket", "kind": "ellipse", "cx": 580, "cy": 1320, "rx": 130, "ry": 110 },
+    { "id": "ganeuri_hollow", "kind": "ellipse", "cx": 1660, "cy": 1620, "rx": 210, "ry": 150 },
+    { "id": "storage_front", "kind": "ellipse", "cx": 2700, "cy": 1080, "rx": 220, "ry": 150 },
+    { "id": "frozen_storage", "kind": "polygon", "points": [[2150, 760], [2250, 330], [2650, 250], [3000, 300], [3080, 560], [2950, 780], [2600, 800]] },
+    { "id": "machine_floor", "kind": "ellipse", "cx": 1500, "cy": 470, "rx": 330, "ry": 260, "note": "서리 미싱이 있는 저장고 중앙 — 넓고 비어 있다" }
+  ],
+  "islands": [
+    { "id": "frozen_crates", "kind": "ellipse", "cx": 2850, "cy": 560, "rx": 110, "ry": 80 }
+  ],
+  "gates": [
+    { "id": "gate_storage_door", "x": 2610, "y": 880, "width": 180, "height": 40, "orientation": "horizontal", "openEvent": "fridge_frozen_guard_won", "note": "남북 길을 가로로 막는 얼어붙은 저장고 문" }
+  ],
+  "zones": [
+    { "id": "frost_zone", "kind": "rect", "x": 700, "y": 1780, "width": 700, "height": 240, "effect": "numb", "note": "서리 구역 — 이동 0.7배, 안내 버튼 지연(배경에 서리가 더 짙게)" },
+    { "id": "needle_1", "kind": "rect", "x": 1900, "y": 1460, "width": 120, "height": 200, "effect": "needle" },
+    { "id": "needle_2", "kind": "rect", "x": 2080, "y": 1460, "width": 120, "height": 200, "effect": "needle" },
+    { "id": "needle_3", "kind": "rect", "x": 2260, "y": 1460, "width": 120, "height": 200, "effect": "needle" }
+  ],
+  "points": [
+    { "id": "spawn", "x": 380, "y": 2020 },
+    { "id": "fridge_ganeuri", "x": 1680, "y": 1600, "radius": 80, "what": "얼음 도안에 박힌 가느리" },
+    { "id": "fridge_guard", "x": 2700, "y": 1080, "radius": 110, "what": "저장고 앞 전투(얼어붙은 박음이·골무막이)" },
+    { "id": "fridge_storage_wall", "x": 2600, "y": 400, "radius": 100, "what": "완성된 도안 벽" },
+    { "id": "fridge_confession", "x": 2050, "y": 495, "radius": 90, "what": "누비가 멈춰 서는 자리(고백)" },
+    { "id": "fridge_boss_entrance", "x": 1800, "y": 470, "radius": 90, "what": "서리 미싱 입구" }
+  ],
+  "overlay_regions": [
+    { "id": "storage_pattern_wall", "x": 2350, "y": 220, "width": 600, "height": 220, "note": "도안 벽 오버레이 캔버스(월드 좌표). 저장고 위쪽 벽에 붙는다" }
+  ]
+}

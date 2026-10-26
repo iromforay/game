@@ -31,6 +31,7 @@ export interface OverlayPlan {
   forPoints: string[];
   rotation: number; // 도(°)
   alpha: number;
+  glow: boolean; // 10-23 C4-6: 그 그림에만 임무 대상 외곽광
 }
 export interface GatePlan {
   id: string;
@@ -74,7 +75,7 @@ export function planStageRender(view: StageView | null, has: HasTexture, fallbac
   // 월드 그림(길 오버레이·NPC·보스 표식 등): 텍스처가 있는 것만. 층이 story면 이야기 대상 위(고리·마름모 위), 같은 층에서는 데이터 순서대로 위로 쌓인다
   const overlays: OverlayPlan[] = (view?.render?.overlays ?? [])
     .filter((o) => has(o.assetKey))
-    .map((o, i) => ({ id: o.id, assetKey: o.assetKey, x: o.x, y: o.y, width: o.width, height: o.height, pivot: o.pivot ?? [0.5, 0.5], depth: (o.layer ?? 'overlay') === 'story' ? MAP_DEPTH.story + 1 + i * 0.01 : MAP_DEPTH.overlay, forPoints: o.forPoints ?? [], rotation: o.rotation ?? 0, alpha: o.alpha ?? 1 }));
+    .map((o, i) => ({ id: o.id, assetKey: o.assetKey, x: o.x, y: o.y, width: o.width, height: o.height, pivot: o.pivot ?? [0.5, 0.5], depth: (o.layer ?? 'overlay') === 'story' ? MAP_DEPTH.story + 1 + i * 0.01 : MAP_DEPTH.overlay, forPoints: o.forPoints ?? [], rotation: o.rotation ?? 0, alpha: o.alpha ?? 1, glow: o.glow === true }));
 
   const gates: GatePlan[] = (view?.gates ?? []).map((g) => {
     const key = g.open ? g.openAssetKey : g.closedAssetKey;

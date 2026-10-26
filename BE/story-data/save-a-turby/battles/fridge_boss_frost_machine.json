@@ -1,0 +1,100 @@
+{
+  "key": "fridge_boss_frost_machine",
+  "_note": "임시 전투 정의(기능 검증용 수치, 밸런스 정본 아님 — C4-3). 서리 미싱(제자리, 공격 대상 아님): 적 차례마다 지난 예고 칸을 내려찍고(그 칸의 아군 하나를 고정 + 옆에 연결 실) 다음 칸을 예고한다. 예고 칸 수 = 남은 밑실 수(처음 2). 연결 실이 남아 있으면 새로 고정하지 않고 같은 아군을 연속으로 고정하지 않는다. 혼자 하면 가느리가 다음 아군 차례 전에 연결 실을 끊어 준다(10-23 Codex 의견 P-04). 밑실 2가닥(순서 1)을 먼저, 윗실 = 얼음 극세사(순서 2)를 끊으면 미싱이 멈추고 승리 — 파괴하지 않는다. 승리하면 얼음 극세사 1회 지급(fridge_boss_defeated).",
+  "cornerEscape": false,
+  "objectives": {
+    "win": [
+      {
+        "kind": "defeat_units",
+        "unitIds": [
+          "upper_thread"
+        ]
+      }
+    ]
+  },
+  "hints": {
+    "needle": "바늘이 내려올 칸이 표시됐어요. 다른 칸으로 비켜요",
+    "pinned": "바닥에 고정됐어요. 옆의 연결 실을 끊으면 풀려요",
+    "rescue": "가느리가 연결 실을 끊어 줬어요"
+  },
+  "units": [
+    {
+      "unitId": "frost_machine",
+      "side": "wild",
+      "characterCode": "frost_machine",
+      "name": "서리 미싱",
+      "col": 10,
+      "row": 3,
+      "attack": 0,
+      "defense": 0,
+      "actionPower": 1,
+      "maxHp": 1,
+      "targetable": false,
+      "anchored": true,
+      "protectMode": "reject",
+      "needleMachine": {
+        "lowerOrder": 1
+      }
+    },
+    {
+      "unitId": "lower_thread_1",
+      "side": "wild",
+      "characterCode": "lower_thread",
+      "name": "밑실",
+      "col": 7,
+      "row": 1,
+      "attack": 0,
+      "defense": 0,
+      "actionPower": 0,
+      "maxHp": 1,
+      "canAct": false,
+      "partOf": "frost_machine",
+      "breakOrder": 1
+    },
+    {
+      "unitId": "lower_thread_2",
+      "side": "wild",
+      "characterCode": "lower_thread",
+      "name": "밑실",
+      "col": 7,
+      "row": 6,
+      "attack": 0,
+      "defense": 0,
+      "actionPower": 0,
+      "maxHp": 1,
+      "canAct": false,
+      "partOf": "frost_machine",
+      "breakOrder": 1
+    },
+    {
+      "unitId": "upper_thread",
+      "side": "wild",
+      "characterCode": "upper_thread",
+      "name": "윗실(얼음 극세사)",
+      "col": 7,
+      "row": 3,
+      "attack": 0,
+      "defense": 0,
+      "actionPower": 0,
+      "maxHp": 1,
+      "canAct": false,
+      "partOf": "frost_machine",
+      "breakOrder": 2
+    },
+    {
+      "unitId": "ganeuri",
+      "side": "neutral",
+      "characterCode": "ganeuri",
+      "name": "가느리",
+      "col": 1,
+      "row": 7,
+      "attack": 0,
+      "defense": 0,
+      "actionPower": 0,
+      "maxHp": 10,
+      "canAct": false,
+      "targetable": false,
+      "rescuer": true
+    }
+  ]
+}

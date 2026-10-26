@@ -133,7 +133,7 @@ export class RoomsGateway implements OnGatewayDisconnect, OnModuleInit {
         this.log.warn(`story trigger on map:enter failed: ${err instanceof Error ? err.message : String(err)}`);
         return null;
       });
-      return { ok: true as const, self, corrected, players: others, wilds, encounterRadiusPx, story: story ? { play: story.play, delivery: story.story.delivery } : null };
+      return { ok: true as const, self, corrected, players: others, wilds, encounterRadiusPx, story: story ? { play: story.play, delivery: story.story.delivery } : null, serverNow: Date.now() }; // serverNow: 바늘 칸 주기 표시용 시계 보정(판정은 서버)
     });
   }
 

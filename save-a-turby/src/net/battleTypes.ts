@@ -34,10 +34,17 @@ export interface BattleUnit {
   reversed?: boolean; // 작은 실패굴이: 운반 실이 끊겨 아군 쪽으로 굴러온다
   thread?: boolean; // 보스의 기억실(진짜·가짜는 알리지 않는다)
   hinted?: boolean; // 오래된 폭신이가 지금 가리키는 다음 기억실
+  // 10-23 C4-3(4장): 서버 스냅샷 값 그대로 표시만 한다
+  shardOf?: string; // 검은 실 파편(흩뿌린 박음이)
+  reviving?: boolean; // 쓰러졌지만 파편이 남아 다시 일어날 수 있는 박음이
+  reviveRound?: number;
+  guardedBy?: string;
+  guarded?: boolean; // 지금 골무막이 보호(피해 0)
+  linkFor?: string; // 연결 실(묶인 아군)
 }
 
 export interface StatusEffect {
-  kind: 'bind' | 'wet_bind' | 'confused'; // confused = 혼란(이동·공격 대상이 서버가 정한 다른 칸·대상으로 바뀐다). wet_bind = 젖은 속박(다음 이동 한 번의 이동 거리 1칸 감소, 최소 1칸, 한 번 쓰면 해제)
+  kind: 'bind' | 'wet_bind' | 'confused' | 'pinned'; // pinned(10-23 C4-3) = 바닥에 고정(연결 실을 끊으면 풀림) // confused = 혼란(이동·공격 대상이 서버가 정한 다른 칸·대상으로 바뀐다). wet_bind = 젖은 속박(다음 이동 한 번의 이동 거리 1칸 감소, 최소 1칸, 한 번 쓰면 해제)
   turnsLeft: number;
   movePenalty: number;
   sourceUnitId: string | null;
@@ -86,6 +93,8 @@ export interface BattleSnapshot {
   telegraphedCurrent?: { direction: 'east' | 'west'; round: number } | null;
   lastCurrent?: { round: number; direction: 'east' | 'west'; moved: string[]; skipped: string[] } | null;
   hintsShown?: { code: string; text: string }[];
+  ice?: string[]; // 10-23 C4-3: 얼음 칸 "col,row"
+  needleMarks?: string[]; // 10-23 C4-3: 다음 적 차례에 바늘이 내려올 칸
 }
 
 export type BattleEvent =
@@ -107,7 +116,16 @@ export type BattleEvent =
   | { version: number; type: 'wrong_thread'; unitId: string; targetId: string }
   | { version: number; type: 'confused_action'; unitId: string; action: 'move' | 'attack' }
   | { version: number; type: 'carrier_cut'; unitId: string; spoolId: string }
-  | { version: number; type: 'empower'; unitId: string; targets: string[]; attack: number };
+  | { version: number; type: 'empower'; unitId: string; targets: string[]; attack: number }
+  // 10-23 C4-3
+  | { version: number; type: 'ice'; cells: string[] }
+  | { version: number; type: 'slide'; unitId: string; fromCol: number; fromRow: number; toCol: number; toRow: number }
+  | { version: number; type: 'shatter'; unitId: string; shardIds: string[]; reviveRound: number }
+  | { version: number; type: 'shatter_cleared'; unitId: string }
+  | { version: number; type: 'revive'; unitId: string; hp: number }
+  | { version: number; type: 'needle_telegraph'; cells: string[] }
+  | { version: number; type: 'needle_strike'; cells: string[]; pinned: string[]; linkIds: string[] }
+  | { version: number; type: 'freed'; unitId: string; linkId: string; byUnitId: string | null };
 
 export interface BattleReward {
   playerId: string;

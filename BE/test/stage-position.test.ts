@@ -299,16 +299,18 @@ test('위치 증거: 거부된 이동의 좌표는 쓰지 않는다 — 수집�
   assert.equal((await collect('forest_dust_10')).collected, 4);
 });
 
-test('지역 데이터가 없는 지역(얼음 등)은 한가운데에서 시작하고 충돌 판정 없이 경계만 지킨다', async () => {
-  // 10-13: 호수는 2장 기능 맵 데이터가 생겨 이 시험의 "데이터 없는 지역" 예시를 지하로 바꿨다. 10-16: 지하도 3장 기능 맵이 생겨 얼음으로 바꿨다(역할은 같다)
-  const s = setup([...COMPASS, 'lake_unlocked', 'underfloor_unlocked', 'fridge_unlocked', 'legacy_access_ice'], 'CH01_COMPLETE');
+test('지역 데이터가 없는 지역(사막 등)은 한가운데에서 시작하고 충돌 판정 없이 경계만 지킨다', async () => {
+  // 10-13: 호수는 2장 기능 맵 데이터가 생겨 이 시험의 "데이터 없는 지역" 예시를 지하로 바꿨다. 10-16: 지하도 3장 기능 맵이 생겨 얼음으로, 10-23: 얼음도 4장 기능 맵이 생겨 사막으로 바꿨다(역할은 같다)
+  const s = setup([...COMPASS, 'lake_unlocked', 'underfloor_unlocked', 'fridge_unlocked', 'desert_unlocked', 'legacy_access_desert'], 'CH01_COMPLETE');
   s.db.seed('story_chapter', { chapter_order: 3, stage_code: 'underground', clear_character_code: 'pokshini', title: '3장 — 지하', map_width: 3200, map_height: 2400 });
   s.db.seed('story_chapter', { chapter_order: 4, stage_code: 'ice', clear_character_code: 'ganeuri', title: '4장 — 얼음', map_width: 3200, map_height: 2400 });
-  // 구 판정(기본): 이전 장의 대표 터비(누비·물들이·폭신이)를 모두 포획한 계정은 얼음에 들어갈 수 있다
+  s.db.seed('story_chapter', { chapter_order: 5, stage_code: 'desert', clear_character_code: 'geumbiti', title: '5장 — 사막', map_width: 3200, map_height: 2400 });
+  // 구 판정(기본): 이전 장의 대표 터비(누비·물들이·폭신이·가느리)를 모두 포획한 계정은 사막에 들어갈 수 있다
   s.db.seed('turby_instance', { owner_player_id: 1n, character_id: s.db.rows('turby_character', { code: 'nubi' })[0].id, acquired_via: 'wild_capture' });
   s.db.seed('turby_instance', { owner_player_id: 1n, character_id: s.db.seed('turby_character', { code: 'muldeuli', name: '물들이' }).id, acquired_via: 'wild_capture' });
   s.db.seed('turby_instance', { owner_player_id: 1n, character_id: s.db.seed('turby_character', { code: 'pokshini', name: '폭신이' }).id, acquired_via: 'wild_capture' });
-  const r = await s.enter('ice');
+  s.db.seed('turby_instance', { owner_player_id: 1n, character_id: s.db.seed('turby_character', { code: 'ganeuri', name: '가느리' }).id, acquired_via: 'wild_capture' });
+  const r = await s.enter('desert');
   assert.deepEqual([r.self.x, r.self.y], [1600, 1200]);
   assert.equal(s.walk({ x: 1700, y: 1200 }), 'ok');
   assert.equal((s.jump({ x: 1700, y: 2401 }, 60_000) as { reason: string }).reason, 'out_of_bounds');

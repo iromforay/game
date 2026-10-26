@@ -1,0 +1,505 @@
+{
+  "schemaVersion": 1,
+  "chapterCode": "ch04",
+  "source": "docs/scene/4장.md",
+  "segments": [
+    {
+      "segmentId": "ch04.entry",
+      "resumeFrom": "CH03_COMPLETE",
+      "replayOnResume": true,
+      "completesWith": "fridge_entry_seen",
+      "entries": [
+        {
+          "kind": "title",
+          "dialogueId": "ch04.entry.001",
+          "text": "소리 없는 냉기"
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch04.entry.002",
+          "text": "문이 열릴 때마다 바깥의 빛이 거대한 섬광처럼 쏟아졌다가 사라진다. 누비는 얼어붙은 통로를 걷지만 발끝의 감각을 느끼지 못한다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch04.entry.003",
+          "text": "어둠 속에서 낮고 큰 목소리가 들린다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch04.entry.004",
+          "text": "돌아와.",
+          "cameraCue": "voice-frost",
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch04.entry.005",
+          "text": "누비가 뒤를 돌아보지만 주인공은 아무것도 듣지 못했다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch04.entry.006",
+          "speaker": "player",
+          "speakerLabel": "{playerName}",
+          "text": "무슨 일이야?",
+          "portrait": "player",
+          "expression": "worried",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch04.entry.007",
+          "speaker": "nubi",
+          "speakerLabel": "누비",
+          "text": "아무것도 아니야. 얼음이 갈라지는 소리였나 봐.",
+          "portrait": "nubi",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch04.entry.008",
+          "text": "벽의 서리 아래에는 같은 모양을 반복해서 박은 재봉선이 얼어붙어 있다. 재봉선 끝마다 작은 절단 자국이 남아 있다.",
+          "cameraCue": null,
+          "soundCue": null
+        }
+      ]
+    },
+    {
+      "segmentId": "ch04.ganeuri",
+      "resumeFrom": "CH04_STARTED",
+      "replayOnResume": false,
+      "completesWith": "fridge_ganeuri_freed",
+      "entries": [
+        {
+          "kind": "title",
+          "dialogueId": "ch04.ganeuri.001",
+          "text": "얼음에 박힌 가느리"
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch04.ganeuri.002",
+          "text": "통로 끝에서 가느리 한 마리가 바닥의 도안에 검은 실로 박혀 있다. 주인공과 누비가 연결 실을 끊자 가느리가 천천히 몸을 일으킨다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch04.ganeuri.003",
+          "speaker": "ganeuri",
+          "speakerLabel": "가느리",
+          "text": "소리를 내면 다시 찾아와.",
+          "portrait": null,
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch04.ganeuri.004",
+          "text": "멀리서 바늘이 얼음을 찍는 소리가 규칙적으로 울린다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch04.ganeuri.005",
+          "text": "타닥. 타닥. 타닥.",
+          "cameraCue": null,
+          "soundCue": "needle-tap"
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch04.ganeuri.006",
+          "speaker": "ganeuri",
+          "speakerLabel": "가느리",
+          "text": "서리 미싱이 모두를 같은 자리에 박아 놓고 있어. 움직이지도, 달라지지도 못하게.",
+          "portrait": null,
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch04.ganeuri.007",
+          "text": "가느리는 누비를 바라보다 낮게 묻는다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch04.ganeuri.008",
+          "speaker": "ganeuri",
+          "speakerLabel": "가느리",
+          "text": "너도 그 목소리를 들었지?",
+          "portrait": null,
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch04.ganeuri.009",
+          "text": "누비는 대답하지 못한다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch04.ganeuri.010",
+          "speaker": "ganeuri",
+          "speakerLabel": "가느리",
+          "text": "나도 가끔 들었어. 그런데 내 이름은 부르지 않았어. 언제나 아주 오래된 무언가를 찾는 목소리였지.",
+          "portrait": null,
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        }
+      ]
+    },
+    {
+      "segmentId": "ch04.guard",
+      "resumeFrom": "CH04_GANEURI_RESCUED",
+      "replayOnResume": false,
+      "completesWith": null,
+      "entries": [
+        {
+          "kind": "title",
+          "dialogueId": "ch04.guard.001",
+          "text": "얼어붙은 저장고"
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch04.guard.002",
+          "text": "세 사람은 얼음 극세사가 있다는 저장고로 향한다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch04.guard.003",
+          "text": "가느리가 바늘이 내려오는 순서를 듣고 안전한 길을 알려 준다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch04.guard.004",
+          "text": "통로 곳곳에서 얼어붙은 박음이와 골무막이가 길을 막는다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "storyBattle",
+          "dialogueId": "ch04.guard.005",
+          "encounterKey": "fridge_frozen_guard"
+        }
+      ]
+    },
+    {
+      "segmentId": "ch04.storage",
+      "resumeFrom": "CH04_GANEURI_RESCUED",
+      "replayOnResume": true,
+      "completesWith": "fridge_storage_seen",
+      "entries": [
+        {
+          "kind": "narration",
+          "dialogueId": "ch04.storage.001",
+          "text": "저장고 벽에는 처음으로 완성된 도안이 보인다. 모든 지역에서 모은 실이 하나의 거대한 실타래 형태로 박혀 있고, 그 한가운데만 가위 모양으로 도려내져 있다.",
+          "cameraCue": "storage-pattern",
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch04.storage.002",
+          "speaker": "player",
+          "speakerLabel": "{playerName}",
+          "text": "누군가 일부러 가운데를 잘라 냈어.",
+          "portrait": "player",
+          "expression": "worried",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch04.storage.003",
+          "speaker": "ganeuri",
+          "speakerLabel": "가느리",
+          "text": "미싱은 도안대로 박을 뿐이야. 자를 곳을 정하는 건 따로 있어.",
+          "portrait": null,
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch04.storage.004",
+          "text": "누비에게 다시 목소리가 들린다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch04.storage.005",
+          "text": "네가 돌아오면 길이 열린다.",
+          "cameraCue": "voice-frost",
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch04.storage.006",
+          "text": "누비는 이번에도 들었다는 사실을 숨긴 채 앞으로 걷는다.",
+          "cameraCue": null,
+          "soundCue": null
+        }
+      ]
+    },
+    {
+      "segmentId": "ch04.confession",
+      "resumeFrom": "CH04_STORAGE_CLEARED",
+      "replayOnResume": true,
+      "completesWith": "fridge_confession_seen",
+      "entries": [
+        {
+          "kind": "title",
+          "dialogueId": "ch04.confession.001",
+          "text": "누비의 고백"
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch04.confession.002",
+          "text": "저장고 중심에 도착하기 전 누비가 걸음을 멈춘다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch04.confession.003",
+          "speaker": "nubi",
+          "speakerLabel": "누비",
+          "text": "사실은 계속 목소리가 들렸어.",
+          "portrait": "nubi",
+          "expression": "worried",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch04.confession.004",
+          "speaker": "player",
+          "speakerLabel": "{playerName}",
+          "text": "왜 말하지 않았어?",
+          "portrait": "player",
+          "expression": "worried",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch04.confession.005",
+          "speaker": "nubi",
+          "speakerLabel": "누비",
+          "text": "그 목소리가 나를 아는 것 같아서. 내가 기억하지 못하는 나를 계속 부르고 있어.",
+          "portrait": "nubi",
+          "expression": "weak",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch04.confession.006",
+          "text": "누비는 가슴의 솜심을 누른다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch04.confession.007",
+          "speaker": "nubi",
+          "speakerLabel": "누비",
+          "text": "내가 낫는다는 게…… 지금의 내가 없어지고 그 목소리의 무언가로 돌아가는 거라면 어떡하지?",
+          "portrait": "nubi",
+          "expression": "weak",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch04.confession.008",
+          "speaker": "player",
+          "speakerLabel": "{playerName}",
+          "text": "어떤 기억이 돌아와도 지금 여기 있는 널 혼자 두지 않을게.",
+          "portrait": "player",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch04.confession.009",
+          "text": "누비는 대답 대신 주인공의 손을 잡는다.",
+          "cameraCue": null,
+          "soundCue": null
+        }
+      ]
+    },
+    {
+      "segmentId": "ch04.boss_intro",
+      "resumeFrom": "CH04_CONFESSION_SEEN",
+      "replayOnResume": false,
+      "completesWith": null,
+      "entries": [
+        {
+          "kind": "title",
+          "dialogueId": "ch04.boss_intro.001",
+          "text": "서리 미싱"
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch04.boss_intro.002",
+          "text": "저장고 중앙에서 거대한 미싱이 얼음 도안을 반복해서 박고 있다. 윗실로 사용되는 은빛 극세사가 움직일 때마다 주변 터비들이 바닥에 고정된다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch04.boss_intro.003",
+          "text": "서리 미싱의 낡은 음성이 같은 명령을 반복한다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch04.boss_intro.004",
+          "speaker": "frost_machine",
+          "speakerLabel": "서리 미싱",
+          "text": "도안에서 벗어난 실 발견. 원래 형태로 고정한다.",
+          "portrait": null,
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch04.boss_intro.005",
+          "text": "미싱 바늘이 누비를 향한다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch04.boss_intro.006",
+          "speaker": "frost_machine",
+          "speakerLabel": "서리 미싱",
+          "text": "재단자의 명령을 수행한다.",
+          "portrait": null,
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "storyBattle",
+          "dialogueId": "ch04.boss_intro.007",
+          "encounterKey": "fridge_boss_frost_machine"
+        }
+      ]
+    },
+    {
+      "segmentId": "ch04.boss_victory",
+      "resumeFrom": "CH04_BOSS_DEFEATED",
+      "replayOnResume": true,
+      "completesWith": "fridge_boss_aftermath_seen",
+      "entries": [
+        {
+          "kind": "narration",
+          "dialogueId": "ch04.boss_victory.001",
+          "text": "마지막 윗실이 빠지자 서리 미싱은 파괴되지 않고 작동을 멈춘다. 정지 직전 마지막 기록을 재생한다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch04.boss_victory.002",
+          "speaker": "frost_machine",
+          "speakerLabel": "서리 미싱",
+          "text": "재단자에게 보고…… 태초의 실…… 발견…….",
+          "portrait": null,
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch04.boss_victory.003",
+          "text": "목소리가 끊긴다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch04.boss_victory.004",
+          "text": "가느리가 `재단자`라는 말을 되뇌지만 그 정체를 아는 이는 없다. 미싱 몸체에는 커다란 두 날이 스쳐 간 평행한 흠집이 남아 있다.",
+          "cameraCue": "frost-machine-scar",
+          "soundCue": null
+        }
+      ]
+    },
+    {
+      "segmentId": "ch04.chapter_complete",
+      "resumeFrom": "CH04_COMPLETE",
+      "replayOnResume": true,
+      "completesWith": "fridge_chapter_complete_seen",
+      "entries": [
+        {
+          "kind": "title",
+          "dialogueId": "ch04.chapter_complete.001",
+          "text": "이어진 감각"
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch04.chapter_complete.002",
+          "text": "주인공이 얼음 극세사를 누비의 팔과 목 둘레에 감는다. 누비는 차가운 공기, 주인공의 손과 자신의 심장 같은 떨림을 차례로 느낀다.",
+          "cameraCue": "sense-restore",
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch04.chapter_complete.003",
+          "speaker": "nubi",
+          "speakerLabel": "누비",
+          "text": "느껴져. 무서운 것도, 네가 옆에 있는 것도 전부.",
+          "portrait": "nubi",
+          "expression": "relieved",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "ch04.chapter_complete.004",
+          "text": "극세사 끝에서 따뜻한 금빛이 번진다. 냉장고 밖, 보일러가 있는 방향에서 뜨거운 바람이 불어온다.",
+          "cameraCue": "warm-gold",
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "ch04.chapter_complete.005",
+          "speaker": "ganeuri",
+          "speakerLabel": "가느리",
+          "text": "재단자가 마지막 실을 먼저 찾기 전에 가야 해.",
+          "portrait": null,
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        }
+      ]
+    }
+  ]
+}

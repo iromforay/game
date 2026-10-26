@@ -16,6 +16,9 @@ export const POSITION_CORRECTED_TEXT = '안전한 위치에서 다시 시작했�
 
 // 깊은 물에 들어가 마지막 안전 지점으로 돌아왔을 때(한 탐험 세션에서 처음 한 번만, 10-13 C2-2)
 export const DEEP_WATER_TEXT = '깊은 물은 위험해. 물풀이 잔잔한 길로 가자.';
+// 10-23 C4-1 4장: 서리 구역에 처음 들어섰을 때, 바늘에 닿아 통로 입구로 돌아왔을 때(한 화면에서 한 번씩)
+export const FROST_ZONE_TEXT = '서리 때문에 몸이 둔해졌어. 천천히 걸어가자.';
+export const NEEDLE_RETURN_TEXT = '바늘에 닿아 통로 입구로 돌아왔어. 바늘이 지나간 칸을 따라가 보자.';
 
 // 모르는 사유는 가장 흔한 경우(길이 막힘)로 안내한다 — 사유 코드를 그대로 보여 주지 않는다
 export function wildUnreachableText(reason: string | null | undefined): string {

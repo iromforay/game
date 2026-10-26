@@ -42,11 +42,29 @@ export interface BlackThreadTrap {
   slowFactor: number;
   extraPushPx: number;
 }
+// 서리 구역(10-23 C4-1 4장 냉장고): 승인된 위치가 이 안이면 이동 속도 상한이 slowFactor배가 된다(감각 둔화). 위치를 옮기지 않는다
+export interface FrostZone extends Rect {
+  id: string;
+  slowFactor: number;
+}
+// 바늘 칸(10-23 C4-1): 서버 시각으로 도는 주기(periodMs) — 시작부터 warnMs 동안 예고, 이어서 strikeMs 동안 내려찍기, 나머지는 쉼.
+// 내려찍는 동안 몸이 칸 안에 있으면 마지막 안전 앵커로 돌아간다(피해·진행 손실 없음, 깊은 물과 같은 복귀). offsetMs로 칸마다 순서를 어긋나게 한다
+export interface NeedleField extends Rect {
+  id: string;
+  periodMs: number;
+  warnMs: number;
+  strikeMs: number;
+  offsetMs: number;
+  requires: string[];
+  unless: string[];
+}
 export interface StageWater {
   areas: WaterArea[];
   currents: CurrentField[];
   anchors: SafeAnchor[];
   traps: BlackThreadTrap[];
+  frost: FrostZone[];
+  needles: NeedleField[];
 }
 
 // 지역 JSON 원본(StageStoryData의 같은 이름 필드)
@@ -55,6 +73,8 @@ export interface RawWater {
   currentFields?: unknown;
   safeAnchors?: unknown;
   blackThreadTraps?: unknown;
+  frostZones?: unknown;
+  needleFields?: unknown;
 }
 
 type Raw = Record<string, unknown>;
@@ -66,7 +86,7 @@ const deepOf = (w: StageWater) => w.areas.filter((a) => a.kind === 'deep');
 
 // 지역 데이터 → 계약. 없으면 null(물 규칙이 없는 지역). 잘못되면 Error — 서버는 시작 단계에서 멈춘다(geometry 계약과 같은 원칙)
 export function parseStageWater(raw: RawWater, geo: StageGeometry, stageCode: string): StageWater | null {
-  if (raw.waterAreas === undefined && raw.currentFields === undefined && raw.safeAnchors === undefined && raw.blackThreadTraps === undefined) return null;
+  if (raw.waterAreas === undefined && raw.currentFields === undefined && raw.safeAnchors === undefined && raw.blackThreadTraps === undefined && raw.frostZones === undefined && raw.needleFields === undefined) return null;
   const bad: string[] = [];
   const ids = new Set<string>();
   const idOf = (r: Raw, at: string) => {
@@ -160,8 +180,33 @@ export function parseStageWater(raw: RawWater, geo: StageGeometry, stageCode: st
     if (areas.some((w) => w.kind === 'deep' && insideRect(w, p, SERVER_BODY_HALF + DEEP_MARGIN_PX))) bad.push(`${at}(${id}): 깊은 물과 겹친다`);
     traps.push({ id, x: r.x, y: r.y, radius: r.radius, rescueEvent: r.rescueEvent, slowMs, slowFactor, extraPushPx });
   });
+  const frost: FrostZone[] = [];
+  list(raw.frostZones, 'frostZones').forEach((r, i) => {
+    const at = `frostZones[${i}]`;
+    const id = idOf(r, at);
+    const b = rect(r, `${at}(${id})`);
+    if (!num(r.slowFactor) || r.slowFactor < 0.3 || r.slowFactor > 1) return void bad.push(`${at}(${id}): slowFactor는 0.3~1`);
+    if (b) frost.push({ id, ...b, slowFactor: r.slowFactor });
+  });
+  const needles: NeedleField[] = [];
+  list(raw.needleFields, 'needleFields').forEach((r, i) => {
+    const at = `needleFields[${i}]`;
+    const id = idOf(r, at);
+    const b = rect(r, `${at}(${id})`);
+    if (!num(r.periodMs) || r.periodMs < 1000 || r.periodMs > 10_000) return void bad.push(`${at}(${id}): periodMs는 1000~10000`);
+    if (!num(r.warnMs) || r.warnMs < 300) return void bad.push(`${at}(${id}): warnMs는 300 이상(예고 없이 내려찍지 않는다)`);
+    if (!num(r.strikeMs) || r.strikeMs < 100) return void bad.push(`${at}(${id}): strikeMs는 100 이상`);
+    if (r.warnMs + r.strikeMs >= r.periodMs) return void bad.push(`${at}(${id}): warnMs + strikeMs는 periodMs보다 작다(쉬는 틈이 있어야 지나갈 수 있다)`);
+    const offsetMs = r.offsetMs ?? 0;
+    if (!num(offsetMs) || offsetMs < 0 || offsetMs >= r.periodMs) return void bad.push(`${at}(${id}): offsetMs는 0 이상 periodMs 미만`);
+    if (r.requires !== undefined && !strs(r.requires)) bad.push(`${at}(${id}): requires는 이벤트 이름 배열`);
+    if (r.unless !== undefined && !strs(r.unless)) bad.push(`${at}(${id}): unless는 이벤트 이름 배열`);
+    if (b) needles.push({ id, ...b, periodMs: r.periodMs, warnMs: r.warnMs, strikeMs: r.strikeMs, offsetMs, requires: (r.requires as string[] | undefined) ?? [], unless: (r.unless as string[] | undefined) ?? [] });
+  });
+  if (needles.length > 0 && anchors.length === 0) bad.push('바늘 칸이 있는데 safeAnchors가 없다');
+  for (const a of anchors) if (needles.some((f) => insideRect(f, a, SERVER_BODY_HALF))) bad.push(`safeAnchors(${a.id}): 바늘 칸과 겹친다`);
   if (bad.length > 0) throw new Error(`지역 데이터(${stageCode}) 물 규칙 검증 실패: ${bad.join(' / ')}`);
-  return { areas, currents, anchors, traps };
+  return { areas, currents, anchors, traps, frost, needles };
 }
 
 // ---------- 플레이어별 상태 ----------
@@ -178,14 +223,26 @@ export interface WaterMemberState {
 }
 export const newWaterState = (): WaterMemberState => ({ anchorId: null, consecutive: 0, appliedAt: {}, protectUntil: 0, trapUntil: 0, trapSlowFactor: 1, trapExtraPush: 0, insideTraps: {} });
 
-// 지금 이 플레이어의 이동 속도 배율(덫에 묶인 동안만 1 미만)
-export const speedFactor = (state: WaterMemberState, now: number): number => (now < state.trapUntil ? state.trapSlowFactor : 1);
+// 지금 이 플레이어의 이동 속도 배율: 덫에 묶인 동안, 그리고 마지막 승인 위치가 서리 구역 안이면 1 미만(둘 다면 곱)
+export const speedFactor = (state: WaterMemberState, now: number, water: StageWater | null = null, at: Point | null = null): number =>
+  (now < state.trapUntil ? state.trapSlowFactor : 1) * (water && at ? frostFactor(water, at) : 1);
+export const frostFactor = (water: StageWater, p: Point): number => water.frost.find((z) => insideRect(z, p, 0))?.slowFactor ?? 1;
+
+// 바늘 칸의 지금 단계(서버 시각 기준). 클라이언트는 같은 식으로 예고·내려찍기를 그린다(판정은 서버)
+export function needlePhase(f: NeedleField, now: number): 'warn' | 'strike' | 'idle' {
+  const t = (((now + f.offsetMs) % f.periodMs) + f.periodMs) % f.periodMs;
+  return t < f.warnMs ? 'warn' : t < f.warnMs + f.strikeMs ? 'strike' : 'idle';
+}
+const needleActive = (f: NeedleField, events: ReadonlySet<string>) => f.requires.every((e) => events.has(e)) && !(f.unless.length > 0 && f.unless.every((e) => events.has(e)));
+// 몸 가운데가 내려찍는 바늘 칸 안인가(가장자리를 스친 정도는 봐준다 — 저학년 기준, 10-23 Codex 의견 P-03 취지)
+export const struckBy = (water: StageWater, events: ReadonlySet<string>, p: Point, now: number): NeedleField | null =>
+  water.needles.find((f) => needleActive(f, events) && needlePhase(f, now) === 'strike' && insideRect(f, p, 0)) ?? null;
 
 export type WaterOutcome =
   | { kind: 'none' }
   | { kind: 'pushed'; x: number; y: number; currentFieldId: string; trapBonus: number }
   | { kind: 'trapped'; x: number; y: number; trapId: string; until: number } // 덫에 걸렸다 — 위치는 그대로, 속도만 제한
-  | { kind: 'returned'; x: number; y: number; anchorId: string | null };
+  | { kind: 'returned'; x: number; y: number; anchorId: string | null; cause: 'deep' | 'needle'; needleId?: string };
 
 const eligible = (f: CurrentField, events: ReadonlySet<string>) => f.requires.every((e) => events.has(e)) && !(f.unless.length > 0 && f.unless.every((e) => events.has(e)));
 
@@ -248,7 +305,15 @@ export function resolveWater(water: StageWater | null, geo: StageGeometry, solid
     const back = returnTarget(water, geo, solids, state, to, events);
     state.consecutive = 0;
     state.protectUntil = now + SAFE_RETURN_PROTECT_MS;
-    return { kind: 'returned', x: back.x, y: back.y, anchorId: back.anchorId };
+    return { kind: 'returned', x: back.x, y: back.y, anchorId: back.anchorId, cause: 'deep' };
+  }
+  // 바늘: 내려찍는 칸 안이면 마지막 안전 앵커로(복귀 직후 보호 시간에는 다시 맞지 않는다)
+  const needle = now >= state.protectUntil ? struckBy(water, events, to, now) : null;
+  if (needle) {
+    const back = returnTarget(water, geo, solids, state, to, events);
+    state.consecutive = 0;
+    state.protectUntil = now + SAFE_RETURN_PROTECT_MS;
+    return { kind: 'returned', x: back.x, y: back.y, anchorId: back.anchorId, cause: 'needle', needleId: needle.id };
   }
   const touch = (p: Point) => {
     const a = nearestAnchor(water.anchors, p, (x) => Math.hypot(x.x - p.x, x.y - p.y) <= x.radius && x.requires.every((e) => events.has(e)));

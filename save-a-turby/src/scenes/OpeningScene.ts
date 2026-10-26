@@ -10,7 +10,7 @@ import { NAME_RULE_TEXT, nameReasonMessage, precheckName } from '../story/nameRu
 import type { OpeningStoryState, StoryClient } from '../story/storyClient';
 
 // 장 전용 대화 배경(한 장 그림, 화면 크기). 없으면 bg-<code> 타일(1·2장 숲·집)
-const DIALOGUE_BACKDROPS: Record<string, { key: string; alpha: number }> = { underfloor: { key: 'chapter03-dialogue-bg', alpha: 0.8 } };
+const DIALOGUE_BACKDROPS: Record<string, { key: string; alpha: number }> = { underfloor: { key: 'chapter03-dialogue-bg', alpha: 0.8 }, fridge: { key: 'chapter04-dialogue-bg', alpha: 0.8 } };
 
 // M3 오프닝 — 서버 체크포인트가 지정한 구간부터 공용 대사 재생기(story/dialogueRunner.ts)로 재생한다.
 // 이 씬은 그리기와 입력만 맡는다. 진행·보상·체크포인트는 전부 서버가 판정한다.
@@ -29,7 +29,10 @@ const WORLD_SATURATION_STEADY = 0.65; // 이름을 기억한 뒤 일부만 안�
 
 // 대사 표시·입력은 1장 대화 화면(StoryDialogueScene)도 그대로 쓴다(상속) — 재생 범위와 전투 연결만 다르다
 // 3장 기억 비침 cameraCue = 에셋 키(fx/story/<키>.png). 10-16 2차: 기억 조각(내 것이 아닌 기억)·은빛 실(장 마무리)도 같은 원형 연출
-const MEMORY_GLIMPSE_KEYS = ['memory-glove', 'memory-blanket', 'memory-doll', 'memory-fragment', 'silver-thread'];
+const MEMORY_GLIMPSE_KEYS = ['memory-glove', 'memory-blanket', 'memory-doll', 'memory-fragment', 'silver-thread', 'storage-pattern', 'frost-machine-scar', 'sense-restore', 'warm-gold'];
+// 10-23 C4-1 4장: 누비에게만 들리는 목소리 — 화자 없는 지문을 차가운 은색 글자로, 화면 가장자리에 서리(voice-frost)를 두른다
+const VOICE_CUE = 'voice-frost';
+const VOICE_TEXT_COLOR = '#6f8aa3';
 
 export class OpeningScene extends Phaser.Scene {
   protected opts!: OpeningSceneData;
@@ -39,6 +42,7 @@ export class OpeningScene extends Phaser.Scene {
   private layer!: Phaser.GameObjects.Container;
   private advanceResolver: ((a: Advance) => void) | null = null;
   private typing: Phaser.Time.TimerEvent | null = null;
+  private glimpse: Phaser.GameObjects.Image | null = null; // 지금 떠 있는 기억 비침(연속 큐면 앞 것을 먼저 걷는다)
   private fullText = '';
   private textObj!: Phaser.GameObjects.Text;
 
@@ -50,7 +54,7 @@ export class OpeningScene extends Phaser.Scene {
     this.opts = data;
     this.advanceResolver = null;
     this.typing = null;
-    this.fxState = { glimpseShown: [], glimpseBounds: null, drainPlayed: 0, saturation: 1, bounds: null, relicShown: 0, relicBounds: null, restorePlayed: 0 }; // 같은 장면 객체를 다시 쓸 때 연출 상태를 비운다
+    this.fxState = { glimpseShown: [], glimpseBounds: null, drainPlayed: 0, saturation: 1, bounds: null, relicShown: 0, relicBounds: null, restorePlayed: 0, voiceShown: 0 }; this.glimpse = null; // 같은 장면 객체를 다시 쓸 때 연출 상태를 비운다
     this.fxNubi = undefined;
     this.fxRelic = undefined;
     this.satTween = undefined;
@@ -158,7 +162,8 @@ export class OpeningScene extends Phaser.Scene {
       }
       this.textObj = this.add.text(BOX.x + 44, BOX.y + 44, '', {
         fontSize: '26px',
-        color: entry.kind === 'narration' ? TEXT.sub : TEXT.body,
+        color: entry.kind === 'narration' ? (entry.cameraCue === VOICE_CUE ? VOICE_TEXT_COLOR : TEXT.sub) : TEXT.body,
+        fontStyle: entry.kind === 'narration' && entry.cameraCue === VOICE_CUE ? 'italic' : 'normal',
         wordWrap: { width: BOX.w - 88, useAdvancedWrap: true },
         lineSpacing: 10,
       });
@@ -244,12 +249,13 @@ export class OpeningScene extends Phaser.Scene {
     else if (cam === 'water-dye-yarn-rise') this.playRelicRise();
     else if (cam === 'nubi-color-restore') this.playNubiColorRestore();
     else if (cam && MEMORY_GLIMPSE_KEYS.includes(cam)) this.playMemoryGlimpse(cam);
+    else if (cam === VOICE_CUE) this.playVoiceFrost();
   }
 
   // ---------- 누비 색 빠짐 연출(10-13 C2-4) ----------
   // 누비 그림 위에 같은 중심으로 투명 오버레이를 1회 재생하고(캐릭터를 대체하지 않는다), 배경 채도를 부드럽게 낮춘다.
   // 대화창·이름표·버튼(this.layer)은 별도 레이어라 탈색되지 않는다. 붉은 화면·섬광·흔들림·시간 제한은 쓰지 않는다.
-  fxState: { drainPlayed: number; saturation: number; bounds: { x: number; y: number; w: number; h: number } | null; relicShown: number; relicBounds: { x: number; y: number; w: number; h: number } | null; restorePlayed: number; glimpseShown: string[]; glimpseBounds: { x: number; y: number; w: number; h: number } | null } = { drainPlayed: 0, saturation: 1, bounds: null, relicShown: 0, relicBounds: null, restorePlayed: 0, glimpseShown: [], glimpseBounds: null };
+  fxState: { drainPlayed: number; saturation: number; bounds: { x: number; y: number; w: number; h: number } | null; relicShown: number; relicBounds: { x: number; y: number; w: number; h: number } | null; restorePlayed: number; glimpseShown: string[]; glimpseBounds: { x: number; y: number; w: number; h: number } | null; voiceShown: number } = { drainPlayed: 0, saturation: 1, bounds: null, relicShown: 0, relicBounds: null, restorePlayed: 0, glimpseShown: [], glimpseBounds: null, voiceShown: 0 };
   private fxNubi?: Phaser.GameObjects.Image;
   private fxRelic?: Phaser.GameObjects.Image;
   private satTween?: Phaser.Tweens.Tween;
@@ -298,9 +304,32 @@ export class OpeningScene extends Phaser.Scene {
     const cy = 300;
     this.fxState.glimpseBounds = { x: cx - 160, y: cy - 160, w: 320, h: 320 };
     if (!this.textures.exists(key)) return;
+    const prev = this.glimpse;
+    if (prev?.active) {
+      this.tweens.killTweensOf(prev);
+      this.tweens.add({ targets: prev, alpha: 0, duration: 300, onComplete: () => prev.destroy() });
+    }
     const img = this.add.image(cx, cy, key).setDisplaySize(320, 320).setAlpha(0).setDepth(6);
+    this.glimpse = img;
     this.tweens.add({ targets: img, alpha: 0.95, duration: 700, ease: 'Sine.easeOut', yoyo: false });
-    this.tweens.add({ targets: img, alpha: 0, delay: 3800, duration: 900, onComplete: () => img.destroy() });
+    this.tweens.add({ targets: img, alpha: 0, delay: 3800, duration: 900, onComplete: () => { img.destroy(); if (this.glimpse === img) this.glimpse = null; } });
+  }
+
+  // ---------- 누비에게만 들리는 목소리(10-23 C4-1) ----------
+  // 화면 가장자리에 서리가 번졌다가 천천히 걷힌다. 가운데(대화창·기억 비침)는 가리지 않는다. 그림이 없으면 옅은 가장자리 띠(임시)
+  private playVoiceFrost() {
+    this.fxState.voiceShown++;
+    const objs: Phaser.GameObjects.GameObject[] = [];
+    if (this.textures.exists(VOICE_CUE)) objs.push(this.add.image(0, 0, VOICE_CUE).setOrigin(0, 0).setDisplaySize(CANVAS_WIDTH, CANVAS_HEIGHT).setDepth(7));
+    else {
+      const band = 56;
+      for (const [x, y, w, h] of [[0, 0, CANVAS_WIDTH, band], [0, CANVAS_HEIGHT - band, CANVAS_WIDTH, band], [0, 0, band, CANVAS_HEIGHT], [CANVAS_WIDTH - band, 0, band, CANVAS_HEIGHT]]) objs.push(this.add.rectangle(x, y, w, h, 0xdff3fb, 0.35).setOrigin(0, 0).setDepth(7));
+    }
+    for (const o of objs) {
+      (o as Phaser.GameObjects.Image).setAlpha(0);
+      this.tweens.add({ targets: o, alpha: 0.85, duration: 500, ease: 'Sine.easeOut' });
+      this.tweens.add({ targets: o, alpha: 0, delay: 3200, duration: 900, onComplete: () => o.destroy() });
+    }
   }
 
   // ---------- 물빛 염색실이 떠오르는 연출(10-14 C2-5B) ----------

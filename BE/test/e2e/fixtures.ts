@@ -187,3 +187,37 @@ export function seedUnderfloor(device: string, stage: 'entry' | 'started' | 'ite
     }
   };
 }
+
+// 10-23 C4-1: 3장을 마치고 4장 냉장고 입구에 서기 직전(CH03_COMPLETE, 성장 3) — 솜심 장착·장 완료 장면·4장 개방까지 기록된 계정.
+// stage = 'entry'(도입 직전) | 'started'(도입을 본 뒤 CH04_STARTED, 가느리 전) | 'rescued'(가느리 구조 CH04_GANEURI_RESCUED — 바늘 통로 앞) |
+//         'opened'(저장고 앞 전투 승리 시드. 문 열림, 체크포인트는 그대로) | 'storage'(도안 벽까지 본 CH04_STORAGE_CLEARED — 고백 직전) | 'confessed'(고백까지 본 CH04_CONFESSION_SEEN — 서리 미싱 직전)
+export function seedFridge(device: string, stage: 'entry' | 'started' | 'rescued' | 'opened' | 'storage' | 'confessed' = 'entry') {
+  const base = seedUnderfloor(device, 'aftermath');
+  return (db: FakeDb) => {
+    base(db);
+    const player = db.rows('player', { device_uuid: `dev-device-${device}-account` })[0] as { id: bigint };
+    const progress = db.rows('player_story_progress', { player_id: player.id })[0] as { checkpoint: string; nubi_growth_stage: number };
+    const add = (list: string[]) => list.forEach((e) => db.seed('player_story_event', { player_id: player.id, event_id: e }));
+    add(['underfloor_cotton_core_equipped', 'fridge_unlocked', 'underfloor_chapter_complete_seen']);
+    progress.checkpoint = 'CH03_COMPLETE';
+    progress.nubi_growth_stage = 3;
+    const nubi = db.rows('turby_instance', { owner_player_id: player.id, is_story_companion: true })[0] as { id: bigint };
+    const core = (db.rows('item_definition', { code: 'old_cotton_core' })[0] as { id: number }).id;
+    if (db.rows('turby_equipment', { turby_instance_id: nubi.id, slot_key: 'story_3' }).length === 0) db.seed('turby_equipment', { turby_instance_id: nubi.id, slot_key: 'story_3', item_definition_id: core });
+    const ice = db.rows('story_chapter', { stage_code: 'ice' })[0] as { title: string } | undefined;
+    if (ice) ice.title = '4장 — 냉장고 속';
+    else db.seed('story_chapter', { chapter_order: 4, stage_code: 'ice', clear_character_code: 'ganeuri', title: '4장 — 냉장고 속', map_width: 3200, map_height: 2400 });
+    const steps: [typeof stage, string[], string][] = [
+      ['started', ['fridge_entry_seen'], 'CH04_STARTED'],
+      ['rescued', ['fridge_ganeuri_freed'], 'CH04_GANEURI_RESCUED'],
+      ['opened', ['fridge_frozen_guard_won'], 'CH04_GANEURI_RESCUED'],
+      ['storage', ['fridge_storage_seen'], 'CH04_STORAGE_CLEARED'],
+      ['confessed', ['fridge_confession_seen'], 'CH04_CONFESSION_SEEN'],
+    ];
+    const upto = steps.findIndex(([s]) => s === stage);
+    for (let i = 0; i <= upto; i++) {
+      add(steps[i][1]);
+      progress.checkpoint = steps[i][2];
+    }
+  };
+}
