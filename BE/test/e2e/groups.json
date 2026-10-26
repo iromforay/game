@@ -7,7 +7,7 @@
     },
     "story": {
       "purpose": "1장 흐름·복원",
-      "files": ["ch01.e2e.ts", "chapter1-full.e2e.ts", "forest.e2e.ts", "restore.e2e.ts", "lake.e2e.ts", "lake-maze.e2e.ts", "lake-rescue.e2e.ts", "lake-crisis.e2e.ts", "lake-boss-combat.e2e.ts", "lake-boss-reward.e2e.ts", "lake-chapter-complete.e2e.ts", "lake-final-art.e2e.ts", "lake-final-layout.e2e.ts", "lake-final-visual.e2e.ts", "underfloor-explore.e2e.ts", "underfloor-battle.e2e.ts", "fridge-explore.e2e.ts", "fridge-battle.e2e.ts", "desert-explore.e2e.ts", "desert-battle.e2e.ts"]
+      "files": ["ch01.e2e.ts", "chapter1-full.e2e.ts", "forest.e2e.ts", "restore.e2e.ts", "lake.e2e.ts", "lake-maze.e2e.ts", "lake-rescue.e2e.ts", "lake-crisis.e2e.ts", "lake-boss-combat.e2e.ts", "lake-boss-reward.e2e.ts", "lake-chapter-complete.e2e.ts", "lake-final-art.e2e.ts", "lake-final-layout.e2e.ts", "lake-final-visual.e2e.ts", "underfloor-explore.e2e.ts", "underfloor-battle.e2e.ts", "fridge-explore.e2e.ts", "fridge-battle.e2e.ts", "desert-explore.e2e.ts", "desert-battle.e2e.ts", "final-explore.e2e.ts"]
     },
     "map": {
       "purpose": "입력·위치·지도·월드 렌더",

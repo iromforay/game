@@ -36,6 +36,12 @@ export const CHECKPOINTS = [
   'CH05_BOSS_DEFEATED',
   'CH05_SCISSORS_REVEALED',
   'CH05_COMPLETE',
+  // 종장(집의 중심, 장 코드 final, 10-26 F-1). 정본 저장점 이름 그대로(docs/scene/종장.md)
+  'CHFINAL_STARTED',
+  'CHFINAL_IDENTITY_REVEALED',
+  'CHFINAL_SCISSORS_DEFEATED',
+  'CHFINAL_COST_ACCEPTED',
+  'ENDING_COMPLETE',
 ] as const;
 
 export type Checkpoint = (typeof CHECKPOINTS)[number];
@@ -44,7 +50,8 @@ export const DEFAULT_NICKNAME = '터비 탐험가';
 export const STORY_NUBI_CHARACTER = 'nubi';
 
 // 장 번호(0 = 오프닝)별 코드. 대화 파일 이름과 GET /player/me/story의 chapterCode에 쓴다.
-export const CHAPTER_CODES = ['opening', 'ch01', 'ch02', 'ch03', 'ch04', 'ch05'] as const;
+export const CHAPTER_CODES = ['opening', 'ch01', 'ch02', 'ch03', 'ch04', 'ch05', 'final'] as const; // 6 = 종장
+export const FINAL_CHAPTER = 6;
 export type ChapterCode = (typeof CHAPTER_CODES)[number];
 
 // 정본 이벤트 ID ↔ DB stage_code(C4: 내부 코드는 underground/ice 유지)
@@ -53,8 +60,9 @@ export const STAGE_UNLOCK_EVENTS: Record<string, string> = {
   underground: 'underfloor_unlocked',
   ice: 'fridge_unlocked',
   desert: 'desert_unlocked',
+  home_core: 'final_unlocked', // 10-26 F-1: 종장 집의 중심(5장 금빛 마감실 장착 때 기록)
 };
-export const STAGE_CHAPTER: Record<string, number> = { forest: 1, lake: 2, underground: 3, ice: 4, desert: 5 };
+export const STAGE_CHAPTER: Record<string, number> = { forest: 1, lake: 2, underground: 3, ice: 4, desert: 5, home_core: 6 };
 export const LEGACY_ACCESS_PREFIX = 'legacy_access_';
 
 export type ItemGrant = { itemCode: string; quantity: number };
@@ -307,10 +315,16 @@ export const STORY_EVENTS: StoryEventDef[] = [
     alsoComplete: ['final_unlocked'],
     to: 'CH05_COMPLETE',
   }),
-  // 종장(집의 중심) 개방 기록. 종장 지역 코드는 종장 계획에서 정한다(STAGE_UNLOCK_EVENTS 연결은 그때)
+  // 종장(집의 중심, home_core) 개방 기록
   ev({ id: 'final_unlocked', chapter: 5, allowedAt: ['CH05_SCISSORS_REVEALED'], requires: ['desert_scissors_seen'], serverOnly: true, evidence: { kind: 'none' } }),
   // '마지막 마감' 장면(ch05.chapter_complete)을 끝까지 본 뒤 클라이언트가 완료를 요청한다. 체크포인트·보상·성장은 다시 바꾸지 않는다
   ev({ id: 'desert_chapter_complete_seen', chapter: 5, allowedAt: ['CH05_COMPLETE'], requires: ['desert_finish_thread_equipped', 'final_unlocked'], evidence: { kind: 'none' } }),
+
+  // ---- 종장 집의 중심(F-1) ----
+  // 집의 중심: 금빛 길 끝의 입구 지점에서 도착 장면(동료 합류)을 끝까지 보면 CHFINAL_STARTED. 5장 '마지막 마감' 장면을 본 뒤에만
+  ev({ id: 'final_entry_seen', chapter: 6, allowedAt: ['CH05_COMPLETE'], requires: ['final_unlocked', 'desert_chapter_complete_seen'], evidence: { kind: 'point', stageCode: 'home_core', pointId: 'final_arrival' }, to: 'CHFINAL_STARTED' }),
+  // 다섯 기억의 결속: 중앙의 빈자리에서 정체 공개 장면을 끝까지 보면 CHFINAL_IDENTITY_REVEALED(정본 — 이후 재접속은 가위 등장 직전부터)
+  ev({ id: 'final_identity_revealed', chapter: 6, allowedAt: ['CHFINAL_STARTED'], requires: ['final_entry_seen'], evidence: { kind: 'point', stageCode: 'home_core', pointId: 'final_core' }, to: 'CHFINAL_IDENTITY_REVEALED' }),
 ];
 
 // 부분 사건이 모두 기록되면 같은 트랜잭션에서 함께 기록하는 집계 사건(C2-3). 이미 기록돼 있으면 다시 만들지 않는다
@@ -521,6 +535,11 @@ export const STORY_TRIGGERS: StoryTriggerDef[] = [
   { id: 'desert_cut_face', stageCode: 'desert', evidence: { kind: 'point', stageCode: 'desert', pointId: 'desert_cut_face' }, activeAt: ['CH05_CLUES_JOINED'], requires: ['desert_ridge_thread'], unless: ['desert_ridge_crossed'], repeatable: true, play: { segmentId: 'ch05.cut_face', endAfter: 'ch05.cut_face' } },
   // 7) 금빛 마감실이 잠든 자리 — 보스 도입 → 전투 → (이기면 이어서) 승리 장면 → 가위(C5-3)
   { id: 'desert_boss_entrance', stageCode: 'desert', evidence: { kind: 'point', stageCode: 'desert', pointId: 'desert_boss_entrance' }, activeAt: ['CH05_RIDGE_CROSSED'], requires: ['desert_ridge_crossed'], unless: ['desert_boss_defeated'], encounterKey: 'desert_boss_golden_doll', repeatable: true, play: { segmentId: 'ch05.boss_intro', endAfter: 'ch05.scissors' } },
+  // ---- 종장 집의 중심(F-1) ----
+  // 1) 금빛 길 끝 — 도착 장면(동료 합류). 끝까지 보면 final_entry_seen + CHFINAL_STARTED. 중간에 끊기면 같은 지점에서 처음부터
+  { id: 'final_arrival', stageCode: 'home_core', evidence: { kind: 'point', stageCode: 'home_core', pointId: 'final_arrival' }, activeAt: ['CH05_COMPLETE'], requires: ['final_unlocked', 'desert_chapter_complete_seen'], unless: ['final_entry_seen'], repeatable: true, play: { segmentId: 'final.arrival', endAfter: 'final.arrival' } },
+  // 2) 중앙의 빈자리 — 다섯 기억의 결속·정체 공개. 끝까지 보면 final_identity_revealed + CHFINAL_IDENTITY_REVEALED
+  { id: 'final_core', stageCode: 'home_core', evidence: { kind: 'point', stageCode: 'home_core', pointId: 'final_core' }, activeAt: ['CHFINAL_STARTED'], requires: ['final_entry_seen'], unless: ['final_identity_revealed'], repeatable: true, play: { segmentId: 'final.bind', endAfter: 'final.bind' } },
 ];
 export const TRIGGER_BY_ID = new Map(STORY_TRIGGERS.map((t) => [t.id, t]));
 

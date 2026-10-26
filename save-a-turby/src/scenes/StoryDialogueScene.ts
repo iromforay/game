@@ -21,7 +21,7 @@ export interface StoryDialogueData extends OpeningSceneData {
 }
 
 // 장 코드 → 대화 배경(OpeningScene의 DIALOGUE_BACKDROPS 키). 없으면 숲 타일
-const BACKDROP_OF_CHAPTER: Record<string, string> = { ch03: 'underfloor', ch04: 'fridge', ch05: 'desert' };
+const BACKDROP_OF_CHAPTER: Record<string, string> = { ch03: 'underfloor', ch04: 'fridge', ch05: 'desert', final: 'home_core' };
 
 export class StoryDialogueScene extends OpeningScene {
   private data2!: StoryDialogueData;

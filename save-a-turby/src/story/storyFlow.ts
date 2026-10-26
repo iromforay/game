@@ -53,6 +53,6 @@ export function shortageText(s: { itemCode: string; have: number; need: number }
   return `${name}${particle} ${s.need - s.have}개 더 필요해요 (${s.have}/${s.need})`;
 }
 
-// 지역 → 장 대화 파일(story_chapter 순서와 같다: 1장 숲 … 5장 사막)
-const STAGE_CHAPTER: Record<string, string> = { forest: 'ch01', lake: 'ch02', underground: 'ch03', ice: 'ch04', desert: 'ch05' };
+// 지역 → 장 대화 파일(story_chapter 순서와 같다: 1장 숲 … 5장 사막 · 종장 집의 중심)
+const STAGE_CHAPTER: Record<string, string> = { forest: 'ch01', lake: 'ch02', underground: 'ch03', ice: 'ch04', desert: 'ch05', home_core: 'final' };
 export const chapterOfStage = (stageCode: string) => STAGE_CHAPTER[stageCode] ?? 'ch01';

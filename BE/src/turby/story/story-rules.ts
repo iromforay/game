@@ -2,6 +2,7 @@
 import {
   CHECKPOINTS,
   CHAPTER_CODES,
+  FINAL_CHAPTER,
   DEFAULT_NICKNAME,
   LEGACY_ACCESS_PREFIX,
   STAGE_UNLOCK_EVENTS,
@@ -33,7 +34,13 @@ export function toCheckpoint(value: string): Checkpoint {
 
 export function chapterOf(cp: Checkpoint): number {
   if (cp.startsWith('OPENING_')) return 0;
+  if (cp.startsWith('CHFINAL_') || cp === 'ENDING_COMPLETE') return FINAL_CHAPTER; // 10-26 F-1 종장
   return Number(cp.slice(2, 4));
+}
+
+// N장을 마친 체크포인트(종장은 ENDING_COMPLETE)
+export function chapterCompleteCheckpoint(chapter: number): string {
+  return chapter === FINAL_CHAPTER ? 'ENDING_COMPLETE' : `CH0${chapter}_COMPLETE`;
 }
 
 export function chapterCodeOf(cp: Checkpoint): ChapterCode {
@@ -47,7 +54,7 @@ export function chapterCodeOf(cp: Checkpoint): ChapterCode {
 export function canProgressChapter(chapter: number, cp: Checkpoint): boolean {
   if (chapter <= 0) return true;
   if (chapter === 1) return checkpointIndex(cp) >= checkpointIndex('OPENING_COMPLETE');
-  const prevComplete = `CH0${chapter - 1}_COMPLETE`;
+  const prevComplete = chapterCompleteCheckpoint(chapter - 1);
   return isCheckpoint(prevComplete) && checkpointIndex(cp) >= checkpointIndex(prevComplete);
 }
 

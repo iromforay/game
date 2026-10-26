@@ -34,6 +34,7 @@ export const BACKGROUND_TILES: Record<string, string> = {
   underground: undergroundTileUrl,
   ice: iceTileUrl,
   desert: desertTileUrl,
+  home_core: homeTileUrl, // 10-26 F-1: 종장 — 대형 배경(home-core-base) 연결 전 임시 바닥과 대화 배경 대체
 };
 
 export const AVATAR_IMAGE = childUrl;

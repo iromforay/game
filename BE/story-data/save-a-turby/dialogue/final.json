@@ -1,0 +1,834 @@
+{
+  "schemaVersion": 1,
+  "chapterCode": "final",
+  "source": "docs/scene/종장.md",
+  "segments": [
+    {
+      "segmentId": "final.arrival",
+      "resumeFrom": "CH05_COMPLETE",
+      "replayOnResume": true,
+      "completesWith": "final_entry_seen",
+      "entries": [
+        {
+          "kind": "title",
+          "dialogueId": "final.arrival.001",
+          "text": "집의 중심"
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.arrival.002",
+          "text": "주인공과 누비가 금빛 길의 끝에 도착한다. 그곳에는 벽도 바닥도 없다. 먼지숲의 실뿌리, 호수의 물빛, 마루 밑의 오래된 물건, 냉장고의 서리와 사막의 열기가 한 공간에 겹쳐 보인다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.arrival.003",
+          "text": "다섯 지역에서 이어진 실은 중앙의 빈자리를 향하지만 서로 닿지 못한 채 멈춰 있다. 모든 실 사이에는 가위로 자른 듯한 검은 틈이 남아 있다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.arrival.004",
+          "text": "물들이, 오래된 폭신이와 가느리가 각자의 지역에서 실을 붙잡고 있다. 멀리 숲 쪽 실에는 보풀이가 매달려 있다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "final.arrival.005",
+          "speaker": "bopuli",
+          "speakerLabel": "보풀이",
+          "text": "여기까지 이어 놓긴 했는데, 중앙이 전부 잘려 있어!",
+          "portrait": "bopuli",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.arrival.006",
+          "text": "누비가 한 걸음 앞으로 나가자 다섯 실의 유물이 동시에 빛난다.",
+          "cameraCue": "five-relics",
+          "soundCue": null
+        }
+      ]
+    },
+    {
+      "segmentId": "final.bind",
+      "resumeFrom": "CHFINAL_STARTED",
+      "replayOnResume": true,
+      "completesWith": "final_identity_revealed",
+      "entries": [
+        {
+          "kind": "title",
+          "dialogueId": "final.bind.001",
+          "text": "다섯 기억의 결속"
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.bind.002",
+          "text": "첫 매듭이 가장 먼저 빛나고, 물빛 염색실과 오래된 솜심, 얼음 극세사, 금빛 마감실이 차례로 반응한다. 다섯 유물에서 나온 빛이 누비의 몸 위에서 하나의 무늬로 이어진다.",
+          "cameraCue": "five-bind",
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.bind.003",
+          "text": "낡고 기운 자국이 사라진다. 호수에서 되찾은 색과 마루 밑의 기억, 냉장고에서 이어진 감각과 사막의 금빛 마감이 누비의 몸을 덮는다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.bind.004",
+          "text": "누비는 한동안 아무 말도 하지 못한다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "final.bind.005",
+          "speaker": "nubi",
+          "speakerLabel": "누비",
+          "text": "……기억났어. 전부 다.",
+          "portrait": "nubi",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "final.bind.006",
+          "speaker": "player",
+          "speakerLabel": "{playerName}",
+          "text": "네가 누구였는지?",
+          "portrait": "player",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "final.bind.007",
+          "speaker": "nubi",
+          "speakerLabel": "누비",
+          "text": "나는 네가 찾던 엄마의 뜨개실이었어. 그리고 모두가 찾던 태초의 실타래도 나였어.",
+          "portrait": "nubi",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.bind.008",
+          "text": "공간 전체에 그날의 기억이 펼쳐진다. 소파 밑으로 굴러간 엄마의 뜨개실이 주인공보다 먼저 틈으로 빨려 들어간다. 틈을 지나는 동안 뜨개실은 무지갯빛 태초의 실타래로 빛나며 터비 세계로 추락한다. 충격으로 몸에 지니고 있던 첫 매듭, 물빛 염색실, 오래된 솜심, 얼음 극세사와 금빛 마감실이 집 안의 여러 지역으로 흩어진다. 몸과 기억을 잃은 중심 실뭉치만 숲 바닥에 남아 풀린누비의 모습이 된다. 뒤이어 떨어진 주인공이 그 위에 내려앉는다. 뒤늦게 그 자리에 도착한 가위가 흩어지는 유물의 빛을 바라본다.",
+          "cameraCue": "origin-fall",
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "final.bind.009",
+          "speaker": "nubi",
+          "speakerLabel": "누비",
+          "text": "네가 엄마의 털실 이야기를 할 때마다 내 몸이 반응한 것도 그래서였어. 네가 찾던 건 처음부터 네 곁에 있었던 거야.",
+          "portrait": "nubi",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "final.bind.010",
+          "speaker": "player",
+          "speakerLabel": "{playerName}",
+          "text": "그럼 우리는 처음부터…….",
+          "portrait": "player",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "final.bind.011",
+          "speaker": "nubi",
+          "speakerLabel": "누비",
+          "text": "응. 나는 나를 찾으면서 너와 함께 여행했던 거야.",
+          "portrait": "nubi",
+          "expression": "happy",
+          "cameraCue": null,
+          "soundCue": null
+        }
+      ]
+    },
+    {
+      "segmentId": "final.last_thread",
+      "resumeFrom": "CHFINAL_IDENTITY_REVEALED",
+      "replayOnResume": false,
+      "completesWith": null,
+      "entries": [
+        {
+          "kind": "title",
+          "dialogueId": "final.last_thread.001",
+          "text": "마지막 검정실"
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.last_thread.002",
+          "text": "다섯 지역의 실이 누비를 향해 움직이기 시작한다. 그 순간 중앙의 검은 틈에서 검정실이 솟아나 모든 실을 잡아당긴다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.last_thread.003",
+          "text": "서걱.",
+          "cameraCue": null,
+          "soundCue": "scissors-snip"
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.last_thread.004",
+          "text": "집의 중심이 둘로 갈라지고 거대한 가위가 틈 사이에서 모습을 드러낸다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "final.last_thread.005",
+          "speaker": "scissors",
+          "speakerLabel": "가위",
+          "text": "결국 모든 조각을 다시 모았구나.",
+          "portrait": null,
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "final.last_thread.006",
+          "speaker": "player",
+          "speakerLabel": "{playerName}",
+          "text": "왜 계속 우리 길을 끊은 거야?",
+          "portrait": "player",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "final.last_thread.007",
+          "speaker": "scissors",
+          "speakerLabel": "가위",
+          "text": "나는 이 세계에서 이미 이어진 것을 자를 수는 있어도, 새 길을 엮거나 지역의 경계를 넘을 수는 없다. 그래서 네가 필요했다.",
+          "portrait": null,
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.last_thread.008",
+          "text": "가위의 한쪽 날에 숲과 호수에 숨겨 두었던 유물이 비치고, 다른 날에는 마루 밑과 냉장고에서 누비를 지켜보던 검정실이 비친다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "final.last_thread.009",
+          "speaker": "scissors",
+          "speakerLabel": "가위",
+          "text": "흩어진 유물은 내가 먼저 찾았다. 미싱에게 보스들의 몸속에 심게 하고, 검정실로 너를 그곳까지 이끌었지. 유물을 깨울 수 있는 것은 태초의 실타래뿐이니까.",
+          "portrait": null,
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "final.last_thread.010",
+          "speaker": "nubi",
+          "speakerLabel": "누비",
+          "text": "그래서 모두를 다치게 하면서 나를 여기까지 몰아온 거야?",
+          "portrait": "nubi",
+          "expression": "worried",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "final.last_thread.011",
+          "speaker": "scissors",
+          "speakerLabel": "가위",
+          "text": "이제 완성된 네 몸으로 현실까지 길을 짜라. 그 길은 내가 차지한다.",
+          "portrait": null,
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.last_thread.012",
+          "text": "누비는 주인공이 처음 묶어 준 첫 매듭을 만진다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "final.last_thread.013",
+          "speaker": "nubi",
+          "speakerLabel": "누비",
+          "text": "다시 풀릴 수 있어도, 함께했던 매듭은 없어지지 않아.",
+          "portrait": "nubi",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.last_thread.014",
+          "text": "가위가 두 날을 벌린다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "final.last_thread.015",
+          "speaker": "scissors",
+          "speakerLabel": "가위",
+          "text": "스스로 길이 되지 않겠다면, 내가 네 실을 풀어 쓰겠다.",
+          "portrait": null,
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "storyBattle",
+          "dialogueId": "final.last_thread.016",
+          "encounterKey": "final_boss_scissors"
+        }
+      ]
+    },
+    {
+      "segmentId": "final.knot",
+      "resumeFrom": "CHFINAL_SCISSORS_DEFEATED",
+      "replayOnResume": true,
+      "completesWith": "final_boss_aftermath_seen",
+      "entries": [
+        {
+          "kind": "narration",
+          "dialogueId": "final.knot.001",
+          "text": "가위가 집의 중심과 현실을 잇는 마지막 실을 자르려 한다. 1~5장에서 만난 동료들이 각자의 실 한 가닥을 누비에게 보낸다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "final.knot.002",
+          "speaker": "muldeuli",
+          "speakerLabel": "물들이",
+          "text": "색은 다시 물들일 수 있어!",
+          "portrait": null,
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "final.knot.003",
+          "speaker": "old_pokshini",
+          "speakerLabel": "오래된 폭신이",
+          "text": "기억은 혼자 품는 것이 아니란다.",
+          "portrait": null,
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "final.knot.004",
+          "speaker": "ganeuri",
+          "speakerLabel": "가느리",
+          "text": "끊어질 순간을 느끼면 다시 잡으면 돼.",
+          "portrait": null,
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "final.knot.005",
+          "speaker": "bopuli",
+          "speakerLabel": "보풀이",
+          "text": "이번에는 우리가 네 실을 붙잡을게!",
+          "portrait": "bopuli",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.knot.006",
+          "text": "누비와 주인공은 다섯 실의 유물과 동료들의 실을 하나의 매듭으로 묶는다. 매듭은 가위의 두 날을 감아 더는 닫히지 못하게 한다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.knot.007",
+          "text": "가위를 묶고 남은 동료들의 실은 사라지지 않는다. 보풀이의 크림색 실은 첫 매듭에, 물들이의 푸른 실은 물빛 염색실에, 오래된 폭신이의 솜실은 오래된 솜심에, 가느리의 은빛 실은 얼음 극세사에 스며든다. 다섯 실의 유물에는 누비 혼자의 과거뿐 아니라 함께 여행한 동료들의 현재 기억이 새겨진다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.knot.008",
+          "text": "가위는 마지막으로 힘을 주지만 실을 끊지 못한다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "final.knot.009",
+          "speaker": "scissors",
+          "speakerLabel": "가위",
+          "text": "문이 열리면…… 나도 언젠가 저 세계로 나갈 수 있다.",
+          "portrait": null,
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "final.knot.010",
+          "speaker": "nubi",
+          "speakerLabel": "누비",
+          "text": "다른 존재를 길로 쓰려 했던 너에게 그 문은 열리지 않아.",
+          "portrait": "nubi",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.knot.011",
+          "text": "가위의 힘이 멈춘다. 두 날은 묶인 채 집의 중심 바깥으로 밀려난다. 가위는 파괴되지 않고 어둠 속에서 누비를 바라본다.",
+          "cameraCue": null,
+          "soundCue": null
+        }
+      ]
+    },
+    {
+      "segmentId": "final.cost",
+      "resumeFrom": "CHFINAL_SCISSORS_DEFEATED",
+      "replayOnResume": true,
+      "completesWith": "final_cost_accepted",
+      "entries": [
+        {
+          "kind": "title",
+          "dialogueId": "final.cost.001",
+          "text": "귀환의 대가"
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.cost.002",
+          "text": "가위가 물러난 자리에서 작은 금속성 빛이 나타난다. 단수링이 집의 중심에 걸린 오래된 실을 따라 내려온다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "final.cost.003",
+          "speaker": "dansuring",
+          "speakerLabel": "단수링",
+          "text": "마침내 이음매가 다시 보이는구나.",
+          "portrait": "dansuring",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "final.cost.004",
+          "speaker": "player",
+          "speakerLabel": "{playerName}",
+          "text": "이제 집으로 돌아가는 문을 열 수 있어?",
+          "portrait": "player",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "final.cost.005",
+          "speaker": "dansuring",
+          "speakerLabel": "단수링",
+          "text": "문을 여는 것이 아니야. 끊어진 두 세계 사이를 실로 다시 잇는 거야.",
+          "portrait": "dansuring",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.cost.006",
+          "text": "단수링은 현실과 모험 세계가 겹쳐 보이는 작은 지점을 표시한다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "final.cost.007",
+          "speaker": "dansuring",
+          "speakerLabel": "단수링",
+          "text": "나는 두 세계가 이어졌던 위치를 기억하는 열쇠야. 하지만 길을 만들 실은 내가 줄 수 없어.",
+          "portrait": "dansuring",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.cost.008",
+          "text": "단수링이 누비를 바라본다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "final.cost.009",
+          "speaker": "dansuring",
+          "speakerLabel": "단수링",
+          "text": "태초의 실타래가 전부 풀려 그 사이를 메워야 해. 길이 완성되면 실은 현실로 돌아가지만, 누비였던 모습과 기억은 다시 돌아오지 못해.",
+          "portrait": "dansuring",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.cost.010",
+          "text": "주인공은 즉시 고개를 젓는다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "final.cost.011",
+          "speaker": "player",
+          "speakerLabel": "{playerName}",
+          "text": "그럼 안 돌아갈래. 너를 풀어서 만든 길로는 갈 수 없어.",
+          "portrait": "player",
+          "expression": "worried",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.cost.012",
+          "text": "주인공은 단수링을 다른 실에 걸어 보고, 다섯 유물을 누비에게서 떼어 바닥의 틈에 놓아 본다. 동료들도 각자의 실을 보태지만 어느 것도 현실까지 닿지 못한다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.cost.013",
+          "text": "첫 매듭에서 시작된 빛만이 현실의 소파 밑까지 이어진다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "final.cost.014",
+          "speaker": "nubi",
+          "speakerLabel": "누비",
+          "text": "처음 만났을 때 네가 내 풀린 실을 묶어 줬잖아.",
+          "portrait": "nubi",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "final.cost.015",
+          "speaker": "nubi",
+          "speakerLabel": "누비",
+          "text": "이번에는 내가 네가 돌아갈 길을 묶어 줄게.",
+          "portrait": "nubi",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "final.cost.016",
+          "speaker": "player",
+          "speakerLabel": "{playerName}",
+          "text": "싫어. 다른 방법을 더 찾으면 돼.",
+          "portrait": "player",
+          "expression": "worried",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "final.cost.017",
+          "speaker": "nubi",
+          "speakerLabel": "누비",
+          "text": "나도 사라지고 싶지는 않아. 네 이름도, 같이 걸었던 길도 잊고 싶지 않아.",
+          "portrait": "nubi",
+          "expression": "worried",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.cost.018",
+          "text": "누비는 주인공의 손을 잡는다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "final.cost.019",
+          "speaker": "nubi",
+          "speakerLabel": "누비",
+          "text": "그래도 이건 가위가 정한 끝이 아니야. 내가 무엇과 이어질지, 내가 선택하는 거야.",
+          "portrait": "nubi",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.cost.020",
+          "text": "주인공은 끝내 대답하지 못하고 누비의 손을 마주 잡는다.",
+          "cameraCue": null,
+          "soundCue": null
+        }
+      ]
+    },
+    {
+      "segmentId": "final.unravel",
+      "resumeFrom": "CHFINAL_COST_ACCEPTED",
+      "replayOnResume": true,
+      "completesWith": null,
+      "entries": [
+        {
+          "kind": "title",
+          "dialogueId": "final.unravel.001",
+          "text": "다섯 실이 풀리다"
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.unravel.002",
+          "text": "누비가 몸 가장자리의 금빛 마감실을 스스로 푼다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.unravel.003",
+          "text": "금빛이 사라지며 화려해진 터비의 모습이 다시 낡은 모습으로 돌아간다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.unravel.004",
+          "text": "얼음 극세사가 풀린다. 누비는 주인공의 손을 잡고 있지만 점점 그 감각을 느끼지 못한다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.unravel.005",
+          "text": "오래된 솜심이 풀린다. 태초의 실타래였던 과거와 여행 중 되찾은 기억이 빛이 되어 흩어진다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.unravel.006",
+          "text": "물빛 염색실이 풀린다. 호수에서 돌아온 푸른색과 세상의 색이 누비의 몸에서 빠져나온다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.unravel.007",
+          "text": "마지막으로 첫 매듭만 남는다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.unravel.008",
+          "text": "누비가 주인공을 바라본다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "final.unravel.009",
+          "speaker": "nubi",
+          "speakerLabel": "누비",
+          "text": "내가 네 이름을 잊어도, 너는 나를 기억해 줄 거야?",
+          "portrait": "nubi",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "final.unravel.010",
+          "speaker": "player",
+          "speakerLabel": "{playerName}",
+          "text": "응. 이번에는 내가 기억할게.",
+          "portrait": "player",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.unravel.011",
+          "text": "누비가 웃으며 첫 매듭을 푼다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.unravel.012",
+          "text": "풀린 실이 단수링이 표시한 이음매를 통과한다. 실은 어둠 속을 여러 번 오가며 두 세계 사이에 길을 짠다. 이야기 장식에 스며들었던 동료들의 실과 기억도 누비의 실에 함께 엮인다. 현실까지 닿는 중심 실은 누비의 몸 전체로 만들어지지만, 그것은 더 이상 과거의 태초의 실타래와 같지 않다. 주인공과 동료들이 함께한 기억을 품은 새로운 태초의 실타래가 되어 길을 완성한다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.unravel.013",
+          "text": "누비의 얼굴과 목소리가 사라진다. 마지막 실 한 가닥이 현실의 소파 아래에 닿는 순간 귀환길이 완성된다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.unravel.014",
+          "text": "주인공이 길을 모두 건너자 터비 세계 쪽의 길이 끝에서부터 다시 풀린다. 단수링을 통과한 누비의 마지막 실은 현실로 빠져나와 원래의 엄마 뜨개실로 돌아가고, 처음의 크림색 매듭을 그 끝에 남긴다.",
+          "cameraCue": null,
+          "soundCue": null
+        }
+      ]
+    },
+    {
+      "segmentId": "final.real_world",
+      "resumeFrom": "CHFINAL_COST_ACCEPTED",
+      "replayOnResume": true,
+      "completesWith": "ending_yarn_reunion_seen",
+      "entries": [
+        {
+          "kind": "title",
+          "dialogueId": "final.real_world.001",
+          "text": "현실 세계"
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.real_world.002",
+          "text": "빛이 사라진다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.real_world.003",
+          "text": "주인공은 소파 아래에서 잠든 채 발견된다. 엄마가 주인공을 소파에 눕히고, 소파 밑에서 발견한 털실을 탁자 위에 올려 둔다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.real_world.004",
+          "text": "잠시 뒤 주인공이 눈을 뜬다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "final.real_world.005",
+          "speaker": "mother",
+          "speakerLabel": "엄마",
+          "text": "깨어났어? 소파 밑에서 잠들어 있었어. 찾던 털실은 거기 있더라.",
+          "portrait": null,
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.real_world.006",
+          "text": "주인공은 주변을 둘러본다. 보풀이도, 물들이도, 폭신이도, 가느리도 보이지 않는다. 누비의 목소리도 들리지 않는다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.real_world.007",
+          "text": "엄마가 탁자 위의 뜨개실을 집으려다 손을 멈춘다. 털실 한쪽에는 작은 고리 모양의 단수링이 끼워져 있다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "final.real_world.008",
+          "speaker": "mother",
+          "speakerLabel": "엄마",
+          "text": "어? 이 단수링이 왜 여기 달려 있지?",
+          "portrait": null,
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.real_world.009",
+          "text": "주인공은 탁자 위의 털실을 바라본다. 실 끝에는 처음 누비에게 묶어 주었던 작은 크림색 매듭이 남아 있다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.real_world.010",
+          "text": "주인공이 털실 가까이 다가간다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "line",
+          "dialogueId": "final.real_world.011",
+          "speaker": "player",
+          "speakerLabel": "{playerName}",
+          "text": "누비, 내가 기억할게.",
+          "portrait": "player",
+          "expression": "neutral",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.real_world.012",
+          "text": "잠시 침묵이 흐른다.",
+          "cameraCue": null,
+          "soundCue": null
+        },
+        {
+          "kind": "narration",
+          "dialogueId": "final.real_world.013",
+          "text": "털실이 아주 조금 꿈틀거린다.",
+          "cameraCue": null,
+          "soundCue": null
+        }
+      ]
+    }
+  ]
+}
