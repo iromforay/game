@@ -233,7 +233,7 @@ test('장착 성공: story_4 + 성장 3→4 + 사건 둘 + CH04_COMPLETE를 한 
   assert.equal((await s.story.getState(P)).resume.segmentId, 'ch04.chapter_complete');
   assert.equal((await s.story.completeEvent(P, 'fridge_chapter_complete_seen')).alreadyCompleted, false);
   assert.equal((await s.story.completeEvent(P, 'fridge_chapter_complete_seen')).alreadyCompleted, true);
-  assert.equal((await s.story.getState(P)).resume.segmentId, null);
+  assert.equal((await s.story.getState(P)).resume.segmentId, 'ch05.entry', '10-26 C5-1: 4장 장면을 끝까지 본 뒤에는 5장 도입(사막에 들어서면 재생)');
   assert.deepEqual(state(s), { cp: 'CH04_COMPLETE', growth: 4, slot4: 1, events: 2 }, '장면 완료는 상태를 바꾸지 않는다');
   assert.equal((await s.story.getState(P)).stages.find((x) => x.stageCode === 'desert')!.canEnter, true, '5장 보일러 옆 사막 개방');
 });

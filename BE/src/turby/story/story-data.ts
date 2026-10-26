@@ -270,6 +270,20 @@ export const STORY_EVENTS: StoryEventDef[] = [
   ev({ id: 'desert_unlocked', chapter: 4, allowedAt: ['CH04_BOSS_DEFEATED'], requires: ['fridge_boss_aftermath_seen'], serverOnly: true, evidence: { kind: 'none' } }),
   // '이어진 감각' 장면(ch04.chapter_complete)을 끝까지 본 뒤 클라이언트가 완료를 요청한다. 체크포인트·보상·성장은 다시 바꾸지 않는다
   ev({ id: 'fridge_chapter_complete_seen', chapter: 4, allowedAt: ['CH04_COMPLETE'], requires: ['fridge_microfiber_equipped', 'desert_unlocked'], evidence: { kind: 'none' } }),
+
+  // ---- 5장 보일러 옆 사막(C5-1) ----
+  // 뜨거운 침묵: 사막에 들어서면 도입(동료 셋 합류)을 끝까지 본 뒤 클라이언트가 완료를 요청한다. 5장 개방(desert_unlocked)은 4장 장착 때 이미 기록됐다
+  ev({ id: 'desert_entry_seen', chapter: 5, allowedAt: ['CH04_COMPLETE'], requires: ['desert_unlocked'], evidence: { kind: 'stage', stageCode: 'desert' }, to: 'CH05_STARTED' }),
+  // 말하지 못한 결론: 단서 길 지점에서 장면을 끝까지 보면 기록(정본 CH05_CLUES_JOINED — 단서를 거의 완성했지만 정체를 말하지 않은 장면)
+  ev({ id: 'desert_clues_seen', chapter: 5, allowedAt: ['CH05_STARTED'], requires: ['desert_entry_seen'], evidence: { kind: 'point', stageCode: 'desert', pointId: 'desert_clues' }, to: 'CH05_CLUES_JOINED' }),
+  // 능선 앞 전투(C5-3에서 전투 연결) 승리 정산: 능선 첫 틈 앞 물들이 지점만 연다. 체크포인트는 바꾸지 않는다(4장 P-01 방식). 서버 전용
+  ev({ id: 'desert_scorched_won', chapter: 5, allowedAt: ['CH05_CLUES_JOINED'], requires: ['desert_clues_seen'], serverOnly: true, evidence: { kind: 'none' } }),
+  // 뜨거운 모래 능선: 동료 셋이 차례로 틈을 잇는다(각 틈 앞 지점에서 장면을 끝까지 보면 그 틈이 열린다). 체크포인트 유지
+  ev({ id: 'desert_ridge_pad', chapter: 5, allowedAt: ['CH05_CLUES_JOINED'], requires: ['desert_scorched_won'], evidence: { kind: 'point', stageCode: 'desert', pointId: 'desert_ridge_pad' } }),
+  ev({ id: 'desert_ridge_scent', chapter: 5, allowedAt: ['CH05_CLUES_JOINED'], requires: ['desert_ridge_pad'], evidence: { kind: 'point', stageCode: 'desert', pointId: 'desert_ridge_scent' } }),
+  ev({ id: 'desert_ridge_thread', chapter: 5, allowedAt: ['CH05_CLUES_JOINED'], requires: ['desert_ridge_scent'], evidence: { kind: 'point', stageCode: 'desert', pointId: 'desert_ridge_thread' } }),
+  // 능선 끝 절단면: 장면(두 긴 날은 플레이어에게만)을 끝까지 보면 능선 통과
+  ev({ id: 'desert_ridge_crossed', chapter: 5, allowedAt: ['CH05_CLUES_JOINED'], requires: ['desert_ridge_thread'], evidence: { kind: 'point', stageCode: 'desert', pointId: 'desert_cut_face' }, to: 'CH05_RIDGE_CROSSED' }),
 ];
 
 // 부분 사건이 모두 기록되면 같은 트랜잭션에서 함께 기록하는 집계 사건(C2-3). 이미 기록돼 있으면 다시 만들지 않는다
@@ -465,6 +479,17 @@ export const STORY_TRIGGERS: StoryTriggerDef[] = [
   { id: 'fridge_confession', stageCode: 'ice', evidence: { kind: 'point', stageCode: 'ice', pointId: 'fridge_confession' }, activeAt: ['CH04_STORAGE_CLEARED'], requires: ['fridge_storage_seen'], unless: ['fridge_confession_seen'], repeatable: true, play: { segmentId: 'ch04.confession', endAfter: 'ch04.confession' } },
   // 6) 저장고 중심 입구(10-23 C4-3) — 고백 뒤에만. 도입 → 서리 미싱 전투 → (이기면) 승리 장면이 한 재생 범위로 이어진다. 정산 뒤에는 닫힌다
   { id: 'fridge_boss_entrance', stageCode: 'ice', evidence: { kind: 'point', stageCode: 'ice', pointId: 'fridge_boss_entrance' }, activeAt: ['CH04_CONFESSION_SEEN'], requires: ['fridge_confession_seen'], unless: ['fridge_boss_defeated'], encounterKey: 'fridge_boss_frost_machine', repeatable: true, play: { segmentId: 'ch04.boss_intro', endAfter: 'ch04.boss_victory' } },
+  // ---- 5장 보일러 옆 사막(C5-1) ----
+  // 1) 사막 초입 — 지역에 들어서면 서버가 실행. 도입(뜨거운 침묵)을 끝까지 본 뒤 desert_entry_seen(completesWith)
+  { id: 'desert_entry', stageCode: 'desert', evidence: { kind: 'stage', stageCode: 'desert' }, auto: true, repeatable: true, play: 'resume' },
+  // 2) 단서 길 — 끝까지 보면 desert_clues_seen + CH05_CLUES_JOINED
+  { id: 'desert_clues', stageCode: 'desert', evidence: { kind: 'point', stageCode: 'desert', pointId: 'desert_clues' }, activeAt: ['CH05_STARTED'], requires: ['desert_entry_seen'], unless: ['desert_clues_seen'], repeatable: true, play: { segmentId: 'ch05.clues', endAfter: 'ch05.clues' } },
+  // 3~5) 능선의 세 틈 앞 동료 — 차례로 하나씩. 끝까지 보면 그 틈이 열린다(체크포인트 유지)
+  { id: 'desert_ridge_pad', stageCode: 'desert', evidence: { kind: 'point', stageCode: 'desert', pointId: 'desert_ridge_pad' }, activeAt: ['CH05_CLUES_JOINED'], requires: ['desert_scorched_won'], unless: ['desert_ridge_pad'], repeatable: true, play: { segmentId: 'ch05.ridge_pad', endAfter: 'ch05.ridge_pad' } },
+  { id: 'desert_ridge_scent', stageCode: 'desert', evidence: { kind: 'point', stageCode: 'desert', pointId: 'desert_ridge_scent' }, activeAt: ['CH05_CLUES_JOINED'], requires: ['desert_ridge_pad'], unless: ['desert_ridge_scent'], repeatable: true, play: { segmentId: 'ch05.ridge_scent', endAfter: 'ch05.ridge_scent' } },
+  { id: 'desert_ridge_thread', stageCode: 'desert', evidence: { kind: 'point', stageCode: 'desert', pointId: 'desert_ridge_thread' }, activeAt: ['CH05_CLUES_JOINED'], requires: ['desert_ridge_scent'], unless: ['desert_ridge_thread'], repeatable: true, play: { segmentId: 'ch05.ridge_thread', endAfter: 'ch05.ridge_thread' } },
+  // 6) 능선 끝 절단면 — 끝까지 보면 desert_ridge_crossed + CH05_RIDGE_CROSSED
+  { id: 'desert_cut_face', stageCode: 'desert', evidence: { kind: 'point', stageCode: 'desert', pointId: 'desert_cut_face' }, activeAt: ['CH05_CLUES_JOINED'], requires: ['desert_ridge_thread'], unless: ['desert_ridge_crossed'], repeatable: true, play: { segmentId: 'ch05.cut_face', endAfter: 'ch05.cut_face' } },
 ];
 export const TRIGGER_BY_ID = new Map(STORY_TRIGGERS.map((t) => [t.id, t]));
 

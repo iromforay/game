@@ -21,7 +21,7 @@ export interface StoryDialogueData extends OpeningSceneData {
 }
 
 // 장 코드 → 대화 배경(OpeningScene의 DIALOGUE_BACKDROPS 키). 없으면 숲 타일
-const BACKDROP_OF_CHAPTER: Record<string, string> = { ch03: 'underfloor', ch04: 'fridge' };
+const BACKDROP_OF_CHAPTER: Record<string, string> = { ch03: 'underfloor', ch04: 'fridge', ch05: 'desert' };
 
 export class StoryDialogueScene extends OpeningScene {
   private data2!: StoryDialogueData;
@@ -60,7 +60,7 @@ export class StoryDialogueScene extends OpeningScene {
   protected ports(): RunnerPorts {
     return {
       ...super.ports(),
-      onSegment: (id) => this.setBackdrop(BACKDROP_OF_CHAPTER[chapterOfSegment(id)] ?? 'forest'), // 장 전용 대화 배경(3장 C3-6 R1-04, 4장 C4-3)
+      onSegment: (id) => this.setBackdrop(BACKDROP_OF_CHAPTER[chapterOfSegment(id)] ?? 'forest'), // 장 전용 대화 배경(3장 C3-6 R1-04, 4장 C4-3, 5장 C5-1)
       startBattle: (key) => this.startBattle(key),
     };
   }
