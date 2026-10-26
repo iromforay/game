@@ -93,6 +93,7 @@ export class InventoryService {
           maxStack: d.max_stack,
           equipped,
           equippedOnStoryNubi: onNubi.has(r.item_definition_id),
+          finalUnraveled: d.category === 'relic' && snap.events.has('relics_final_unraveled'), // 10-26 F-3b: 정식 결말 뒤 다섯 유물(FINAL_UNRAVELED — 보유·장착 기록은 남고 도감·가방에 '완결')
           isNew: r.is_new,
           isLocked: r.is_locked || isStory, // 스토리 아이템은 언제나 잠금(판매·폐기·일반 소비 불가)
           isMissionTarget: false, // 목표 연동은 M4(1장 트리거)에서

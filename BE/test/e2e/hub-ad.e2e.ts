@@ -35,7 +35,7 @@ test('허브 통합: 게임 목록에 터비 구하기와 광고게임이 함께
 
   // 1) 허브 게임 목록
   await page.goto(`${hub.url}/?device=e2e-hub-ad`);
-  await page.getByRole('button', { name: /터비 구하기/ }).first().waitFor({ timeout: 30_000 });
+  await page.getByRole('button', { name: /터비 구하기/ }).first().waitFor({ timeout: 90_000 }); // 10-26: 허브 첫 빌드가 병렬 실행에서 느리다(그린 트래킹 3D 의존성 추가)
   await page.getByRole('button', { name: /광고게임/ }).waitFor();
   await shot('1280x800_01_hub_game_list.png');
 

@@ -259,7 +259,7 @@ export class OpeningScene extends Phaser.Scene {
   // ---------- 누비 색 빠짐 연출(10-13 C2-4) ----------
   // 누비 그림 위에 같은 중심으로 투명 오버레이를 1회 재생하고(캐릭터를 대체하지 않는다), 배경 채도를 부드럽게 낮춘다.
   // 대화창·이름표·버튼(this.layer)은 별도 레이어라 탈색되지 않는다. 붉은 화면·섬광·흔들림·시간 제한은 쓰지 않는다.
-  fxState: { drainPlayed: number; saturation: number; bounds: { x: number; y: number; w: number; h: number } | null; relicShown: number; relicBounds: { x: number; y: number; w: number; h: number } | null; restorePlayed: number; glimpseShown: string[]; glimpseBounds: { x: number; y: number; w: number; h: number } | null; voiceShown: number } = { drainPlayed: 0, saturation: 1, bounds: null, relicShown: 0, relicBounds: null, restorePlayed: 0, glimpseShown: [], glimpseBounds: null, voiceShown: 0 };
+  fxState: { drainPlayed: number; saturation: number; bounds: { x: number; y: number; w: number; h: number } | null; relicShown: number; relicBounds: { x: number; y: number; w: number; h: number } | null; restorePlayed: number; glimpseShown: string[]; glimpseBounds: { x: number; y: number; w: number; h: number } | null; voiceShown: number; endingShown?: boolean; endingReady?: boolean } = { drainPlayed: 0, saturation: 1, bounds: null, relicShown: 0, relicBounds: null, restorePlayed: 0, glimpseShown: [], glimpseBounds: null, voiceShown: 0 };
   private fxNubi?: Phaser.GameObjects.Image;
   private fxRelic?: Phaser.GameObjects.Image;
   private satTween?: Phaser.Tweens.Tween;

@@ -1,5 +1,5 @@
 // 10-26 F-3a: 종장 가위 최종 전투 — 결속을 마친 계정이 검은 틈에서 가위 등장 장면 → 최종 전투(한 전투 안의 3단계: 잘린 길·잘린 기억·다섯 기억의 매듭)
-// → 승리(서버 정산 final_boss_defeated, CHFINAL_SCISSORS_DEFEATED) → 다섯 기억의 매듭 장면 → final_boss_aftermath_seen. 자동 진행(__dev.battleStep)은 누비 환영을 치지 않는다.
+// → 승리(서버 정산 final_boss_defeated, CHFINAL_SCISSORS_DEFEATED) → 다섯 기억의 매듭 → 귀환의 대가 → 다섯 실이 풀리다 → 현실 세계 → 암전·제목 카드(ENDING_COMPLETE, F-3b). 자동 진행(__dev.battleStep)은 누비 환영을 치지 않는다.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'fs';
@@ -32,6 +32,7 @@ const snapOf = (g: Game) => g.page.evaluate(() => (window as any).__game.scene.g
 const stageIs = (n: number) => `(() => { const b = window.__game.scene.getScene('Battle'); return !!b && !!b.snap && !!b.snap.stage && b.snap.stage.index === ${n} && b.snap.currentPlayerId === b.myId; })()`;
 const eventsOf = (device: string) => backend.db.rows('player_story_event', { player_id: backend.playerByDevice(device)!.id }).map((r) => r.event_id as string);
 const count = (device: string, id: string) => eventsOf(device).filter((e) => e === id).length;
+const ENDING_SHOWN = `(() => { const sc = window.__game.scene.getScenes(true).find((x) => x.fxState); return !!sc && !!sc.fxState.endingShown; })()`;
 const checkpointOf = (device: string) => (backend.db.rows('player_story_progress', { player_id: backend.playerByDevice(device)!.id })[0] as { checkpoint: string }).checkpoint;
 
 async function enterHome(g: Game) {
@@ -47,7 +48,7 @@ async function enterHome(g: Game) {
   await g.until('집의 중심 지도', MAP_READY, 30_000);
 }
 
-test('종장 F-3a ①(1280×720): 검은 틈 → 가위 등장 → 최종 전투 3단계(잘린 길·잘린 기억·다섯 기억의 매듭) → 승리 정산 → 다섯 기억의 매듭 장면', async () => {
+test('종장 F-3a ①(1280×720): 검은 틈 → 가위 등장 → 최종 전투 3단계(잘린 길·잘린 기억·다섯 기억의 매듭) → 승리 정산 → 매듭·귀환의 대가·다섯 실·현실 세계 → 암전·제목 카드(ENDING_COMPLETE)', async () => {
   const device = 'e2e-final-boss-1280';
   await backend.start(seedFinal(device, 'revealed'), { 'story.stageAccessV2': true });
   const g = await Game.open(browser, `${vite.url}/?device=${device}`, device);
@@ -85,12 +86,16 @@ test('종장 F-3a ①(1280×720): 검은 틈 → 가위 등장 → 최종 전투
     await g.until('결과 확정', 's.battle && s.battle.settled === true && s.battle.resultButton', 30_000);
     assert.equal((await battle(g)).units.find((u) => u.id === 'scissors')!.phase, 'exposed', '가위가 묶여 풀림(파괴 아님)');
     assert.deepEqual([count(device, 'final_boss_defeated'), checkpointOf(device)], [1, 'CHFINAL_SCISSORS_DEFEATED']);
-    // 다섯 기억의 매듭(승리 장면) → final_boss_aftermath_seen
+    // F-3b: 다섯 기억의 매듭 → 귀환의 대가 → 다섯 실이 풀리다 → 현실 세계 → 즉시 암전·제목 카드(한 재생 범위)
     await g.clickLabel('이야기 계속하기', { exact: true });
     await g.until('매듭 장면', "s.scenes.includes('StoryDialogue')", 30_000);
-    await g.advanceDialogue("s.scenes.includes('Map') && !s.scenes.includes('StoryDialogue')");
+    await g.advanceDialogue(ENDING_SHOWN);
+    assert.deepEqual([count(device, 'final_boss_aftermath_seen'), count(device, 'final_cost_accepted'), count(device, 'ending_yarn_reunion_seen'), checkpointOf(device)], [1, 1, 1, 'ENDING_COMPLETE']);
+    for (const id of ['game_cleared', 'nubi_bound_to_real_yarn', 'relics_final_unraveled', 'dansuring_returned']) assert.equal(count(device, id), 1, `정식 결말 상태 ${id}`);
+    await g.until('제목 카드(누를 수 있음)', `(() => { const sc = window.__game.scene.getScenes(true).find((x) => x.fxState); return !!sc && !!sc.fxState.endingReady; })()`, 15_000);
+    await g.capture('final_ending_title');
+    await g.clickAt(640, 360, "s.scenes.includes('Map') && !s.scenes.includes('StoryDialogue')");
     await g.until('집의 중심 지도', MAP_READY, 30_000);
-    assert.deepEqual([count(device, 'final_boss_aftermath_seen'), checkpointOf(device)], [1, 'CHFINAL_SCISSORS_DEFEATED']);
   }, backend, device);
   await g.close();
 });

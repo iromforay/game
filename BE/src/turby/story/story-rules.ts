@@ -129,7 +129,12 @@ export function resumeOf(snap: StorySnapshot): { segmentId: string | null; tutor
       case 'CH05_COMPLETE':
         return has('desert_chapter_complete_seen') ? null : 'ch05.chapter_complete'; // 장착은 끝났고 장면을 끝까지 보기 전 — 장면만 처음부터
       case 'CHFINAL_SCISSORS_DEFEATED':
-        return has('final_boss_aftermath_seen') ? null : 'final.knot'; // 10-26 F-3a: 정산은 끝났다 — 다섯 기억의 매듭 장면을 끝까지 보기 전이면 그 장면부터(귀환의 대가는 F-3b)
+        // 10-26 F-3a·F-3b: 정산은 끝났다 — 매듭 장면을 끝까지 보기 전이면 그 장면부터, 본 뒤면 귀환의 대가부터(정본 저장점 안내)
+        return has('final_boss_aftermath_seen') ? 'final.cost' : 'final.knot';
+      case 'CHFINAL_COST_ACCEPTED':
+        return 'final.unravel'; // 정본: 이후 구간은 결말 시퀀스 — 종료하면 다섯 실 해체부터 다시 재생한다
+      case 'ENDING_COMPLETE':
+        return null; // 엔딩을 강제로 반복하지 않는다(회상은 엔딩 범위 안 B — 다음 단계)
       case 'CH04_BOSS_DEFEATED':
         return has('fridge_boss_aftermath_seen') ? null : 'ch04.boss_victory'; // 정산은 끝났고 승리 장면을 끝까지 보기 전 — 장면만 처음부터
       case 'CH03_BOSS_DEFEATED':

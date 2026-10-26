@@ -44,9 +44,9 @@ test('허브 임베드: 대시보드 → 터비 구하기 → 게임 시작 → 
   await backend.start(seedKnotReady(device));
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   const page = await ctx.newPage();
-  const story = page.waitForResponse((r) => r.url().includes('/player/me/story') && r.status() === 200, { timeout: 30_000 });
+  const story = page.waitForResponse((r) => r.url().includes('/player/me/story') && r.status() === 200, { timeout: 120_000 }); // 10-26: 허브 첫 빌드가 병렬 실행에서 느리다(그린 트래킹 3D 의존성 추가) — 첫 화면만 넉넉히
   await page.goto(`${hub.url}/?device=${device}`);
-  await page.getByRole('button', { name: /터비 구하기/ }).first().click();
+  await page.getByRole('button', { name: /터비 구하기/ }).first().click({ timeout: 90_000 });
   await page.getByRole('button', { name: '게임 시작' }).click();
   await page.locator('.game-canvas-container canvas').waitFor({ timeout: 30_000 });
   await story; // 게임이 서버 스토리 상태를 받아 첫 화면(기존 계정 → 마을)을 고른다

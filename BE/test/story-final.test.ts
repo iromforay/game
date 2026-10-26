@@ -87,7 +87,7 @@ test('이벤트·트리거 정의: 도착·결속은 지점 증거, 전이·선�
   assert.deepEqual(STORY_TRIGGERS.filter((t) => t.stageCode === 'home_core').map((t) => [t.id, t.activeAt, t.unless, t.play]), [
     ['final_arrival', ['CH05_COMPLETE'], ['final_entry_seen'], { segmentId: 'final.arrival', endAfter: 'final.arrival' }],
     ['final_core', ['CHFINAL_STARTED'], ['final_identity_revealed'], { segmentId: 'final.bind', endAfter: 'final.bind' }],
-    ['final_scissors', ['CHFINAL_IDENTITY_REVEALED'], ['final_boss_defeated'], { segmentId: 'final.last_thread', endAfter: 'final.knot' }],
+    ['final_scissors', ['CHFINAL_IDENTITY_REVEALED'], ['final_boss_defeated'], { segmentId: 'final.last_thread', endAfter: 'final.real_world' }],
   ]);
   // 10-26 F-3a: 가위 최종전 — 승리 정산은 서버 전용, 승리 장면을 끝까지 보면 final_boss_aftermath_seen(체크포인트 유지)
   assert.deepEqual(sig('final_boss_defeated'), [6, ['CHFINAL_IDENTITY_REVEALED'], 'CHFINAL_SCISSORS_DEFEATED', true, ['final_identity_revealed'], { kind: 'none' }]);
@@ -144,14 +144,33 @@ test('가위(F-3a): 결속 전에는 검은 틈이 닫혀 있고, 결속 뒤 지
   s.goHome();
   s.standAt('final_scissors');
   const t = await s.service.trigger(P1, 'final_scissors');
-  assert.deepEqual(t.play, { segmentId: 'final.last_thread', endAfter: 'final.knot' });
+  assert.deepEqual(t.play, { segmentId: 'final.last_thread', endAfter: 'final.real_world' });
   assert.equal(await codeOf(s.service.completeEvent(P1, 'final_boss_defeated')), 'STORY_EVENT_SERVER_ONLY');
   assert.equal(await codeOf(s.service.completeEvent(P1, 'final_boss_aftermath_seen')), 'STORY_EVENT_NOT_ALLOWED', '승리 전 거부');
   const won = [...CH05_DONE, 'final_entry_seen', 'final_identity_revealed', 'final_boss_defeated'];
   assert.equal(resumeOf({ checkpoint: 'CHFINAL_SCISSORS_DEFEATED', events: new Set(won), objectives: new Map(), growthStage: 5 }).segmentId, 'final.knot');
-  assert.equal(resumeOf({ checkpoint: 'CHFINAL_SCISSORS_DEFEATED', events: new Set([...won, 'final_boss_aftermath_seen']), objectives: new Map(), growthStage: 5 }).segmentId, null);
+  assert.equal(resumeOf({ checkpoint: 'CHFINAL_SCISSORS_DEFEATED', events: new Set([...won, 'final_boss_aftermath_seen']), objectives: new Map(), growthStage: 5 }).segmentId, 'final.cost', 'F-3b: 매듭 장면 뒤에는 귀환의 대가부터');
   const after = setup('CHFINAL_SCISSORS_DEFEATED', won);
   assert.equal((await after.service.completeEvent(P1, 'final_boss_aftermath_seen')).story.checkpoint, 'CHFINAL_SCISSORS_DEFEATED');
+});
+
+test('엔딩(F-3b): 귀환의 대가 → CHFINAL_COST_ACCEPTED, 현실 세계를 끝까지 보면 ENDING_COMPLETE와 정식 결말 상태(클리어·누비 귀환·유물 완결·단수링 귀환)가 한 번에, 보상 없음·멱등. 재접속 복원 지점', async () => {
+  const won = [...CH05_DONE, 'final_entry_seen', 'final_identity_revealed', 'final_boss_defeated'];
+  const s = setup('CHFINAL_SCISSORS_DEFEATED', won);
+  const before = s.items();
+  assert.equal(await codeOf(s.service.completeEvent(P1, 'final_cost_accepted')), 'STORY_PREREQUISITE_MISSING', '매듭 장면 전 거부');
+  await s.service.completeEvent(P1, 'final_boss_aftermath_seen');
+  assert.equal((await s.service.completeEvent(P1, 'final_cost_accepted')).story.checkpoint, 'CHFINAL_COST_ACCEPTED');
+  assert.equal(resumeOf({ checkpoint: 'CHFINAL_COST_ACCEPTED', events: new Set([...won, 'final_boss_aftermath_seen', 'final_cost_accepted']), objectives: new Map(), growthStage: 5 }).segmentId, 'final.unravel', '정본: 결말 시퀀스는 다섯 실 해체부터 다시');
+  for (const id of ['game_cleared', 'nubi_bound_to_real_yarn', 'relics_final_unraveled', 'dansuring_returned']) assert.equal(await codeOf(s.service.completeEvent(P1, id)), 'STORY_EVENT_SERVER_ONLY', `${id}는 서버 전용`);
+  const first = await s.service.completeEvent(P1, 'ending_yarn_reunion_seen');
+  const again = await s.connect().completeEvent(P1, 'ending_yarn_reunion_seen');
+  assert.deepEqual([first.alreadyCompleted, first.story.checkpoint, again.alreadyCompleted, again.story.checkpoint], [false, 'ENDING_COMPLETE', true, 'ENDING_COMPLETE']);
+  const ev = s.events();
+  for (const id of ['ending_yarn_reunion_seen', 'game_cleared', 'nubi_bound_to_real_yarn', 'relics_final_unraveled', 'dansuring_returned']) assert.equal(ev.filter((e) => e === id).length, 1, `${id} 한 번`);
+  assert.equal(s.items(), before, '엔딩 보상은 아직 없다(최초 1회 보상 품목 미정)');
+  assert.equal(resumeOf({ checkpoint: 'ENDING_COMPLETE', events: new Set(ev), objectives: new Map(), growthStage: 5 }).segmentId, null, '엔딩을 강제로 반복하지 않는다');
+  assert.equal(chapterCompleted(6, 'ENDING_COMPLETE'), true);
 });
 
 test('종장 대화·지역: 5장을 마치기 전에는 대화 잠김, 마친 뒤 열림. 지역 화면은 목표가 진행에 따라 바뀌고 동료 넷·검은 틈 오버레이가 내려간다', async () => {

@@ -442,7 +442,9 @@ export class BattleScene extends Phaser.Scene {
     } else if (u.characterCode === 'carrier_thread' && this.textures.exists(CARRIER_KEY)) {
       body = this.add.image(0, 0, CARRIER_KEY).setDisplaySize(TARGET_DISPLAY_PX, TARGET_DISPLAY_PX);
     } else {
-      body = hasImage ? this.add.image(0, 0, `turby-${u.characterCode}`).setDisplaySize(52, 52) : this.add.circle(0, 0, u.partOf ? 16 : 24, fill);
+      // 10-26 F-3b: 종장 최종 전투의 이야기 누비는 태초의 실타래 모습(정체 공개 뒤 — 다섯 실이 풀리기 전)
+      const originNubi = u.storyNubi && this.snap.story?.encounterKey === 'final_boss_scissors' && this.textures.exists('nubi-origin');
+      body = originNubi ? this.add.image(0, 0, 'nubi-origin').setDisplaySize(52, 52) : hasImage ? this.add.image(0, 0, `turby-${u.characterCode}`).setDisplaySize(52, 52) : this.add.circle(0, 0, u.partOf ? 16 : 24, fill);
     }
     const selectRing = this.add.circle(0, 0, 29).setStrokeStyle(3, 0x9fe58a, 0);
     const ring = this.add.circle(0, 0, 26).setStrokeStyle(3, u.side === 'party' ? slotNum(u.participantSlot) : u.side === 'neutral' ? 0x4a9a4a : u.mirageOf ? MIRAGE_GLOW : 0x2d6fa3);

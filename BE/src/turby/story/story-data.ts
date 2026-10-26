@@ -329,6 +329,13 @@ export const STORY_EVENTS: StoryEventDef[] = [
   ev({ id: 'final_boss_defeated', chapter: 6, allowedAt: ['CHFINAL_IDENTITY_REVEALED'], requires: ['final_identity_revealed'], serverOnly: true, evidence: { kind: 'none' }, to: 'CHFINAL_SCISSORS_DEFEATED' }),
   // 승리 장면(final.knot — 다섯 기억의 매듭)을 끝까지 본 뒤 클라이언트가 완료를 요청한다(completesWith). 체크포인트는 바꾸지 않는다
   ev({ id: 'final_boss_aftermath_seen', chapter: 6, allowedAt: ['CHFINAL_SCISSORS_DEFEATED'], requires: ['final_boss_defeated'], evidence: { kind: 'none' } }),
+  // 10-26 F-3b: 귀환의 대가(선택지 없는 고정 장면 final.cost)를 끝까지 보면 CHFINAL_COST_ACCEPTED
+  ev({ id: 'final_cost_accepted', chapter: 6, allowedAt: ['CHFINAL_SCISSORS_DEFEATED'], requires: ['final_boss_aftermath_seen'], evidence: { kind: 'none' }, to: 'CHFINAL_COST_ACCEPTED' }),
+  // 다섯 실이 풀리다 → 현실 세계(final.real_world)를 끝까지 보면 ENDING_COMPLETE. 한 트랜잭션으로 정식 결말 상태를 함께 기록한다(정본 '정식 결말 상태' — 엔딩 범위 안 A):
+  //   game_cleared(게임 클리어), nubi_bound_to_real_yarn(이야기 누비 BOUND_TO_REAL_YARN), relics_final_unraveled(다섯 유물 FINAL_UNRAVELED — 보유·장착 레코드는 지우지 않는다),
+  //   dansuring_returned(단수링 RETURNED_TO_REAL_WORLD). 모두 서버 전용이고 되돌리지 않는다
+  ev({ id: 'ending_yarn_reunion_seen', chapter: 6, allowedAt: ['CHFINAL_COST_ACCEPTED'], requires: ['final_cost_accepted'], evidence: { kind: 'none' }, alsoComplete: ['game_cleared', 'nubi_bound_to_real_yarn', 'relics_final_unraveled', 'dansuring_returned'], to: 'ENDING_COMPLETE' }),
+  ...(['game_cleared', 'nubi_bound_to_real_yarn', 'relics_final_unraveled', 'dansuring_returned'] as const).map((id) => ev({ id, chapter: 6, allowedAt: ['CHFINAL_COST_ACCEPTED'], requires: ['final_cost_accepted'], serverOnly: true, evidence: { kind: 'none' } })),
 ];
 
 // 부분 사건이 모두 기록되면 같은 트랜잭션에서 함께 기록하는 집계 사건(C2-3). 이미 기록돼 있으면 다시 만들지 않는다
@@ -545,7 +552,7 @@ export const STORY_TRIGGERS: StoryTriggerDef[] = [
   // 2) 중앙의 빈자리 — 다섯 기억의 결속·정체 공개. 끝까지 보면 final_identity_revealed + CHFINAL_IDENTITY_REVEALED
   { id: 'final_core', stageCode: 'home_core', evidence: { kind: 'point', stageCode: 'home_core', pointId: 'final_core' }, activeAt: ['CHFINAL_STARTED'], requires: ['final_entry_seen'], unless: ['final_identity_revealed'], repeatable: true, play: { segmentId: 'final.bind', endAfter: 'final.bind' } },
   // 3) 검은 틈(F-3a) — 가위 등장 → 최종 전투(한 전투 3단계) → (이기면 이어서) 다섯 기억의 매듭 장면. 정산 뒤에는 닫힌다
-  { id: 'final_scissors', stageCode: 'home_core', evidence: { kind: 'point', stageCode: 'home_core', pointId: 'final_scissors' }, activeAt: ['CHFINAL_IDENTITY_REVEALED'], requires: ['final_identity_revealed'], unless: ['final_boss_defeated'], encounterKey: 'final_boss_scissors', repeatable: true, play: { segmentId: 'final.last_thread', endAfter: 'final.knot' } },
+  { id: 'final_scissors', stageCode: 'home_core', evidence: { kind: 'point', stageCode: 'home_core', pointId: 'final_scissors' }, activeAt: ['CHFINAL_IDENTITY_REVEALED'], requires: ['final_identity_revealed'], unless: ['final_boss_defeated'], encounterKey: 'final_boss_scissors', repeatable: true, play: { segmentId: 'final.last_thread', endAfter: 'final.real_world' } }, // F-3b: 승리 뒤 매듭 → 귀환의 대가 → 다섯 실이 풀리다 → 현실 세계까지 한 번에
 ];
 export const TRIGGER_BY_ID = new Map(STORY_TRIGGERS.map((t) => [t.id, t]));
 
@@ -563,7 +570,9 @@ export const SEGMENT_CHAIN_END: Record<string, string> = {
   'ch04.chapter_complete': 'ch04.chapter_complete',
   'ch05.boss_victory': 'ch05.scissors', // 10-26 C5-3: 승리 장면에 가위 장면이 이어진다(정본 — 장착하려는 순간)
   'ch05.chapter_complete': 'ch05.chapter_complete',
-  'final.knot': 'final.knot', // 10-26 F-3a: 귀환의 대가(final.cost)부터는 F-3b
+  'final.knot': 'final.real_world', // 10-26 F-3b: 매듭 장면에 귀환의 대가·다섯 실이 풀리다·현실 세계가 이어진다(정본 — 전투 뒤 결말 시퀀스)
+  'final.cost': 'final.real_world',
+  'final.unravel': 'final.real_world',
 };
 
 // 숲 입구 복귀 범위: 잘린 실을 살펴보기 전까지는 첫 길의 걷는 장면(001~004)만 다시 보여 준다. 그 뒤는 지점이 이어 간다
