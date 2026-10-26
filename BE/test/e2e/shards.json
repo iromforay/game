@@ -1,10 +1,10 @@
 {
-  "_note": "E2E 병렬 shard manifest(10-12 v6). 34개 *.e2e.ts를 중복·누락 없이 정확히 2개 shard로 나눈다(wildcard 금지). expectedTests는 파일의 test() 수, estimatedSeconds는 10-12 v5 완료 후보 순차 실행의 실측(시험 본문 합 + 파일당 기동 비용 약 21.9초)이다. 두 shard의 예상 시간이 비슷해지도록 큰 파일부터 가벼운 shard에 배치했다.",
+  "_note": "E2E 병렬 shard manifest(10-12 v6). 35개 *.e2e.ts를 중복·누락 없이 정확히 2개 shard로 나눈다(wildcard 금지). expectedTests는 파일의 test() 수, estimatedSeconds는 10-12 v5 완료 후보 순차 실행의 실측(시험 본문 합 + 파일당 기동 비용 약 21.9초)이다. 두 shard의 예상 시간이 비슷해지도록 큰 파일부터 가벼운 shard에 배치했다.",
   "shards": {
     "1": {
-      "files": ["wild2.e2e.ts", "ch01.e2e.ts", "restore.e2e.ts", "position.e2e.ts", "hub.e2e.ts", "shelf.e2e.ts", "bopuli-world.e2e.ts", "map.e2e.ts", "lake.e2e.ts", "lake-rescue.e2e.ts", "lake-boss-combat.e2e.ts", "lake-chapter-complete.e2e.ts", "lake-final-layout.e2e.ts", "underfloor-battle.e2e.ts", "fridge-explore.e2e.ts", "desert-explore.e2e.ts", "final-explore.e2e.ts"],
-      "expectedTests": 55,
-      "estimatedSeconds": 1386
+      "files": ["wild2.e2e.ts", "ch01.e2e.ts", "restore.e2e.ts", "position.e2e.ts", "hub.e2e.ts", "shelf.e2e.ts", "bopuli-world.e2e.ts", "map.e2e.ts", "lake.e2e.ts", "lake-rescue.e2e.ts", "lake-boss-combat.e2e.ts", "lake-chapter-complete.e2e.ts", "lake-final-layout.e2e.ts", "underfloor-battle.e2e.ts", "fridge-explore.e2e.ts", "desert-explore.e2e.ts", "final-explore.e2e.ts", "final-battle.e2e.ts"],
+      "expectedTests": 56,
+      "estimatedSeconds": 1506
     },
     "2": {
       "files": ["chapter1-full.e2e.ts", "forest.e2e.ts", "wild.e2e.ts", "screens.e2e.ts", "input.e2e.ts", "render.e2e.ts", "final-captures.e2e.ts", "previews.e2e.ts", "hub-ad.e2e.ts", "lake-maze.e2e.ts", "lake-crisis.e2e.ts", "lake-boss-reward.e2e.ts", "lake-final-art.e2e.ts", "lake-final-visual.e2e.ts", "underfloor-explore.e2e.ts", "fridge-battle.e2e.ts", "desert-battle.e2e.ts"],

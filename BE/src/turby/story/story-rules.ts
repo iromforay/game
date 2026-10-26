@@ -128,6 +128,8 @@ export function resumeOf(snap: StorySnapshot): { segmentId: string | null; tutor
         return has('desert_boss_aftermath_seen') ? (has('desert_scissors_seen') ? null : 'ch05.scissors') : 'ch05.boss_victory';
       case 'CH05_COMPLETE':
         return has('desert_chapter_complete_seen') ? null : 'ch05.chapter_complete'; // 장착은 끝났고 장면을 끝까지 보기 전 — 장면만 처음부터
+      case 'CHFINAL_SCISSORS_DEFEATED':
+        return has('final_boss_aftermath_seen') ? null : 'final.knot'; // 10-26 F-3a: 정산은 끝났다 — 다섯 기억의 매듭 장면을 끝까지 보기 전이면 그 장면부터(귀환의 대가는 F-3b)
       case 'CH04_BOSS_DEFEATED':
         return has('fridge_boss_aftermath_seen') ? null : 'ch04.boss_victory'; // 정산은 끝났고 승리 장면을 끝까지 보기 전 — 장면만 처음부터
       case 'CH03_BOSS_DEFEATED':

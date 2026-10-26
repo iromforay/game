@@ -14,33 +14,33 @@ const run = (...args: string[]) => spawnSync(process.execPath, [SCRIPT, ...args]
 const real = JSON.parse(readFileSync(MANIFEST, 'utf8')) as { shards: Record<string, { files: string[]; expectedTests: number; estimatedSeconds: number }> };
 const testCount = (f: string) => (readFileSync(join(E2E_DIR, f), 'utf8').match(/^test\(/gm) ?? []).length;
 
-test('실제 manifest: shard 정확히 2개, 모든(34개) 파일이 정확히 한 shard에만(누락 0·중복 0·wildcard 0)', () => {
+test('실제 manifest: shard 정확히 2개, 모든(35개) 파일이 정확히 한 shard에만(누락 0·중복 0·wildcard 0)', () => {
   assert.deepEqual(Object.keys(real.shards).sort(), ['1', '2']);
   const all = readdirSync(E2E_DIR).filter((f) => f.endsWith('.e2e.ts')).sort();
   const listed = Object.values(real.shards).flatMap((s) => s.files);
-  assert.equal(all.length, 34); // 10-26 F-1: final-explore.e2e.ts. 10-26 C5-3: desert-battle.e2e.ts. 10-26 C5-1: desert-explore.e2e.ts. 10-23 C4-3: fridge-battle.e2e.ts. 10-23 C4-1: fridge-explore.e2e.ts. 10-16 C3-1: underfloor-explore.e2e.ts. 10-13~15: lake.e2e.ts, lake-maze.e2e.ts, lake-rescue.e2e.ts, lake-crisis.e2e.ts, lake-boss-combat.e2e.ts, lake-boss-reward.e2e.ts, lake-chapter-complete.e2e.ts, lake-final-art.e2e.ts, lake-final-layout.e2e.ts, lake-final-visual.e2e.ts 추가
+  assert.equal(all.length, 35); // 10-26 F-3a: final-battle.e2e.ts. 10-26 F-1: final-explore.e2e.ts. 10-26 C5-3: desert-battle.e2e.ts. 10-26 C5-1: desert-explore.e2e.ts. 10-23 C4-3: fridge-battle.e2e.ts. 10-23 C4-1: fridge-explore.e2e.ts. 10-16 C3-1: underfloor-explore.e2e.ts. 10-13~15: lake.e2e.ts, lake-maze.e2e.ts, lake-rescue.e2e.ts, lake-crisis.e2e.ts, lake-boss-combat.e2e.ts, lake-boss-reward.e2e.ts, lake-chapter-complete.e2e.ts, lake-final-art.e2e.ts, lake-final-layout.e2e.ts, lake-final-visual.e2e.ts 추가
   assert.equal(new Set(listed).size, listed.length, '중복 없음');
   assert.deepEqual([...listed].sort(), all, '누락 없음');
   assert.equal(listed.some((f) => /[*?]/.test(f)), false);
 });
 
-test('실제 manifest: 예상 시험 수 = 파일의 test() 선언 수, 합계 112, 예상 시간 균형(차이 10% 이내)', () => {
+test('실제 manifest: 예상 시험 수 = 파일의 test() 선언 수, 합계 113, 예상 시간 균형(차이 10% 이내)', () => {
   let total = 0;
   for (const [id, s] of Object.entries(real.shards)) {
     const n = s.files.reduce((a, f) => a + testCount(f), 0);
     assert.equal(s.expectedTests, n, `shard ${id}`);
     total += n;
   }
-  assert.equal(total, 112); // 10-26 F-1 종장 탐험 2개, 10-26 C5-3 사막 전투 3개, C5-1 사막 탐험 2개, 10-23 C4-3 냉장고 전투 3개, C4-1 냉장고 탐험 2개, 10-16 C3-1 마루 밑 탐험 2개 포함. 기존 68 + 2장 호수 2개(C2-1) + 물풀 미로 3개(C2-2) + 구조 4개(C2-3) + 위기 3개(C2-4) + 보스 2개(C2-5A) + 보상 2개(C2-5B) + 장 완료 2개(C2-6) + 최종 배경 2개(C2-7A) + 좌표 정합 3개(C2-7B) + 최종 표식 2개(C2-7D)
+  assert.equal(total, 113); // 10-26 F-3a 종장 최종 전투 1개, 10-26 F-1 종장 탐험 2개, 10-26 C5-3 사막 전투 3개, C5-1 사막 탐험 2개, 10-23 C4-3 냉장고 전투 3개, C4-1 냉장고 탐험 2개, 10-16 C3-1 마루 밑 탐험 2개 포함. 기존 68 + 2장 호수 2개(C2-1) + 물풀 미로 3개(C2-2) + 구조 4개(C2-3) + 위기 3개(C2-4) + 보스 2개(C2-5A) + 보상 2개(C2-5B) + 장 완료 2개(C2-6) + 최종 배경 2개(C2-7A) + 좌표 정합 3개(C2-7B) + 최종 표식 2개(C2-7D)
   const [a, b] = Object.values(real.shards).map((s) => s.estimatedSeconds);
   assert.ok(Math.abs(a - b) / Math.max(a, b) <= 0.1, `예상 시간 ${a}초 vs ${b}초`);
 });
 
-test('--dry-run: 파일 34개·누락 0·중복 0을 출력하고 아무것도 실행하지 않는다', () => {
+test('--dry-run: 파일 35개·누락 0·중복 0을 출력하고 아무것도 실행하지 않는다', () => {
   const r = run('--dry-run');
   assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /shard 2개 · 파일 34개\(누락 0·중복 0\) · 예상 시험 112개/);
-  assert.match(r.stdout, /shard 1: 파일 17개 · 시험 55개/);
+  assert.match(r.stdout, /shard 2개 · 파일 35개\(누락 0·중복 0\) · 예상 시험 113개/);
+  assert.match(r.stdout, /shard 1: 파일 18개 · 시험 56개/);
   assert.match(r.stdout, /shard 2: 파일 17개 · 시험 57개/);
 });
 

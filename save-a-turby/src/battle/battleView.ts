@@ -98,7 +98,15 @@ export function objectiveLines(snap: BattleSnapshot): string[] {
 
 function winText(snap: BattleSnapshot, o: BattleObjective) {
   if (o.kind === 'defeat_all') return '적을 모두 물리치기';
-  if (o.kind === 'defeat_units') return `${namesOf(snap, o.unitIds)} 쓰러뜨리기`;
+  if (o.kind === 'defeat_units') {
+    // 10-26 F-3a 종장 단계 목표: 유물 매듭은 잇고, 검정실은 끊고, 다섯 기억의 매듭은 누비가 묶는다
+    const units = o.unitIds.map((id) => snap.units.find((u) => u.unitId === id)).filter((u): u is BattleUnit => !!u);
+    const stage = snap.stage ? `${snap.stage.label} · ` : '';
+    if (units.length > 0 && units.every((u) => u.restores)) return `${stage}유물 매듭을 순서대로 눌러 길 잇기`;
+    if (units.length > 0 && units.every((u) => u.releases)) return `${stage}환영과 이어진 검정실 끊기`;
+    if (units.length > 0 && units.every((u) => u.nubiOnly)) return `${stage}누비가 ${namesOf(snap, o.unitIds)} 묶기`;
+    return `${stage}${namesOf(snap, o.unitIds)} 쓰러뜨리기`;
+  }
   return '';
 }
 
@@ -112,7 +120,8 @@ export function unitTags(u: BattleUnit): string[] {
   if (u.stunned) tags.push('기절');
   if (u.inactive) tags.push('이탈');
   if (u.side === 'neutral') tags.push('보호 대상');
-  if (u.thread) return u.hinted ? ['다음 실'] : [];
+  if (u.thread) return u.hinted ? [u.restores ? '다음 매듭' : '다음 실'] : [];
+  if (u.phantom) tags.push('환영');
   if (u.flat === true) tags.push('납작');
   else if (u.flat === false) tags.push('재봉선 노출');
   if (u.reversed) tags.push('운반 실 끊김');
@@ -271,6 +280,7 @@ const COMPACT_NAME: Record<string, string> = { frozen_sewn_doll: '박음이', up
 const nameOf = (u: BattleUnit, compact: boolean) => (compact ? (COMPACT_NAME[u.characterCode] ?? u.name) : u.name);
 export function unitLabel(u: BattleUnit, compact: boolean): string {
   // 10-14 v1a: 검은 재봉실은 A/B/C 글자로 구분하고 모바일에서는 "검은 실 A" 한 줄(HP 1/1은 생략)
+  if (u.thread && u.restores) return compact ? `${u.name}${u.hinted ? ' ▶' : ''}` : `${u.name}${u.hinted ? ' (다음 매듭)' : ''}`; // 10-26 F-3a 유물 매듭(번호 없이 유물 이름)
   if (u.thread) return compact ? `${u.name} ${threadNumber(u)}${u.hinted ? ' ▶' : ''}` : `${u.name} ${threadNumber(u)}${u.hinted ? ' (다음 실)' : ''}`;
   if (isSeam(u)) return compact ? `검은 실 ${seamLetter(u)}` : `${u.name} ${seamLetter(u)} HP ${u.hp}/${u.maxHp}`;
   const tags = unitTags(u);

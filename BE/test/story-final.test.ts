@@ -87,7 +87,12 @@ test('이벤트·트리거 정의: 도착·결속은 지점 증거, 전이·선�
   assert.deepEqual(STORY_TRIGGERS.filter((t) => t.stageCode === 'home_core').map((t) => [t.id, t.activeAt, t.unless, t.play]), [
     ['final_arrival', ['CH05_COMPLETE'], ['final_entry_seen'], { segmentId: 'final.arrival', endAfter: 'final.arrival' }],
     ['final_core', ['CHFINAL_STARTED'], ['final_identity_revealed'], { segmentId: 'final.bind', endAfter: 'final.bind' }],
+    ['final_scissors', ['CHFINAL_IDENTITY_REVEALED'], ['final_boss_defeated'], { segmentId: 'final.last_thread', endAfter: 'final.knot' }],
   ]);
+  // 10-26 F-3a: 가위 최종전 — 승리 정산은 서버 전용, 승리 장면을 끝까지 보면 final_boss_aftermath_seen(체크포인트 유지)
+  assert.deepEqual(sig('final_boss_defeated'), [6, ['CHFINAL_IDENTITY_REVEALED'], 'CHFINAL_SCISSORS_DEFEATED', true, ['final_identity_revealed'], { kind: 'none' }]);
+  assert.deepEqual(sig('final_boss_aftermath_seen'), [6, ['CHFINAL_SCISSORS_DEFEATED'], null, false, ['final_boss_defeated'], { kind: 'none' }]);
+  assert.equal(STORY_TRIGGERS.find((t) => t.id === 'final_scissors')!.encounterKey, 'final_boss_scissors');
   for (const t of STORY_TRIGGERS.filter((x) => x.stageCode === 'home_core')) assert.ok(pointOf((t.evidence as { pointId: string }).pointId), `${t.id}의 지점이 지역 데이터에 있다`);
 });
 
@@ -128,6 +133,25 @@ test('다섯 기억의 결속: 도착 전 거부 → 중앙의 빈자리에서 �
   assert.equal((await s.service.completeEvent(P1, 'final_identity_revealed')).story.checkpoint, 'CHFINAL_IDENTITY_REVEALED');
   assert.equal((await s.connect().completeEvent(P1, 'final_identity_revealed')).alreadyCompleted, true);
   assert.equal((await s.service.trigger(P1, 'final_core')).play, null);
+});
+
+test('가위(F-3a): 결속 전에는 검은 틈이 닫혀 있고, 결속 뒤 지점에서 최종 전투 범위(가위 등장 → 매듭 장면)가 열린다. 승리 정산은 클라이언트가 요청할 수 없고, 재접속은 매듭 장면부터', async () => {
+  const before = setup('CHFINAL_STARTED', [...CH05_DONE, 'final_entry_seen']);
+  before.goHome();
+  before.standAt('final_scissors');
+  assert.notEqual(await codeOf(before.service.trigger(P1, 'final_scissors')), 'NO_ERROR', '결속 전 거부');
+  const s = setup('CHFINAL_IDENTITY_REVEALED', [...CH05_DONE, 'final_entry_seen', 'final_identity_revealed']);
+  s.goHome();
+  s.standAt('final_scissors');
+  const t = await s.service.trigger(P1, 'final_scissors');
+  assert.deepEqual(t.play, { segmentId: 'final.last_thread', endAfter: 'final.knot' });
+  assert.equal(await codeOf(s.service.completeEvent(P1, 'final_boss_defeated')), 'STORY_EVENT_SERVER_ONLY');
+  assert.equal(await codeOf(s.service.completeEvent(P1, 'final_boss_aftermath_seen')), 'STORY_EVENT_NOT_ALLOWED', '승리 전 거부');
+  const won = [...CH05_DONE, 'final_entry_seen', 'final_identity_revealed', 'final_boss_defeated'];
+  assert.equal(resumeOf({ checkpoint: 'CHFINAL_SCISSORS_DEFEATED', events: new Set(won), objectives: new Map(), growthStage: 5 }).segmentId, 'final.knot');
+  assert.equal(resumeOf({ checkpoint: 'CHFINAL_SCISSORS_DEFEATED', events: new Set([...won, 'final_boss_aftermath_seen']), objectives: new Map(), growthStage: 5 }).segmentId, null);
+  const after = setup('CHFINAL_SCISSORS_DEFEATED', won);
+  assert.equal((await after.service.completeEvent(P1, 'final_boss_aftermath_seen')).story.checkpoint, 'CHFINAL_SCISSORS_DEFEATED');
 });
 
 test('종장 대화·지역: 5장을 마치기 전에는 대화 잠김, 마친 뒤 열림. 지역 화면은 목표가 진행에 따라 바뀌고 동료 넷·검은 틈 오버레이가 내려간다', async () => {

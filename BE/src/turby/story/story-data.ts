@@ -325,6 +325,10 @@ export const STORY_EVENTS: StoryEventDef[] = [
   ev({ id: 'final_entry_seen', chapter: 6, allowedAt: ['CH05_COMPLETE'], requires: ['final_unlocked', 'desert_chapter_complete_seen'], evidence: { kind: 'point', stageCode: 'home_core', pointId: 'final_arrival' }, to: 'CHFINAL_STARTED' }),
   // 다섯 기억의 결속: 중앙의 빈자리에서 정체 공개 장면을 끝까지 보면 CHFINAL_IDENTITY_REVEALED(정본 — 이후 재접속은 가위 등장 직전부터)
   ev({ id: 'final_identity_revealed', chapter: 6, allowedAt: ['CHFINAL_STARTED'], requires: ['final_entry_seen'], evidence: { kind: 'point', stageCode: 'home_core', pointId: 'final_core' }, to: 'CHFINAL_IDENTITY_REVEALED' }),
+  // 10-26 F-3a: 가위 최종전 승리 정산(서버 전용 — 전투 확정만 기록). 가위는 파괴하지 않는다(두 날이 묶여 밀려난다). 최초 1회 보상은 F-3b에서 엔딩 보상과 함께 정한다
+  ev({ id: 'final_boss_defeated', chapter: 6, allowedAt: ['CHFINAL_IDENTITY_REVEALED'], requires: ['final_identity_revealed'], serverOnly: true, evidence: { kind: 'none' }, to: 'CHFINAL_SCISSORS_DEFEATED' }),
+  // 승리 장면(final.knot — 다섯 기억의 매듭)을 끝까지 본 뒤 클라이언트가 완료를 요청한다(completesWith). 체크포인트는 바꾸지 않는다
+  ev({ id: 'final_boss_aftermath_seen', chapter: 6, allowedAt: ['CHFINAL_SCISSORS_DEFEATED'], requires: ['final_boss_defeated'], evidence: { kind: 'none' } }),
 ];
 
 // 부분 사건이 모두 기록되면 같은 트랜잭션에서 함께 기록하는 집계 사건(C2-3). 이미 기록돼 있으면 다시 만들지 않는다
@@ -540,6 +544,8 @@ export const STORY_TRIGGERS: StoryTriggerDef[] = [
   { id: 'final_arrival', stageCode: 'home_core', evidence: { kind: 'point', stageCode: 'home_core', pointId: 'final_arrival' }, activeAt: ['CH05_COMPLETE'], requires: ['final_unlocked', 'desert_chapter_complete_seen'], unless: ['final_entry_seen'], repeatable: true, play: { segmentId: 'final.arrival', endAfter: 'final.arrival' } },
   // 2) 중앙의 빈자리 — 다섯 기억의 결속·정체 공개. 끝까지 보면 final_identity_revealed + CHFINAL_IDENTITY_REVEALED
   { id: 'final_core', stageCode: 'home_core', evidence: { kind: 'point', stageCode: 'home_core', pointId: 'final_core' }, activeAt: ['CHFINAL_STARTED'], requires: ['final_entry_seen'], unless: ['final_identity_revealed'], repeatable: true, play: { segmentId: 'final.bind', endAfter: 'final.bind' } },
+  // 3) 검은 틈(F-3a) — 가위 등장 → 최종 전투(한 전투 3단계) → (이기면 이어서) 다섯 기억의 매듭 장면. 정산 뒤에는 닫힌다
+  { id: 'final_scissors', stageCode: 'home_core', evidence: { kind: 'point', stageCode: 'home_core', pointId: 'final_scissors' }, activeAt: ['CHFINAL_IDENTITY_REVEALED'], requires: ['final_identity_revealed'], unless: ['final_boss_defeated'], encounterKey: 'final_boss_scissors', repeatable: true, play: { segmentId: 'final.last_thread', endAfter: 'final.knot' } },
 ];
 export const TRIGGER_BY_ID = new Map(STORY_TRIGGERS.map((t) => [t.id, t]));
 
@@ -557,6 +563,7 @@ export const SEGMENT_CHAIN_END: Record<string, string> = {
   'ch04.chapter_complete': 'ch04.chapter_complete',
   'ch05.boss_victory': 'ch05.scissors', // 10-26 C5-3: 승리 장면에 가위 장면이 이어진다(정본 — 장착하려는 순간)
   'ch05.chapter_complete': 'ch05.chapter_complete',
+  'final.knot': 'final.knot', // 10-26 F-3a: 귀환의 대가(final.cost)부터는 F-3b
 };
 
 // 숲 입구 복귀 범위: 잘린 실을 살펴보기 전까지는 첫 길의 걷는 장면(001~004)만 다시 보여 준다. 그 뒤는 지점이 이어 간다
@@ -602,6 +609,8 @@ export const STORY_ENCOUNTERS: StoryEncounterDef[] = [
   { key: 'desert_scorched_ambush', chapter: 5, stageCode: 'desert', allowedAt: ['CH05_CLUES_JOINED'], requires: ['desert_clues_seen'], onWinEvents: ['desert_scorched_won'] },
   // 10-26 C5-3: 황금 재단인형. 승리하면 desert_boss_defeated(마감실 지급 사건·금빛 마감실 1개·CH05_BOSS_DEFEATED)를 서버가 한 트랜잭션으로 정산한다
   { key: 'desert_boss_golden_doll', chapter: 5, stageCode: 'desert', allowedAt: ['CH05_RIDGE_CROSSED'], requires: ['desert_ridge_crossed'], onWinEvents: ['desert_boss_defeated'] },
+  // 10-26 F-3a: 가위(한 전투 안의 3단계). 승리하면 final_boss_defeated(CHFINAL_SCISSORS_DEFEATED)를 서버가 정산한다
+  { key: 'final_boss_scissors', chapter: 6, stageCode: 'home_core', allowedAt: ['CHFINAL_IDENTITY_REVEALED'], requires: ['final_identity_revealed'], onWinEvents: ['final_boss_defeated'] },
   { key: 'forest_giant_knot', chapter: 1, stageCode: 'forest', allowedAt: ['CH01_COMPASS_ACQUIRED'], requires: ['forest_compass_granted', 'forest_hidden_path_opened'], onWinEvents: ['forest_giant_knot_defeated'] },
 ];
 

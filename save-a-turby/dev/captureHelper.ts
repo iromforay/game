@@ -168,7 +168,7 @@ function battleStep(): { x: number; y: number; kind: 'attack' | 'move' | 'end' }
   if (snap.phase !== 'player_subturn' || snap.currentPlayerId !== b.myId) return null;
   const u = snap.units.find((x) => x.unitId === b.selectedUnitId) as BattleUnit | undefined;
   const d = (a: { col: number; row: number }, c: { col: number; row: number }) => Math.abs(a.col - c.col) + Math.abs(a.row - c.row);
-  const foes = snap.units.filter((x) => x.side === 'wild' && !x.stunned && !x.inactive && !x.fled && targetState(snap, x, u) === 'ok' && !x.invulnerable && (!x.thread || !!x.hinted)); // 기억실은 폭신이가 가리키는 다음 실만 노린다(순서가 아니면 혼란)
+  const foes = snap.units.filter((x) => x.side === 'wild' && !x.stunned && !x.inactive && !x.fled && targetState(snap, x, u) === 'ok' && !x.invulnerable && (!x.thread || !!x.hinted) && !x.phantom); // 기억실은 폭신이가 가리키는 다음 실만 노린다(순서가 아니면 혼란). 10-26 F-3a: 누비 환영은 치지 않는다(가위가 길을 끊는다)
   const end = find('턴 종료');
   if (!u || u.ap <= 0 || u.stunned) return end && { ...end, kind: 'end' };
   const adj = foes.find((f) => d(u, f) === 1);
@@ -177,7 +177,24 @@ function battleStep(): { x: number; y: number; kind: 'attack' | 'move' | 'end' }
     return { x: Math.round(p.x), y: Math.round(p.y), kind: 'attack' };
   }
   const goals = foes.flatMap((f) => [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([a, c]) => ({ col: f.col + a, row: f.row + c })));
-  const gap = (x: { col: number; row: number }) => Math.min(...goals.map((y) => d(x, y)));
+  // 10-26 F-3a: 거리는 막힌 칸·다른 유닛을 돌아가는 실제 걸음 수(종장 1단계의 벽처럼 돌아가야 하는 전장에서 직선거리로 고르면 막다른 곳에 갇힌다). 닿을 수 없으면 직선거리
+  const blocked = new Set(snap.blocked ?? []);
+  const taken = new Set(snap.units.filter((x) => x !== u && !x.stunned && !x.inactive && !x.fled).map((x) => `${x.col},${x.row}`));
+  const walk = new Map<string, number>();
+  const queue = goals.filter((g) => g.col >= 0 && g.row >= 0 && g.col < snap.grid.cols && g.row < snap.grid.rows && !blocked.has(`${g.col},${g.row}`) && !taken.has(`${g.col},${g.row}`));
+  for (const g of queue) walk.set(`${g.col},${g.row}`, 0);
+  for (let i = 0; i < queue.length; i++) {
+    const c = queue[i];
+    const n = walk.get(`${c.col},${c.row}`)! + 1;
+    for (const [a, r] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const next = { col: c.col + a, row: c.row + r };
+      const k = `${next.col},${next.row}`;
+      if (next.col < 0 || next.row < 0 || next.col >= snap.grid.cols || next.row >= snap.grid.rows || blocked.has(k) || taken.has(k) || walk.has(k)) continue;
+      walk.set(k, n);
+      queue.push(next);
+    }
+  }
+  const gap = (x: { col: number; row: number }) => walk.get(`${x.col},${x.row}`) ?? 1000 + Math.min(...goals.map((y) => d(x, y)));
   const best = reachableCells(snap, u).sort((a, c) => gap(a) - gap(c))[0];
   if (best && gap(best) < gap(u)) {
     const p = b.tileToWorld(best.col, best.row);

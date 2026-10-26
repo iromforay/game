@@ -70,6 +70,12 @@ const TARGET_IMAGES: Record<string, { key: string; px: number }> = {
   cut_knot: { key: 'cut-knot', px: 72 },
   gold_point: { key: 'gold-point', px: 80 },
   inner_link: { key: 'inner-link', px: 80 },
+  // 10-26 F-3a 종장(2차 에셋 F-4 전까지는 있는 그림만 — 유물 매듭은 유물 아이콘, 검정실은 4장 연결 실)
+  relic_knot_dye: { key: 'water-dye-yarn', px: 72 },
+  relic_knot_cotton: { key: 'old-cotton-core', px: 72 },
+  relic_knot_frost: { key: 'ice-microfiber', px: 72 },
+  relic_knot_gold: { key: 'golden-finish-thread', px: 72 },
+  black_thread: { key: 'link-thread', px: 72 },
 };
 const TOAST_ABOVE_HINT = 64; // 작은 화면 사건 안내 가운데 ~ 조작 안내 줄 위끝 거리
 const MIRAGE_GLOW = 0xffa64d; // 10-26 C5-6 QA-02 열기 환영 외곽광·고리(따뜻한 주황)
@@ -128,6 +134,8 @@ export class BattleScene extends Phaser.Scene {
   private generation = 0; // 다시 배치(재시작)할 때마다 증가 — 이전 화면의 자동 재확인 루프를 멈춘다
   private relayoutPending = false;
   private goalButtonText?: Phaser.GameObjects.Text;
+  private storyPanel: Phaser.GameObjects.GameObject[] = []; // 보통 화면 목표 패널(단계 전투는 단계가 바뀌면 다시 그린다)
+  private panelStage = -1;
 
   constructor() {
     super('Battle');
@@ -345,6 +353,11 @@ export class BattleScene extends Phaser.Scene {
   // 스토리 전투 표식·현재 목표·보상 없음 안내. 보통 화면: 격자 왼쪽 여백에 세로 패널. 작은 화면: "목표" 버튼으로 접고 펼친다(v3 §5)
   private renderStoryPanel() {
     if (!isStoryBattle(this.snap)) return;
+    this.panelStage = this.snap.stage?.index ?? -1;
+    this.storyPanel.forEach((o) => o.destroy());
+    this.storyPanel = [];
+    this.goalButtonText?.destroy();
+    this.goalButtonText = undefined;
     const F = this.hud.font;
     if (!this.hud.objectivesCollapsible) {
       const x = 8;
@@ -353,7 +366,8 @@ export class BattleScene extends Phaser.Scene {
       const badge = this.add.text(x + 8, 68, STORY_BADGE, { fontSize: `${F.panelTitle}px`, color: '#ffd27f' }).setDepth(2001);
       const goals = this.add.text(x + 8, badge.y + badge.height + 10, objectiveLines(this.snap).map((l) => `· ${l}`).join('\n'), { fontSize: `${F.panel}px`, color: '#ffffff', lineSpacing: 6, wordWrap: wrap }).setDepth(2001);
       const notice = this.add.text(x + 8, goals.y + goals.height + 12, STORY_NOTICE, { fontSize: `${F.panel}px`, color: '#cfc6ee', wordWrap: wrap }).setDepth(2001);
-      this.add.rectangle(x, 58, w, notice.y + notice.height + 10 - 58, 0x241a3d, 0.92).setOrigin(0, 0).setStrokeStyle(2, 0xffd27f, 0.9).setDepth(2000);
+      const frame = this.add.rectangle(x, 58, w, notice.y + notice.height + 10 - 58, 0x241a3d, 0.92).setOrigin(0, 0).setStrokeStyle(2, 0xffd27f, 0.9).setDepth(2000);
+      this.storyPanel = [badge, goals, notice, frame];
       return;
     }
     const gb = this.hud.rects.goalButton!;
@@ -413,7 +427,7 @@ export class BattleScene extends Phaser.Scene {
         sprite.setInteractive(new Phaser.Geom.Rectangle(edge / 2 - half, edge / 2 - half, half * 2, half * 2), Phaser.Geom.Rectangle.Contains);
       }
       body = sprite;
-    } else if (u.thread && this.textures.exists(THREAD_SHEET)) {
+    } else if (u.thread && !(TARGET_IMAGES[u.characterCode] && this.textures.exists(TARGET_IMAGES[u.characterCode].key)) && this.textures.exists(THREAD_SHEET)) {
       // 기억실: 시트의 프레임 = 가닥 번호(thread_1~5). 진짜·가짜는 그림으로 알리지 않는다
       body = this.add.sprite(0, 0, THREAD_SHEET, Math.max(0, Math.min(4, Number(threadNumber(u)) - 1))).setDisplaySize(THREAD_DISPLAY_PX, THREAD_DISPLAY_PX);
     } else if (TARGET_IMAGES[u.characterCode] && this.textures.exists(TARGET_IMAGES[u.characterCode].key)) {
@@ -447,6 +461,7 @@ export class BattleScene extends Phaser.Scene {
 
   // snapshot의 모든 상태(위치·HP·기절·선택)를 화면에 맞춘다 — 애니메이션 뒤에 항상 이걸로 서버 상태와 일치시킨다
   private syncFromSnapshot() {
+    if ((this.snap.stage?.index ?? -1) !== this.panelStage && this.hud) this.renderStoryPanel(); // 10-26 F-3a: 단계가 바뀌면 목표를 다시 그린다
     for (const u of this.snap.units) {
       let view = this.views.get(u.unitId);
       if (!view) {
@@ -1118,12 +1133,21 @@ export class BattleScene extends Phaser.Scene {
         await wait(this, 350);
       }
     } else if (ev.type === 'cut') {
-      if (ev.hits.length > 0) showToast(this, '재단인형의 팔에 맞았어요! 표시된 줄에서 비켜요', { y: this.toastY, error: true });
+      const scissors = this.snap.units.some((x) => x.characterCode === 'scissors'); // 10-26 F-3a 종장 가위
+      if (ev.hits.length > 0) showToast(this, scissors ? '가위 날에 맞았어요! 표시된 줄에서 비켜요' : '재단인형의 팔에 맞았어요! 표시된 줄에서 비켜요', { y: this.toastY, error: true });
       else if (ev.cells.length > 0) showToast(this, '길이 끊겼어요', { y: this.toastY, error: true });
       await wait(this, ev.cells.length + ev.hits.length > 0 ? 350 : 0);
     } else if (ev.type === 'restored') {
-      showToast(this, `${this.unit(ev.byUnitId)?.name ?? '동료'}가 끊긴 길을 다시 붙잡았어요`, { y: this.toastY });
+      const by = this.unit(ev.byUnitId);
+      showToast(this, by?.side === 'party' ? '유물의 힘으로 끊긴 길이 이어졌어요' : `${by?.name ?? '동료'}가 끊긴 길을 다시 붙잡았어요`, { y: this.toastY }); // 10-26 F-3a: 유물 매듭을 누른 아군
       await wait(this, 250);
+    } else if (ev.type === 'stage') {
+      // 10-26 F-3a: 최종 전투 단계 전환 — 단계 이름과 안내를 차례로
+      showToast(this, ev.hint ? `${ev.label}\n${ev.hint}` : ev.label, { y: this.toastY });
+      await wait(this, 900);
+    } else if (ev.type === 'phantom_hit') {
+      showToast(this, '환영이었어요! 가위가 곁의 길을 끊었어요', { y: this.toastY, error: true });
+      await wait(this, 350);
     } else if (ev.type === 'needle_strike') {
       this.cameras.main.shake(120, 0.002);
       if (ev.pinned.length > 0) showToast(this, '바늘에 박혀 움직일 수 없어요! 옆의 연결 실을 끊어요', { y: this.toastY, error: true });
