@@ -46,11 +46,12 @@ const wait = (scene: Phaser.Scene, ms: number) => new Promise<void>((resolve) =>
 const BOSS_SHEETS: Record<string, { idle: string; exposed: string; labelBelow?: number }> = {
   waterlogged_sewn_doll: { idle: 'waterlogged-sewn-doll-idle', exposed: 'waterlogged-sewn-doll-exposed' },
   memory_spool: { idle: 'memory-spool-idle', exposed: 'memory-spool-exposed', labelBelow: 118 },
-  frost_machine: { idle: 'frost-machine-idle', exposed: 'frost-machine-stopped', labelBelow: 118 }, // 10-23 C4-3 서리 미싱(작동 → 정지, 파괴 없음) // 10-16 3장 기억 실패굴이(결박 → 약점 노출). C3-6 QA-08: 라벨이 솜심 약점을 가리지 않게 그림 아래로
+  frost_machine: { idle: 'frost-machine-idle', exposed: 'frost-machine-stopped', labelBelow: 118 }, // 10-23 C4-3 서리 미싱(작동 → 정지, 파괴 없음)
+  golden_doll: { idle: 'golden-doll-idle', exposed: 'golden-doll-unraveled', labelBelow: 118 }, // 10-26 C5-3 황금 재단인형(작동 → 풀려 무너짐, 파괴 없음) // 10-16 3장 기억 실패굴이(결박 → 약점 노출). C3-6 QA-08: 라벨이 솜심 약점을 가리지 않게 그림 아래로
 };
 const BOSS_DISPLAY_PX = 240;
 // 10-16 3장: 일반 적 시트의 표시 크기(기본 64). 원본 투명 여백을 감안했다. C3-6 QA-06: 전투판 대비 작아 박음이 88→104, 실패굴이 80→88
-const SHEET_DISPLAY_PX: Record<string, number> = { 'pressed-sewn-doll-idle': 104, 'pressed-sewn-doll-exposed': 104, 'small-spool-idle': 88, 'frozen-sewn-doll-idle': 104, 'thimble-guard-idle': 104, 'thimble-guard-exposed': 104 };
+const SHEET_DISPLAY_PX: Record<string, number> = { 'pressed-sewn-doll-idle': 104, 'pressed-sewn-doll-exposed': 104, 'small-spool-idle': 88, 'frozen-sewn-doll-idle': 104, 'thimble-guard-idle': 104, 'thimble-guard-exposed': 104, 'scorched-sewn-doll-idle': 104, 'cutting-stitch-idle': 96 };
 // 눌린 박음이: 납작(flat=true) → 재봉선 노출(flat=false). 같은 프레임 인덱스·같은 중심에서 텍스처만 바꾼다(서버 스냅샷 상태 — 화면이 정하지 않는다)
 const FLAT_SHEETS: Record<string, { flat: string; exposed: string }> = { pressed_sewn_doll: { flat: 'pressed-sewn-doll-idle', exposed: 'pressed-sewn-doll-exposed' } };
 // 10-23 C4-3 골무막이: 실밥이 남은 동안(phase bound) 골무를 쓴 그림, 끊기면(exposed) 벗겨진 그림 — 일반 적 크기(보스 아님)
@@ -62,10 +63,20 @@ const TARGET_IMAGES: Record<string, { key: string; px: number }> = {
   lower_thread: { key: 'lower-thread', px: 80 },
   upper_thread: { key: 'upper-thread', px: 80 },
   link_thread: { key: 'link-thread', px: 72 },
+  // 10-26 C5-3 5장(열기 환영·연결 매듭·금빛 연결점·안쪽 검은 연결)
+  heat_mirage: { key: 'heat-mirage', px: 96 },
+  cut_knot: { key: 'cut-knot', px: 72 },
+  gold_point: { key: 'gold-point', px: 80 },
+  inner_link: { key: 'inner-link', px: 80 },
 };
 const ICE_KEY = 'ice-cell';
 const NEEDLE_MARK_KEY = 'battle-needle-mark';
 const PINNED_KEY = 'pinned-stitch';
+// 10-26 C5-3 5장 바닥 칸(불씨·젖은 칸·곧 끊어질 칸)과 끊긴 칸
+const EMBER_KEY = 'ember-cell';
+const WET_KEY = 'wet-cell';
+const CUT_WARN_KEY = 'cut-warn';
+const CUT_KEY = 'cut-cell';
 // 보스 부위·표적 그림: 운반 실(한 장), 기억실(5가닥 시트의 프레임 = 가닥 번호), 폭신이가 가리키는 다음 실 표시(기억실 위에 중첩)
 const CARRIER_KEY = 'carrier-thread';
 const THREAD_SHEET = 'memory-thread';
@@ -312,9 +323,12 @@ export class BattleScene extends Phaser.Scene {
     if (key === this.blockedDrawn) return;
     this.blockedDrawn = key;
     this.blockedObjs.forEach((o) => o.destroy());
+    const cut = new Set(this.snap.cut ?? []);
     this.blockedObjs = blocked.map((k) => {
       const [col, row] = k.split(',').map(Number);
       const { x, y } = this.tileToWorld(col, row);
+      // 10-26 C5-3: 실밥이·재단인형이 끊은 칸은 끊긴 칸 그림(없으면 다른 막힌 칸과 같은 임시 사각형)
+      if (cut.has(k) && this.textures.exists(CUT_KEY)) return this.add.image(x, y, CUT_KEY).setDisplaySize(BATTLE_TILE_SIZE, BATTLE_TILE_SIZE).setDepth(5);
       return this.add.rectangle(x, y, BATTLE_TILE_SIZE - 4, BATTLE_TILE_SIZE - 4, 0x0d0818, 0.85).setStrokeStyle(2, 0x6a5a8a, 0.9).setDepth(5);
     });
   }
@@ -647,6 +661,9 @@ export class BattleScene extends Phaser.Scene {
   private needleObjs: Phaser.GameObjects.GameObject[] = [];
   private iceDrawn = '';
   private needleDrawn = '';
+  // 10-26 C5-3: 불씨·젖은 칸·곧 끊어질 칸(서버 스냅샷 그대로)
+  private desertObjs: Phaser.GameObjects.GameObject[] = [];
+  private desertDrawn = '';
   private syncFloorMarks() {
     const draw = (cells: string[], key: string, color: number, alpha: number, depth: number) =>
       cells.map((k) => {
@@ -666,6 +683,14 @@ export class BattleScene extends Phaser.Scene {
       this.needleObjs.forEach((o) => o.destroy());
       // 이동 가능 칸(깊이 4) 위·유닛(10) 아래 — 내 유닛이 서 있는 칸의 예고도 가려지지 않게
       this.needleObjs = draw(this.snap.needleMarks ?? [], NEEDLE_MARK_KEY, 0xf2fbff, 0.55, 5);
+    }
+    const embers = (this.snap.embers ?? []).map((e) => e.cell);
+    const desert = [embers.join('|'), (this.snap.wet ?? []).join('|'), (this.snap.cutWarns ?? []).join('|')].join('/');
+    if (desert !== this.desertDrawn) {
+      this.desertDrawn = desert;
+      this.desertObjs.forEach((o) => o.destroy());
+      // 젖은 칸(바닥, 깊이 3) → 곧 끊어질 칸·불씨(깊이 5 — 유닛 아래, 내 유닛이 선 칸의 표시도 보이게)
+      this.desertObjs = [...draw(this.snap.wet ?? [], WET_KEY, 0x7fc8ff, 0.4, 3), ...draw(this.snap.cutWarns ?? [], CUT_WARN_KEY, 0xffd27f, 0.4, 5), ...draw(embers, EMBER_KEY, 0xff9a52, 0.5, 5)];
     }
   }
   private syncStates() {
@@ -802,7 +827,7 @@ export class BattleScene extends Phaser.Scene {
     const u = this.unit(this.selectedUnitId);
     const target = this.unit(targetId);
     if (this.busy || !this.isMyTurn || !u || !this.actionable(u) || !target) return;
-    const st = targetState(this.snap, target);
+    const st = targetState(this.snap, target, u);
     if (st === 'not_target') return;
     if (st !== 'ok' && st !== 'zero') {
       showToast(this, TARGET_HINT[st], { y: 660 }); // 부위 순서·중심부 보호 — 서버도 같은 규칙(PART_ORDER/TARGET_PROTECTED)
@@ -1062,8 +1087,22 @@ export class BattleScene extends Phaser.Scene {
       showToast(this, '파편을 모두 끊었어요. 박음이가 다시 일어나지 못해요', { y: 660 });
       await wait(this, 250);
     } else if (ev.type === 'revive') {
-      showToast(this, '파편이 다시 붙어 박음이가 일어났어요', { y: 660, error: true });
+      showToast(this, this.unit(ev.unitId)?.regen ? '금빛 연결점이 다시 꿰매졌어요' : '파편이 다시 붙어 박음이가 일어났어요', { y: 660, error: true });
       await wait(this, 400);
+    } else if (ev.type === 'ember_burst') {
+      // 10-26 C5-3: 불씨가 터졌다(맞은 아군이 있을 때만 알린다 — 피해·쓰러짐은 스냅샷이 확정한다)
+      if (ev.hits.length > 0) {
+        this.cameras.main.shake(100, 0.002);
+        showToast(this, '불씨가 터졌어요!', { y: 660, error: true });
+        await wait(this, 350);
+      }
+    } else if (ev.type === 'cut') {
+      if (ev.hits.length > 0) showToast(this, '재단인형의 팔에 맞았어요! 표시된 줄에서 비켜요', { y: 660, error: true });
+      else if (ev.cells.length > 0) showToast(this, '길이 끊겼어요', { y: 660, error: true });
+      await wait(this, ev.cells.length + ev.hits.length > 0 ? 350 : 0);
+    } else if (ev.type === 'restored') {
+      showToast(this, `${this.unit(ev.byUnitId)?.name ?? '동료'}가 끊긴 길을 다시 붙잡았어요`, { y: 660 });
+      await wait(this, 250);
     } else if (ev.type === 'needle_strike') {
       this.cameras.main.shake(120, 0.002);
       if (ev.pinned.length > 0) showToast(this, '바늘에 박혀 움직일 수 없어요! 옆의 연결 실을 끊어요', { y: 660, error: true });

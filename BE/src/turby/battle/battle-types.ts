@@ -399,6 +399,7 @@ export interface BattleUnitDto {
   knotOf?: string; // 연결 매듭(지키는 예고 칸)
   regen?: boolean; // 금빛 연결점(다시 꿰매지는 부위)
   nubiOnly?: boolean; // 누비만 끊을 수 있는 안쪽 연결
+  storyNubi?: boolean; // 10-26 C5-3: 이야기 누비(스토리 전투 파티)
 }
 
 export interface BattleSnapshotDto {

@@ -91,6 +91,11 @@ export const SPRITESHEET_FRAMES: Record<string, { size: number; frames: number; 
   'thimble-guard-exposed': { size: 160, frames: 4, fps: 5 }, // 골무막이(벗겨진 상태)
   'frost-machine-idle': { size: 256, frames: 4, fps: 4 }, // 서리 미싱(작동)
   'frost-machine-stopped': { size: 256, frames: 4, fps: 4 }, // 서리 미싱(정지)
+  // 10-26 C5-3 5장 2차 에셋(C5-4 지시서 규격 — 파일이 오면 그대로 재생)
+  'scorched-sewn-doll-idle': { size: 160, frames: 4, fps: 5 }, // 그을린 박음이
+  'cutting-stitch-idle': { size: 160, frames: 4, fps: 6 }, // 재단 실밥이
+  'golden-doll-idle': { size: 256, frames: 4, fps: 4 }, // 황금 재단인형(작동)
+  'golden-doll-unraveled': { size: 256, frames: 4, fps: 4 }, // 황금 재단인형(풀려 무너짐)
 };
 
 // 전투 정의의 characterCode → 전투·지도에서 쓰는 적 시트 키(없으면 기존 터비 그림/임시 도형)
@@ -105,5 +110,9 @@ export const ENEMY_SHEET_OF: Record<string, string> = {
   frozen_sewn_doll: 'frozen-sewn-doll-idle',
   thimble_guard: 'thimble-guard-idle',
   frost_machine: 'frost-machine-idle',
+  // 10-26 C5-3 5장(2차 에셋 C5-4 — 파일이 오기 전에는 임시 도형)
+  scorched_sewn_doll: 'scorched-sewn-doll-idle',
+  cutting_stitch: 'cutting-stitch-idle',
+  golden_doll: 'golden-doll-idle',
 };
 

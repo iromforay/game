@@ -1366,6 +1366,7 @@ export function toSnapshot(state: BattleState): BattleSnapshotDto {
             ...(u.knotOf ? { knotOf: u.knotOf } : {}),
             ...(u.regen ? { regen: true } : {}),
             ...(u.nubiOnly ? { nubiOnly: true } : {}),
+            ...(u.side === 'party' && state.story?.nubiTurbyId && u.turbyId === state.story.nubiTurbyId ? { storyNubi: true } : {}), // 10-26 C5-3: 화면이 누비 전용 대상을 고를 때 쓴다
           }
         : {}),
     })),
