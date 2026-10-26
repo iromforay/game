@@ -5,7 +5,8 @@ export type AdGameId =
   | 'sweet-shop'
   | 'my-room-dungeon'
   | 'color-blasters'
-  | 'spin-gather-king';
+  | 'spin-gather-king'
+  | 'green-tracking';
 
 export interface AdGameMeta {
   id: AdGameId;
@@ -63,6 +64,13 @@ export const AD_GAMES: AdGameMeta[] = [
     number: 7,
     title: '빙글 채집왕',
     description: '회전 도구로 나무와 돌을 모아 새로운 채집 구역을 건설하세요.',
+    status: 'available',
+  },
+  {
+    id: 'green-tracking',
+    number: 8,
+    title: '그린 트래킹',
+    description: '고해상도 3D 숲길을 걸으며 자연과 마주하는 힐링 산책 실험입니다.',
     status: 'available',
   },
 ];

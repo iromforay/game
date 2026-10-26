@@ -3,6 +3,7 @@ import { MyRoomDungeonGame } from 'my-room-dungeon';
 import { SweetShopGame } from 'sweet-shop';
 import { SpinGatherKingGame } from 'spin-gather-king';
 import { ColorBlastersGame } from 'color-blasters';
+import { GreenTrackingScene } from 'green-tracking';
 import { NumberGateRunnerScreen } from './NumberGateRunnerScreen';
 import type { AdGameId } from './adGames';
 import { GameResultCard } from './scoreboard/GameResultCard';
@@ -22,6 +23,10 @@ export function AdGameScreen({ gameId, onExit, onOpenRanking }: AdGameScreenProp
         <ColorBlastersGame onExit={onExit} />
       </div>
     );
+  }
+
+  if (gameId === 'green-tracking') {
+    return <div className="ad-game-react-screen"><GreenTrackingScene onExit={onExit} /></div>;
   }
 
   if (gameId === 'spin-gather-king') {
