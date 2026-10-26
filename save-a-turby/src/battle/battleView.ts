@@ -102,6 +102,9 @@ function winText(snap: BattleSnapshot, o: BattleObjective) {
   return '';
 }
 
+// 10-26 C5-5: 부위를 다 끊는 순간 이기는 보스는 '약점 노출' 대신 그 보스의 끝 모습으로 적는다
+const EXPOSED_TAG: Record<string, string> = { golden_doll: '풀림' };
+
 // 유닛 이름표 뒤에 붙는 상태 표식
 export function unitTags(u: BattleUnit): string[] {
   const tags: string[] = [];
@@ -117,7 +120,7 @@ export function unitTags(u: BattleUnit): string[] {
   if (u.nubiOnly && !u.stunned) tags.push('누비만');
   if (u.guarded) tags.push('골무 보호');
   if (u.phase === 'bound') tags.push('결박');
-  else if (u.phase === 'exposed') tags.push('약점 노출');
+  else if (u.phase === 'exposed') tags.push(EXPOSED_TAG[u.characterCode] ?? '약점 노출');
   else if (u.invulnerable) tags.push('부위 먼저');
   for (const s of u.statuses ?? []) {
     if (s.kind === 'bind') tags.push(`속박 ${s.turnsLeft}`);

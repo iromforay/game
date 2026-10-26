@@ -38,6 +38,8 @@ const asDepth = (o: Phaser.GameObjects.GameObject, depth: number) => (o as unkno
 const slotHex = (slot: number) => coopSlots.find((c) => c.slot === slot)?.main ?? '#888888';
 const slotNum = (slot: number) => Phaser.Display.Color.HexStringToColor(slotHex(slot)).color;
 const wait = (scene: Phaser.Scene, ms: number) => new Promise<void>((resolve) => scene.time.delayedCall(ms, resolve));
+const CORE_EXPOSED_TOAST: Record<string, string> = { golden_doll: '안쪽 연결이 끊겨 재단인형이 풀렸어요' };
+const BOSS_FINAL_HOLD_MS = 1400; // 마지막 일격으로 바뀐 보스 그림을 결과창 전에 보여 주는 시간
 
 // 4-B: 서버 권위 전투의 렌더러 겸 입력기. 규칙(이동·공격·AI·승패)은 전부 서버가 계산하고,
 // 이 씬은 서버 snapshot을 그리고 이동/공격/턴 종료 "의도"만 보낸다. 임시 도형 UI(디자인 확정 전)는 그대로 유지한다.
@@ -1014,9 +1016,13 @@ export class BattleScene extends Phaser.Scene {
 
   private async playResponse(res: BattleResponse) {
     if (res.version < this.snap.version) return; // 오래된 응답은 무시
-    for (const ev of res.events) if (ev.version > this.snap.version) await this.playEvent(ev);
+    const fresh = res.events.filter((ev) => ev.version > this.snap.version);
+    for (const ev of fresh) await this.playEvent(ev);
     this.snap = res.snapshot;
     this.syncFromSnapshot();
+    // 10-26 C5-5: 마지막 일격에 보스 그림이 바뀌면(풀려 무너짐·정지 등) 결과창 전에 그 모습을 잠깐 보여 준다
+    const bossTurned = fresh.some((ev) => ev.type === 'phase' && !!BOSS_SHEETS[this.unit(ev.unitId)?.characterCode ?? '']);
+    if (this.snap.phase === 'resolved' && bossTurned) await wait(this, BOSS_FINAL_HOLD_MS);
     if (this.snap.phase === 'resolved') await this.showResult(res.ended);
   }
 
@@ -1045,7 +1051,8 @@ export class BattleScene extends Phaser.Scene {
         await wait(this, 320);
       }
     } else if (ev.type === 'part_broken') {
-      showToast(this, ev.coreExposed ? '바깥 부위를 모두 끊었어요! 이제 중심을 노릴 수 있어요' : '부위 하나를 끊었어요', { y: 660 });
+      const finalText = ev.coreExposed ? CORE_EXPOSED_TOAST[this.unit(ev.coreId)?.characterCode ?? ''] : undefined; // 10-26 C5-5: 부위가 곧 승리 조건인 보스
+      showToast(this, finalText ?? (ev.coreExposed ? '바깥 부위를 모두 끊었어요! 이제 중심을 노릴 수 있어요' : '부위 하나를 끊었어요'), { y: 660 });
       await wait(this, 250);
     } else if (ev.type === 'terrain') {
       this.drawBlocked(ev.blocked);

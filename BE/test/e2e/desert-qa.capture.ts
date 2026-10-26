@@ -4,6 +4,7 @@
 // 진행 상태는 테스트 격리 DB 시드(seedDesert)와 서버 위치 옮기기(displace)·사건 기록(grantEvents)으로 준비한다.
 // 4장 C4-6 검수에서 배운 것: 연출 캡처는 그림이 다 떠오른 뒤(waitFx), 연속 연출은 앞 그림이 걷힌 뒤(waitFxGone) 찍는다. 640 전투는 라벨이 몰리는 장면을 넣는다.
 import { test, before, after } from 'node:test';
+import assert from 'node:assert/strict';
 import type { Browser } from 'playwright-core';
 import { join } from 'path';
 import { Backend, Game, ROOT, freePort, launchBrowser, startVite, withDiagnosis } from './harness';
@@ -144,7 +145,16 @@ test('C5 캡처 ②(1280×720): 뜨거운 모래·아지랑이 → 틈 셋(닫�
 
 test('C5 캡처 ③(1280×720): 능선 앞 전투 시작 → 불씨·젖은 칸·곧 끊어질 칸 → 열기 환영 → 끊긴 칸', async () => {
   const device = 'qa-desert-scorched-1280';
-  await backend.start(seedDesert(device, 'joined'), { 'story.stageAccessV2': true });
+  // 열기 환영은 젖지 않은 박음이가 맞고 버틸 때만 생긴다(정본: 젖은 발판 위에서는 환영 없음). 시험 누비(공격 30)는 한 번에 쓰러뜨리므로 이 캡처에서만 공격을 4로 낮춘다
+  const seed = seedDesert(device, 'joined');
+  await backend.start((db) => {
+    seed(db);
+    const player = db.rows('player', { device_uuid: `dev-device-${device}-account` })[0] as { id: bigint };
+    const nubi = db.rows('turby_instance', { owner_player_id: player.id, is_story_companion: true })[0] as { id: bigint; character_id: number; atk_bonus?: number };
+    const grade = db.rows('turby_grade', { id: (db.rows('turby_character', { id: nubi.character_id })[0] as { grade_id: number }).grade_id })[0] as { base_attack: number };
+    const equip = db.rows('turby_equipment', { turby_instance_id: nubi.id }).reduce((n, e) => n + ((db.rows('item_definition', { id: (e as { item_definition_id: number }).item_definition_id })[0] as { atk_bonus?: number }).atk_bonus ?? 0), 0);
+    nubi.atk_bonus = 4 - grade.base_attack - equip;
+  }, { 'story.stageAccessV2': true });
   const g = await Game.open(browser, `${vite.url}/?device=${device}`, device);
   await withDiagnosis(g, 'qa-desert-scorched-1280', async () => {
     await enterDesert(g);
@@ -153,13 +163,37 @@ test('C5 캡처 ③(1280×720): 능선 앞 전투 시작 → 불씨·젖은 칸�
     await g.capture('b01_scorched_start');
     await g.playBattle(300_000, snapHas(`(b.snap.embers ?? []).length > 0 && (b.snap.wet ?? []).length > 0 && ${myTurn}`));
     await g.capture('b02_ember_wet_warn');
-    // 자동 진행은 매듭부터 쳐서 칸이 끊기기 전에 이긴다 — 매듭이 남은 이 차례를 그대로 넘겨 끊김을 먼저 일으킨다
+    // 물들이는 아군과 가장 가까운 박음이를 적시므로, 자동 진행(가까운 적부터)으로는 열기 환영이 나오지 않는다.
+    // 이 차례에 누비를 마른 박음이 곁으로 옮겨 직접 친다(매듭은 치지 않는다)
+    const plan = (await g.page.evaluate(() => {
+      const b = (window as any).__game.scene.getScene('Battle'); // eslint-disable-line @typescript-eslint/no-explicit-any
+      const snap = b.snap;
+      const key = (c: number, r: number) => `${c},${r}`;
+      const wet = new Set((snap.wet ?? []) as string[]);
+      const shut = new Set([...(snap.blocked ?? []), ...(snap.cut ?? [])] as string[]);
+      const taken = new Set(snap.units.filter((u: any) => !u.fled && !(u.stunned && u.hp <= 0)).map((u: any) => key(u.col, u.row))); // eslint-disable-line @typescript-eslint/no-explicit-any
+      const doll = snap.units.find((u: any) => u.unitId.startsWith('scorched_doll') && !u.stunned && !wet.has(key(u.col, u.row))); // eslint-disable-line @typescript-eslint/no-explicit-any
+      if (!doll) return null;
+      const world = (c: number, r: number) => { const w = b.tileToWorld(c, r); return { x: Math.round(w.x), y: Math.round(w.y), cell: key(c, r) }; };
+      const cells = [[0, 1], [-1, 0], [1, 0], [0, -1]].map(([dc, dr]) => [doll.col + dc, doll.row + dr]).filter(([c, r]) => !shut.has(key(c, r)) && !taken.has(key(c, r))).map(([c, r]) => world(c, r));
+      return { doll: world(doll.col, doll.row), cells };
+    })) as { doll: { x: number; y: number }; cells: { x: number; y: number; cell: string }[] } | null;
+    assert.ok(plan && plan.cells.length > 0, '마른 박음이 곁 빈 칸');
+    const nubiAt = (cell: string) => snapHas(`b.snap.units.some((u) => u.storyNubi && u.col + ',' + u.row === '${cell}') && !b.busy`);
+    let moved = false;
+    for (const c of plan!.cells) {
+      await g.click(c.x, c.y);
+      moved = await g.until('누비 이동', nubiAt(c.cell), 3000).then(() => true, () => false);
+      if (moved) break;
+    }
+    assert.ok(moved, '누비가 마른 박음이 곁으로 갔다');
+    await g.clickAt(plan!.doll.x, plan!.doll.y, snapHas('b.snap.units.some((u) => u.mirageOf && !u.stunned && !u.fled) && !b.busy'));
+    await g.capture('b03_heat_mirage');
+    // 자동 진행은 매듭부터 쳐서 칸이 끊기기 전에 이긴다 — 매듭이 남은 이 차례를 그대로 넘겨 끊김을 일으킨다
     await g.until('매듭 남음', snapHas(`b.snap.units.some((u) => u.knotOf && !u.stunned && !u.fled) && ${myTurn} && !b.busy`));
     await g.clickLabel('턴 종료', { exact: true });
     await g.until('끊긴 칸', snapHas(`(b.snap.cut ?? []).length > 0 && ${myTurn}`), 60_000);
     await g.capture('b04_cut_cell');
-    await g.playBattle(300_000, snapHas(`b.snap.units.some((u) => u.mirageOf && !u.stunned && !u.fled) && ${myTurn}`));
-    await g.capture('b03_heat_mirage');
   }, backend, device);
   await g.close();
 });
@@ -179,8 +213,11 @@ test('C5 캡처 ④(1280×720): 황금 재단인형 시작 → 줄 예고 → �
     await g.capture('b07_point_regen');
     await g.playBattle(300_000, snapHas(`b.snap.units.filter((u) => u.regen && u.stunned && !u.reviving).length === 3 && ${myTurn}`));
     await g.capture('b08_inner_link_open');
-    await g.playBattle(300_000, snapHas("b.snap.units.some((u) => u.unitId === 'golden_doll' && u.phase === 'exposed')"));
+    // 안쪽 연결을 끊는 일격이 곧 승리다 — 결과창 전 멈춤(BOSS_FINAL_HOLD_MS) 동안 풀려 무너진 그림을 찍는다
+    const finish = g.playBattle(300_000);
+    await g.page.waitForFunction(() => { const b = (window as any).__game.scene.getScene('Battle'); return !!b && !b.resultShown && b.children.list.some((o: any) => o.list?.some((s: any) => s.texture?.key === 'golden-doll-unraveled')); }, null, { timeout: 300_000, polling: 50 }); // eslint-disable-line @typescript-eslint/no-explicit-any
     await g.capture('b09_boss_unraveled');
+    await finish;
     await g.until('결과 확정', 's.battle && s.battle.settled === true && s.battle.resultButton', 30_000);
     await g.clickLabel('이야기 계속하기', { exact: true });
     await g.until('승리 장면', "s.scenes.includes('StoryDialogue')", 30_000);

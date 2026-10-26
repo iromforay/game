@@ -27,6 +27,7 @@ test('안쪽 검은 연결: 이야기 누비는 ok, 다른 유닛은 zero(공격
 
 test('표식: 다시 꿰매지는 금빛 연결점은 "다시 꿰매짐"(파편 남음 아님), 안쪽 연결은 "누비만"', () => {
   assert.ok(unitTags(unit({ characterCode: 'gold_point', regen: true, stunned: true, reviving: true })).includes('다시 꿰매짐'));
+  assert.deepEqual([unitTags(unit({ characterCode: 'golden_doll', phase: 'exposed' })), unitTags(unit({ characterCode: 'frost_machine', phase: 'exposed' }))], [['풀림'], ['약점 노출']], '재단인형은 풀림(이기는 순간), 다른 보스는 그대로');
   assert.ok(!unitTags(unit({ characterCode: 'gold_point', regen: true, stunned: true, reviving: true })).includes('파편 남음'));
   assert.ok(unitTags(unit({ nubiOnly: true })).includes('누비만'));
   assert.ok(unitTags(unit({ characterCode: 'frozen_sewn_doll', stunned: true, reviving: true })).includes('파편 남음'), '4장 그대로');
