@@ -39,12 +39,12 @@ test('허브 통합: 게임 목록에 터비 구하기와 광고게임이 함께
   await page.getByRole('button', { name: /광고게임/ }).waitFor();
   await shot('1280x800_01_hub_game_list.png');
 
-  // 2) 광고게임 목록: 6개 모두 출시(hub/src/adGames.ts status 'available' — main 1acb04e에서 머지 디펜스·달콤상점·내 방이 던전, 이후 빙글 채집왕 출시)되어 모두 시작 가능
+  // 2) 광고게임 목록: 7개 모두 출시(hub/src/adGames.ts status 'available' — main 1acb04e에서 머지 디펜스·달콤상점·내 방이 던전, 이후 빙글 채집왕·컬러 블래스터즈 출시)되어 모두 시작 가능
   await page.getByRole('button', { name: /광고게임/ }).click();
   const cards = page.locator('.ad-game-card');
-  assert.equal(await cards.count(), 6);
-  assert.deepEqual(await page.locator('.ad-game-title').allTextContents(), ['숫자 게이트 러너', '숫자 용사 탑', '머지 디펜스', '달콤상점', '내 방이 던전', '빙글 채집왕']);
-  assert.equal(await page.locator('.ad-game-card:not(:disabled)').count(), 6, '출시 게임 여섯 개는 시작 가능');
+  assert.equal(await cards.count(), 7);
+  assert.deepEqual(await page.locator('.ad-game-title').allTextContents(), ['숫자 게이트 러너', '숫자 용사 탑', '머지 디펜스', '달콤상점', '내 방이 던전', '컬러 블래스터즈', '빙글 채집왕']);
+  assert.equal(await page.locator('.ad-game-card:not(:disabled)').count(), 7, '출시 게임 일곱 개는 시작 가능');
   assert.equal(await page.locator('.ad-game-card:disabled').count(), 0, '기획 중(비활성) 게임 없음');
   await shot('1280x800_02_ad_game_catalog.png');
 
