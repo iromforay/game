@@ -86,25 +86,34 @@ test('불씨: 박음이가 차례를 마칠 때 가장 가까운 아군 칸에 �
   assert.equal(b.hp, before[1], '멀리 비켜 선 아군은 맞지 않는다');
 });
 
-test('젖은 칸: 물들이가 아군 차례 전에 박음이 발밑을 적시고, 젖은 칸에서 차례를 시작한 박음이는 불씨를 두지 못한다', () => {
+test('젖은 칸: 물들이는 열기 환영을 드러낸 박음이 발밑을 아군 차례 전에 적시고, 젖은 칸에서 차례를 시작한 박음이는 불씨를 두지 못한다', () => {
   const s = start(AMBUSH);
   nextRound(s);
-  assert.equal(s.wet!.length, 1, '2라운드 시작에 한 칸');
-  const wetDoll = ['scorched_doll_a', 'scorched_doll_b'].map((id) => u(s, id)).find((d) => s.wet!.some((w) => w.cell === `${d.col},${d.row}`))!;
-  const dry = ['scorched_doll_a', 'scorched_doll_b'].map((id) => u(s, id)).find((d) => d !== wetDoll)!;
-  assert.ok(wetDoll && dry);
-  assert.ok(s.hintsShown!.some((h) => h.code === 'wet'));
+  assert.equal(s.wet?.length ?? 0, 0, '환영을 쓴 박음이가 없으면 적시지 않는다(10-26 C5-6 QA-01)');
+  // 한 박음이를 쳐서 환영을 드러내게 한 뒤 다음 라운드
+  const h = mine(s);
+  const wetDoll = u(s, 'scorched_doll_a');
+  const dry = u(s, 'scorched_doll_b');
+  place(s, wetDoll.unitId, 4, 4);
+  h.col = 3;
+  h.row = 4;
+  h.ap = 3;
+  attackBy(s, h.unitId, wetDoll.unitId);
+  assert.ok(wetDoll.mirageUsed);
+  nextRound(s);
+  assert.deepEqual(s.wet!.map((w) => w.cell), [`${wetDoll.col},${wetDoll.row}`], '환영을 쓴 박음이 발밑 한 칸');
+  assert.ok(s.hintsShown!.some((x) => x.code === 'wet'));
   // 1라운드 불씨를 지우고 다음 적 차례를 본다: 젖은 박음이는 두지 못하고 마른 박음이만 둔다
   s.embers = [];
   dry.col = 4;
   dry.row = 0; // 젖은 박음이와 다른 줄에서 시작(같은 아군 칸을 노리지 않게 불씨 하나만 본다)
   nextRound(s);
   assert.deepEqual((s.embers ?? []).map((x) => x.by), [dry.unitId], '젖은 칸에서 시작한 박음이는 불씨 없음');
-  assert.deepEqual(s.wet!.map((w) => w.cell).length, 2, '3라운드 시작에 마른 박음이 발밑도 적신다(첫 칸은 아직 2라운드 기한 안)');
+  assert.equal(s.wet!.length, 1, '환영을 아직 쓰지 않은 박음이는 적시지 않는다');
 });
 
-test('열기 환영: 박음이를 처음 치면 곁에 환영이 생기고(한 번만), 환영을 치면 행동만 쓰고 사라진다. 젖은 칸 위면 환영이 없다', () => {
-  const s = start(AMBUSH);
+test('열기 환영: 마른 박음이를 처음 치면 그 일격을 버티고(HP 1 남김) 한 칸 띄운 자리에 환영이 생기고(한 번만), 환영을 치면 행동만 쓰고 사라진다. 젖은 칸 위면 환영이 없다', () => {
+  const s = start(AMBUSH, [hero({ attack: 30, actionPower: 8 })]);
   const h = mine(s);
   place(s, 'scorched_doll_a', 4, 4);
   h.col = 3;
@@ -114,9 +123,11 @@ test('열기 환영: 박음이를 처음 치면 곁에 환영이 생기고(한 �
   assert.ok(m, '환영 생김');
   const mirage = u(s, m.mirageId);
   assert.deepEqual([mirage.mirageOf, mirage.hp, mirage.characterCode], ['scorched_doll_a', 1, 'heat_mirage']);
-  assert.ok(Math.abs(mirage.col - 4) + Math.abs(mirage.row - 4) === 1, '박음이 곁');
+  assert.deepEqual([u(s, 'scorched_doll_a').hp, u(s, 'scorched_doll_a').stunned], [1, false], '누비 혼자 센 일격이어도 첫 일격은 버틴다');
+  assert.equal(Math.abs(mirage.col - 4) + Math.abs(mirage.row - 4), 2, '원본과 한 칸 띄운 자리(QA-02)');
   attackBy(s, h.unitId, 'scorched_doll_a');
   assert.equal(s.units.filter((x) => x.mirageOf).length, 1, '두 번째 피격에는 새 환영 없음');
+  assert.equal(u(s, 'scorched_doll_a').stunned, true, '두 번째 일격은 흘리지 못한다');
   if (Math.abs(mirage.col - h.col) + Math.abs(mirage.row - h.row) !== 1) {
     mirage.col = h.col;
     mirage.row = h.row - 1;
@@ -132,6 +143,15 @@ test('열기 환영: 박음이를 처음 치면 곁에 환영이 생기고(한 �
   wh.row = 4;
   w.wet = [{ cell: '4,4', untilRound: 9 }];
   assert.ok(!types(attackBy(w, wh.unitId, 'scorched_doll_b')).includes('mirage'), '젖은 칸이면 환영 없음');
+  // 젖은 박음이는 첫 일격도 흘리지 못한다
+  const w2 = start(AMBUSH, [hero({ attack: 30, actionPower: 8 })]);
+  const wh2 = mine(w2);
+  place(w2, 'scorched_doll_b', 4, 4);
+  wh2.col = 3;
+  wh2.row = 4;
+  w2.wet = [{ cell: '4,4', untilRound: 9 }];
+  attackBy(w2, wh2.unitId, 'scorched_doll_b');
+  assert.equal(u(w2, 'scorched_doll_b').stunned, true, '젖은 칸이면 한 번에 쓰러진다');
 });
 
 test('재단 실밥이: 아군 곁 칸을 예고하고 매듭을 둔다 → 매듭이 남으면 다음 차례에 그 칸이 끊기고(지나갈 수 없음), 매듭을 끊으면 예고가 취소된다. 합계 3칸', () => {
@@ -169,6 +189,7 @@ test('능선 앞 승리: 박음이 둘·실밥이 둘을 쓰러뜨리면 이긴�
     h.row = t.row;
     h.ap = 8;
     attackBy(s, h.unitId, id);
+    if (!u(s, id).stunned) attackBy(s, h.unitId, id); // 마른 박음이는 첫 일격을 버틴다
     if (id === 'cutting_stitch_a') assert.ok(!s.cutWarns!.some((w) => w.knotId === warnsBy.knotId), '쓰러진 실밥이의 예고 취소');
   }
   assert.deepEqual([s.phase, s.outcome], ['resolved', 'win']);

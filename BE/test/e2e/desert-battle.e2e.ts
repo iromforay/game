@@ -89,9 +89,13 @@ test('5장 C5-3 ①(1280×720): 능선 앞 — 지문 → 전투(불씨·젖은 
     let b = await battle(g);
     assert.deepEqual(['scorched_doll_a', 'scorched_doll_b', 'cutting_stitch_a', 'cutting_stitch_b', 'muldeuli'].map((id) => !!b.units.find((u) => u.id === id)), [true, true, true, true, true]);
     await g.capture('desert_scorched_start');
-    // 첫 적 차례 뒤: 불씨·곧 끊어질 칸, 둘째 라운드 시작에 물들이가 박음이 발밑을 적신다
-    await g.playBattle(120_000, 's.battle && s.battle.round >= 2');
-    const mid = (await g.page.evaluate(() => (window as any).__game.scene.getScene('Battle').snap)) as { embers?: unknown[]; wet?: unknown[]; cutWarns?: unknown[] }; // eslint-disable-line
+    // 첫 적 차례 뒤 불씨·곧 끊어질 칸. 누비 혼자여도 마른 박음이는 첫 일격을 버티고 열기 환영을 만들고(C5-6 QA-01),
+    // 그 뒤 물들이가 환영을 드러낸 박음이 발밑을 적신다
+    const snapOf = () => g.page.evaluate(() => (window as any).__game.scene.getScene('Battle').snap) as Promise<{ embers?: unknown[]; wet?: unknown[]; units: { mirageOf?: string }[] }>; // eslint-disable-line
+    await g.playBattle(120_000, "(() => { const b = window.__game.scene.getScene('Battle'); return !!b && !!b.snap && b.snap.units.some((u) => u.mirageOf); })()");
+    assert.ok((await snapOf()).units.some((u) => u.mirageOf), '열기 환영');
+    await g.playBattle(120_000, "(() => { const b = window.__game.scene.getScene('Battle'); return !!b && !!b.snap && (b.snap.embers ?? []).length > 0 && (b.snap.wet ?? []).length > 0; })()");
+    const mid = await snapOf();
     assert.ok((mid.embers?.length ?? 0) > 0 && (mid.wet?.length ?? 0) > 0, `불씨 ${mid.embers?.length ?? 0}·젖은 칸 ${mid.wet?.length ?? 0}`);
     await g.capture('desert_scorched_mid');
     await winAndSettle(g);

@@ -43,6 +43,12 @@ const DEPTH_GROUND = MAP_DEPTH.greybox;
 const TRAP_SLOW_MS = 1200; // 서버 덫 지속 시간(lake.json blackThreadTraps.slowMs)과 같은 값 — 연출 길이용이며 판정은 서버
 const MAP_TARGET_GLOW = 0xf6dfa8; // 임무 대상 외곽광 색(크림)
 const DEPTH_STORY = MAP_DEPTH.story; // 이야기 지점·오브젝트 표식·문(아바타·야생 터비보다 아래)
+// 10-26 C5-6 QA-05 아지랑이: 가장 짙을 때 투명도, 좌우 흔들림(px), 위아래 늘어남 비율
+const MIRAGE_PEAK_ALPHA = 0.5;
+const MIRAGE_SWAY_PX = 6;
+const MIRAGE_STRETCH = 0.06;
+// 10-26 C5-6 QA-06 열린 틈 다리 보정: 그림 색 곱하기(tint), 가운데 안내선 색(guide)
+const GATE_ART_TUNE: Record<string, { tint?: number; guide?: number }> = { 'ridge-gap-scent': { tint: 0xe6b08a }, 'ridge-gap-thread': { guide: 0xf2c75c } };
 
 interface WildMarker {
   info: WildInfo; // 서버가 내려 준 마커(위치·종류) — 클라이언트 설정에는 야생 좌표가 없다
@@ -498,7 +504,19 @@ export class MapScene extends Phaser.Scene {
     }
     for (const g of plan.gates) {
       const gate = view!.gates.find((x) => x.id === g.id)!;
-      if (g.art) keep(this.add.image(g.art.x, g.art.y, g.art.assetKey).setOrigin(g.art.pivot[0], g.art.pivot[1]).setDisplaySize(g.art.width, g.art.height).setDepth(DEPTH_STORY));
+      if (g.art) {
+        const img = keep(this.add.image(g.art.x, g.art.y, g.art.assetKey).setOrigin(g.art.pivot[0], g.art.pivot[1]).setDisplaySize(g.art.width, g.art.height).setDepth(DEPTH_STORY));
+        // 10-26 C5-6 QA-06: 표시 크기에서 비슷해 보이는 열린 틈 다리를 구분한다(묻힌 실 다리는 붉은 갈색, 금빛 실 다리는 가운데 금빛 안내선)
+        const tune = GATE_ART_TUNE[g.art.assetKey];
+        if (tune?.tint) img.setTint(tune.tint);
+        if (tune?.guide) {
+          const cx = g.art.x + (0.5 - g.art.pivot[0]) * g.art.width;
+          const cy = g.art.y + (0.5 - g.art.pivot[1]) * g.art.height;
+          const h = g.art.height * 0.86;
+          const line = keep(this.add.graphics().fillStyle(tune.guide, 0.9).fillRect(cx - 1.5, cy - h / 2, 3, h).setDepth(DEPTH_STORY + 0.01)); // 임시 문 사각형(Rectangle) 집계와 섞이지 않게 Graphics
+          line.postFX?.addGlow(tune.guide, 2, 0, false, 0.1, 8);
+        }
+      }
       for (const q of g.pieces) {
         // 열림 그림의 일부(원본 px 사각형)를 이름 붙은 프레임으로 한 번 등록해 그 프레임만 그린다(PNG는 그대로)
         const tex = this.textures.get(q.assetKey);
@@ -995,6 +1013,13 @@ export class MapScene extends Phaser.Scene {
     if (heat ? this.notices.once('heat-zone') : this.notices.once('frost-zone')) this.notice(heat ? HEAT_ZONE_TEXT : FROST_ZONE_TEXT);
   }
 
+  // 아지랑이 그림: 흐리게 번지게 한다(10-26 C5-6 QA-05 — 또렷한 천 길처럼 보이지 않게)
+  private mirageImage(f: { x: number; y: number; width: number; height: number }) {
+    const img = this.add.image(f.x, f.y, 'mirage-path').setOrigin(0, 0).setDisplaySize(f.width, f.height);
+    img.preFX?.addBlur(0, 2, 2, 1.2);
+    return img;
+  }
+
   // 10-26 C5-1: 아지랑이 가짜 길 — 서버 시각 주기로 떠올랐다 사라진다(판정 없음). 그림(mirage-path)이 없으면 옅은 모래색 사각형(임시)
   private updateMirages(fields: NonNullable<NonNullable<StageView['layout']>['mirages']> | undefined) {
     if (!fields || fields.length === 0) return;
@@ -1002,16 +1027,20 @@ export class MapScene extends Phaser.Scene {
       this.mirageViews.forEach((m) => m.view.destroy());
       this.mirageViews = fields.map((f) => ({
         id: f.id,
-        view: (this.textures.exists('mirage-path') ? this.add.image(f.x, f.y, 'mirage-path').setOrigin(0, 0).setDisplaySize(f.width, f.height) : this.add.rectangle(f.x, f.y, f.width, f.height, 0xf3d9a4, 0.9).setOrigin(0, 0)).setDepth(DEPTH_STORY - 0.6).setAlpha(0),
+        view: (this.textures.exists('mirage-path') ? this.mirageImage(f) : this.add.rectangle(f.x, f.y, f.width, f.height, 0xf3d9a4, 0.9).setOrigin(0, 0)).setDepth(DEPTH_STORY - 0.6).setAlpha(0),
         alpha: 0,
       }));
     }
     const now = roomClient.now();
-    for (const f of fields) {
+    fields.forEach((f, i) => {
       const m = this.mirageViews.find((x) => x.id === f.id)!;
       m.alpha = mirageAlphaAt(f, now);
-      m.view.setAlpha(m.alpha * 0.85);
-    }
+      m.view.setAlpha(m.alpha * MIRAGE_PEAK_ALPHA);
+      // 10-26 C5-6 QA-05: 열기에 일렁이게(좌우로 조금 흔들리고 위아래로 늘었다 줄었다) — 단단한 길·다리로 읽히지 않게
+      const sway = Math.sin(now / 260 + i * 1.7) * MIRAGE_SWAY_PX;
+      const stretch = 1 + Math.sin(now / 170 + i) * MIRAGE_STRETCH;
+      m.view.setPosition(f.x + sway, f.y - (f.height * (stretch - 1)) / 2).setDisplaySize(f.width, f.height * stretch);
+    });
   }
 
   // 깊은 물에서 돌아왔을 때의 안내 — 한 탐험 세션(이 화면)에서 처음 한 번만

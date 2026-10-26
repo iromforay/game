@@ -71,6 +71,8 @@ const TARGET_IMAGES: Record<string, { key: string; px: number }> = {
   gold_point: { key: 'gold-point', px: 80 },
   inner_link: { key: 'inner-link', px: 80 },
 };
+const TOAST_ABOVE_HINT = 64; // 작은 화면 사건 안내 가운데 ~ 조작 안내 줄 위끝 거리
+const MIRAGE_GLOW = 0xffa64d; // 10-26 C5-6 QA-02 열기 환영 외곽광·고리(따뜻한 주황)
 const ICE_KEY = 'ice-cell';
 const NEEDLE_MARK_KEY = 'battle-needle-mark';
 const PINNED_KEY = 'pinned-stitch';
@@ -289,7 +291,7 @@ export class BattleScene extends Phaser.Scene {
     const rank = (u: BattleUnit) => (u.side === 'party' ? 0 : u.phase ? 1 : 2);
     for (const u of [...this.snap.units].sort((a, b) => rank(a) - rank(b))) {
       const v = this.views.get(u.unitId);
-      if (!v || isHiddenUnit(u)) continue;
+      if (!v || isHiddenUnit(u) || !v.hpText.visible) continue;
       const { x, y } = this.tileToWorld(u.col, u.row);
       let pref = labelPlacement(this.snap, u);
       if (u.row === 0) pref = 'below';
@@ -313,6 +315,11 @@ export class BattleScene extends Phaser.Scene {
     const bottom = compact ? Math.min(this.offsetY + this.gridH, COMPACT_LABEL_BOTTOM) : this.offsetY + this.gridH;
     const spots = resolveLabels(boxes, { x: this.offsetX, y: this.offsetY, w: this.gridW, h: bottom - this.offsetY }, LABEL_GAP, obstacles);
     for (const [id, p] of spots) this.views.get(id)!.hpText.setOrigin(0.5, 0).setPosition(p.cx, p.top);
+  }
+
+  // 사건 안내(토스트) 높이: 작은 화면은 글자가 커서 아래 조작 안내 줄과 붙으므로 그 위로 띄운다(10-26 C5-6 QA-04)
+  private get toastY() {
+    return this.hud?.mode === 'compact' ? this.hud.rects.hint.y - TOAST_ABOVE_HINT : 660;
   }
 
   private hpLabel(u: BattleUnit) {
@@ -412,13 +419,19 @@ export class BattleScene extends Phaser.Scene {
     } else if (TARGET_IMAGES[u.characterCode] && this.textures.exists(TARGET_IMAGES[u.characterCode].key)) {
       const t = TARGET_IMAGES[u.characterCode];
       body = this.add.image(0, 0, t.key).setDisplaySize(t.px, t.px);
+      // 10-26 C5-6 QA-02: 열기 환영은 어두운 배경에 묻히지 않게 따뜻한 굴절 외곽광을 두른다
+      if (u.characterCode === 'heat_mirage' && (body as Phaser.GameObjects.Image).preFX) {
+        const img = body as Phaser.GameObjects.Image;
+        img.preFX!.setPadding(10);
+        img.preFX!.addGlow(MIRAGE_GLOW, 4, 0, false, 0.1, 10);
+      }
     } else if (u.characterCode === 'carrier_thread' && this.textures.exists(CARRIER_KEY)) {
       body = this.add.image(0, 0, CARRIER_KEY).setDisplaySize(TARGET_DISPLAY_PX, TARGET_DISPLAY_PX);
     } else {
       body = hasImage ? this.add.image(0, 0, `turby-${u.characterCode}`).setDisplaySize(52, 52) : this.add.circle(0, 0, u.partOf ? 16 : 24, fill);
     }
     const selectRing = this.add.circle(0, 0, 29).setStrokeStyle(3, 0x9fe58a, 0);
-    const ring = this.add.circle(0, 0, 26).setStrokeStyle(3, u.side === 'party' ? slotNum(u.participantSlot) : u.side === 'neutral' ? 0x4a9a4a : 0x2d6fa3);
+    const ring = this.add.circle(0, 0, 26).setStrokeStyle(3, u.side === 'party' ? slotNum(u.participantSlot) : u.side === 'neutral' ? 0x4a9a4a : u.mirageOf ? MIRAGE_GLOW : 0x2d6fa3);
     container.add([selectRing, ring, body]);
     container.setDepth(10);
     // 라벨은 줄이지 않고 두 칸 폭 안에서 줄바꿈(이웃 라벨은 위·아래로 엇갈려 겹치지 않음 — labelPlacement)
@@ -444,7 +457,8 @@ export class BattleScene extends Phaser.Scene {
       // 끊어진 검은 재봉실(보스 부위)은 스프라이트·HP·이름표를 숨긴다(서버 스냅샷 상태는 그대로 — 표시만)
       const hidden = isHiddenUnit(u);
       view.container.setPosition(x, y).setAlpha(u.stunned || u.inactive ? 0.4 : 1).setVisible(!hidden);
-      view.hpText.setText(this.hpLabel(u)).setAlpha(u.stunned || u.inactive ? 0.6 : 1).setVisible(!hidden);
+      const label = this.hpLabel(u);
+      view.hpText.setText(label).setAlpha(u.stunned || u.inactive ? 0.6 : 1).setVisible(!hidden && label !== '');
       // 쓰러진·이탈한 유닛의 그림은 입력을 받지 않는다 — 그 칸으로 이동하려는 누름이 그림에 가로막히지 않게(부서진 거대 매듭의 실 칸 등)
       for (const o of view.container.list) if (o.input) o.input.enabled = !(u.stunned || u.inactive);
     }
@@ -474,7 +488,7 @@ export class BattleScene extends Phaser.Scene {
     if (this.resultShown || this.snap.phase === 'resolved' || !me || me.active || this.leavingRemoved) return;
     this.leavingRemoved = true;
     const why = me.leftReason === 'timeout' ? '접속이 오래 끊겨 전투에서 제외되었어요.' : '전투에서 빠졌어요.';
-    showToast(this, why, { y: 660, error: true });
+    showToast(this, why, { y: this.toastY, error: true });
     // 스토리 전투는 불러낸 대화 화면으로(재도전) — 대화가 잠든 채로 남지 않게
     this.time.delayedCall(1800, () => (this.initData.returnTo ? this.exitTo('cancelled') : this.scene.start(roomClient.room ? 'Map' : 'StageSelect', { stageCode: this.initData.stageCode, capturedIndices: this.initData.capturedIndices, removedIndices: this.initData.removedIndices })));
   }
@@ -821,7 +835,7 @@ export class BattleScene extends Phaser.Scene {
     for (const h of shown) {
       if (this.hintsSeen.has(h.code)) continue;
       this.hintsSeen.add(h.code);
-      showToast(this, h.text, { y: 660 });
+      showToast(this, h.text, { y: this.toastY });
     }
   }
 
@@ -832,7 +846,7 @@ export class BattleScene extends Phaser.Scene {
     const st = targetState(this.snap, target, u);
     if (st === 'not_target') return;
     if (st !== 'ok' && st !== 'zero') {
-      showToast(this, TARGET_HINT[st], { y: 660 }); // 부위 순서·중심부 보호 — 서버도 같은 규칙(PART_ORDER/TARGET_PROTECTED)
+      showToast(this, TARGET_HINT[st], { y: this.toastY }); // 부위 순서·중심부 보호 — 서버도 같은 규칙(PART_ORDER/TARGET_PROTECTED)
       return;
     }
     if (Math.abs(u.col - target.col) + Math.abs(u.row - target.row) !== 1) return;
@@ -903,7 +917,7 @@ export class BattleScene extends Phaser.Scene {
         } catch (err) {
           if (err instanceof RoomApiError) throw err;
           if (attempt === RETRY_LIMIT) throw err;
-          showToast(this, '연결이 불안정해요. 다시 시도하는 중...', { y: 660, error: true });
+          showToast(this, '연결이 불안정해요. 다시 시도하는 중...', { y: this.toastY, error: true });
           await wait(this, 1000);
         }
       }
@@ -919,20 +933,20 @@ export class BattleScene extends Phaser.Scene {
 
   private async handleError(err: unknown) {
     if (!(err instanceof RoomApiError)) {
-      showToast(this, '서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.', { y: 660, error: true });
+      showToast(this, '서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.', { y: this.toastY, error: true });
       return;
     }
     if (err.code === 'STATE_MISMATCH' && err.snapshot) {
       this.snap = err.snapshot; // 서버 상태가 기준 — 최신으로 맞춘다
-      showToast(this, '전투 상태가 달라져 화면을 맞췄어요.', { y: 660 });
+      showToast(this, '전투 상태가 달라져 화면을 맞췄어요.', { y: this.toastY });
     } else if (err.code === 'BATTLE_EXPIRED' || err.code === 'NOT_PARTICIPANT') {
-      showToast(this, '전투가 사라졌어요. 지역 선택으로 돌아갑니다.', { y: 660, error: true });
+      showToast(this, '전투가 사라졌어요. 지역 선택으로 돌아갑니다.', { y: this.toastY, error: true });
       this.time.delayedCall(1800, () => (this.initData.returnTo ? this.exitTo('cancelled') : this.scene.start('StageSelect')));
     } else if (err.code === 'BATTLE_RESOLVED') {
       const res = await battleClient.snapshot(this.snap.battleId).catch(() => null);
       if (res) await this.playResponse(res);
     } else {
-      showToast(this, err.message, { y: 660, error: true });
+      showToast(this, err.message, { y: this.toastY, error: true });
     }
   }
 
@@ -1052,32 +1066,32 @@ export class BattleScene extends Phaser.Scene {
       }
     } else if (ev.type === 'part_broken') {
       const finalText = ev.coreExposed ? CORE_EXPOSED_TOAST[this.unit(ev.coreId)?.characterCode ?? ''] : undefined; // 10-26 C5-5: 부위가 곧 승리 조건인 보스
-      showToast(this, finalText ?? (ev.coreExposed ? '바깥 부위를 모두 끊었어요! 이제 중심을 노릴 수 있어요' : '부위 하나를 끊었어요'), { y: 660 });
+      showToast(this, finalText ?? (ev.coreExposed ? '바깥 부위를 모두 끊었어요! 이제 중심을 노릴 수 있어요' : '부위 하나를 끊었어요'), { y: this.toastY });
       await wait(this, 250);
     } else if (ev.type === 'terrain') {
       this.drawBlocked(ev.blocked);
       await wait(this, 200);
     } else if (ev.type === 'current') {
       // 예고된 물살 적용: 서버가 정한 이동만 그린다(스냅샷으로 곧 같은 위치가 확정된다)
-      showToast(this, `물살이 ${ev.direction === 'east' ? '→' : '←'} 방향으로 밀었어요`, { y: 660 });
+      showToast(this, `물살이 ${ev.direction === 'east' ? '→' : '←'} 방향으로 밀었어요`, { y: this.toastY });
       await wait(this, 350);
     } else if (ev.type === 'wrong_thread') {
-      showToast(this, '이 실이 아니에요! 혼란에 빠졌어요', { y: 660, error: true });
+      showToast(this, '이 실이 아니에요! 혼란에 빠졌어요', { y: this.toastY, error: true });
       await wait(this, 350);
     } else if (ev.type === 'confused_action') {
-      showToast(this, '혼란 때문에 엉뚱하게 움직였어요', { y: 660 });
+      showToast(this, '혼란 때문에 엉뚱하게 움직였어요', { y: this.toastY });
       await wait(this, 250);
     } else if (ev.type === 'carrier_cut') {
-      showToast(this, '운반 실이 끊겼어요! 실패굴이가 이쪽으로 굴러와요', { y: 660 });
+      showToast(this, '운반 실이 끊겼어요! 실패굴이가 이쪽으로 굴러와요', { y: this.toastY });
       await wait(this, 300);
     } else if (ev.type === 'empower') {
-      showToast(this, '작은 실패굴이가 기억실을 전달했어요! 박음이가 강해졌어요', { y: 660, error: true });
+      showToast(this, '작은 실패굴이가 기억실을 전달했어요! 박음이가 강해졌어요', { y: this.toastY, error: true });
       await wait(this, 450);
     } else if (ev.type === 'hint' && ev.code === 'thread_hint') {
-      showToast(this, ev.text, { y: 660 });
+      showToast(this, ev.text, { y: this.toastY });
       await wait(this, 200);
     } else if (ev.type === 'phase' && this.unit(ev.unitId)?.flat !== undefined) {
-      showToast(this, '재봉선이 드러났어요', { y: 660 });
+      showToast(this, '재봉선이 드러났어요', { y: this.toastY });
       await wait(this, 200);
     } else if (ev.type === 'slide') {
       // 10-23 C4-3: 얼음 칸에서 한 칸 더 미끄러진다(서버가 정한 칸)
@@ -1088,34 +1102,34 @@ export class BattleScene extends Phaser.Scene {
         await wait(this, 180);
       }
     } else if (ev.type === 'shatter') {
-      showToast(this, '박음이가 검은 실 파편을 흩뿌렸어요!', { y: 660 });
+      showToast(this, '박음이가 검은 실 파편을 흩뿌렸어요!', { y: this.toastY });
       await wait(this, 300);
     } else if (ev.type === 'shatter_cleared') {
-      showToast(this, '파편을 모두 끊었어요. 박음이가 다시 일어나지 못해요', { y: 660 });
+      showToast(this, '파편을 모두 끊었어요. 박음이가 다시 일어나지 못해요', { y: this.toastY });
       await wait(this, 250);
     } else if (ev.type === 'revive') {
-      showToast(this, this.unit(ev.unitId)?.regen ? '금빛 연결점이 다시 꿰매졌어요' : '파편이 다시 붙어 박음이가 일어났어요', { y: 660, error: true });
+      showToast(this, this.unit(ev.unitId)?.regen ? '금빛 연결점이 다시 꿰매졌어요' : '파편이 다시 붙어 박음이가 일어났어요', { y: this.toastY, error: true });
       await wait(this, 400);
     } else if (ev.type === 'ember_burst') {
       // 10-26 C5-3: 불씨가 터졌다(맞은 아군이 있을 때만 알린다 — 피해·쓰러짐은 스냅샷이 확정한다)
       if (ev.hits.length > 0) {
         this.cameras.main.shake(100, 0.002);
-        showToast(this, '불씨가 터졌어요!', { y: 660, error: true });
+        showToast(this, '불씨가 터졌어요!', { y: this.toastY, error: true });
         await wait(this, 350);
       }
     } else if (ev.type === 'cut') {
-      if (ev.hits.length > 0) showToast(this, '재단인형의 팔에 맞았어요! 표시된 줄에서 비켜요', { y: 660, error: true });
-      else if (ev.cells.length > 0) showToast(this, '길이 끊겼어요', { y: 660, error: true });
+      if (ev.hits.length > 0) showToast(this, '재단인형의 팔에 맞았어요! 표시된 줄에서 비켜요', { y: this.toastY, error: true });
+      else if (ev.cells.length > 0) showToast(this, '길이 끊겼어요', { y: this.toastY, error: true });
       await wait(this, ev.cells.length + ev.hits.length > 0 ? 350 : 0);
     } else if (ev.type === 'restored') {
-      showToast(this, `${this.unit(ev.byUnitId)?.name ?? '동료'}가 끊긴 길을 다시 붙잡았어요`, { y: 660 });
+      showToast(this, `${this.unit(ev.byUnitId)?.name ?? '동료'}가 끊긴 길을 다시 붙잡았어요`, { y: this.toastY });
       await wait(this, 250);
     } else if (ev.type === 'needle_strike') {
       this.cameras.main.shake(120, 0.002);
-      if (ev.pinned.length > 0) showToast(this, '바늘에 박혀 움직일 수 없어요! 옆의 연결 실을 끊어요', { y: 660, error: true });
+      if (ev.pinned.length > 0) showToast(this, '바늘에 박혀 움직일 수 없어요! 옆의 연결 실을 끊어요', { y: this.toastY, error: true });
       await wait(this, 350);
     } else if (ev.type === 'freed') {
-      showToast(this, ev.byUnitId === 'ganeuri' ? '가느리가 연결 실을 끊어 줬어요' : '연결 실을 끊어 풀려났어요', { y: 660 });
+      showToast(this, ev.byUnitId === 'ganeuri' ? '가느리가 연결 실을 끊어 줬어요' : '연결 실을 끊어 풀려났어요', { y: this.toastY });
       await wait(this, 250);
     } else if (ev.type === 'subturn' && ev.phase === 'wild_turn') {
       this.statusText.setText('야생 터비 차례...');
@@ -1169,7 +1183,7 @@ export class BattleScene extends Phaser.Scene {
     } catch (err) {
       if (!ackFailureAllowsExit(err instanceof RoomApiError ? err.code : undefined)) {
         this.resultAcking = false;
-        if (this.scene.isActive() && gen === this.generation) showToast(this, RESULT_ACK_RETRY_TEXT, { y: 660, error: true, fixed: true });
+        if (this.scene.isActive() && gen === this.generation) showToast(this, RESULT_ACK_RETRY_TEXT, { y: this.toastY, error: true, fixed: true });
         return;
       }
     }

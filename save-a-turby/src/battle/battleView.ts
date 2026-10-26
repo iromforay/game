@@ -274,11 +274,20 @@ export function unitLabel(u: BattleUnit, compact: boolean): string {
   if (u.thread) return compact ? `${u.name} ${threadNumber(u)}${u.hinted ? ' ▶' : ''}` : `${u.name} ${threadNumber(u)}${u.hinted ? ' (다음 실)' : ''}`;
   if (isSeam(u)) return compact ? `검은 실 ${seamLetter(u)}` : `${u.name} ${seamLetter(u)} HP ${u.hp}/${u.maxHp}`;
   const tags = unitTags(u);
+  // 10-26 C5-6 QA-03: 끊긴 부위(금빛 연결점 등)는 HP 없이 남은 상태만 적고, 남은 상태가 없으면(완전히 끊김) 라벨을 숨긴다(빈 문자열)
+  if (u.partOf && u.stunned) {
+    const rest = tags.filter((t) => t !== '기절');
+    if (rest.length === 0) return '';
+    return compact ? `${nameOf(u, true)}\n${rest.join(' · ')}` : `${u.name} (${rest.join(' · ')})`;
+  }
   // 10-23 C4-3: 공격 대상이 아닌 적(서리 미싱 본체 — 부위를 끊어 멈춘다)은 HP를 보이지 않는다
   if (u.side === 'wild' && u.targetable === false) return tags.length === 0 ? nameOf(u, compact) : compact ? `${nameOf(u, compact)}\n${tags.join(' · ')}` : `${u.name} (${tags.join(' · ')})`;
   if (!compact) return `${u.name} HP ${u.hp}/${u.maxHp}${tags.length > 0 ? ` (${tags.join(' · ')})` : ''}`;
   const short = tags.map((t) => SHORT_TAG[t] ?? t);
-  return `${nameOf(u, true)}\n${[`${u.hp}/${u.maxHp}`, ...short].join(' · ')}`;
+  // 10-26 C5-6 QA-04: 작은 화면에서 한 번에 끊기는 부위(HP 1)는 HP를 적지 않는다
+  const hp = u.partOf && u.maxHp === 1 ? [] : [`${u.hp}/${u.maxHp}`];
+  const second = [...hp, ...short];
+  return second.length > 0 ? `${nameOf(u, true)}\n${second.join(' · ')}` : nameOf(u, true);
 }
 
 // ---------- 10-14 C2-5A 시각 보완(v1a) ----------
@@ -323,25 +332,26 @@ export function resolveLabels(boxes: LabelBox[], bounds: { x: number; y: number;
   for (const b of boxes) {
     const sides: ('above' | 'below')[] = b.pref === 'above' ? ['above', 'below'] : ['below', 'above'];
     const shifts = [0, b.w / 2 + 4, -(b.w / 2 + 4), b.w + 8, -(b.w + 8)];
+    // 10-26 C5-6 QA-03: 바로 위·아래가 다 찼으면 한 줄 더 바깥(라벨 높이만큼)까지 찾는다
+    const rings = [0, b.h + gap];
     const others = obstacles.filter((o) => o.id !== b.id);
     let best: { cx: number; top: number; rect: { x0: number; y0: number; x1: number; y1: number } } | null = null;
-    let chosen = false;
-    for (const avoidArt of others.length > 0 ? [true, false] : [false]) {
-      for (const side of sides) {
-        for (const dx of shifts) {
-          const top = side === 'above' ? b.anchorY - gap - b.h : b.anchorY + gap;
-          const c = clampLabel(b.cx + dx, top, b.w, b.h, bounds);
-          const rect = { x0: c.cx - b.w / 2, y0: c.top, x1: c.cx + b.w / 2, y1: c.top + b.h };
-          if (!best) best = { ...c, rect };
-          if (!placed.some((p) => overlap(p, rect)) && !(avoidArt && others.some((o) => overlap(o, rect)))) {
-            best = { ...c, rect };
-            chosen = true;
-            break;
+    // 가까운 줄부터: 그림까지 피한 자리 → 라벨끼리만 피한 자리 순으로 찾고, 없으면 바깥 줄로
+    search: for (const ring of rings) {
+      for (const avoidArt of others.length > 0 ? [true, false] : [false]) {
+        for (const side of sides) {
+          for (const dx of shifts) {
+            const top = side === 'above' ? b.anchorY - gap - b.h - ring : b.anchorY + gap + ring;
+            const c = clampLabel(b.cx + dx, top, b.w, b.h, bounds);
+            const rect = { x0: c.cx - b.w / 2, y0: c.top, x1: c.cx + b.w / 2, y1: c.top + b.h };
+            if (!best) best = { ...c, rect };
+            if (!placed.some((p) => overlap(p, rect)) && !(avoidArt && others.some((o) => overlap(o, rect)))) {
+              best = { ...c, rect };
+              break search;
+            }
           }
         }
-        if (chosen) break;
       }
-      if (chosen) break;
     }
     placed.push(best!.rect);
     out.set(b.id, { cx: best!.cx, top: best!.top });

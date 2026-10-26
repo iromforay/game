@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { canAttack, targetState, unitLabel, unitTags } from '../src/battle/battleView.ts';
+import { canAttack, resolveLabels, targetState, unitLabel, unitTags } from '../src/battle/battleView.ts';
 import type { BattleSnapshot, BattleUnit } from '../src/net/battleTypes.ts';
 
 const here = (rel: string) => fileURLToPath(new URL(rel, import.meta.url));
@@ -51,4 +51,20 @@ test('2차 에셋 키 계약(C5-4): 시트 규격·보스 두 상태·표적·�
   assert.match(scene, /golden_doll: \{ idle: 'golden-doll-idle', exposed: 'golden-doll-unraveled', labelBelow: \d+ \}/);
   for (const [code, key, px] of [['heat_mirage', 'heat-mirage', 96], ['cut_knot', 'cut-knot', 72], ['gold_point', 'gold-point', 80], ['inner_link', 'inner-link', 80]] as const) assert.match(scene, new RegExp(`${code}: \\{ key: '${key}', px: ${px} \\}`));
   assert.match(scene, /const EMBER_KEY = 'ember-cell';\nconst WET_KEY = 'wet-cell';\nconst CUT_WARN_KEY = 'cut-warn';\nconst CUT_KEY = 'cut-cell';/);
+});
+
+test('C5-6 QA-03·04 라벨: 끊긴 연결점은 HP 없이 상태만(완전히 끊기면 숨김), 작은 화면의 HP 1 부위는 HP 생략, 자리가 차면 한 줄 바깥으로', () => {
+  const point = (o: Partial<BattleUnit>) => unit({ unitId: 'gold_point_1', characterCode: 'gold_point', name: '금빛 연결점', partOf: 'golden_doll', regen: true, ...o });
+  assert.equal(unitLabel(point({ stunned: true, hp: 0, reviving: true }), false), '금빛 연결점 (다시 꿰매짐)');
+  assert.equal(unitLabel(point({ stunned: true, hp: 0, reviving: true }), true), '연결점\n다시 꿰매짐');
+  assert.equal(unitLabel(point({ stunned: true, hp: 0 }), false), '', '다시 꿰매지지 않는 끊긴 부위는 라벨 없음');
+  assert.equal(unitLabel(point({}), true), '연결점');
+  assert.equal(unitLabel(unit({ nubiOnly: true, partOf: 'golden_doll' }), true), '안쪽 연결\n누비만');
+  assert.equal(unitLabel(point({}), false), '금빛 연결점 HP 1/1', '큰 화면은 그대로');
+  // 위·아래 바로 옆 자리가 모두 찼을 때 겹치지 않고 한 줄 바깥에 놓는다
+  const bounds = { x: 0, y: 0, w: 400, h: 400 };
+  const box = (id: string) => ({ id, cx: 200, anchorY: 200, w: 380, h: 20, pref: 'below' as const });
+  const spots = resolveLabels([box('a'), box('b'), box('c')], bounds, 4);
+  const tops = ['a', 'b', 'c'].map((id) => spots.get(id)!.top).sort((x, y) => x - y);
+  assert.ok(tops[1] - tops[0] >= 20 && tops[2] - tops[1] >= 20, `세 라벨이 겹치지 않는다: ${tops.join(', ')}`);
 });

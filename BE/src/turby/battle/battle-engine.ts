@@ -415,10 +415,26 @@ function addCut(state: BattleState, cell: string) {
 const emitCutWarns = (state: BattleState, ctx: Ctx) => emit(state, ctx, { type: 'cut_warn', cells: [...(state.cutWarns ?? []).map((w) => w.cell), ...(state.lineWarns ?? [])] });
 const emitEmbers = (state: BattleState, ctx: Ctx) => emit(state, ctx, { type: 'embers', cells: (state.embers ?? []).map((e) => e.cell) });
 
-// 그을린 박음이가 처음 맞으면 곁에 열기 환영(맞으면 사라지는 표적)을 만든다. 젖은 칸 위에서는 만들지 않는다
+// 열기 환영 자리: 원본과 한 칸 띄운 빈 칸(거리 2) 가운데 아군과 가장 가까운 곳, 없으면 바로 옆 빈 칸(10-26 C5-6 QA-02)
+function mirageCell(state: BattleState, doll: BattleUnit): { col: number; row: number } | undefined {
+  const foes = partyUnits(state).filter(isLive);
+  const gap = (c: { col: number; row: number }) => (foes.length > 0 ? Math.min(...foes.map((f) => dist(f, c))) : 0);
+  const far = freeNeighbors(state, doll)
+    .flatMap((n) => freeNeighbors(state, n))
+    .filter((c) => dist(c, doll) === 2)
+    .sort((a, b) => gap(a) - gap(b) || a.row - b.row || a.col - b.col);
+  return far[0] ?? freeNeighbors(state, doll)[0];
+}
+
+// 처음 맞는 마른 박음이는 열기 일렁임으로 그 일격을 흘려 쓰러지지 않는다(HP 1 남김) — 환영을 만들 수 있을 때만(10-26 C5-6 QA-01)
+function shimmerGuard(state: BattleState, defender: BattleUnit) {
+  return !!defender.mirageOnHit && !defender.mirageUsed && defender.hp > 1 && !isWet(state, defender.col, defender.row) && !!mirageCell(state, defender);
+}
+
+// 그을린 박음이가 처음 맞으면 열기 환영(맞으면 사라지는 표적)을 만든다. 젖은 칸 위에서는 만들지 않는다
 function spawnMirage(state: BattleState, doll: BattleUnit, ctx: Ctx) {
   if (isWet(state, doll.col, doll.row)) return;
-  const at = freeNeighbors(state, doll)[0];
+  const at = mirageCell(state, doll);
   if (!at) return;
   doll.mirageUsed = true;
   const m = spawnTarget(state, nextSpawnId(state, doll.unitId + '_mirage'), 'heat_mirage', '열기 환영', at, { mirageOf: doll.unitId, expireRound: state.round + 2 });
@@ -468,13 +484,14 @@ function expireDesert(state: BattleState, ctx: Ctx) {
 }
 
 // 물들이(중립): 아군 차례 전에, 아군과 가장 가까운(젖지 않은 칸의) 그을린 박음이 발밑을 2라운드 동안 적신다. 그 칸의 불씨는 꺼진다
+// 10-26 C5-6 QA-01: 열기 환영을 이미 드러낸 박음이만 적신다(누비 혼자여도 첫 전투에서 환영을 한 번은 본다)
 function applyWetter(state: BattleState, ctx: Ctx) {
   const wetter = state.units.find((u) => u.wetter && !u.inactive && !u.stunned);
   const foes = partyUnits(state).filter(isLive);
   if (!wetter || foes.length === 0) return;
   const gap = (u: BattleUnit) => Math.min(...foes.map((f) => dist(f, u)));
   const doll = enemyUnits(state)
-    .filter((u) => isLive(u) && (u.ember || u.mirageOnHit) && !isWet(state, u.col, u.row))
+    .filter((u) => isLive(u) && (u.ember || u.mirageOnHit) && (!u.mirageOnHit || u.mirageUsed) && !isWet(state, u.col, u.row))
     .sort((a, b) => gap(a) - gap(b) || (a.unitId < b.unitId ? -1 : 1))[0];
   if (!doll) return;
   const cell = cellKey(doll.col, doll.row);
@@ -740,7 +757,8 @@ function damageOf(state: BattleState, attacker: BattleUnit, defender: BattleUnit
 }
 
 function strike(state: BattleState, attacker: BattleUnit, defender: BattleUnit, ctx: Ctx) {
-  const damage = damageOf(state, attacker, defender);
+  const raw = damageOf(state, attacker, defender);
+  const damage = shimmerGuard(state, defender) ? Math.min(raw, defender.hp - 1) : raw;
   defender.hp = Math.max(0, defender.hp - damage);
   if (defender.hp <= 0) defender.stunned = true;
   emit(state, ctx, { type: 'attack', attackerId: attacker.unitId, targetId: defender.unitId, damage, targetHp: defender.hp, targetStunned: defender.stunned });
