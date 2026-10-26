@@ -1,5 +1,16 @@
 # Green Tracking 에셋 출처
 
+## `src/assets/forest-path-clean-v3.png` / `.webp`
+
+- 분류: AI 생성 실사형 배경 이미지
+- 생성일: 2026-10-26
+- 생성 도구: Codex에서 제공된 OpenAI 이미지 생성 도구
+- 외부 사진·스톡 사이트·웹 검색 사용: 없음
+- 원본 생성 파일: `C:\Users\foray\.codex\generated_images\01a16662-cc5c-7d42-b81c-95995cfc7af5\exec-1a63be46-7f99-4851-9b36-4501c169a36e.png`
+- 실제 게임 적용 파일: `src/assets/forest-path-clean-v3.webp`
+- 구성 원칙: 가까운 나무·수양버들·갈대·큰 잡풀을 배경에서 제외하고, 오솔길·낮은 지피식물·먼 숲만 배치한다.
+- 보행 연출: 나무·수양버들·갈대·잡풀은 투명 2.5D 오브젝트로만 사용하며 소실점에서 화면 가장자리 방향으로 이동한다.
+
 ## `src/assets/forest-path-backdrop-v2.png` / `.webp`
 
 - 분류: AI 생성 실사형 배경 이미지

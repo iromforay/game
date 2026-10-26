@@ -1,10 +1,23 @@
 import { useEffect, useRef, useState } from 'react';
-import backdropUrl from './assets/forest-path-backdrop-v2.webp';
+import backdropUrl from './assets/forest-path-clean-v3.webp';
+import treeUrl from './assets/photoreal-deciduous-tree.png';
+import grassUrl from './assets/photoreal-wild-grass.png';
+import reedsUrl from './assets/photoreal-reeds.png';
+import willowUrl from './assets/photoreal-willow.png';
 import './styles.css';
 
 interface GreenTrackingSceneProps { onExit?: () => void }
 type MoveMode = 'stop' | 'walk' | 'run';
 const MODE_SPEED: Record<MoveMode, number> = { stop: 0, walk: 4.1, run: 8.2 };
+const OBJECTS = [
+  { kind: 'grass', side: -1, offset: 3, size: .52 }, { kind: 'tree', side: 1, offset: 11, size: .72 },
+  { kind: 'reeds', side: -1, offset: 20, size: .64 }, { kind: 'grass', side: 1, offset: 29, size: .46 },
+  { kind: 'tree', side: -1, offset: 38, size: .68 }, { kind: 'reeds', side: 1, offset: 47, size: .58 },
+  { kind: 'willow', side: -1, offset: 57, size: .86 }, { kind: 'grass', side: 1, offset: 67, size: .5 },
+  { kind: 'tree', side: 1, offset: 77, size: .7 }, { kind: 'reeds', side: -1, offset: 87, size: .6 },
+  { kind: 'grass', side: -1, offset: 95, size: .48 },
+] as const;
+const OBJECT_ASSETS = { tree: treeUrl, grass: grassUrl, reeds: reedsUrl, willow: willowUrl };
 
 export function GreenTrackingScene({ onExit }: GreenTrackingSceneProps) {
   const modeRef = useRef<MoveMode>('walk');
@@ -25,8 +38,16 @@ export function GreenTrackingScene({ onExit }: GreenTrackingSceneProps) {
     return () => cancelAnimationFrame(frame);
   }, []);
 
-  const backdropScale = 1.035 + progress * .00045;
-  return <main className={`green-tracking-shell mode-${mode}`}><div className="forest-backdrop" role="img" aria-label="수양버들이 있는 실사형 숲길 산책 장면" style={{ backgroundImage: `url(${backdropUrl})`, transform: `scale(${backdropScale}) translateY(${progress * -.008}%)` }} /><div className="forest-vignette" />
+  return <main className={`green-tracking-shell mode-${mode}`}><div className="forest-backdrop" role="img" aria-label="나무와 갈대가 없는 실사형 오솔길 배경" style={{ backgroundImage: `url(${backdropUrl})` }} />
+    <div className="passing-objects" aria-hidden="true">{OBJECTS.map((object, index) => {
+      const depth = ((progress + object.offset) % 100) / 100;
+      const approach = depth * depth;
+      const x = 50 + object.side * (4 + Math.pow(depth, 1.55) * 57);
+      const y = 44 + Math.pow(depth, 1.7) * 63;
+      const scale = (.09 + approach * 1.38) * object.size;
+      const opacity = Math.min(1, depth * 8, (1 - depth) * 7);
+      return <img key={`${object.kind}-${index}`} src={OBJECT_ASSETS[object.kind]} alt="" className={`passing-object passing-${object.kind}`} style={{ left: `${x}%`, top: `${y}%`, opacity, transform: `translate(-50%, -100%) scale(${scale}) scaleX(${object.side < 0 ? -1 : 1})`, zIndex: 10 + Math.round(depth * 80) }} />;
+    })}</div><div className="forest-vignette" />
     <header className="forest-topbar"><button type="button" onClick={onExit ?? (() => history.back())}>← 허브</button><div><small>GAME 08 · VISUAL MVP</small><strong>GREEN TRACKING</strong></div><span>숲속길 · 맑은 낮</span></header>
     <section id="walk-controls" className={`walk-panel${panelExpanded ? ' expanded' : ' collapsed'}`}>
       <button className="walk-panel-toggle" type="button" aria-expanded={panelExpanded} aria-controls="walk-panel-details" onClick={() => setPanelExpanded((expanded) => !expanded)}>
