@@ -116,6 +116,11 @@ export function resumeOf(snap: StorySnapshot): { segmentId: string | null; tutor
         return has('underfloor_chapter_complete_seen') ? (has('fridge_entry_seen') ? null : 'ch04.entry') : 'ch03.chapter_complete'; // 장착은 끝났고 장면을 끝까지 보기 전 — 장착·성장은 반복하지 않고 장면만 처음부터
       case 'CH04_COMPLETE':
         return has('fridge_chapter_complete_seen') ? (has('desert_entry_seen') ? null : 'ch05.entry') : 'ch04.chapter_complete'; // 10-23 C4-3: 장착은 끝났고 장면을 끝까지 보기 전 — 장면만 처음부터. 10-26 C5-1: 본 뒤에는 5장 도입
+      case 'CH05_BOSS_DEFEATED':
+        // 10-26 C5-3: 정산은 끝났다 — 승리 장면을 끝까지 보기 전이면 승리 장면부터(가위 장면이 이어진다), 본 뒤 가위 장면 전이면 가위부터
+        return has('desert_boss_aftermath_seen') ? (has('desert_scissors_seen') ? null : 'ch05.scissors') : 'ch05.boss_victory';
+      case 'CH05_COMPLETE':
+        return has('desert_chapter_complete_seen') ? null : 'ch05.chapter_complete'; // 장착은 끝났고 장면을 끝까지 보기 전 — 장면만 처음부터
       case 'CH04_BOSS_DEFEATED':
         return has('fridge_boss_aftermath_seen') ? null : 'ch04.boss_victory'; // 정산은 끝났고 승리 장면을 끝까지 보기 전 — 장면만 처음부터
       case 'CH03_BOSS_DEFEATED':

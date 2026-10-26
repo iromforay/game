@@ -81,13 +81,15 @@ test('이벤트·지점 정의: 이름·체크포인트 전이·서버 전용 �
   assert.deepEqual(sig('desert_ridge_scent'), [['CH05_CLUES_JOINED'], null, false, ['desert_ridge_pad']]);
   assert.deepEqual(sig('desert_ridge_thread'), [['CH05_CLUES_JOINED'], null, false, ['desert_ridge_scent']]);
   assert.deepEqual(sig('desert_ridge_crossed'), [['CH05_CLUES_JOINED'], 'CH05_RIDGE_CROSSED', false, ['desert_ridge_thread']]);
-  for (const d of STORY_EVENTS.filter((x) => x.id.startsWith('desert_') && x.id !== 'desert_unlocked')) {
+  // 보상·장착은 보스 정산(grant)과 장착 사건(equipRelic) 둘뿐이다(10-26 C5-3). 나머지 5장 사건에는 아이템·통화·성장이 없다
+  const REWARD = ['desert_boss_defeated', 'desert_finish_thread_equipped'];
+  for (const d of STORY_EVENTS.filter((x) => x.id.startsWith('desert_') && x.id !== 'desert_unlocked' && !REWARD.includes(x.id))) {
     assert.equal(d.chapter, 5, d.id);
     assert.deepEqual([d.grant, d.consume, d.equipRelic, d.grantStoryNubi], [undefined, undefined, undefined, undefined], `${d.id}: 아이템·통화·성장 없음`);
   }
   assert.deepEqual(
     STORY_TRIGGERS.filter((t) => t.stageCode === 'desert').map((t) => t.id),
-    ['desert_entry', 'desert_clues', 'desert_ridge_pad', 'desert_ridge_scent', 'desert_ridge_thread', 'desert_cut_face'],
+    ['desert_entry', 'desert_clues', 'desert_ridge_pad', 'desert_ridge_scent', 'desert_ridge_thread', 'desert_scorched', 'desert_cut_face', 'desert_boss_entrance'],
   );
   for (const t of STORY_TRIGGERS.filter((x) => x.stageCode === 'desert' && x.evidence.kind === 'point')) assert.ok(pointOf((t.evidence as { pointId: string }).pointId), `${t.id}의 지점이 지역 데이터에 있다`);
   const idx = (c: string) => (CHECKPOINTS as readonly string[]).indexOf(c);
@@ -112,7 +114,7 @@ test('대화 데이터: 구간 11개의 시작 체크포인트·완료 이벤트
     ],
   );
   const battles = CH05.segments.flatMap((x) => x.entries.filter((e) => e.kind === 'storyBattle').map((e) => [x.segmentId, e.encounterKey]));
-  assert.deepEqual(battles, [['ch05.scorched', 'desert_scorched_ambush'], ['ch05.boss_intro', 'desert_boss_golden_doll']], '전투 연결은 C5-3');
+  assert.deepEqual(battles, [['ch05.scorched', 'desert_scorched_ambush'], ['ch05.boss_intro', 'desert_boss_golden_doll']]);
   const lines = CH05.segments.flatMap((x) => x.entries).filter((e) => e.kind === 'line');
   const label: Record<string, string> = { muldeuli: '물들이', old_pokshini: '오래된 폭신이', ganeuri: '가느리', scissors: '가위' };
   for (const [speaker, text] of Object.entries(label)) {
@@ -125,7 +127,8 @@ test('대화 데이터: 구간 11개의 시작 체크포인트·완료 이벤트
   for (const e of CH05.segments.flatMap((x) => x.entries)) assert.ok(!e.text?.includes('`'), `${e.dialogueId}: 백틱`);
   const ids = new Set(CH05.segments.map((s) => s.segmentId));
   for (const t of STORY_TRIGGERS.filter((x) => x.stageCode === 'desert' && typeof x.play === 'object')) assert.ok(ids.has((t.play as { segmentId: string }).segmentId), `${t.id} 재생 구간`);
-  for (const s of CH05.segments.slice(0, 7)) if (s.completesWith) assert.ok(EVENT_BY_ID.get(s.completesWith), `${s.segmentId} 완료 이벤트`);
+  for (const s of CH05.segments) if (s.completesWith) assert.ok(EVENT_BY_ID.get(s.completesWith), `${s.segmentId} 완료 이벤트`);
+  for (const [, key] of battles) assert.ok(STORY_TRIGGERS.some((t) => t.encounterKey === key), `${key} 트리거`);
 });
 
 // ---------- 진행 ----------

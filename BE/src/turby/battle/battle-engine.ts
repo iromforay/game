@@ -24,7 +24,7 @@ export interface CreateBattleInput {
   encounterPlayerId: string;
   participants: { playerId: string; nickname: string; slot: number; connected: boolean; invited?: boolean }[]; // invited=초대받은 사람(응답 전까지 pending)
   definition?: BattleDefinition | null; // M4-A: 있으면 야생 1마리 대신 정의 데이터로 적·NPC·목표·지형을 만든다
-  story?: { encounterKey: string } | null; // M4-B: 스토리 전투 표식(포획·야생 보상 없음)
+  story?: { encounterKey: string; nubiTurbyId?: string | null } | null; // M4-B: 스토리 전투 표식(포획·야생 보상 없음). nubiTurbyId(10-26 C5-3): 이야기 누비
 }
 
 export function createBattle(input: CreateBattleInput): BattleState {
@@ -263,6 +263,14 @@ function addDefinitionUnits(state: BattleState, def: BattleDefinition) {
       ...(d.guardedBy ? { guardedBy: d.guardedBy } : {}),
       ...(d.needleMachine ? { needleMachine: { ...d.needleMachine } } : {}),
       ...(d.rescuer ? { rescuer: true } : {}),
+      ...(d.ember ? { ember: { ...d.ember } } : {}),
+      ...(d.mirageOnHit ? { mirageOnHit: true, mirageUsed: false } : {}),
+      ...(d.wetter ? { wetter: true } : {}),
+      ...(d.cutter ? { cutter: { ...d.cutter } } : {}),
+      ...(d.lineCut ? { lineCut: { ...d.lineCut } } : {}),
+      ...(d.restorer ? { restorer: true } : {}),
+      ...(d.regen ? { regen: { ...d.regen }, reviveRound: null } : {}),
+      ...(d.nubiOnly ? { nubiOnly: true } : {}),
       ...(d.flee ? { flee: { ...d.flee }, reversed: false } : {}),
       ...(d.carrierOf ? { carrierOf: d.carrierOf } : {}),
       ...(d.thread ? { thread: { order: d.thread.order } } : {}),
@@ -348,7 +356,7 @@ function emitThreadHint(state: BattleState, ctx: Ctx) {
 const clampTo = (v: number, max: number) => Math.min(Math.max(v, 0), max);
 
 // 10-23 C4-3: 정의의 안내 문구를 전투당 한 번만 낸다(기믹 첫 등장 — Codex 의견 P-03)
-function hintOnce(state: BattleState, ctx: Ctx, code: 'iceTrail' | 'shatter' | 'guarded' | 'needle' | 'pinned' | 'rescue') {
+function hintOnce(state: BattleState, ctx: Ctx, code: 'iceTrail' | 'shatter' | 'guarded' | 'needle' | 'pinned' | 'rescue' | 'ember' | 'mirage' | 'wet' | 'cutWarn' | 'lineCut' | 'restore' | 'regen' | 'nubiOnly') {
   const text = state.definition?.hints?.[code];
   const shown = (state.hintsShown ??= []);
   if (!text || shown.some((h) => h.code === code)) return;
@@ -373,6 +381,228 @@ function spawnTarget(state: BattleState, unitId: string, characterCode: string, 
   const u: BattleUnit = { unitId, side: 'wild', ownerPlayerId: null, participantSlot: 0, partyOrder: 0, turbyId: null, characterCode, name, col: at.col, row: at.row, hp: 1, maxHp: 1, ap: 0, maxAp: 0, attack: 0, defense: 0, stunned: false, inactive: false, statuses: [], targetable: true, threatened: false, canAct: false, partOf: null, breakOrder: null, onHit: null, exitOnDefeat: null, fled: false, protectMode: 'reject', ...extra };
   state.units.push(u);
   return u;
+}
+
+// ---------- 10-26 C5-3: 5장 규칙(모두 전투 정의 데이터가 켠 경우만) ----------
+const isWet = (state: BattleState, col: number, row: number) => !!state.wet?.some((w) => w.cell === cellKey(col, row));
+const cellOf = (k: string) => {
+  const [col, row] = k.split(',').map(Number);
+  return { col, row };
+};
+const bySlot = (a: BattleUnit, b: BattleUnit) => a.participantSlot - b.participantSlot || a.partyOrder - b.partyOrder || (a.unitId < b.unitId ? -1 : 1);
+// 가장 가까운 생존 아군(동률이면 슬롯 순서 — 결정적)
+const nearestParty = (state: BattleState, from: { col: number; row: number }) => partyUnits(state).filter(isLive).sort((a, b) => dist(a, from) - dist(b, from) || bySlot(a, b))[0] ?? null;
+// 이야기 누비: 스토리 전투는 서버가 넘긴 누비 개체, 그 밖(시험 등)은 캐릭터 코드
+function isStoryNubi(state: BattleState, u: BattleUnit): boolean {
+  if (u.side !== 'party') return false;
+  const id = state.story?.nubiTurbyId;
+  return id ? u.turbyId === id : u.characterCode === 'nubi';
+}
+function nextSpawnId(state: BattleState, prefix: string) {
+  state.spawnSeq = (state.spawnSeq ?? 0) + 1;
+  return `${prefix}_${state.spawnSeq}`;
+}
+// 공격자 없는 피해(불씨·줄 절단). 쓰러짐 판정만 한다 — 승패는 호출 쪽이 evaluateOutcome으로 본다
+function hurt(u: BattleUnit, damage: number) {
+  u.hp = Math.max(0, u.hp - damage);
+  if (u.hp <= 0) u.stunned = true;
+  return { unitId: u.unitId, damage, hp: u.hp, stunned: u.stunned };
+}
+function addCut(state: BattleState, cell: string) {
+  state.cut = [...new Set([...(state.cut ?? []), cell])];
+  state.blocked = [...new Set([...(state.blocked ?? []), cell])];
+}
+const emitCutWarns = (state: BattleState, ctx: Ctx) => emit(state, ctx, { type: 'cut_warn', cells: [...(state.cutWarns ?? []).map((w) => w.cell), ...(state.lineWarns ?? [])] });
+const emitEmbers = (state: BattleState, ctx: Ctx) => emit(state, ctx, { type: 'embers', cells: (state.embers ?? []).map((e) => e.cell) });
+
+// 그을린 박음이가 처음 맞으면 곁에 열기 환영(맞으면 사라지는 표적)을 만든다. 젖은 칸 위에서는 만들지 않는다
+function spawnMirage(state: BattleState, doll: BattleUnit, ctx: Ctx) {
+  if (isWet(state, doll.col, doll.row)) return;
+  const at = freeNeighbors(state, doll)[0];
+  if (!at) return;
+  doll.mirageUsed = true;
+  const m = spawnTarget(state, nextSpawnId(state, doll.unitId + '_mirage'), 'heat_mirage', '열기 환영', at, { mirageOf: doll.unitId, expireRound: state.round + 2 });
+  emit(state, ctx, { type: 'mirage', unitId: doll.unitId, mirageId: m.unitId });
+  hintOnce(state, ctx, 'mirage');
+}
+
+// 그을린 박음이: 차례를 마칠 때 가장 가까운 아군 칸에 불씨(한 마리당 하나, 젖은 칸·이미 불씨가 있는 칸 제외)
+function placeEmber(state: BattleState, doll: BattleUnit, ctx: Ctx) {
+  if ((state.embers ?? []).some((e) => e.by === doll.unitId)) return;
+  const target = nearestParty(state, doll);
+  if (!target) return;
+  const cell = cellKey(target.col, target.row);
+  if (isWet(state, target.col, target.row) || (state.embers ?? []).some((e) => e.cell === cell)) return;
+  (state.embers ??= []).push({ cell, explodeRound: state.round + doll.ember!.delayRounds, damage: doll.ember!.damage, by: doll.unitId });
+  emitEmbers(state, ctx);
+  hintOnce(state, ctx, 'ember');
+}
+
+// 라운드 시작: 때가 된 불씨가 그 칸과 동서남북 이웃 칸의 아군에게 피해를 준다
+function burstEmbers(state: BattleState, ctx: Ctx) {
+  const due = (state.embers ?? []).filter((e) => e.explodeRound <= state.round);
+  if (due.length === 0) return;
+  state.embers = (state.embers ?? []).filter((e) => e.explodeRound > state.round);
+  for (const e of due) {
+    const c = cellOf(e.cell);
+    const hits = partyUnits(state)
+      .filter((u) => isLive(u) && dist(u, c) <= 1)
+      .sort(bySlot)
+      .map((u) => hurt(u, e.damage));
+    emit(state, ctx, { type: 'ember_burst', cell: e.cell, hits });
+  }
+  emitEmbers(state, ctx);
+}
+
+// 라운드 시작: 기한이 된 열기 환영은 사라지고, 젖은 칸은 마른다
+function expireDesert(state: BattleState, ctx: Ctx) {
+  for (const m of state.units.filter((u) => u.mirageOf && isLive(u) && u.expireRound != null && state.round >= u.expireRound)) {
+    m.stunned = true;
+    m.fled = true;
+    emit(state, ctx, { type: 'unit_exit', unitId: m.unitId, mode: 'flee' });
+  }
+  const before = state.wet?.length ?? 0;
+  if (before === 0) return;
+  state.wet = (state.wet ?? []).filter((w) => w.untilRound > state.round);
+  if (state.wet.length !== before) emit(state, ctx, { type: 'wet', cells: state.wet.map((w) => w.cell) });
+}
+
+// 물들이(중립): 아군 차례 전에, 아군과 가장 가까운(젖지 않은 칸의) 그을린 박음이 발밑을 2라운드 동안 적신다. 그 칸의 불씨는 꺼진다
+function applyWetter(state: BattleState, ctx: Ctx) {
+  const wetter = state.units.find((u) => u.wetter && !u.inactive && !u.stunned);
+  const foes = partyUnits(state).filter(isLive);
+  if (!wetter || foes.length === 0) return;
+  const gap = (u: BattleUnit) => Math.min(...foes.map((f) => dist(f, u)));
+  const doll = enemyUnits(state)
+    .filter((u) => isLive(u) && (u.ember || u.mirageOnHit) && !isWet(state, u.col, u.row))
+    .sort((a, b) => gap(a) - gap(b) || (a.unitId < b.unitId ? -1 : 1))[0];
+  if (!doll) return;
+  const cell = cellKey(doll.col, doll.row);
+  (state.wet ??= []).push({ cell, untilRound: state.round + 2 });
+  emit(state, ctx, { type: 'wet', cells: state.wet.map((w) => w.cell) });
+  const embers = state.embers?.length ?? 0;
+  state.embers = (state.embers ?? []).filter((e) => e.cell !== cell);
+  if (state.embers.length !== embers) emitEmbers(state, ctx);
+  hintOnce(state, ctx, 'wet');
+}
+
+// 재단 실밥이: 차례를 마칠 때 가장 가까운 아군 곁 빈 칸 하나를 끊을 칸으로 예고하고 그 칸에 연결 매듭을 둔다(한 마리당 하나, 합계 상한)
+function placeCutWarn(state: BattleState, cutter: BattleUnit, ctx: Ctx) {
+  if ((state.cutCount ?? 0) + (state.cutWarns?.length ?? 0) >= cutter.cutter!.limit) return;
+  if ((state.cutWarns ?? []).some((w) => w.by === cutter.unitId)) return;
+  const target = nearestParty(state, cutter);
+  if (!target) return;
+  const at = freeNeighbors(state, target)[0];
+  if (!at) return;
+  const cell = cellKey(at.col, at.row);
+  const knot = spawnTarget(state, nextSpawnId(state, 'knot'), 'cut_knot', '연결 매듭', at, { knotOf: cell });
+  (state.cutWarns ??= []).push({ cell, knotId: knot.unitId, by: cutter.unitId });
+  emitCutWarns(state, ctx);
+  hintOnce(state, ctx, 'cutWarn');
+}
+
+// 재단 실밥이 차례 시작: 지난 예고 칸의 매듭이 남아 있으면 그 칸이 끊긴다(매듭은 사라진다)
+function resolveCuts(state: BattleState, cutter: BattleUnit, ctx: Ctx) {
+  const mine = (state.cutWarns ?? []).filter((w) => w.by === cutter.unitId);
+  if (mine.length === 0) return;
+  state.cutWarns = (state.cutWarns ?? []).filter((w) => w.by !== cutter.unitId);
+  const cells: string[] = [];
+  for (const w of mine) {
+    const knot = state.units.find((u) => u.unitId === w.knotId);
+    if (!knot || !isLive(knot)) continue;
+    knot.stunned = true;
+    knot.fled = true;
+    knot.hp = 0;
+    addCut(state, w.cell);
+    state.cutCount = (state.cutCount ?? 0) + 1;
+    cells.push(w.cell);
+  }
+  emitCutWarns(state, ctx);
+  if (cells.length > 0) emit(state, ctx, { type: 'cut', cells, hits: [] });
+}
+
+// 쓰러진 실밥이의 예고는 함께 사라진다
+function cancelCutWarnsBy(state: BattleState, cutterId: string, ctx: Ctx) {
+  const mine = (state.cutWarns ?? []).filter((w) => w.by === cutterId);
+  if (mine.length === 0) return;
+  for (const w of mine) {
+    const knot = state.units.find((u) => u.unitId === w.knotId);
+    if (knot && isLive(knot)) {
+      knot.stunned = true;
+      knot.fled = true;
+    }
+  }
+  state.cutWarns = (state.cutWarns ?? []).filter((w) => w.by !== cutterId);
+  emitCutWarns(state, ctx);
+}
+
+// 황금 재단인형(제자리). 적 차례마다 ① 지난 예고 줄을 끊고(서 있는 아군은 피해, 그 칸은 끊기지 않는다) ② 가장 가까운 아군 줄을 다시 예고한다.
+//   예고에서 빼는 칸: 막힌 칸·적이 선 칸·부위 바로 옆 칸(부위에 닿을 길 보장). 끊긴 칸이 상한이면 피해만 준다
+function runLineCut(state: BattleState, doll: BattleUnit, ctx: Ctx) {
+  const def = doll.lineCut!;
+  const warned = state.lineWarns ?? [];
+  if (warned.length > 0) {
+    state.lineWarns = [];
+    const cells: string[] = [];
+    const hits: { unitId: string; damage: number; hp: number; stunned: boolean }[] = [];
+    for (const k of warned) {
+      const c = cellOf(k);
+      const standing = partyUnits(state).filter((u) => isLive(u) && u.col === c.col && u.row === c.row);
+      if (standing.length > 0) {
+        for (const u of standing) hits.push(hurt(u, def.damage));
+        continue;
+      }
+      if (state.units.some((u) => isLive(u) && u.col === c.col && u.row === c.row)) continue;
+      if ((state.cut?.length ?? 0) >= def.maxCut) continue;
+      addCut(state, k);
+      cells.push(k);
+    }
+    emit(state, ctx, { type: 'cut', cells, hits });
+    emitCutWarns(state, ctx);
+    evaluateOutcome(state, ctx);
+    if (state.phase === 'resolved') return;
+  }
+  const target = nearestParty(state, doll);
+  if (!target) return;
+  const half = Math.floor(def.length / 2);
+  const parts = state.units.filter((u) => u.partOf === doll.unitId && isLive(u));
+  const cells: string[] = [];
+  for (let col = target.col - half; col <= target.col + half; col++) {
+    if (col < 0 || col >= state.rules.gridCols) continue;
+    const at = { col, row: target.row };
+    if (isBlockedCell(state, col, target.row) || state.units.some((u) => u.side === 'wild' && isLive(u) && u.col === col && u.row === target.row)) continue;
+    if (parts.some((p) => dist(p, at) === 1)) continue;
+    cells.push(cellKey(col, target.row));
+  }
+  state.lineWarns = cells;
+  emitCutWarns(state, ctx);
+  if (cells.length > 0) hintOnce(state, ctx, 'lineCut');
+}
+
+// 동료(중립): 아군 차례 전에 끊긴 칸 하나(아군과 가장 가까운 칸)를 다시 붙잡는다. 동료가 여럿이면 라운드마다 돌아가며 한 명
+function applyRestorer(state: BattleState, ctx: Ctx) {
+  const restorers = state.units.filter((u) => u.restorer && !u.inactive && !u.stunned);
+  const foes = partyUnits(state).filter(isLive);
+  if (restorers.length === 0 || !state.cut || state.cut.length === 0 || foes.length === 0) return;
+  const by = restorers[state.round % restorers.length];
+  const gap = (k: string) => Math.min(...foes.map((f) => dist(f, cellOf(k))));
+  const cell = [...state.cut].sort((a, b) => gap(a) - gap(b) || (a < b ? -1 : 1))[0];
+  state.cut = state.cut.filter((k) => k !== cell);
+  state.blocked = (state.blocked ?? []).filter((k) => k !== cell);
+  emit(state, ctx, { type: 'restored', cell, byUnitId: by.unitId });
+  hintOnce(state, ctx, 'restore');
+}
+
+// 금빛 연결점이 끊겼다: 같은 중심부의 다른 연결점이 남아 있으면 N라운드 뒤 다시 꿰매진다. 마지막 하나까지 끊으면 모두 끊긴 채 남는다
+function applyRegenBreak(state: BattleState, point: BattleUnit, ctx: Ctx) {
+  const siblings = state.units.filter((u) => u.regen && u.partOf === point.partOf && u.unitId !== point.unitId);
+  if (siblings.some((u) => !u.stunned)) {
+    point.reviveRound = state.round + point.regen!.rounds;
+    emit(state, ctx, { type: 'regen', unitId: point.unitId, reviveRound: point.reviveRound });
+    hintOnce(state, ctx, 'regen');
+  } else {
+    for (const u of siblings) u.reviveRound = null;
+  }
 }
 
 function corners(rules: BattleRules) {
@@ -546,6 +776,14 @@ function strike(state: BattleState, attacker: BattleUnit, defender: BattleUnit, 
       }
     }
     if (defender.linkFor) freeLinked(state, defender, attacker.unitId, ctx);
+    // 10-26 C5-3: 환영·매듭은 끊기면 숨기고(매듭이면 예고 취소), 쓰러진 실밥이의 예고는 함께 사라진다. 금빛 연결점은 다시 꿰매질 수 있다
+    if (defender.mirageOf || defender.knotOf) defender.fled = true;
+    if (defender.knotOf) {
+      state.cutWarns = (state.cutWarns ?? []).filter((w) => w.knotId !== defender.unitId);
+      emitCutWarns(state, ctx);
+    }
+    if (defender.cutter) cancelCutWarnsBy(state, defender.unitId, ctx);
+    if (defender.regen && defender.partOf) applyRegenBreak(state, defender, ctx);
     if (defender.exitOnDefeat === 'flee') {
       defender.fled = true; // 연출 표시만 — 승패는 "쓰러짐"으로 이미 판정된다
       emit(state, ctx, { type: 'unit_exit', unitId: defender.unitId, mode: 'flee' });
@@ -556,8 +794,9 @@ function strike(state: BattleState, attacker: BattleUnit, defender: BattleUnit, 
       emit(state, ctx, { type: 'part_broken', unitId: defender.unitId, coreId: defender.partOf, coreExposed: exposed });
       if (exposed) emit(state, ctx, { type: 'phase', unitId: defender.partOf, phase: 'exposed' }); // 부위는 되살아나지 않으므로 한 번만 발생한다
     }
-  } else if (attacker.onHit) {
-    applyStatus(state, defender, attacker.onHit, attacker.unitId, ctx);
+  } else {
+    if (defender.mirageOnHit && !defender.mirageUsed) spawnMirage(state, defender, ctx);
+    if (attacker.onHit) applyStatus(state, defender, attacker.onHit, attacker.unitId, ctx);
   }
   evaluateOutcome(state, ctx);
 }
@@ -650,6 +889,15 @@ function attack(state: BattleState, unit: BattleUnit, targetRaw: unknown, ctx: C
     const firstOrder = Math.min(...state.units.filter((p) => p.partOf === target.partOf && !p.stunned).map((p) => p.breakOrder ?? 0));
     if ((target.breakOrder ?? 0) !== firstOrder) throw new BattleError('PART_ORDER', '먼저 끊어야 할 부위가 남아 있습니다.');
   }
+  // 10-26 C5-3: 안쪽 검은 연결 — 이야기 누비만 풀 수 있다(다른 유닛은 행동만 쓰고 피해 0)
+  if (target.nubiOnly && !isStoryNubi(state, unit)) {
+    if (unit.ap < 1) throw new BattleError('NO_ACTION_POWER', '행동력이 없습니다.');
+    if (dist(unit, target) !== 1) throw new BattleError('OUT_OF_RANGE', '인접한 대상만 공격할 수 있습니다.');
+    unit.ap -= 1;
+    emit(state, ctx, { type: 'attack', attackerId: unit.unitId, targetId: target.unitId, damage: 0, targetHp: target.hp, targetStunned: false });
+    hintOnce(state, ctx, 'nubiOnly');
+    return;
+  }
   // 10-23 C4-3: 골무막이 곁(8방향 이웃)의 박음이 — 골무막이 실밥이 남아 있으면 피해 0(행동은 쓴다)
   if (guardActive(state, target)) {
     if (unit.ap < 1) throw new BattleError('NO_ACTION_POWER', '행동력이 없습니다.');
@@ -728,6 +976,12 @@ function runOneEnemy(state: BattleState, wild: BattleUnit, ctx: Ctx): boolean {
     runNeedleMachine(state, wild, ctx);
     return state.phase === 'wild_turn';
   }
+  if (wild.lineCut) {
+    runLineCut(state, wild, ctx);
+    return state.phase === 'wild_turn';
+  }
+  if (wild.cutter) resolveCuts(state, wild, ctx);
+  const startedWet = isWet(state, wild.col, wild.row); // 10-26 C5-3: 젖은 칸에서 차례를 시작한 박음이는 불씨를 쓰지 못한다
   while (wild.ap > 0 && !wild.stunned) {
     const target = nearestTarget(state, wild);
     if (!target) return state.phase === 'wild_turn'; // 아군이 없으면 이미 lose/cancelled로 끝났어야 함
@@ -769,6 +1023,8 @@ function runOneEnemy(state: BattleState, wild: BattleUnit, ctx: Ctx): boolean {
       }
     }
   }
+  if (isLive(wild) && wild.ember && !startedWet) placeEmber(state, wild, ctx);
+  if (isLive(wild) && wild.cutter) placeCutWarn(state, wild, ctx);
   return true;
 }
 
@@ -899,12 +1155,16 @@ function startNextRound(state: BattleState, ctx: Ctx) {
   tickStatuses(state, endedRound, ctx);
   applyEmpower(state, ctx);
   applyRevives(state, ctx);
+  burstEmbers(state, ctx);
+  expireDesert(state, ctx);
   evaluateOutcome(state, ctx);
   if (state.phase === 'resolved') return;
   applyTerrainRules(state, ctx);
   applyCurrent(state, ctx);
   telegraphCurrent(state, ctx);
   applyRescue(state, ctx);
+  applyWetter(state, ctx);
+  applyRestorer(state, ctx);
   for (const u of partyUnits(state)) if (isLive(u)) u.ap = isPinned(u) ? 0 : u.maxAp; // 고정된 아군은 행동할 수 없다
   state.phase = 'player_subturn';
   state.subturnIndex = roundStartIndex(state);
@@ -1102,6 +1362,10 @@ export function toSnapshot(state: BattleState): BattleSnapshotDto {
             ...(u.reviveRound != null ? { reviving: true, reviveRound: u.reviveRound } : {}),
             ...(u.guardedBy ? { guardedBy: u.guardedBy, guarded: guardActive(state, u) } : {}),
             ...(u.linkFor ? { linkFor: u.linkFor } : {}),
+            ...(u.mirageOf ? { mirageOf: u.mirageOf } : {}),
+            ...(u.knotOf ? { knotOf: u.knotOf } : {}),
+            ...(u.regen ? { regen: true } : {}),
+            ...(u.nubiOnly ? { nubiOnly: true } : {}),
           }
         : {}),
     })),
@@ -1114,5 +1378,9 @@ export function toSnapshot(state: BattleState): BattleSnapshotDto {
     ...(state.hintsShown && state.hintsShown.length > 0 ? { hintsShown: state.hintsShown.map((h) => ({ ...h })) } : {}),
     ...(state.ice && state.ice.length > 0 ? { ice: [...state.ice] } : {}),
     ...(state.needleMarks && state.needleMarks.length > 0 ? { needleMarks: [...state.needleMarks] } : {}),
+    ...(state.embers && state.embers.length > 0 ? { embers: state.embers.map((e) => ({ cell: e.cell, explodeRound: e.explodeRound })) } : {}),
+    ...(state.wet && state.wet.length > 0 ? { wet: state.wet.map((w) => w.cell) } : {}),
+    ...((state.cutWarns?.length ?? 0) + (state.lineWarns?.length ?? 0) > 0 ? { cutWarns: [...(state.cutWarns ?? []).map((w) => w.cell), ...(state.lineWarns ?? [])] } : {}),
+    ...(state.cut && state.cut.length > 0 ? { cut: [...state.cut] } : {}),
   };
 }

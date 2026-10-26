@@ -1,0 +1,26 @@
+{
+  "key": "desert_scorched_ambush",
+  "_note": "임시 전투 정의(기능 검증용 수치, 밸런스 정본 아님 — C5-3). 그을린 박음이 2(차례를 마칠 때 가장 가까운 아군 칸에 불씨 — 2라운드 뒤 그 칸·동서남북 이웃 칸의 아군에게 피해 3. 처음 맞으면 곁에 열기 환영(맞으면 사라지는 표적)을 만든다) + 재단 실밥이 2(차례를 마칠 때 아군 곁 칸 하나를 끊을 칸으로 예고하고 연결 매듭을 둔다 — 다음 차례에 매듭이 남아 있으면 그 칸이 끊긴다, 전투 전체 3칸까지). 물들이(중립)가 아군 차례 전에 박음이 하나의 발밑을 2라운드 동안 적신다 — 젖은 칸에서 차례를 시작한 박음이는 불씨를 쓰지 못하고 환영도 만들지 못한다. 기믹마다 첫 등장 때 한 줄 안내. 포획·보상 없음 — 승리하면 능선 첫 틈 앞 물들이 지점이 열린다(desert_scorched_won, 체크포인트 유지).",
+  "cornerEscape": false,
+  "objectives": {
+    "win": [
+      {
+        "kind": "defeat_units",
+        "unitIds": ["scorched_doll_a", "scorched_doll_b", "cutting_stitch_a", "cutting_stitch_b"]
+      }
+    ]
+  },
+  "hints": {
+    "ember": "불씨가 놓였어요. 2라운드 뒤 그 칸과 옆 칸이 터지니 비켜요",
+    "mirage": "열기 환영이에요. 치면 사라지지만 행동만 써요",
+    "wet": "물들이가 박음이 발밑을 적셨어요. 젖은 칸에서는 불씨를 못 써요",
+    "cutWarn": "곧 끊어질 칸이에요. 연결 매듭을 끊으면 막을 수 있어요"
+  },
+  "units": [
+    { "unitId": "scorched_doll_a", "side": "wild", "characterCode": "scorched_sewn_doll", "name": "그을린 박음이", "col": 7, "row": 2, "attack": 4, "defense": 1, "actionPower": 1, "maxHp": 8, "ember": { "delayRounds": 2, "damage": 3 }, "mirageOnHit": true },
+    { "unitId": "scorched_doll_b", "side": "wild", "characterCode": "scorched_sewn_doll", "name": "그을린 박음이", "col": 7, "row": 5, "attack": 4, "defense": 1, "actionPower": 1, "maxHp": 8, "ember": { "delayRounds": 2, "damage": 3 }, "mirageOnHit": true },
+    { "unitId": "cutting_stitch_a", "side": "wild", "characterCode": "cutting_stitch", "name": "재단 실밥이", "col": 9, "row": 1, "attack": 2, "defense": 0, "actionPower": 1, "maxHp": 5, "cutter": { "limit": 3 } },
+    { "unitId": "cutting_stitch_b", "side": "wild", "characterCode": "cutting_stitch", "name": "재단 실밥이", "col": 9, "row": 6, "attack": 2, "defense": 0, "actionPower": 1, "maxHp": 5, "cutter": { "limit": 3 } },
+    { "unitId": "muldeuli", "side": "neutral", "characterCode": "muldeuli", "name": "물들이", "col": 0, "row": 7, "attack": 0, "defense": 0, "actionPower": 0, "maxHp": 10, "canAct": false, "targetable": false, "wetter": true }
+  ]
+}
