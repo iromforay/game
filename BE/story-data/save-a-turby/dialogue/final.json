@@ -191,7 +191,7 @@
           "kind": "narration",
           "dialogueId": "final.last_thread.004",
           "text": "집의 중심이 둘로 갈라지고 거대한 가위가 틈 사이에서 모습을 드러낸다.",
-          "cameraCue": null,
+          "cameraCue": "scissors-final-reveal",
           "soundCue": null
         },
         {
@@ -371,7 +371,7 @@
           "kind": "narration",
           "dialogueId": "final.knot.006",
           "text": "누비와 주인공은 다섯 실의 유물과 동료들의 실을 하나의 매듭으로 묶는다. 매듭은 가위의 두 날을 감아 더는 닫히지 못하게 한다.",
-          "cameraCue": null,
+          "cameraCue": "five-knot-bind",
           "soundCue": null
         },
         {

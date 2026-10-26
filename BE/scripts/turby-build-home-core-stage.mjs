@@ -172,6 +172,8 @@ const doc = {
       companion('bopuli', 'turby-bopuli', 'final_bopuli'),
       // 중앙의 검은 틈(WF-OVL-01) — 가위 최종전 승리 뒤 걷힌다(F-3)
       { id: 'overlay_core_gap', assetKey: 'core-gap', x: gap.x, y: gap.y, width: gap.width, height: gap.height, pivot: [0, 0], layer: 'overlay', hiddenAfter: 'final_boss_defeated' },
+      // 가위가 물러난 뒤 이어진 중앙(WF-OVL-02) — 같은 자리
+      { id: 'overlay_core_joined', assetKey: 'core-joined', x: gap.x, y: gap.y, width: gap.width, height: gap.height, pivot: [0, 0], layer: 'overlay', visibleAfter: 'final_boss_defeated' },
     ],
   },
 };

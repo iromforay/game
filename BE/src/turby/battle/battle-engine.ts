@@ -316,6 +316,10 @@ function advanceStage(state: BattleState, ctx: Ctx) {
   applyStageTerrain(state, st);
   for (const d of st.units) {
     const u = unitOf(d, to);
+    // 앞 단계에서 끊긴 칸에 다음 단계 유닛이 놓이면 그 칸을 다시 연다(유닛이 막힌 칸 위에 서지 않게)
+    const k = cellKey(u.col, u.row);
+    state.blocked = (state.blocked ?? []).filter((x) => x !== k);
+    state.cut = (state.cut ?? []).filter((x) => x !== k);
     if (state.units.some((x) => isLive(x) && x.col === u.col && x.row === u.row)) {
       const at = freeNeighbors(state, u)[0];
       if (at) [u.col, u.row] = [at.col, at.row];

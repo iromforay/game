@@ -420,6 +420,20 @@
         ],
         "layer": "overlay",
         "hiddenAfter": "final_boss_defeated"
+      },
+      {
+        "id": "overlay_core_joined",
+        "assetKey": "core-joined",
+        "x": 1280,
+        "y": 890,
+        "width": 640,
+        "height": 240,
+        "pivot": [
+          0,
+          0
+        ],
+        "layer": "overlay",
+        "visibleAfter": "final_boss_defeated"
       }
     ]
   }

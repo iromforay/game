@@ -49,7 +49,8 @@ const BOSS_SHEETS: Record<string, { idle: string; exposed: string; labelBelow?: 
   waterlogged_sewn_doll: { idle: 'waterlogged-sewn-doll-idle', exposed: 'waterlogged-sewn-doll-exposed' },
   memory_spool: { idle: 'memory-spool-idle', exposed: 'memory-spool-exposed', labelBelow: 118 },
   frost_machine: { idle: 'frost-machine-idle', exposed: 'frost-machine-stopped', labelBelow: 118 }, // 10-23 C4-3 서리 미싱(작동 → 정지, 파괴 없음)
-  golden_doll: { idle: 'golden-doll-idle', exposed: 'golden-doll-unraveled', labelBelow: 118 }, // 10-26 C5-3 황금 재단인형(작동 → 풀려 무너짐, 파괴 없음) // 10-16 3장 기억 실패굴이(결박 → 약점 노출). C3-6 QA-08: 라벨이 솜심 약점을 가리지 않게 그림 아래로
+  golden_doll: { idle: 'golden-doll-idle', exposed: 'golden-doll-unraveled', labelBelow: 118 },
+  scissors: { idle: 'scissors-open-idle', exposed: 'scissors-bound', labelBelow: 118 }, // 10-26 F-4 종장 가위(열림 → 다섯 기억의 실로 묶임, 파괴 없음) // 10-26 C5-3 황금 재단인형(작동 → 풀려 무너짐, 파괴 없음) // 10-16 3장 기억 실패굴이(결박 → 약점 노출). C3-6 QA-08: 라벨이 솜심 약점을 가리지 않게 그림 아래로
 };
 const BOSS_DISPLAY_PX = 240;
 // 10-16 3장: 일반 적 시트의 표시 크기(기본 64). 원본 투명 여백을 감안했다. C3-6 QA-06: 전투판 대비 작아 박음이 88→104, 실패굴이 80→88
@@ -70,12 +71,19 @@ const TARGET_IMAGES: Record<string, { key: string; px: number }> = {
   cut_knot: { key: 'cut-knot', px: 72 },
   gold_point: { key: 'gold-point', px: 80 },
   inner_link: { key: 'inner-link', px: 80 },
-  // 10-26 F-3a 종장(2차 에셋 F-4 전까지는 있는 그림만 — 유물 매듭은 유물 아이콘, 검정실은 4장 연결 실)
-  relic_knot_dye: { key: 'water-dye-yarn', px: 72 },
-  relic_knot_cotton: { key: 'old-cotton-core', px: 72 },
-  relic_knot_frost: { key: 'ice-microfiber', px: 72 },
-  relic_knot_gold: { key: 'golden-finish-thread', px: 72 },
-  black_thread: { key: 'link-thread', px: 72 },
+  // 10-26 F-3a·F-4 종장(유물 매듭 5·누비 환영 4·검정실·가위의 날·다섯 기억의 매듭)
+  relic_knot_first: { key: 'relic-knot-first', px: 72 },
+  relic_knot_dye: { key: 'relic-knot-dye', px: 72 },
+  relic_knot_cotton: { key: 'relic-knot-cotton', px: 72 },
+  relic_knot_frost: { key: 'relic-knot-frost', px: 72 },
+  relic_knot_gold: { key: 'relic-knot-gold', px: 72 },
+  nubi_phantom_name: { key: 'nubi-phantom-name', px: 96 },
+  nubi_phantom_memory: { key: 'nubi-phantom-memory', px: 96 },
+  nubi_phantom_fade: { key: 'nubi-phantom-fade', px: 96 },
+  nubi_phantom_silence: { key: 'nubi-phantom-silence', px: 96 },
+  black_thread: { key: 'black-thread', px: 72 },
+  scissors_blade: { key: 'scissors-blade', px: 80 },
+  five_memory_knot: { key: 'five-memory-knot', px: 80 },
 };
 const TOAST_ABOVE_HINT = 64; // 작은 화면 사건 안내 가운데 ~ 조작 안내 줄 위끝 거리
 const MIRAGE_GLOW = 0xffa64d; // 10-26 C5-6 QA-02 열기 환영 외곽광·고리(따뜻한 주황)

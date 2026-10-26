@@ -13,7 +13,7 @@ const src = process.argv[2];
 const doCopy = process.argv.includes('--copy');
 if (!src) throw new Error('Codex chapter-final-home 폴더 경로가 필요하다');
 
-// [전달 폴더, 파일 키, 런타임 경로, 너비, 높이, 알파] — to_codex/2026-10-26 v7(1차) 지시서 계약
+// [전달 폴더, 파일 키, 런타임 경로, 너비, 높이, 알파] — to_codex/2026-10-26 v7(1차)·v9(2차) 지시서 계약
 const CONTRACT = [
   ['delivery-v1', 'home-core-base', 'world/home-core', 3200, 2400, false],
   ['delivery-v1', 'core-gap', 'world/home-core', 1280, 480, true],
@@ -21,8 +21,26 @@ const CONTRACT = [
   ['delivery-v1', 'nubi-origin', 'sprites/story', 512, 512, true],
   ['delivery-v1', 'five-bind', 'fx/story', 768, 768, true],
   ['delivery-v1', 'origin-fall', 'fx/story', 768, 768, true],
+  // to_codex/2026-10-26 v9(F-4 2차 — 최종 전투)
+  ['delivery-v2', 'scissors-open-idle', 'sprites/bosses', 1024, 256, true],
+  ['delivery-v2', 'scissors-bound', 'sprites/bosses', 1024, 256, true],
+  ['delivery-v2', 'scissors-blade', 'sprites/enemies', 128, 128, true],
+  ['delivery-v2', 'five-memory-knot', 'sprites/enemies', 128, 128, true],
+  ['delivery-v2', 'relic-knot-first', 'sprites/enemies', 128, 128, true],
+  ['delivery-v2', 'relic-knot-dye', 'sprites/enemies', 128, 128, true],
+  ['delivery-v2', 'relic-knot-cotton', 'sprites/enemies', 128, 128, true],
+  ['delivery-v2', 'relic-knot-frost', 'sprites/enemies', 128, 128, true],
+  ['delivery-v2', 'relic-knot-gold', 'sprites/enemies', 128, 128, true],
+  ['delivery-v2', 'nubi-phantom-name', 'sprites/enemies', 160, 160, true],
+  ['delivery-v2', 'nubi-phantom-memory', 'sprites/enemies', 160, 160, true],
+  ['delivery-v2', 'nubi-phantom-fade', 'sprites/enemies', 160, 160, true],
+  ['delivery-v2', 'nubi-phantom-silence', 'sprites/enemies', 160, 160, true],
+  ['delivery-v2', 'black-thread', 'sprites/enemies', 128, 128, true],
+  ['delivery-v2', 'scissors-final-reveal', 'fx/story', 1280, 720, true],
+  ['delivery-v2', 'five-knot-bind', 'fx/story', 768, 768, true],
+  ['delivery-v2', 'core-joined', 'world/home-core', 1280, 480, true],
 ];
-const SHEETS = {};
+const SHEETS = { 'scissors-open-idle': 256, 'scissors-bound': 256 };
 
 const manifestHash = new Map();
 for (const folder of new Set(CONTRACT.map((c) => c[0]))) {

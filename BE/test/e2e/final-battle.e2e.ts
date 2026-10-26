@@ -96,6 +96,7 @@ test('종장 F-3a ①(1280×720): 검은 틈 → 가위 등장 → 최종 전투
     await g.capture('final_ending_title');
     await g.clickAt(640, 360, "s.scenes.includes('Map') && !s.scenes.includes('StoryDialogue')");
     await g.until('집의 중심 지도', MAP_READY, 30_000);
+    await g.capture('final_after_ending'); // 검은 틈 대신 이어진 중앙(core-joined)
   }, backend, device);
   await g.close();
 });

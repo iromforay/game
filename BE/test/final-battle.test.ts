@@ -134,3 +134,13 @@ test('3단계 다섯 기억의 매듭: 두 날 전에는 순서 거부, 다른 �
   assert.ok(win.some((x) => x.type === 'phase' && x.unitId === 'scissors' && x.phase === 'exposed'));
   assert.equal(u(s, 'scissors').stunned, false, '가위는 쓰러뜨리지 않는다');
 });
+
+test('단계 전환: 앞 단계에서 끊긴 칸에 다음 단계 유닛이 놓이면 그 칸이 다시 열린다', () => {
+  const s = start();
+  toStage(s, 1);
+  s.cut = [...(s.cut ?? []), '7,2'];
+  s.blocked = [...(s.blocked ?? []), '7,2'];
+  for (const t of THREADS) hit(s, mine(s).unitId, t);
+  assert.equal(s.stageIndex, 2);
+  assert.ok(!s.blocked!.includes('7,2') && !(s.cut ?? []).includes('7,2'), '윗날 자리는 열린다');
+});

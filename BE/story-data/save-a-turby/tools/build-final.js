@@ -103,7 +103,7 @@ const file = {
       t(s, 87),
       n(s, 89),
       n(s, 91, { soundCue: 'scissors-snip' }),
-      n(s, 93),
+      n(s, 93, { cameraCue: 'scissors-final-reveal' }), // 2차 에셋 WF-FX-01(가위 전체 — F-0 수위)
       l(s, 95, 96, 'neutral'),
       l(s, 98, 99, 'neutral'),
       l(s, 101, 102, 'neutral'),
@@ -124,7 +124,7 @@ const file = {
       l(s, 157, 158, 'neutral'),
       l(s, 160, 161, 'neutral'),
       l(s, 163, 164, 'neutral'),
-      n(s, 166),
+      n(s, 166, { cameraCue: 'five-knot-bind' }), // 2차 에셋 WF-FX-02(매듭이 두 날을 감는다)
       n(s, 168),
       n(s, 170),
       l(s, 172, 173, 'neutral'),
