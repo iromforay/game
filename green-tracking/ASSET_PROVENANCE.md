@@ -1,5 +1,17 @@
 # Green Tracking 에셋 출처
 
+## 운영 품질 3D 장면 에셋
+
+- 제공처: Poly Haven
+- 라이선스: CC0
+- 적용일: 2026-10-26
+- 사용 모델: `tree_small_02`, `shrub_03`, `grass_medium_01`, `fern_02`
+- 사용 재질: `dirt`, `forest_ground_04` 1K diffuse / normal(GL) / roughness
+- 원본 형식: glTF 1K 및 JPG 1K
+- 웹 최적화: glTF Transform으로 메시 단순화, Meshopt 압축, WebP 텍스처 내장 GLB 생성
+- 최종 모델: `src/assets/models/tree-small.glb`, `shrub.glb`, `grass.glb`, `fern.glb`
+- 공식 출처: https://polyhaven.com/
+
 ## `src/assets/forest-path-clean-v3.png` / `.webp`
 
 - 분류: AI 생성 실사형 배경 이미지

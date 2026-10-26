@@ -1,14 +1,11 @@
 .green-tracking-shell, .green-tracking-shell * { box-sizing: border-box; }
 .green-tracking-shell { position: relative; width: 100%; height: 100vh; min-height: 560px; overflow: hidden; background: #162d1c; color: #f6fff4; font-family: Pretendard, "Noto Sans KR", system-ui, sans-serif; isolation: isolate; }
 .green-tracking-shell button { font: inherit; }
-.forest-backdrop { position: absolute; inset: -1%; background-position: center center; background-size: cover; background-repeat: no-repeat; background-color: #9eb79b; transform: scale(1.02); transform-origin: 50% 54%; }
-.passing-objects { position: absolute; inset: 0; z-index: 1; overflow: hidden; pointer-events: none; }
-.passing-object { position: absolute; width: auto; max-width: none; transform-origin: 50% 100%; filter: saturate(.88) brightness(.94) drop-shadow(0 7px 7px #14241238); transition: left .12s linear, top .12s linear, transform .12s linear, opacity .12s linear; will-change: left, top, transform; }
-.passing-tree { height: min(72vh, 720px); }
-.passing-willow { height: min(78vh, 780px); }
-.passing-reeds { height: min(34vh, 340px); }
-.passing-grass { height: min(24vh, 230px); }
+.forest-scene { position: absolute; inset: 0; background: #a9beb4; } .forest-scene canvas { display: block; width: 100%; height: 100%; }
 .forest-vignette { position: absolute; inset: 0; z-index: 2; pointer-events: none; background: linear-gradient(180deg, #08160b52 0%, transparent 24%, transparent 68%, #0711098f 100%), radial-gradient(circle at 50% 48%, transparent 52%, #07110955 100%); }
+.forest-loading { position: absolute; z-index: 8; inset: 0; display: grid; place-content: center; justify-items: center; gap: 12px; background: #14241ce8; color: #eaf4e6; font-size: 13px; font-weight: 800; letter-spacing: .04em; }
+.forest-loading i { width: 34px; height: 34px; border: 3px solid #d8efc633; border-top-color: #d8efc6; border-radius: 50%; animation: forest-spin .85s linear infinite; }
+@keyframes forest-spin { to { transform: rotate(360deg); } }
 .forest-topbar { position: absolute; z-index: 5; top: 18px; left: 20px; right: 20px; display: grid; grid-template-columns: 110px 1fr 150px; align-items: center; gap: 16px; pointer-events: none; text-shadow: 0 2px 8px #000c; }
 .forest-topbar button { width: max-content; padding: 10px 15px; border: 1px solid #dff5d5aa; border-radius: 999px; background: #0d2119cc; color: white; font-weight: 800; pointer-events: auto; cursor: pointer; backdrop-filter: blur(8px); }
 .forest-topbar div { justify-self: center; display: grid; text-align: center; letter-spacing: .08em; } .forest-topbar small { color: #d5edc4; font-size: 11px; font-weight: 800; } .forest-topbar strong { font-family: Georgia, serif; font-size: clamp(20px, 2.5vw, 34px); letter-spacing: .16em; } .forest-topbar > span { justify-self: end; padding: 8px 12px; border-radius: 99px; background: #0c2118aa; color: #e8f5de; font-size: 13px; font-weight: 700; }
@@ -23,5 +20,5 @@
 .walk-panel.collapsed .walk-panel-details { max-height: 0; opacity: 0; pointer-events: none; }
 .move-modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; } .move-modes button { display: grid; gap: 1px; padding: 9px 6px; border: 1px solid #e4f4db33; border-radius: 13px; background: #ffffff0d; color: #dce9d7; cursor: pointer; } .move-modes button.active { border-color: #dff4b5; background: #dff1c9; color: #17351e; box-shadow: 0 0 20px #b8df8d44; } .move-modes small { font-size: 10px; opacity: .75; }
 .mvp-note { position: absolute; z-index: 4; right: 24px; bottom: 58px; margin: 0; max-width: 390px; padding: 10px 14px; border-radius: 12px; background: #0d1c1599; color: #dbe8d6; font-size: 12px; font-weight: 700; text-align: right; text-shadow: 0 1px 5px #000; }
-.ai-image-credit { position: absolute; z-index: 6; right: 20px; bottom: 18px; padding: 7px 11px; border: 1px solid #fff6; border-radius: 8px; background: #07120ddd; color: #f4f7f3; font-size: 12px; font-weight: 800; letter-spacing: .02em; box-shadow: 0 3px 12px #0008; }
-@media (max-width: 700px) { .forest-topbar { grid-template-columns: auto 1fr; top: 12px; left: 12px; right: 12px; } .forest-topbar div { justify-self: end; text-align: right; } .forest-topbar > span, .mvp-note { display: none; } .walk-panel { left: 12px; bottom: 48px; width: calc(100% - 24px); } .walk-panel.collapsed { width: min(340px, calc(100% - 24px)); } .ai-image-credit { right: 12px; bottom: 10px; } }
+.asset-credit { position: absolute; z-index: 6; right: 20px; bottom: 18px; padding: 7px 11px; border: 1px solid #fff6; border-radius: 8px; background: #07120ddd; color: #f4f7f3; font-size: 11px; font-weight: 800; letter-spacing: .02em; box-shadow: 0 3px 12px #0008; }
+@media (max-width: 700px) { .forest-topbar { grid-template-columns: auto 1fr; top: 12px; left: 12px; right: 12px; } .forest-topbar div { justify-self: end; text-align: right; } .forest-topbar > span, .mvp-note { display: none; } .walk-panel { left: 12px; bottom: 48px; width: calc(100% - 24px); } .walk-panel.collapsed { width: min(340px, calc(100% - 24px)); } .asset-credit { right: 12px; bottom: 10px; } }
