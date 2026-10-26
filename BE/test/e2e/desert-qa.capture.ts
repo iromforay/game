@@ -153,10 +153,13 @@ test('C5 캡처 ③(1280×720): 능선 앞 전투 시작 → 불씨·젖은 칸�
     await g.capture('b01_scorched_start');
     await g.playBattle(300_000, snapHas(`(b.snap.embers ?? []).length > 0 && (b.snap.wet ?? []).length > 0 && ${myTurn}`));
     await g.capture('b02_ember_wet_warn');
+    // 자동 진행은 매듭부터 쳐서 칸이 끊기기 전에 이긴다 — 매듭이 남은 이 차례를 그대로 넘겨 끊김을 먼저 일으킨다
+    await g.until('매듭 남음', snapHas(`b.snap.units.some((u) => u.knotOf && !u.stunned && !u.fled) && ${myTurn} && !b.busy`));
+    await g.clickLabel('턴 종료', { exact: true });
+    await g.until('끊긴 칸', snapHas(`(b.snap.cut ?? []).length > 0 && ${myTurn}`), 60_000);
+    await g.capture('b04_cut_cell');
     await g.playBattle(300_000, snapHas(`b.snap.units.some((u) => u.mirageOf && !u.stunned && !u.fled) && ${myTurn}`));
     await g.capture('b03_heat_mirage');
-    await g.playBattle(300_000, snapHas(`(b.snap.cut ?? []).length > 0 && ${myTurn}`));
-    await g.capture('b04_cut_cell');
   }, backend, device);
   await g.close();
 });
