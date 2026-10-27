@@ -329,6 +329,13 @@ export class OpeningScene extends Phaser.Scene {
     this.fxState.glimpseShown.push(key);
     if (!this.textures.exists(key)) return;
     this.clearEdgeGlimpse();
+    // 10-27 F-6: 떠 있는 원형 기억 비침도 걷는다(다섯 실 해체 → 실의 길이 겹치지 않게)
+    const memory = this.glimpse;
+    if (memory?.active) {
+      this.glimpse = null;
+      this.tweens.killTweensOf(memory);
+      this.tweens.add({ targets: memory, alpha: 0, duration: 300, onComplete: () => memory.destroy() });
+    }
     const img = this.add.image(0, 0, key).setOrigin(0, 0).setDisplaySize(CANVAS_WIDTH, CANVAS_HEIGHT).setAlpha(0).setDepth(7);
     this.edgeGlimpse = img;
     this.tweens.add({ targets: img, alpha: 0.9, duration: 400, ease: 'Sine.easeOut' });

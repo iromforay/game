@@ -1,4 +1,4 @@
-// 10-26 F-2·F-4: 종장 1·2차 에셋 연결 — 파일·키(파일명)·크기·알파·해시(Codex manifest, codex/turby-final-assets 9e64b65), 지도·대화 배경·연출 키가 지역 데이터·대화와 맞는다.
+// 10-26 F-2·F-4·F-3b, 10-27 F-6 보정(codex/turby-final-assets 5003319): 종장 에셋 연결 — 파일·키(파일명)·크기·알파·해시(Codex manifest, codex/turby-final-assets 9e64b65), 지도·대화 배경·연출 키가 지역 데이터·대화와 맞는다.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -13,7 +13,7 @@ const ASSETS: [string, string, number, number, boolean, string][] = [
   ['core-gap', 'world/home-core', 1280, 480, true, 'D82EA86E319DF9B6AC3E743848E3380EA4E8C2DE8A20724029BEA998DF937DE9'],
   ['final-dialogue-bg', 'world/home-core', 1280, 720, false, '001638C012E2F68D7B9A7E2C42C9006D189C84AD17A81EA82DEF2513270E9164'],
   ['nubi-origin', 'sprites/story', 512, 512, true, 'E7C8254D0BDF5A06BF6FD0102669294061201C45797DC573834A042D1681CAF3'],
-  ['five-bind', 'fx/story', 768, 768, true, '06D601B2B0FB18F4C41B419E26B2302DEBA21D800849D320FE09CEB4779EFDD1'],
+  ['five-bind', 'fx/story', 768, 768, true, 'E6BBD9DEDCF01AEB5916EBEDF2FDD5779E7DF8BDA8B6C2B6A2E6041FBF9291DE'], // 10-27 F-6 보정(delivery-v4)
   ['origin-fall', 'fx/story', 768, 768, true, '87562A2CBEAAA3962528FF684204900F7B6569D7F7293EFD3092F15CD27D51D2'],
   // F-4 2차(최종 전투, codex/turby-final-assets 61fd1f2)
   ['scissors-open-idle', 'sprites/bosses', 1024, 256, true, 'FADA36B604EC892D693CB401D72586E0209131415B88F8DE2F7BB256F50FE0A3'],
@@ -35,10 +35,10 @@ const ASSETS: [string, string, number, number, boolean, string][] = [
   ['core-joined', 'world/home-core', 1280, 480, true, '0C8F95BF0FECADD60548863AFB961B9366BD0F0A53BB0F816EEE71C30C2E59A2'],
   // F-3b 3차(엔딩, codex/turby-final-assets 950e3c2)
   ['five-unravel', 'fx/story', 768, 768, true, 'FC04AC27E16B8A657ED7585D4D8194DB73D5CE46FEC310EDC57114722CD22800'],
-  ['thread-path', 'fx/story', 1280, 720, true, '8FA72E3214EF0994B8B539BA1B719C355175274AD23EF8D44D5F7EFFE2EFB743'],
+  ['thread-path', 'fx/story', 1280, 720, true, '7392974DFCB5FA5362FC358BED73B207F3C799D05BE8F5E1FD48D7D7EE914DCE'], // 10-27 F-6 보정(delivery-v4)
   ['real-world-bg', 'world/home-core', 1280, 720, false, '64EA93A60200D08B4831F30763672C677444607CFFC4C4F38C8E33924588DD00'],
-  ['real-yarn-knot', 'fx/story', 768, 768, true, '9C9AC6662B89D2FF8ABD9780FC79580BBE2A5591C5E6678EBBA6B0456CA246EF'],
-  ['mother-hand', 'fx/story', 768, 768, true, 'E5D4141086381B01E180959EDD81CA4384E193A0A5325609D4CB9920F80ACC60'],
+  ['real-yarn-knot', 'fx/story', 768, 768, true, 'D4C5828874BB06BA2861BDFA92902C32190058B534A5EC94490C7A2EDD549359'], // 10-27 F-6 보정(delivery-v4)
+  ['mother-hand', 'fx/story', 768, 768, true, 'E1F62A92BC35DD4450AA2104A6E8CDB5B28D3957A08F92417F2E0926D29D0508'], // 10-27 F-6 보정(delivery-v4)
   ['title-card-bg', 'world/home-core', 1280, 720, false, '3C4E0D107932B552084EC59B1FED8169BAD6D60B1ECD84AD0A6C940AD616B184'],
 ];
 
