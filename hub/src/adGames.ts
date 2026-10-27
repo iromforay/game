@@ -4,6 +4,7 @@ export type AdGameId =
   | 'merge-defense'
   | 'sweet-shop'
   | 'my-room-dungeon'
+  | 'color-blasters'
   | 'spin-gather-king'
   | 'green-tracking';
 
@@ -49,6 +50,13 @@ export const AD_GAMES: AdGameMeta[] = [
     number: 5,
     title: '내 방이 던전',
     description: '방 안의 사물을 분해해 자원을 모으고 무기와 채집 로봇을 성장시키세요.',
+    status: 'available',
+  },
+  {
+    id: 'color-blasters',
+    number: 6,
+    title: '컬러 블래스터즈',
+    description: '페인트 무기를 조율하고 상대를 색으로 물들이는 싱글·멀티 3D 대전에 참가하세요.',
     status: 'available',
   },
   {
