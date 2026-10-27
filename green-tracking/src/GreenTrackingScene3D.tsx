@@ -4,7 +4,6 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import treeUrl from './assets/models/tree-small.glb?url';
 import shrubUrl from './assets/models/shrub.glb?url';
-import grassUrl from './assets/models/grass.glb?url';
 import fernUrl from './assets/models/fern.glb?url';
 import dirtDiffuseUrl from './assets/textures/dirt/diffuse.jpg';
 import dirtNormalUrl from './assets/textures/dirt/normal.jpg';
@@ -56,7 +55,7 @@ export function GreenTrackingScene({ onExit }: Props) {
   useEffect(() => {
     const mount = mountRef.current; if (!mount) return;
     const random = seededRandom();
-    const scene = new THREE.Scene(); scene.background = new THREE.Color(0xb9cbd0); scene.fog = new THREE.FogExp2(0xb8c7bb, .0135);
+    const scene = new THREE.Scene(); scene.background = new THREE.Color(0xaec8ce); scene.fog = new THREE.FogExp2(0x9fb4a5, .009);
     const camera = new THREE.PerspectiveCamera(54, 1, .1, 180); camera.position.set(0, 1.72, 8);
     const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5)); renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -90,8 +89,8 @@ export function GreenTrackingScene({ onExit }: Props) {
       uniforms: { topColor: { value: new THREE.Color(0x86a7b5) }, bottomColor: { value: new THREE.Color(0xe1e6da) } },
       vertexShader: 'varying float h;void main(){vec4 w=modelMatrix*vec4(position,1.);h=normalize(w.xyz).y;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
       fragmentShader: 'uniform vec3 topColor;uniform vec3 bottomColor;varying float h;void main(){float t=smoothstep(-.12,.55,h);gl_FragColor=vec4(mix(bottomColor,topColor,t),1.);}' }));
-    scene.add(sky, new THREE.HemisphereLight(0xf0f5ef, 0x37452f, 2.05), new THREE.AmbientLight(0xc8d8cc, .28));
-    const sun = new THREE.DirectionalLight(0xfff2d6, 2.15); sun.position.set(-18, 25, 10); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+    scene.add(sky, new THREE.HemisphereLight(0xf0f5ef, 0x30452f, 2.2), new THREE.AmbientLight(0xc8d8cc, .34));
+    const sun = new THREE.DirectionalLight(0xfff0ce, 2.35); sun.position.set(-18, 25, 10); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
     sun.shadow.camera.left = -24; sun.shadow.camera.right = 24; sun.shadow.camera.top = 28; sun.shadow.camera.bottom = -12; scene.add(sun);
 
     const tl = new THREE.TextureLoader(); const [diffuse, normal, roughness] = [dirtDiffuseUrl, dirtNormalUrl, dirtRoughnessUrl].map((url) => tl.load(url));
@@ -107,22 +106,29 @@ export function GreenTrackingScene({ onExit }: Props) {
       groundPositions.setZ(i, height);
     }
     groundGeometry.computeVertexNormals();
-    const ground = new THREE.Mesh(groundGeometry, new THREE.MeshStandardMaterial({ map: forestDiffuse, normalMap: forestNormal, roughnessMap: forestRoughness, color: 0xb7c09e, roughness: 1 })); ground.rotation.x = -Math.PI / 2; ground.position.z = -76; ground.receiveShadow = true; scene.add(ground);
-    const path = new THREE.Mesh(new THREE.PlaneGeometry(3.9, 180), new THREE.MeshStandardMaterial({ map: diffuse, normalMap: normal, roughnessMap: roughness, color: 0xc9bea8, roughness: 1 })); path.rotation.x = -Math.PI / 2; path.position.set(0, .018, -76); path.receiveShadow = true; scene.add(path);
+    const ground = new THREE.Mesh(groundGeometry, new THREE.MeshStandardMaterial({ map: forestDiffuse, normalMap: forestNormal, roughnessMap: forestRoughness, color: 0x9fb88b, roughness: 1 })); ground.rotation.x = -Math.PI / 2; ground.position.z = -76; ground.receiveShadow = true; scene.add(ground);
+    const path = new THREE.Mesh(new THREE.PlaneGeometry(3.25, 180), new THREE.MeshStandardMaterial({ map: diffuse, normalMap: normal, roughnessMap: roughness, color: 0xb9ac92, roughness: 1 })); path.rotation.x = -Math.PI / 2; path.position.set(0, .018, -76); path.receiveShadow = true; scene.add(path);
 
     let disposed = false; const loader = new GLTFLoader(); loader.setMeshoptDecoder(MeshoptDecoder);
-    Promise.all([treeUrl, shrubUrl, grassUrl, fernUrl].map((url) => loader.loadAsync(url))).then(([tree, shrub, grass, fern]) => {
+    Promise.all([treeUrl, shrubUrl, fernUrl].map((url) => loader.loadAsync(url))).then(([tree, shrub, fern]) => {
       if (disposed) return;
       const place = (source: THREE.Object3D, count: number, heights: [number, number], minX: number, maxX: number) => {
         for (let i = 0; i < count; i += 1) { const side = i % 2 ? 1 : -1; const object = normalizedClone(source, heights[0] + random() * (heights[1] - heights[0])); object.position.x += side * (minX + random() * (maxX - minX)); object.position.z = 6 - ((i + random() * .82) / count) * 164; object.rotation.y = random() * Math.PI * 2; scene.add(object); }
       };
-      place(tree.scene, 46, [8, 14.5], 4.5, 18); place(shrub.scene, 116, [1.2, 3], 2.8, 11); place(grass.scene, 190, [.55, 1.35], 2.15, 9); place(fern.scene, 132, [.5, 1.15], 2.25, 10); setLoading(false);
+      // Two overlapping tree strata keep branches and leaf clusters touching,
+      // while the lower shrubs conceal repeated trunks and empty ground.
+      place(tree.scene, 150, [11.5, 18], 2.75, 13);
+      place(tree.scene, 96, [5.5, 10.5], 2.15, 9);
+      place(shrub.scene, 230, [1.3, 3.7], 1.9, 8);
+      place(shrub.scene, 130, [.55, 1.25], 1.65, 4.8);
+      place(fern.scene, 290, [.55, 1.45], 1.55, 6.5);
+      setLoading(false);
     }).catch((error) => { console.error('3D forest assets failed', error); setLoading(false); });
 
     const resize = () => { renderer.setSize(mount.clientWidth, mount.clientHeight, false); camera.aspect = mount.clientWidth / Math.max(1, mount.clientHeight); camera.updateProjectionMatrix(); };
     const observer = new ResizeObserver(resize); observer.observe(mount); resize();
     const clock = new THREE.Clock(); let frame = 0; let cameraZ = 8; let lastUpdate = 0;
-    const animate = () => { frame = requestAnimationFrame(animate); const delta = Math.min(clock.getDelta(), .04); const elapsed = clock.elapsedTime; const active = modeRef.current; cameraZ -= delta * SPEED[active]; if (cameraZ < -142) cameraZ = 8; const moving = active !== 'stop'; const run = active === 'run'; camera.position.set(moving ? Math.sin(elapsed * (run ? 2.1 : 1.2)) * .055 : 0, 1.72 + (moving ? Math.sin(elapsed * (run ? 10 : 5.4)) * (run ? .055 : .022) : 0), cameraZ); currentYaw = THREE.MathUtils.damp(currentYaw, targetYaw, 9, delta); camera.fov = THREE.MathUtils.damp(camera.fov, targetFov, 10, delta); camera.updateProjectionMatrix(); camera.lookAt(camera.position.x + Math.sin(currentYaw) * 17, 1.28, cameraZ - Math.cos(currentYaw) * 17); if (soundOn && moving && elapsed - lastStepAt > (run ? .32 : .56)) { lastStepAt = elapsed; let next = Math.floor(Math.random() * stepSounds.length); if (next === lastStepIndex) next = (next + 1) % stepSounds.length; lastStepIndex = next; const step = stepSounds[next]; step.currentTime = 0; step.playbackRate = .94 + Math.random() * .12; step.volume = (run ? .6 : .46) * (.9 + Math.random() * .1); void step.play(); } if (elapsed - lastUpdate > .12) { lastUpdate = elapsed; setProgress(Math.round((8 - cameraZ) / 150 * 100)); } renderer.render(scene, camera); };
+    const animate = () => { frame = requestAnimationFrame(animate); const delta = Math.min(clock.getDelta(), .04); const elapsed = clock.elapsedTime; const active = modeRef.current; cameraZ -= delta * SPEED[active]; if (cameraZ < -142) cameraZ = 8; const moving = active !== 'stop'; const run = active === 'run'; camera.position.set(moving ? Math.sin(elapsed * (run ? 2.1 : 1.2)) * .055 : 0, 1.72 + (moving ? Math.sin(elapsed * (run ? 10 : 5.4)) * (run ? .055 : .022) : 0), cameraZ); currentYaw = THREE.MathUtils.damp(currentYaw, targetYaw, 9, delta); camera.fov = THREE.MathUtils.damp(camera.fov, targetFov, 10, delta); camera.updateProjectionMatrix(); camera.lookAt(camera.position.x + Math.sin(currentYaw) * 17, 1.28, cameraZ - Math.cos(currentYaw) * 17); if (soundOn && moving && elapsed - lastStepAt > (run ? .32 : .56)) { lastStepAt = elapsed; let next = Math.floor(Math.random() * stepSounds.length); if (next === lastStepIndex) next = (next + 1) % stepSounds.length; lastStepIndex = next; const step = stepSounds[next]; step.currentTime = 0; step.playbackRate = .88 + Math.random() * .1; step.volume = (run ? .46 : .34) * (.9 + Math.random() * .1); void step.play(); } if (elapsed - lastUpdate > .12) { lastUpdate = elapsed; setProgress(Math.round((8 - cameraZ) / 150 * 100)); } renderer.render(scene, camera); };
     animate();
     return () => { disposed = true; disableAudio(); audioControlRef.current = null; cancelAnimationFrame(frame); observer.disconnect(); renderer.domElement.removeEventListener('pointerdown', pointerDown); renderer.domElement.removeEventListener('pointermove', pointerMove); renderer.domElement.removeEventListener('pointerup', pointerUp); renderer.domElement.removeEventListener('pointercancel', pointerUp); renderer.domElement.removeEventListener('wheel', wheel); scene.traverse((object) => { if (object instanceof THREE.Mesh) { object.geometry.dispose(); (Array.isArray(object.material) ? object.material : [object.material]).forEach((material) => material.dispose()); } }); [diffuse, normal, roughness, forestDiffuse, forestNormal, forestRoughness].forEach((texture) => texture.dispose()); renderer.dispose(); mount.removeChild(renderer.domElement); };
   }, []);
