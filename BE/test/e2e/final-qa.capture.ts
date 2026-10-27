@@ -92,7 +92,7 @@ test('종장 캡처 ①(1280×720): 금빛 길 입구 → 도착 장면 → 중�
     await waitFx(g, 'five-relics');
     await g.capture('d02_five_relics_glow');
     await g.advanceDialogue(ON_MAP);
-    await moveTo(g, device, { x: 1600, y: 1330 });
+    await moveTo(g, device, { x: 1600, y: 1230 }); // F-6 QA-F03: 결속 지점에서 검은 틈이 바로 위에 보인다
     await g.capture('f02_core_companions_gap');
     await moveTo(g, device, { x: 900, y: 1250 });
     await g.capture('f03_lake_thread_muldeuli');
@@ -164,7 +164,7 @@ test('종장 캡처 ②(1280×720): 가위 등장 → 최종 전투 1·2·3단�
     await g.capture('e01_title_card');
     await g.clickAt(640, 360, ON_MAP);
     await g.until('집의 중심 지도', MAP_READY, 30_000);
-    await moveTo(g, device, { x: 1600, y: 1330 });
+    await moveTo(g, device, { x: 1600, y: 1230 });
     await g.capture('f05_core_joined');
   }, backend, device);
   await g.close();

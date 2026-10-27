@@ -28,9 +28,9 @@
     { "id": "final_ganeuri", "x": 2300, "y": 1160, "radius": 80, "what": "가느리(냉장고의 실)" },
     { "id": "final_bopuli", "x": 560, "y": 440, "radius": 90, "what": "보풀이(먼지숲의 실 끝에 매달려 있다)" },
     { "id": "final_core", "x": 1600, "y": 1230, "radius": 110, "what": "중앙의 빈자리 — 다섯 기억의 결속(정체 공개)" },
-    { "id": "final_scissors", "x": 1600, "y": 990, "radius": 100, "what": "검은 틈 — 가위 등장·최종 전투 입구" }
+    { "id": "final_scissors", "x": 1600, "y": 1100, "radius": 100, "what": "검은 틈 — 가위 등장·최종 전투 입구" }
   ],
   "overlay_regions": [
-    { "id": "core_gap", "x": 1280, "y": 890, "width": 640, "height": 240, "note": "중앙의 검은 틈(다섯 실 사이를 가위로 자른 자국) — 최종 전투 승리 전까지 보인다" }
+    { "id": "core_gap", "x": 1280, "y": 980, "width": 640, "height": 240, "note": "중앙의 검은 틈(다섯 실 사이를 가위로 자른 자국) — 최종 전투 승리 전까지 보인다" }
   ]
 }

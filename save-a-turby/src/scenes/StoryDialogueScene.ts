@@ -28,6 +28,7 @@ export const ORIGIN_NAME = '태초의 실타래 누비';
 const ENDING_BLACK_MS = 900; // 암전만 보이는 시간
 const ENDING_FADE_MS = 1400; // 제목이 떠오르는 시간
 const ORIGIN_SEGMENTS = new Set(['final.last_thread', 'final.knot', 'final.cost']);
+const ORIGIN_PORTRAIT = 'nubi_origin'; // portrait-nubi_origin-neutral = nubi-origin 그림(초상화 폴더가 없어 같은 원본을 키 하나 더로 등록)
 // 10-26 F-3b: 현실 세계 장면 뒤 즉시 암전 → 제목 카드(정본 docs/scene/종장.md 302~303행 인용 블록)
 export const ENDING_TITLE = '터비 구하기';
 export const ENDING_LINE = '풀린 실은 사라지는 것이 아니라, 누군가의 기억 속에 다시 묶인다.';
@@ -55,6 +56,7 @@ export class StoryDialogueScene extends OpeningScene {
     const chapterCode = d.play ? chapterOfSegment(d.play.segmentId) : d.resumeBattle!.chapterCode;
     const file = (await this.retrying(() => this.opts.client.fetchDialogue(chapterCode), '이야기를 불러오지 못했어요.')) as DialogueFile;
     this.state = await this.retrying(() => this.opts.client.fetchState(), '이야기 진행 정보를 불러오지 못했어요.');
+    if (this.textures.exists('nubi-origin') && !this.textures.exists(`portrait-${ORIGIN_PORTRAIT}-neutral`)) this.textures.addImage(`portrait-${ORIGIN_PORTRAIT}-neutral`, this.textures.get('nubi-origin').getSourceImage() as HTMLImageElement);
 
     if (d.play) {
       await runDialogue(file, d.play.segmentId, this.ports(), { endAfter: d.play.endAfter, fromEntry: d.play.fromEntry, untilEntry: d.play.untilEntry, exact: true }); // 서버가 정한 범위 그대로
@@ -73,7 +75,7 @@ export class StoryDialogueScene extends OpeningScene {
     return {
       ...base,
       // 10-26 F-3b: 정체 공개 뒤 장면의 누비 이름표
-      show: (line) => base.show(this.segmentNow && ORIGIN_SEGMENTS.has(this.segmentNow) && line.entry.kind === 'line' && line.entry.speaker === 'nubi' ? { ...line, label: ORIGIN_NAME } : line),
+      show: (line) => base.show(this.segmentNow && ORIGIN_SEGMENTS.has(this.segmentNow) && line.entry.kind === 'line' && line.entry.speaker === 'nubi' ? { ...line, label: ORIGIN_NAME, entry: { ...line.entry, portrait: ORIGIN_PORTRAIT as never, expression: 'neutral' } } : line), // F-6 QA-F05: 초상화도
       onSegment: (id) => {
         this.segmentNow = id;
         if (id === 'final.real_world') this.clearEdgeGlimpse(); // 정본: 빛이 사라진다 — 실의 길 연출을 걷고 현실로

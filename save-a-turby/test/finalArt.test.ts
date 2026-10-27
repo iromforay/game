@@ -60,9 +60,9 @@ test('연결: 지도 배경·검은 틈 오버레이·대화 배경·결속/그�
   };
   assert.deepEqual([D.greybox, D.render.background.assetKey], [false, 'home-core-base']);
   const gap = D.render.overlays.find((o) => o.id === 'overlay_core_gap')!;
-  assert.deepEqual([gap.assetKey, gap.x, gap.y, gap.width, gap.height], ['core-gap', 1280, 890, 640, 240], '지시서 계약: 640×240, 왼쪽 위 (1280, 890)');
+  assert.deepEqual([gap.assetKey, gap.x, gap.y, gap.width, gap.height], ['core-gap', 1280, 980, 640, 240], '640×240, 왼쪽 위 (1280, 980) — F-6 QA-F03: 결속 지점 바로 위로 내림');
   const joined = D.render.overlays.find((o) => o.id === 'overlay_core_joined')!;
-  assert.deepEqual([joined.assetKey, joined.x, joined.y, joined.width, joined.height], ['core-joined', 1280, 890, 640, 240], '승리 뒤 같은 자리');
+  assert.deepEqual([joined.assetKey, joined.x, joined.y, joined.width, joined.height], ['core-joined', 1280, 980, 640, 240], '승리 뒤 같은 자리');
   const battle = readFileSync(here('../src/scenes/BattleScene.ts'), 'utf8');
   assert.match(battle, /scissors: \{ idle: 'scissors-open-idle', exposed: 'scissors-bound'/);
   for (const k of ['relic-knot-first', 'nubi-phantom-name', 'black-thread', 'scissors-blade', 'five-memory-knot']) assert.ok(battle.includes(`key: '${k}'`), `${k} 표적 그림`);

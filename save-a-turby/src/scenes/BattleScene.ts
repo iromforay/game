@@ -342,6 +342,23 @@ export class BattleScene extends Phaser.Scene {
     return unitLabel(u, this.hud?.mode === 'compact');
   }
 
+  // 10-26 F-6 QA-F02: 검정실과 묶인 누비 환영 사이의 가는 검은 실(둘 다 남아 있을 때만) — 어떤 실을 끊으면 어떤 환영이 사라지는지
+  private phantomLinks: Phaser.GameObjects.Graphics | null = null;
+  private drawPhantomLinks() {
+    this.phantomLinks?.destroy();
+    this.phantomLinks = null;
+    const pairs = this.snap.units.filter((t) => t.releases && !t.stunned && !t.fled).map((t) => [t, this.snap.units.find((p) => p.unitId === t.releases)] as const).filter(([, p]) => p && !p.stunned && !p.fled);
+    if (pairs.length === 0) return;
+    const g = this.add.graphics().setDepth(4);
+    g.lineStyle(3, 0x1a1424, 0.75);
+    for (const [t, p] of pairs) {
+      const a = this.tileToWorld(t.col, t.row);
+      const b = this.tileToWorld(p!.col, p!.row);
+      g.lineBetween(a.x, a.y, b.x, b.y);
+    }
+    this.phantomLinks = g;
+  }
+
   // 통행 불가 칸(스토리 전투 지형). 지형 규칙으로 바뀌면 다시 그린다 — 임시 도형(에셋 확정 전)
   private drawBlocked(blocked: string[]) {
     const key = blocked.join('|');
@@ -380,11 +397,16 @@ export class BattleScene extends Phaser.Scene {
     }
     const gb = this.hud.rects.goalButton!;
     this.goalButtonText = this.add
-      .text(gb.x, gb.y + gb.h / 2, goalSummary(objectiveLines(this.snap)), { fontSize: `${F.button}px`, color: '#241a3d', backgroundColor: '#ffd27f', padding: { x: 12, y: 8 }, fixedWidth: gb.w })
+      .text(gb.x, gb.y + gb.h / 2, this.goalText(), { fontSize: `${F.button}px`, color: '#241a3d', backgroundColor: '#ffd27f', padding: { x: 12, y: 8 }, fixedWidth: gb.w })
       .setOrigin(0, 0.5)
       .setDepth(2002)
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => this.toggleGoals());
+  }
+
+  // 작은 화면 목표 버튼 문구: 단계 전투는 단계 이름만(긴 목표가 잘리지 않게 — F-6 QA-F01), 그 밖은 첫 목표 요약
+  private goalText(open = false) {
+    return this.snap.stage ? `${this.snap.stage.label} ${open ? '▴' : '▾'}` : goalSummary(objectiveLines(this.snap), open);
   }
 
   // 작은 화면의 목표 상세(펼침) — 격자 위에 겹쳐 그리고, 요약 버튼(▴)·닫기 버튼·패널을 누르면 접힌다
@@ -392,7 +414,7 @@ export class BattleScene extends Phaser.Scene {
     this.goalLayer.forEach((o) => o.destroy());
     this.goalLayer = [];
     this.goalOpen = !this.goalOpen;
-    this.goalButtonText?.setText(goalSummary(objectiveLines(this.snap), this.goalOpen)).setBackgroundColor(this.goalOpen ? '#ffe9b8' : '#ffd27f');
+    this.goalButtonText?.setText(this.goalText(this.goalOpen)).setBackgroundColor(this.goalOpen ? '#ffe9b8' : '#ffd27f');
     if (!this.goalOpen) return;
     const F = this.hud.font;
     const P = this.hud.rects.goalPanel!;
@@ -488,6 +510,7 @@ export class BattleScene extends Phaser.Scene {
       for (const o of view.container.list) if (o.input) o.input.enabled = !(u.stunned || u.inactive);
     }
     this.layoutLabels();
+    this.drawPhantomLinks();
     this.drawBlocked(this.snap.blocked ?? []);
     this.syncBoss();
     this.syncStates();
@@ -1153,7 +1176,7 @@ export class BattleScene extends Phaser.Scene {
       await wait(this, 250);
     } else if (ev.type === 'stage') {
       // 10-26 F-3a: 최종 전투 단계 전환 — 단계 이름과 안내를 차례로
-      showToast(this, ev.hint ? `${ev.label}\n${ev.hint}` : ev.label, { y: this.toastY });
+      showToast(this, ev.hint && this.hud?.mode !== 'compact' ? `${ev.label}\n${ev.hint}` : ev.label, { y: this.toastY }); // F-6 QA-F01: 작은 화면은 단계 이름만(안내는 목표 패널)
       await wait(this, 900);
     } else if (ev.type === 'phantom_hit') {
       showToast(this, '환영이었어요! 가위가 곁의 길을 끊었어요', { y: this.toastY, error: true });

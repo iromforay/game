@@ -23,7 +23,7 @@
     {
       "id": "final_scissors",
       "x": 1600,
-      "y": 990,
+      "y": 1100,
       "radius": 100
     }
   ],
@@ -151,7 +151,7 @@
           ],
           [
             1600,
-            990
+            1100
           ]
         ]
       }
@@ -411,7 +411,7 @@
         "id": "overlay_core_gap",
         "assetKey": "core-gap",
         "x": 1280,
-        "y": 890,
+        "y": 980,
         "width": 640,
         "height": 240,
         "pivot": [
@@ -425,7 +425,7 @@
         "id": "overlay_core_joined",
         "assetKey": "core-joined",
         "x": 1280,
-        "y": 890,
+        "y": 980,
         "width": 640,
         "height": 240,
         "pivot": [
