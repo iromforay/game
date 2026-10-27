@@ -46,6 +46,8 @@ const CONTRACT = [
   ['delivery-v5', 'real-yarn-knot', 'fx/story', 768, 768, true],
   ['delivery-v4', 'mother-hand', 'fx/story', 768, 768, true],
   ['delivery-v3', 'title-card-bg', 'world/home-core', 1280, 720, false],
+  // to_claude/2026-10-27 v4 §3(d11 탁자 장면 전체) — Codex delivery-v6
+  ['delivery-v6', 'real-yarn-table-scene', 'world/home-core', 1280, 720, false],
 ];
 const SHEETS = { 'scissors-open-idle': 256, 'scissors-bound': 256 };
 

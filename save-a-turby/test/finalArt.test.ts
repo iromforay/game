@@ -40,9 +40,10 @@ const ASSETS: [string, string, number, number, boolean, string][] = [
   ['real-yarn-knot', 'fx/story', 768, 768, true, '0E75645236F98C2919547FA772A568CEFAAC5887225FF2E8CCD93C6B87CC9B12'], // 10-27 F-6 재검수 보정(delivery-v5)
   ['mother-hand', 'fx/story', 768, 768, true, 'E1F62A92BC35DD4450AA2104A6E8CDB5B28D3957A08F92417F2E0926D29D0508'], // 10-27 F-6 보정(delivery-v4)
   ['title-card-bg', 'world/home-core', 1280, 720, false, '3C4E0D107932B552084EC59B1FED8169BAD6D60B1ECD84AD0A6C940AD616B184'],
+  ['real-yarn-table-scene', 'world/home-core', 1280, 720, false, 'A37D50BE34F1C1AD4E39E5AA2BF736D3B6590737CB738BB14FE2A69581687EF4'], // 10-27 F-6 d11 탁자 장면 전체(delivery-v6)
 ];
 
-test('종장 에셋 29종(1차 6 + 2차 17 + 3차 6): 파일·키(파일명)·크기·투명·해시가 Codex manifest와 같다', () => {
+test('종장 에셋 30종(1차 6 + 2차 17 + 3차 6 + d11 장면 1): 파일·키(파일명)·크기·투명·해시가 Codex manifest와 같다', () => {
   for (const [key, dir, w, h, alpha, hash] of ASSETS) {
     const file = here(`../src/assets/${dir}/${key}.png`);
     assert.ok(existsSync(file), `${key} 파일`);
