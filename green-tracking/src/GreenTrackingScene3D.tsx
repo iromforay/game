@@ -55,7 +55,7 @@ export function GreenTrackingScene({ onExit }: Props) {
   useEffect(() => {
     const mount = mountRef.current; if (!mount) return;
     const random = seededRandom();
-    const scene = new THREE.Scene(); scene.background = new THREE.Color(0xaec8ce); scene.fog = new THREE.FogExp2(0x9fb4a5, .009);
+    const scene = new THREE.Scene(); scene.background = new THREE.Color(0xa8bbad); scene.fog = new THREE.Fog(0xa8bbad, 18, 68);
     const camera = new THREE.PerspectiveCamera(54, 1, .1, 180); camera.position.set(0, 1.72, 8);
     const compactDisplay = matchMedia('(max-width: 700px)').matches;
     const renderer = new THREE.WebGLRenderer({ antialias: !compactDisplay, powerPreference: 'high-performance' });
@@ -109,19 +109,38 @@ export function GreenTrackingScene({ onExit }: Props) {
     const ground = new THREE.Mesh(groundGeometry, new THREE.MeshStandardMaterial({ map: forestDiffuse, normalMap: forestNormal, roughnessMap: forestRoughness, color: 0x9fb88b, roughness: 1 })); ground.rotation.x = -Math.PI / 2; ground.position.z = -76; ground.receiveShadow = true; scene.add(ground);
     const path = new THREE.Mesh(new THREE.PlaneGeometry(3.25, 180), new THREE.MeshStandardMaterial({ map: diffuse, normalMap: normal, roughnessMap: roughness, color: 0xb9ac92, roughness: 1 })); path.rotation.x = -Math.PI / 2; path.position.set(0, .018, -76); path.receiveShadow = true; scene.add(path);
 
+    const matrix = new THREE.Matrix4(); const quaternion = new THREE.Quaternion(); const scale = new THREE.Vector3(); const position = new THREE.Vector3();
+    const rocks = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(.46, 1), new THREE.MeshStandardMaterial({ color: 0x596b4a, roughness: .96 }), 42);
+    for (let i = 0; i < 42; i += 1) { const side = i % 2 ? 1 : -1; position.set(side * (2.15 + random() * 8), .18, 5 - random() * 158); quaternion.setFromEuler(new THREE.Euler(random() * .35, random() * Math.PI, random() * .25)); const size = .45 + random() * .8; scale.set(size * (1 + random() * .5), size * (.55 + random() * .3), size); matrix.compose(position, quaternion, scale); rocks.setMatrixAt(i, matrix); }
+    rocks.instanceMatrix.needsUpdate = true; scene.add(rocks);
+    const fallenWood = new THREE.InstancedMesh(new THREE.CylinderGeometry(.14, .23, 2.5, 8), new THREE.MeshStandardMaterial({ color: 0x4b3827, roughness: 1 }), 18);
+    for (let i = 0; i < 18; i += 1) { const side = i % 2 ? 1 : -1; position.set(side * (2.3 + random() * 7), .2, 3 - random() * 155); quaternion.setFromEuler(new THREE.Euler(Math.PI / 2 + (random() - .5) * .18, random() * Math.PI, (random() - .5) * .16)); const length = .7 + random() * .8; scale.set(.75 + random() * .45, length, .75 + random() * .35); matrix.compose(position, quaternion, scale); fallenWood.setMatrixAt(i, matrix); }
+    fallenWood.instanceMatrix.needsUpdate = true; scene.add(fallenWood);
+
     let disposed = false; const loader = new GLTFLoader(); loader.setMeshoptDecoder(MeshoptDecoder);
     Promise.all([treeUrl, shrubUrl, fernUrl].map((url) => loader.loadAsync(url))).then(([tree, shrub, fern]) => {
       if (disposed) return;
       const place = (source: THREE.Object3D, count: number, heights: [number, number], minX: number, maxX: number) => {
-        for (let i = 0; i < count; i += 1) { const side = i % 2 ? 1 : -1; const object = normalizedClone(source, heights[0] + random() * (heights[1] - heights[0])); object.position.x += side * (minX + random() * (maxX - minX)); object.position.z = 6 - ((i + random() * .82) / count) * 164; object.rotation.y = random() * Math.PI * 2; scene.add(object); }
+        for (let i = 0; i < count; i += 1) {
+          const side = i % 2 ? 1 : -1;
+          const object = normalizedClone(source, heights[0] + random() * (heights[1] - heights[0]));
+          const grove = .78 + Math.sin(i * 1.73) * .18;
+          object.position.x += side * (minX + random() * (maxX - minX) * grove);
+          object.position.z = 6 - ((i + random() * .82) / count) * 164;
+          object.rotation.y = random() * Math.PI * 2;
+          object.rotation.z = (random() - .5) * .055;
+          object.scale.x *= .72 + random() * .58;
+          object.scale.z *= .72 + random() * .58;
+          scene.add(object);
+        }
       };
       // Two overlapping tree strata keep branches and leaf clusters touching,
       // while the lower shrubs conceal repeated trunks and empty ground.
       place(tree.scene, 72, [12.5, 19], 4, 12);
       place(tree.scene, 36, [6, 11], 3.5, 8);
-      place(shrub.scene, 120, [1.4, 3.8], 2.4, 8);
-      place(shrub.scene, 60, [.6, 1.3], 2.15, 4.8);
-      place(fern.scene, 140, [.6, 1.5], 2.1, 6.5);
+      place(shrub.scene, 120, [1.4, 3.8], 3.2, 8);
+      place(shrub.scene, 60, [.6, 1.3], 2.85, 4.8);
+      place(fern.scene, 140, [.6, 1.5], 2.8, 6.5);
       setLoading(false);
     }).catch((error) => { console.error('3D forest assets failed', error); setLoading(false); });
 
