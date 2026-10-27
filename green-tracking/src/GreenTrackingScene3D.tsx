@@ -110,9 +110,17 @@ export function GreenTrackingScene({ onExit }: Props) {
     const path = new THREE.Mesh(new THREE.PlaneGeometry(3.25, 180), new THREE.MeshStandardMaterial({ map: diffuse, normalMap: normal, roughnessMap: roughness, color: 0xb9ac92, roughness: 1 })); path.rotation.x = -Math.PI / 2; path.position.set(0, .018, -76); path.receiveShadow = true; scene.add(path);
 
     const matrix = new THREE.Matrix4(); const quaternion = new THREE.Quaternion(); const scale = new THREE.Vector3(); const position = new THREE.Vector3();
-    const rocks = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(.46, 1), new THREE.MeshStandardMaterial({ color: 0x596b4a, roughness: .96 }), 42);
-    for (let i = 0; i < 42; i += 1) { const side = i % 2 ? 1 : -1; position.set(side * (2.15 + random() * 8), .18, 5 - random() * 158); quaternion.setFromEuler(new THREE.Euler(random() * .35, random() * Math.PI, random() * .25)); const size = .45 + random() * .8; scale.set(size * (1 + random() * .5), size * (.55 + random() * .3), size); matrix.compose(position, quaternion, scale); rocks.setMatrixAt(i, matrix); }
-    rocks.instanceMatrix.needsUpdate = true; scene.add(rocks);
+    const pathLeaves = new THREE.InstancedMesh(new THREE.CircleGeometry(.09, 6), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, side: THREE.DoubleSide }), 150);
+    const leafColors = [new THREE.Color(0x75502e), new THREE.Color(0x93683a), new THREE.Color(0x5f452c), new THREE.Color(0xa07942)];
+    for (let i = 0; i < 150; i += 1) { position.set((random() - .5) * 2.75, .035, 6 - random() * 164); quaternion.setFromEuler(new THREE.Euler(-Math.PI / 2 + (random() - .5) * .12, random() * Math.PI, 0)); const leafSize = .55 + random() * 1.15; scale.set(leafSize * (.55 + random() * .55), leafSize, 1); matrix.compose(position, quaternion, scale); pathLeaves.setMatrixAt(i, matrix); pathLeaves.setColorAt(i, leafColors[Math.floor(random() * leafColors.length)]); }
+    pathLeaves.instanceMatrix.needsUpdate = true; if (pathLeaves.instanceColor) pathLeaves.instanceColor.needsUpdate = true; scene.add(pathLeaves);
+    // Keep gravel almost flush with the trail. Chunky low-poly stones read as props
+    // and break the photographic scene, while these small irregular patches read
+    // as material embedded in the soil.
+    const pathPebbles = new THREE.InstancedMesh(new THREE.CircleGeometry(.043, 7), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, side: THREE.DoubleSide }), 96);
+    const pebbleColors = [new THREE.Color(0x625e52), new THREE.Color(0x777062), new THREE.Color(0x8a806d), new THREE.Color(0x514f48)];
+    for (let i = 0; i < 96; i += 1) { const edgeBias = Math.pow(random(), .55); const side = random() > .5 ? 1 : -1; position.set(side * (.15 + edgeBias * 1.25), .038, 5 - random() * 162); quaternion.setFromEuler(new THREE.Euler(-Math.PI / 2 + (random() - .5) * .08, random() * Math.PI, 0)); const pebbleSize = .45 + random() * .85; scale.set(pebbleSize * (.72 + random() * .8), pebbleSize, 1); matrix.compose(position, quaternion, scale); pathPebbles.setMatrixAt(i, matrix); pathPebbles.setColorAt(i, pebbleColors[Math.floor(random() * pebbleColors.length)]); }
+    pathPebbles.instanceMatrix.needsUpdate = true; if (pathPebbles.instanceColor) pathPebbles.instanceColor.needsUpdate = true; scene.add(pathPebbles);
     const fallenWood = new THREE.InstancedMesh(new THREE.CylinderGeometry(.14, .23, 2.5, 8), new THREE.MeshStandardMaterial({ color: 0x4b3827, roughness: 1 }), 18);
     for (let i = 0; i < 18; i += 1) { const side = i % 2 ? 1 : -1; position.set(side * (2.3 + random() * 7), .2, 3 - random() * 155); quaternion.setFromEuler(new THREE.Euler(Math.PI / 2 + (random() - .5) * .18, random() * Math.PI, (random() - .5) * .16)); const length = .7 + random() * .8; scale.set(.75 + random() * .45, length, .75 + random() * .35); matrix.compose(position, quaternion, scale); fallenWood.setMatrixAt(i, matrix); }
     fallenWood.instanceMatrix.needsUpdate = true; scene.add(fallenWood);
