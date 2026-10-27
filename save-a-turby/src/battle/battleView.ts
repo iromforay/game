@@ -98,7 +98,15 @@ export function objectiveLines(snap: BattleSnapshot): string[] {
 
 function winText(snap: BattleSnapshot, o: BattleObjective) {
   if (o.kind === 'defeat_all') return '적을 모두 물리치기';
-  if (o.kind === 'defeat_units') return `${namesOf(snap, o.unitIds)} 쓰러뜨리기`;
+  if (o.kind === 'defeat_units') {
+    // 10-26 F-3a 종장 단계 목표: 유물 매듭은 잇고, 검정실은 끊고, 다섯 기억의 매듭은 누비가 묶는다
+    const units = o.unitIds.map((id) => snap.units.find((u) => u.unitId === id)).filter((u): u is BattleUnit => !!u);
+    const stage = snap.stage ? `${snap.stage.label} · ` : '';
+    if (units.length > 0 && units.every((u) => u.restores)) return `${stage}유물 매듭을 순서대로 눌러 길 잇기`;
+    if (units.length > 0 && units.every((u) => u.releases)) return `${stage}환영과 이어진 검정실 끊기`;
+    if (units.length > 0 && units.every((u) => u.nubiOnly)) return `${stage}누비가 ${namesOf(snap, o.unitIds)} 묶기`;
+    return `${stage}${namesOf(snap, o.unitIds)} 쓰러뜨리기`;
+  }
   return '';
 }
 
@@ -112,7 +120,7 @@ export function unitTags(u: BattleUnit): string[] {
   if (u.stunned) tags.push('기절');
   if (u.inactive) tags.push('이탈');
   if (u.side === 'neutral') tags.push('보호 대상');
-  if (u.thread) return u.hinted ? ['다음 실'] : [];
+  if (u.thread) return u.hinted ? [u.restores ? '다음 매듭' : '다음 실'] : [];
   if (u.flat === true) tags.push('납작');
   else if (u.flat === false) tags.push('재봉선 노출');
   if (u.reversed) tags.push('운반 실 끊김');
@@ -267,10 +275,11 @@ export function resultLayout(scale: number, rowCount: number, framed = false): R
 // 작은 화면의 유닛 라벨: 이름 한 줄 + "HP/최대 · 상태" 한 줄(상태는 짧은 UI 표기 — 대본 문구가 아님). 10-22 C3-6 R1-01: 이름과 HP가 한 줄에서 쪼개지지 않게 두 줄 고정
 const SHORT_TAG: Record<string, string> = { '보호 대상': '보호', '부위 먼저': '부위 먼저' };
 // 10-23 C4-6 RQA-08: 작은 화면에서 긴 이름은 줄인 이름으로(라벨이 옆 유닛·보스 그림을 덮지 않게). 큰 화면·목표 문구는 원래 이름
-const COMPACT_NAME: Record<string, string> = { frozen_sewn_doll: '박음이', upper_thread: '윗실', lower_thread: '밑실', scorched_sewn_doll: '박음이', cutting_stitch: '실밥이', golden_doll: '재단인형', gold_point: '연결점', inner_link: '안쪽 연결' }; // 10-26 C5-3: 5장
+const COMPACT_NAME: Record<string, string> = { frozen_sewn_doll: '박음이', upper_thread: '윗실', lower_thread: '밑실', scorched_sewn_doll: '박음이', cutting_stitch: '실밥이', golden_doll: '재단인형', gold_point: '연결점', inner_link: '안쪽 연결', nubi_phantom_name: '이름 환영', nubi_phantom_memory: '기억 환영', nubi_phantom_fade: '사라짐 환영', nubi_phantom_silence: '침묵 환영', scissors_blade: '날', five_memory_knot: '매듭', relic_knot_first: '첫 매듭', relic_knot_dye: '염색실', relic_knot_cotton: '솜심', relic_knot_frost: '극세사', relic_knot_gold: '마감실' }; // 10-26 C5-3: 5장. F-6 QA-F01: 종장
 const nameOf = (u: BattleUnit, compact: boolean) => (compact ? (COMPACT_NAME[u.characterCode] ?? u.name) : u.name);
 export function unitLabel(u: BattleUnit, compact: boolean): string {
   // 10-14 v1a: 검은 재봉실은 A/B/C 글자로 구분하고 모바일에서는 "검은 실 A" 한 줄(HP 1/1은 생략)
+  if (u.thread && u.restores) return compact ? `${u.name}${u.hinted ? ' ▶' : ''}` : `${u.name}${u.hinted ? ' (다음 매듭)' : ''}`; // 10-26 F-3a 유물 매듭(번호 없이 유물 이름)
   if (u.thread) return compact ? `${u.name} ${threadNumber(u)}${u.hinted ? ' ▶' : ''}` : `${u.name} ${threadNumber(u)}${u.hinted ? ' (다음 실)' : ''}`;
   if (isSeam(u)) return compact ? `검은 실 ${seamLetter(u)}` : `${u.name} ${seamLetter(u)} HP ${u.hp}/${u.maxHp}`;
   const tags = unitTags(u);
@@ -282,10 +291,12 @@ export function unitLabel(u: BattleUnit, compact: boolean): string {
   }
   // 10-23 C4-3: 공격 대상이 아닌 적(서리 미싱 본체 — 부위를 끊어 멈춘다)은 HP를 보이지 않는다
   if (u.side === 'wild' && u.targetable === false) return tags.length === 0 ? nameOf(u, compact) : compact ? `${nameOf(u, compact)}\n${tags.join(' · ')}` : `${u.name} (${tags.join(' · ')})`;
+  // 10-26 F-6 QA-F02: 누비 환영은 이름 앞에 '환영'(진짜 누비와 바로 구분), 한 번에 끊기는 표적(HP 1)은 HP를 적지 않는다
+  if (!compact && u.phantom) return `환영: ${u.name}`;
   if (!compact) return `${u.name} HP ${u.hp}/${u.maxHp}${tags.length > 0 ? ` (${tags.join(' · ')})` : ''}`;
   const short = tags.map((t) => SHORT_TAG[t] ?? t);
   // 10-26 C5-6 QA-04: 작은 화면에서 한 번에 끊기는 부위(HP 1)는 HP를 적지 않는다
-  const hp = u.partOf && u.maxHp === 1 ? [] : [`${u.hp}/${u.maxHp}`];
+  const hp = (u.partOf || u.phantom || u.releases || u.restores) && u.maxHp === 1 ? [] : [`${u.hp}/${u.maxHp}`]; // F-6 QA-F01: 종장 표적도
   const second = [...hp, ...short];
   return second.length > 0 ? `${nameOf(u, true)}\n${second.join(' · ')}` : nameOf(u, true);
 }

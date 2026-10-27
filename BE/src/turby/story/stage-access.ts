@@ -2,7 +2,7 @@
 // v2(story.stageAccessV2=true): 스토리 개방 이벤트 또는 백필 입장 권한(legacy_access_<stage>)
 // 구 판정(false, 롤백용): 대표 터비 직접 포획 기록 — 서버 입장 검사는 "이전 장 대표 포획"만, 화면 표시는 연속 개방(기존 FE 규칙)
 import { STAGE_CHAPTER } from './story-data';
-import { canEnterStage, canProgressChapter, checkpointIndex, isCheckpoint } from './story-rules';
+import { canEnterStage, canProgressChapter, chapterCompleteCheckpoint, checkpointIndex, isCheckpoint } from './story-rules';
 import type { Checkpoint } from './story-data';
 
 export interface ChapterRow {
@@ -58,7 +58,7 @@ export function legacyServerCanEnter(order: number, clearCodeByOrder: Map<number
 }
 
 export function chapterCompleted(order: number, checkpoint: Checkpoint): boolean {
-  const done = `CH0${order}_COMPLETE`;
+  const done = chapterCompleteCheckpoint(order);
   return isCheckpoint(done) && checkpointIndex(checkpoint) >= checkpointIndex(done);
 }
 

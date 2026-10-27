@@ -47,6 +47,10 @@ export interface BattleUnit {
   regen?: boolean; // 금빛 연결점(끊겨도 다시 꿰매질 수 있는 부위 — reviving이면 다시 꿰매지는 중)
   nubiOnly?: boolean; // 이야기 누비만 풀 수 있는 안쪽 연결
   storyNubi?: boolean; // 이야기 누비
+  // 10-26 F-3a 종장
+  restores?: boolean; // 유물 매듭(누르면 길이 이어진다 — 정해진 순서)
+  phantom?: boolean; // 누비 환영(치면 가위가 곁 칸을 끊는다)
+  releases?: string; // 검정실(끊으면 묶인 환영이 사라진다)
 }
 
 export interface StatusEffect {
@@ -106,6 +110,8 @@ export interface BattleSnapshot {
   wet?: string[]; // 물들이가 적신 칸
   cutWarns?: string[]; // 곧 끊어질 칸(실밥이 예고·재단인형 줄 예고)
   cut?: string[]; // 끊긴 칸(blocked에도 있다)
+  stage?: { index: number; total: number; id: string; label: string }; // 10-26 F-3a: 단계 전투
+  sealed?: string[]; // 유물 매듭으로 봉합된 칸
 }
 
 export type BattleEvent =
@@ -145,7 +151,9 @@ export type BattleEvent =
   | { version: number; type: 'cut_warn'; cells: string[] }
   | { version: number; type: 'cut'; cells: string[]; hits: { unitId: string; damage: number; hp: number; stunned: boolean }[] }
   | { version: number; type: 'restored'; cell: string; byUnitId: string }
-  | { version: number; type: 'regen'; unitId: string; reviveRound: number };
+  | { version: number; type: 'regen'; unitId: string; reviveRound: number }
+  | { version: number; type: 'stage'; index: number; total: number; id: string; label: string; hint: string | null }
+  | { version: number; type: 'phantom_hit'; unitId: string; phantomId: string; cell: string | null };
 
 export interface BattleReward {
   playerId: string;

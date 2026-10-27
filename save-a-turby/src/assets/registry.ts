@@ -34,6 +34,7 @@ export const BACKGROUND_TILES: Record<string, string> = {
   underground: undergroundTileUrl,
   ice: iceTileUrl,
   desert: desertTileUrl,
+  home_core: homeTileUrl, // 10-26 F-1: 종장 — 대형 배경(home-core-base) 연결 전 임시 바닥과 대화 배경 대체
 };
 
 export const AVATAR_IMAGE = childUrl;
@@ -96,6 +97,8 @@ export const SPRITESHEET_FRAMES: Record<string, { size: number; frames: number; 
   'cutting-stitch-idle': { size: 160, frames: 4, fps: 6 }, // 재단 실밥이
   'golden-doll-idle': { size: 256, frames: 4, fps: 4 }, // 황금 재단인형(작동)
   'golden-doll-unraveled': { size: 256, frames: 4, fps: 4 }, // 황금 재단인형(풀려 무너짐)
+  'scissors-open-idle': { size: 256, frames: 4, fps: 4 }, // 10-26 F-4 종장 가위(열림)
+  'scissors-bound': { size: 256, frames: 4, fps: 4 }, // 종장 가위(다섯 기억의 실로 묶임)
 };
 
 // 전투 정의의 characterCode → 전투·지도에서 쓰는 적 시트 키(없으면 기존 터비 그림/임시 도형)
@@ -114,5 +117,6 @@ export const ENEMY_SHEET_OF: Record<string, string> = {
   scorched_sewn_doll: 'scorched-sewn-doll-idle',
   cutting_stitch: 'cutting-stitch-idle',
   golden_doll: 'golden-doll-idle',
+  scissors: 'scissors-open-idle', // 10-26 F-4 종장
 };
 

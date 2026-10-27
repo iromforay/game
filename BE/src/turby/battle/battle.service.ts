@@ -219,6 +219,15 @@ export class BattleService implements OnModuleInit {
       const nubiId = record.story?.storyNubiId ?? null;
       if (nubiId && !ids.includes(nubiId)) ids.unshift(nubiId);
       const others = ids.filter((i) => i !== nubiId);
+      // 10-26 F-3b: 정식 결말(ENDING_COMPLETE) 뒤 이야기 누비는 현실의 엄마 뜨개실로 돌아갔다(정본 BOUND_TO_REAL_YARN) — 일반 전투 파티에 넣을 수 없다
+      if (!nubiId && others.length > 0) {
+        const progress = await this.prisma.player_story_progress.findUnique({ where: { player_id: BigInt(playerId) } });
+        const storyNubi = progress?.story_nubi_turby_instance_id?.toString() ?? null;
+        if (storyNubi && others.includes(storyNubi)) {
+          const events = await this.prisma.player_story_event.findMany({ where: { player_id: BigInt(playerId) } });
+          if (events.some((e) => e.event_id === 'nubi_bound_to_real_yarn')) throw new BattleError('STORY_NUBI_RETURNED', '누비는 엄마의 뜨개실로 돌아갔어요.');
+        }
+      }
       const owned = [
         ...(nubiId ? await this.prisma.turby_instance.findMany({ where: { id: BigInt(nubiId), owner_player_id: BigInt(playerId), is_story_companion: true }, include: INSTANCE_INCLUDE }) : []),
         ...(others.length > 0

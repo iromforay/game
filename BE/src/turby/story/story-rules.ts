@@ -2,6 +2,7 @@
 import {
   CHECKPOINTS,
   CHAPTER_CODES,
+  FINAL_CHAPTER,
   DEFAULT_NICKNAME,
   LEGACY_ACCESS_PREFIX,
   STAGE_UNLOCK_EVENTS,
@@ -33,7 +34,13 @@ export function toCheckpoint(value: string): Checkpoint {
 
 export function chapterOf(cp: Checkpoint): number {
   if (cp.startsWith('OPENING_')) return 0;
+  if (cp.startsWith('CHFINAL_') || cp === 'ENDING_COMPLETE') return FINAL_CHAPTER; // 10-26 F-1 종장
   return Number(cp.slice(2, 4));
+}
+
+// N장을 마친 체크포인트(종장은 ENDING_COMPLETE)
+export function chapterCompleteCheckpoint(chapter: number): string {
+  return chapter === FINAL_CHAPTER ? 'ENDING_COMPLETE' : `CH0${chapter}_COMPLETE`;
 }
 
 export function chapterCodeOf(cp: Checkpoint): ChapterCode {
@@ -47,7 +54,7 @@ export function chapterCodeOf(cp: Checkpoint): ChapterCode {
 export function canProgressChapter(chapter: number, cp: Checkpoint): boolean {
   if (chapter <= 0) return true;
   if (chapter === 1) return checkpointIndex(cp) >= checkpointIndex('OPENING_COMPLETE');
-  const prevComplete = `CH0${chapter - 1}_COMPLETE`;
+  const prevComplete = chapterCompleteCheckpoint(chapter - 1);
   return isCheckpoint(prevComplete) && checkpointIndex(cp) >= checkpointIndex(prevComplete);
 }
 
@@ -121,6 +128,13 @@ export function resumeOf(snap: StorySnapshot): { segmentId: string | null; tutor
         return has('desert_boss_aftermath_seen') ? (has('desert_scissors_seen') ? null : 'ch05.scissors') : 'ch05.boss_victory';
       case 'CH05_COMPLETE':
         return has('desert_chapter_complete_seen') ? null : 'ch05.chapter_complete'; // 장착은 끝났고 장면을 끝까지 보기 전 — 장면만 처음부터
+      case 'CHFINAL_SCISSORS_DEFEATED':
+        // 10-26 F-3a·F-3b: 정산은 끝났다 — 매듭 장면을 끝까지 보기 전이면 그 장면부터, 본 뒤면 귀환의 대가부터(정본 저장점 안내)
+        return has('final_boss_aftermath_seen') ? 'final.cost' : 'final.knot';
+      case 'CHFINAL_COST_ACCEPTED':
+        return 'final.unravel'; // 정본: 이후 구간은 결말 시퀀스 — 종료하면 다섯 실 해체부터 다시 재생한다
+      case 'ENDING_COMPLETE':
+        return null; // 엔딩을 강제로 반복하지 않는다(회상은 엔딩 범위 안 B — 다음 단계)
       case 'CH04_BOSS_DEFEATED':
         return has('fridge_boss_aftermath_seen') ? null : 'ch04.boss_victory'; // 정산은 끝났고 승리 장면을 끝까지 보기 전 — 장면만 처음부터
       case 'CH03_BOSS_DEFEATED':

@@ -85,6 +85,11 @@ export interface BattleUnit {
   restorer?: boolean; // 동료(중립): 아군 차례 전에 끊긴 칸 하나를 다시 붙잡는다
   regen?: RegenDef | null; // 금빛 연결점: 같은 중심부의 다른 연결점이 남아 있으면 끊긴 뒤 N라운드가 시작될 때 다시 꿰매진다
   nubiOnly?: boolean; // 안쪽 검은 연결: 이야기 누비만 끊을 수 있다(다른 유닛의 공격은 행동만 쓰고 피해 0)
+  // 10-26 F-3a(종장): 모두 전투 정의 데이터가 소유한다. 없으면 기존 전투와 같다
+  restoreCells?: string[] | null; // 유물 매듭: 끊으면 이 칸들("col,row")의 막힘이 풀리고 봉합된다(가위가 다시 자르지 못한다)
+  phantom?: boolean; // 누비 환영: 공격하면 피해 0, 가위가 친 유닛 곁 칸 하나를 바로 끊는다(가위의 힘이 회복)
+  releases?: string | null; // 검정실: 끊으면 묶인 환영이 사라진다
+  stageOf?: number | null; // 단계 전투: 이 유닛이 속한 단계(다음 단계로 넘어가면 걷힌다)
 }
 
 // 10-26 C5-3: 5장 규칙 수치(전투 정의)
@@ -181,6 +186,20 @@ export interface BattleUnitDefinition extends UnitStatsInput {
   restorer?: boolean;
   regen?: RegenDef;
   nubiOnly?: boolean;
+  restoreCells?: { col: number; row: number }[]; // 10-26 F-3a
+  phantom?: boolean;
+  releases?: string;
+}
+
+// 10-26 F-3a: 한 전투 안의 단계(종장 가위). 단계 목표를 이루면 그 단계 유닛을 걷고 다음 단계 유닛·지형으로 바꾼다. 마지막 단계 목표가 승리
+export interface BattleStageDef {
+  id: string;
+  label: string; // 화면 단계 표시
+  hint?: string; // 단계가 시작될 때 한 번
+  units: BattleUnitDefinition[];
+  blocked?: { col: number; row: number }[]; // 이 단계가 시작될 때 막는 칸
+  open?: { col: number; row: number }[]; // 이 단계가 시작될 때 여는 칸(막힘·끊김 모두)
+  objectives: { win: BattleObjective[] };
 }
 // 10-23 C4-3: 서리 미싱 바늘. 예고 칸 수 = 끊기지 않은 밑실(breakOrder = lowerOrder 부위) 수(최소 1)
 export interface NeedleMachineDef {
@@ -217,6 +236,7 @@ export interface BattleHintDef {
   restore?: string;
   regen?: string;
   nubiOnly?: string;
+  phantom?: string; // 10-26 F-3a
 }
 
 export interface BattleDefinition {
@@ -229,6 +249,7 @@ export interface BattleDefinition {
   zones?: BattleZoneDef[];
   current?: BattleCurrentDef;
   hints?: BattleHintDef;
+  stages?: BattleStageDef[]; // 10-26 F-3a: 있으면 objectives.win 대신 단계별 목표
 }
 
 export interface Participant {
@@ -289,6 +310,8 @@ export interface BattleState {
   lineWarns?: string[]; // 재단인형이 예고한 줄(다음 적 차례에 끊긴다)
   cut?: string[]; // 끊긴 칸(blocked에도 들어 있다)
   cutCount?: number; // 실밥이가 끊은 칸 수(CutterDef.limit와 비교)
+  stageIndex?: number; // 10-26 F-3a: 지금 단계(정의에 stages가 있을 때만)
+  sealed?: string[]; // 유물 매듭으로 봉합된 칸(가위가 다시 자르지 못한다)
   spawnSeq?: number; // 전투 중에 생기는 표적(환영·매듭) ID 일련번호
 }
 
@@ -330,7 +353,9 @@ export type BattleEvent =
   | { version: number; type: 'cut_warn'; cells: string[] } // 곧 끊어질 칸(실밥이 예고 + 재단인형 줄 예고, 전체 목록)
   | { version: number; type: 'cut'; cells: string[]; hits: { unitId: string; damage: number; hp: number; stunned: boolean }[] } // 칸이 끊겼다(새로 끊긴 칸·맞은 아군)
   | { version: number; type: 'restored'; cell: string; byUnitId: string } // 동료가 끊긴 칸을 다시 붙잡았다
-  | { version: number; type: 'regen'; unitId: string; reviveRound: number }; // 금빛 연결점이 끊겼지만 다른 연결점이 남아 다시 꿰매질 예정
+  | { version: number; type: 'regen'; unitId: string; reviveRound: number } // 금빛 연결점이 끊겼지만 다른 연결점이 남아 다시 꿰매질 예정
+  | { version: number; type: 'stage'; index: number; total: number; id: string; label: string; hint: string | null } // 10-26 F-3a: 다음 단계로 넘어갔다
+  | { version: number; type: 'phantom_hit'; unitId: string; phantomId: string; cell: string | null }; // 누비 환영을 쳤다 — 가위가 곁 칸을 끊었다(cell)
 
 export type ActionRequest =
   | { type: 'move'; unitId: unknown; targetCol: unknown; targetRow: unknown }
@@ -400,6 +425,10 @@ export interface BattleUnitDto {
   regen?: boolean; // 금빛 연결점(다시 꿰매지는 부위)
   nubiOnly?: boolean; // 누비만 끊을 수 있는 안쪽 연결
   storyNubi?: boolean; // 10-26 C5-3: 이야기 누비(스토리 전투 파티)
+  // 10-26 F-3a
+  restores?: boolean; // 유물 매듭(끊으면 길이 이어진다)
+  phantom?: boolean; // 누비 환영
+  releases?: string; // 검정실(묶인 환영)
 }
 
 export interface BattleSnapshotDto {
@@ -436,4 +465,6 @@ export interface BattleSnapshotDto {
   wet?: string[];
   cutWarns?: string[]; // 실밥이 예고 + 재단인형 줄 예고
   cut?: string[];
+  stage?: { index: number; total: number; id: string; label: string }; // 10-26 F-3a: 단계 전투
+  sealed?: string[];
 }

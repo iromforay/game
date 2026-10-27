@@ -257,3 +257,32 @@ export function seedDesert(device: string, stage: 'entry' | 'started' | 'joined'
     }
   };
 }
+
+// 10-26 F-1: 종장 집의 중심 — 5장을 끝까지 마친 계정(금빛 마감실 장착·성장 5·'마지막 마감' 장면 완료, final_unlocked). stage로 종장 진행 단계를 고른다
+export function seedFinal(device: string, stage: 'complete' | 'started' | 'revealed' = 'complete') {
+  const base = seedDesert(device, 'crossed');
+  return (db: FakeDb) => {
+    base(db);
+    const player = db.rows('player', { device_uuid: `dev-device-${device}-account` })[0] as { id: bigint };
+    const progress = db.rows('player_story_progress', { player_id: player.id })[0] as { checkpoint: string; nubi_growth_stage: number };
+    const add = (list: string[]) => list.forEach((e) => db.seed('player_story_event', { player_id: player.id, event_id: e }));
+    add(['desert_boss_defeated', 'desert_finish_thread_granted', 'desert_boss_aftermath_seen', 'desert_scissors_seen', 'desert_finish_thread_equipped', 'final_unlocked', 'desert_chapter_complete_seen']);
+    progress.checkpoint = 'CH05_COMPLETE';
+    progress.nubi_growth_stage = 5;
+    const def = (code: string) => (db.rows('item_definition', { code })[0] as { id: number }).id;
+    const at = new Date();
+    db.seed('player_item', { player_id: player.id, item_definition_id: def('golden_finish_thread'), quantity: 1, is_new: false, is_locked: true, first_acquired_at: at, last_acquired_at: at });
+    const nubi = db.rows('turby_instance', { owner_player_id: player.id, is_story_companion: true })[0] as { id: bigint };
+    if (db.rows('turby_equipment', { turby_instance_id: nubi.id, slot_key: 'story_5' }).length === 0) db.seed('turby_equipment', { turby_instance_id: nubi.id, slot_key: 'story_5', item_definition_id: def('golden_finish_thread') });
+    if (db.rows('story_chapter', { stage_code: 'home_core' }).length === 0) db.seed('story_chapter', { chapter_order: 6, stage_code: 'home_core', clear_character_code: 'nubi', title: '종장 — 집의 중심', map_width: 3200, map_height: 2400 });
+    const steps: [typeof stage, string[], string][] = [
+      ['started', ['final_entry_seen'], 'CHFINAL_STARTED'],
+      ['revealed', ['final_identity_revealed'], 'CHFINAL_IDENTITY_REVEALED'],
+    ];
+    const upto = steps.findIndex(([s]) => s === stage);
+    for (let i = 0; i <= upto; i++) {
+      add(steps[i][1]);
+      progress.checkpoint = steps[i][2];
+    }
+  };
+}

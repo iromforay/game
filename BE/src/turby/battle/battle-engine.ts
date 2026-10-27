@@ -1,5 +1,5 @@
 import { BattleError } from './battle-types';
-import type { ActionRequest, BattleDefinition, BattleEvent, BattleObjective, BattleOutcome, BattleRules, BattleSnapshotDto, BattleState, BattleUnit, Participant, PartyEntry, StatusEffectDef, UnitStatsInput } from './battle-types';
+import type { ActionRequest, BattleDefinition, BattleEvent, BattleObjective, BattleOutcome, BattleRules, BattleSnapshotDto, BattleStageDef, BattleState, BattleUnit, BattleUnitDefinition, Participant, PartyEntry, StatusEffectDef, UnitStatsInput } from './battle-types';
 
 // 4-B: 서버 권위 전투 엔진(순수 모듈). 규칙은 기존 1인 로컬 전투(BattleScene)를 그대로 옮긴 것이다:
 // 이동=목표 칸까지 맨해튼 거리만큼 AP, 공격=인접 1칸 AP 1, 피해=max(최소피해, 공격-floor(방어/나눗수)), 꼭짓점 도착=즉시 무승부.
@@ -225,8 +225,18 @@ function pushWildUnit(state: BattleState, participantCount: number) {
 
 // M4-A 정의 전투: 정의 데이터의 적·NPC를 그대로 배치(HP 배율 없음). 기믹 수치는 전부 정의에서 온다.
 function addDefinitionUnits(state: BattleState, def: BattleDefinition) {
-  for (const d of def.units) {
-    state.units.push({
+  for (const d of def.units) state.units.push(unitOf(d));
+  state.blocked = (def.blocked ?? []).map((c) => cellKey(c.col, c.row));
+  // 10-26 F-3a: 단계 전투는 첫 단계 유닛·지형으로 시작한다
+  if (def.stages && def.stages.length > 0) {
+    state.stageIndex = 0;
+    applyStageTerrain(state, def.stages[0]);
+    for (const d of def.stages[0].units) state.units.push(unitOf(d, 0));
+  }
+}
+
+function unitOf(d: BattleUnitDefinition, stage?: number): BattleUnit {
+  return {
       unitId: d.unitId,
       side: d.side,
       ownerPlayerId: null,
@@ -274,9 +284,52 @@ function addDefinitionUnits(state: BattleState, def: BattleDefinition) {
       ...(d.flee ? { flee: { ...d.flee }, reversed: false } : {}),
       ...(d.carrierOf ? { carrierOf: d.carrierOf } : {}),
       ...(d.thread ? { thread: { order: d.thread.order } } : {}),
-    });
+      ...(d.restoreCells ? { restoreCells: d.restoreCells.map((c) => cellKey(c.col, c.row)) } : {}),
+      ...(d.phantom ? { phantom: true } : {}),
+      ...(d.releases ? { releases: d.releases } : {}),
+      ...(stage !== undefined ? { stageOf: stage } : {}),
+  };
+}
+
+// ---------- 10-26 F-3a: 단계 전투(종장 가위) ----------
+// 단계 지형: 여는 칸은 막힘·끊김·예고에서 빼고, 막는 칸은 살아 있는 유닛이 서 있지 않은 칸만 막는다
+function applyStageTerrain(state: BattleState, st: BattleStageDef) {
+  const open = new Set((st.open ?? []).map((c) => cellKey(c.col, c.row)));
+  const standing = new Set(state.units.filter(isLive).map((u) => cellKey(u.col, u.row)));
+  const add = (st.blocked ?? []).map((c) => cellKey(c.col, c.row)).filter((k) => !standing.has(k));
+  state.blocked = [...new Set([...(state.blocked ?? []).filter((k) => !open.has(k)), ...add])];
+  state.cut = (state.cut ?? []).filter((k) => !open.has(k));
+  state.lineWarns = (state.lineWarns ?? []).filter((k) => !add.includes(k));
+}
+
+// 단계 목표를 이뤘다: 그 단계 유닛을 걷고 다음 단계 지형·유닛을 놓는다(자리에 누가 서 있으면 곁의 빈 칸)
+function advanceStage(state: BattleState, ctx: Ctx) {
+  const stages = state.definition!.stages!;
+  const from = state.stageIndex ?? 0;
+  for (const u of state.units.filter((x) => x.stageOf === from && !x.fled)) {
+    u.fled = true;
+    u.stunned = true;
   }
-  state.blocked = (def.blocked ?? []).map((c) => cellKey(c.col, c.row));
+  const to = from + 1;
+  const st = stages[to];
+  state.stageIndex = to;
+  applyStageTerrain(state, st);
+  for (const d of st.units) {
+    const u = unitOf(d, to);
+    // 앞 단계에서 끊긴 칸에 다음 단계 유닛이 놓이면 그 칸을 다시 연다(유닛이 막힌 칸 위에 서지 않게)
+    const k = cellKey(u.col, u.row);
+    state.blocked = (state.blocked ?? []).filter((x) => x !== k);
+    state.cut = (state.cut ?? []).filter((x) => x !== k);
+    if (state.units.some((x) => isLive(x) && x.col === u.col && x.row === u.row)) {
+      const at = freeNeighbors(state, u)[0];
+      if (at) [u.col, u.row] = [at.col, at.row];
+    }
+    state.units.push(u);
+  }
+  emit(state, ctx, { type: 'terrain', blocked: [...(state.blocked ?? [])] });
+  emit(state, ctx, { type: 'stage', index: to, total: stages.length, id: st.id, label: st.label, hint: st.hint ?? null });
+  emitCutWarns(state, ctx);
+  emitThreadHint(state, ctx);
 }
 
 // ---------- 조회 ----------
@@ -356,7 +409,7 @@ function emitThreadHint(state: BattleState, ctx: Ctx) {
 const clampTo = (v: number, max: number) => Math.min(Math.max(v, 0), max);
 
 // 10-23 C4-3: 정의의 안내 문구를 전투당 한 번만 낸다(기믹 첫 등장 — Codex 의견 P-03)
-function hintOnce(state: BattleState, ctx: Ctx, code: 'iceTrail' | 'shatter' | 'guarded' | 'needle' | 'pinned' | 'rescue' | 'ember' | 'mirage' | 'wet' | 'cutWarn' | 'lineCut' | 'restore' | 'regen' | 'nubiOnly') {
+function hintOnce(state: BattleState, ctx: Ctx, code: 'iceTrail' | 'shatter' | 'guarded' | 'needle' | 'pinned' | 'rescue' | 'ember' | 'mirage' | 'wet' | 'cutWarn' | 'lineCut' | 'restore' | 'regen' | 'nubiOnly' | 'phantom') {
   const text = state.definition?.hints?.[code];
   const shown = (state.hintsShown ??= []);
   if (!text || shown.some((h) => h.code === code)) return;
@@ -588,6 +641,7 @@ function runLineCut(state: BattleState, doll: BattleUnit, ctx: Ctx) {
     if (col < 0 || col >= state.rules.gridCols) continue;
     const at = { col, row: target.row };
     if (isBlockedCell(state, col, target.row) || state.units.some((u) => u.side === 'wild' && isLive(u) && u.col === col && u.row === target.row)) continue;
+    if (state.sealed?.includes(cellKey(col, target.row))) continue; // 10-26 F-3a: 봉합된 칸은 자르지 않는다
     if (parts.some((p) => dist(p, at) === 1)) continue;
     cells.push(cellKey(col, target.row));
   }
@@ -794,6 +848,26 @@ function strike(state: BattleState, attacker: BattleUnit, defender: BattleUnit, 
       }
     }
     if (defender.linkFor) freeLinked(state, defender, attacker.unitId, ctx);
+    // 10-26 F-3a: 유물 매듭은 정해진 칸의 길을 잇고(봉합 — 가위가 다시 자르지 못한다), 검정실은 묶인 환영을 걷는다
+    if (defender.restoreCells) {
+      defender.fled = true;
+      for (const k of defender.restoreCells) {
+        state.blocked = (state.blocked ?? []).filter((x) => x !== k);
+        state.cut = (state.cut ?? []).filter((x) => x !== k);
+        state.lineWarns = (state.lineWarns ?? []).filter((x) => x !== k);
+        state.sealed = [...new Set([...(state.sealed ?? []), k])];
+        emit(state, ctx, { type: 'restored', cell: k, byUnitId: attacker.unitId });
+      }
+    }
+    if (defender.releases) {
+      defender.fled = true;
+      const p = state.units.find((x) => x.unitId === defender.releases);
+      if (p && !p.fled) {
+        p.fled = true;
+        p.stunned = true;
+        emit(state, ctx, { type: 'unit_exit', unitId: p.unitId, mode: 'flee' });
+      }
+    }
     // 10-26 C5-3: 환영·매듭은 끊기면 숨기고(매듭이면 예고 취소), 쓰러진 실밥이의 예고는 함께 사라진다. 금빛 연결점은 다시 꿰매질 수 있다
     if (defender.mirageOf || defender.knotOf) defender.fled = true;
     if (defender.knotOf) {
@@ -858,8 +932,9 @@ function objectiveMet(state: BattleState, o: BattleObjective): boolean {
 
 // 기본 조건을 채운 승리·패배 목표 — 판정과 스냅샷(프런트 목표 표시)이 같은 목록을 쓴다
 function objectivesOf(state: BattleState): { win: BattleObjective[]; lose: BattleObjective[] } {
+  const stage = state.definition?.stages?.[state.stageIndex ?? 0];
   return {
-    win: state.definition?.objectives?.win ?? [{ kind: 'defeat_all' }],
+    win: stage?.objectives.win ?? state.definition?.objectives?.win ?? [{ kind: 'defeat_all' }],
     lose: [{ kind: 'party_down' }, ...(state.definition?.objectives?.lose ?? [])],
   };
 }
@@ -868,7 +943,11 @@ function evaluateOutcome(state: BattleState, ctx: Ctx) {
   if (state.phase === 'resolved') return;
   const { win, lose } = objectivesOf(state);
   if (lose.some((o) => objectiveMet(state, o))) resolve(state, ctx, 'lose');
-  else if (win.every((o) => objectiveMet(state, o))) resolve(state, ctx, 'win');
+  else if (win.every((o) => objectiveMet(state, o))) {
+    const stages = state.definition?.stages;
+    if (stages && (state.stageIndex ?? 0) < stages.length - 1) advanceStage(state, ctx);
+    else resolve(state, ctx, 'win');
+  }
 }
 
 function attack(state: BattleState, unit: BattleUnit, targetRaw: unknown, ctx: Ctx) {
@@ -901,6 +980,23 @@ function attack(state: BattleState, unit: BattleUnit, targetRaw: unknown, ctx: C
       emit(state, ctx, { type: 'wrong_thread', unitId: unit.unitId, targetId: target.unitId });
       if (!isConfused(unit)) applyStatus(state, unit, { kind: 'confused', turns: 1, movePenalty: 0 }, target.unitId, ctx);
     }
+    return;
+  }
+  // 10-26 F-3a: 누비 환영 — 공격하면 행동만 쓰고(피해 0) 가위가 친 유닛 곁의 봉합되지 않은 빈 칸 하나를 바로 끊는다
+  if (target.phantom) {
+    if (unit.ap < 1) throw new BattleError('NO_ACTION_POWER', '행동력이 없습니다.');
+    if (dist(unit, target) !== 1) throw new BattleError('OUT_OF_RANGE', '인접한 대상만 공격할 수 있습니다.');
+    unit.ap -= 1;
+    emit(state, ctx, { type: 'attack', attackerId: unit.unitId, targetId: target.unitId, damage: 0, targetHp: target.hp, targetStunned: false });
+    const sealed = new Set(state.sealed ?? []);
+    const at = freeNeighbors(state, unit).find((c) => !sealed.has(cellKey(c.col, c.row)));
+    const cell = at ? cellKey(at.col, at.row) : null;
+    if (cell) {
+      addCut(state, cell);
+      emit(state, ctx, { type: 'cut', cells: [cell], hits: [] });
+    }
+    emit(state, ctx, { type: 'phantom_hit', unitId: unit.unitId, phantomId: target.unitId, cell });
+    hintOnce(state, ctx, 'phantom');
     return;
   }
   if (target.partOf) {
@@ -1384,6 +1480,9 @@ export function toSnapshot(state: BattleState): BattleSnapshotDto {
             ...(u.knotOf ? { knotOf: u.knotOf } : {}),
             ...(u.regen ? { regen: true } : {}),
             ...(u.nubiOnly ? { nubiOnly: true } : {}),
+            ...(u.restoreCells ? { restores: true } : {}),
+            ...(u.phantom ? { phantom: true } : {}),
+            ...(u.releases ? { releases: u.releases } : {}),
             ...(u.side === 'party' && state.story?.nubiTurbyId && u.turbyId === state.story.nubiTurbyId ? { storyNubi: true } : {}), // 10-26 C5-3: 화면이 누비 전용 대상을 고를 때 쓴다
           }
         : {}),
@@ -1401,5 +1500,7 @@ export function toSnapshot(state: BattleState): BattleSnapshotDto {
     ...(state.wet && state.wet.length > 0 ? { wet: state.wet.map((w) => w.cell) } : {}),
     ...((state.cutWarns?.length ?? 0) + (state.lineWarns?.length ?? 0) > 0 ? { cutWarns: [...(state.cutWarns ?? []).map((w) => w.cell), ...(state.lineWarns ?? [])] } : {}),
     ...(state.cut && state.cut.length > 0 ? { cut: [...state.cut] } : {}),
+    ...(state.definition?.stages ? { stage: { index: state.stageIndex ?? 0, total: state.definition.stages.length, id: state.definition.stages[state.stageIndex ?? 0].id, label: state.definition.stages[state.stageIndex ?? 0].label } } : {}),
+    ...(state.sealed && state.sealed.length > 0 ? { sealed: [...state.sealed] } : {}),
   };
 }

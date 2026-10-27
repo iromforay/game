@@ -22,6 +22,7 @@ export interface InventoryItem {
   slotsUsed: number;
   equipped: number;
   equippedOnStoryNubi: boolean;
+  finalUnraveled?: boolean; // 10-26 F-3b: 정식 결말 뒤 다섯 유물(완결)
   isNew: boolean;
   isLocked: boolean;
   usedAt: string | null;
@@ -98,7 +99,7 @@ export function itemIconCandidates(iconKey: string): string[] {
 export function detailOf(item: InventoryItem): DetailView {
   const meta = [`수량: ${item.quantity}${item.maxStack > 1 ? ` (한 칸 최대 ${item.maxStack})` : ''}`, `분류: ${item.category === 'relic' ? RELIC_CATEGORY_LABEL : item.tabLabel}`];
   if (item.lastAcquiredAt) meta.push(`최근 획득: ${item.lastAcquiredAt.slice(0, 10)}`);
-  const badges = [item.isNew ? '신규' : null, item.isLocked ? '잠김' : null, item.equippedOnStoryNubi ? '장착됨' : null].filter((b): b is string => b !== null);
+  const badges = [item.finalUnraveled ? '완결' : null, item.isNew ? '신규' : null, item.isLocked ? '잠김' : null, item.equippedOnStoryNubi && !item.finalUnraveled ? '장착됨' : null].filter((b): b is string => b !== null);
   return {
     title: item.name,
     badges,
@@ -106,7 +107,7 @@ export function detailOf(item: InventoryItem): DetailView {
     meta,
     lines: [...(item.description ? [item.description] : []), ...meta],
     equip: item.storyAction ? { label: item.storyAction.label, enabled: item.storyAction.available, note: item.storyAction.available ? null : item.storyAction.reason } : null,
-    equippedLabel: item.equippedOnStoryNubi ? '누비에게 장착됨' : null,
+    equippedLabel: item.finalUnraveled ? '완결 — 누비와 함께 풀려 귀환길이 되었어요' : item.equippedOnStoryNubi ? '누비에게 장착됨' : null,
     lockNote: item.isLocked ? (item.category === 'relic' ? `${RELIC_LOCK_LABEL} · ${item.lockReason ?? '잠긴 아이템이에요'}` : (item.lockReason ?? '잠긴 아이템이에요')) : null,
   };
 }

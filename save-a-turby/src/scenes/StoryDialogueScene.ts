@@ -1,4 +1,5 @@
 import { CHARACTER_IMAGES } from '../assets/registry';
+import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../config/constants';
 import { battleClient } from '../net/battleClient';
 import { RoomApiError } from '../net/roomClient';
 import type { BattleSnapshot } from '../net/battleTypes';
@@ -21,10 +22,20 @@ export interface StoryDialogueData extends OpeningSceneData {
 }
 
 // 장 코드 → 대화 배경(OpeningScene의 DIALOGUE_BACKDROPS 키). 없으면 숲 타일
-const BACKDROP_OF_CHAPTER: Record<string, string> = { ch03: 'underfloor', ch04: 'fridge', ch05: 'desert' };
+const BACKDROP_OF_CHAPTER: Record<string, string> = { ch03: 'underfloor', ch04: 'fridge', ch05: 'desert', final: 'home_core' };
+// 10-26 F-3b: 정체 공개 뒤 누비의 표시 명칭(정본 — 장면 안에서 처음 바뀐다). 다섯 실이 풀리기 시작하면(final.unravel) 다시 누비
+export const ORIGIN_NAME = '태초의 실타래 누비';
+const ENDING_BLACK_MS = 900; // 암전만 보이는 시간
+const ENDING_FADE_MS = 1400; // 제목이 떠오르는 시간
+const ORIGIN_SEGMENTS = new Set(['final.last_thread', 'final.knot', 'final.cost']);
+const ORIGIN_PORTRAIT = 'nubi_origin'; // portrait-nubi_origin-neutral = nubi-origin 그림(초상화 폴더가 없어 같은 원본을 키 하나 더로 등록)
+// 10-26 F-3b: 현실 세계 장면 뒤 즉시 암전 → 제목 카드(정본 docs/scene/종장.md 302~303행 인용 블록)
+export const ENDING_TITLE = '터비 구하기';
+export const ENDING_LINE = '풀린 실은 사라지는 것이 아니라, 누군가의 기억 속에 다시 묶인다.';
 
 export class StoryDialogueScene extends OpeningScene {
   private data2!: StoryDialogueData;
+  private segmentNow: string | null = null;
 
   constructor() {
     super('StoryDialogue');
@@ -45,9 +56,11 @@ export class StoryDialogueScene extends OpeningScene {
     const chapterCode = d.play ? chapterOfSegment(d.play.segmentId) : d.resumeBattle!.chapterCode;
     const file = (await this.retrying(() => this.opts.client.fetchDialogue(chapterCode), '이야기를 불러오지 못했어요.')) as DialogueFile;
     this.state = await this.retrying(() => this.opts.client.fetchState(), '이야기 진행 정보를 불러오지 못했어요.');
+    if (this.textures.exists('nubi-origin') && !this.textures.exists(`portrait-${ORIGIN_PORTRAIT}-neutral`)) this.textures.addImage(`portrait-${ORIGIN_PORTRAIT}-neutral`, this.textures.get('nubi-origin').getSourceImage() as HTMLImageElement);
 
     if (d.play) {
       await runDialogue(file, d.play.segmentId, this.ports(), { endAfter: d.play.endAfter, fromEntry: d.play.fromEntry, untilEntry: d.play.untilEntry, exact: true }); // 서버가 정한 범위 그대로
+      if (this.state.checkpoint === 'ENDING_COMPLETE' && this.segmentNow === 'final.real_world') await this.playEndingCard();
       return;
     }
     const at = battleEntryOf(file, d.resumeBattle!.encounterKey);
@@ -58,11 +71,44 @@ export class StoryDialogueScene extends OpeningScene {
   }
 
   protected ports(): RunnerPorts {
+    const base = super.ports();
     return {
-      ...super.ports(),
-      onSegment: (id) => this.setBackdrop(BACKDROP_OF_CHAPTER[chapterOfSegment(id)] ?? 'forest'), // 장 전용 대화 배경(3장 C3-6 R1-04, 4장 C4-3, 5장 C5-1)
+      ...base,
+      // 10-26 F-3b: 정체 공개 뒤 장면의 누비 이름표
+      show: (line) => base.show(this.segmentNow && ORIGIN_SEGMENTS.has(this.segmentNow) && line.entry.kind === 'line' && line.entry.speaker === 'nubi' ? { ...line, label: ORIGIN_NAME, entry: { ...line.entry, portrait: ORIGIN_PORTRAIT as never, expression: 'neutral' } } : line), // F-6 QA-F05: 초상화도
+      onSegment: (id) => {
+        this.segmentNow = id;
+        if (id === 'final.real_world') this.clearEdgeGlimpse(); // 정본: 빛이 사라진다 — 실의 길 연출을 걷고 현실로
+        this.setBackdrop(id === 'final.real_world' ? 'real_world' : (BACKDROP_OF_CHAPTER[chapterOfSegment(id)] ?? 'forest')); // 장 전용 대화 배경(3장 C3-6 R1-04, 4장 C4-3, 5장 C5-1). F-3b: 현실 세계는 거실
+      },
       startBattle: (key) => this.startBattle(key),
     };
+  }
+
+  // 10-26 F-3b: 즉시 암전(주인공의 반응·털실의 추가 움직임은 보여 주지 않는다) → 제목 카드. 누르면 이어 간다
+  private async playEndingCard() {
+    this.clearLayer();
+    this.fxState.endingShown = true;
+    const cover = this.add.rectangle(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT, 0x000000, 1).setOrigin(0, 0).setDepth(5000);
+    const cardBg = this.textures.exists('title-card-bg') ? this.add.image(0, 0, 'title-card-bg').setOrigin(0, 0).setDisplaySize(CANVAS_WIDTH, CANVAS_HEIGHT).setDepth(5000).setAlpha(0) : null; // 3차 에셋: 거의 검은 실 결 바탕(암전 뒤 떠오른다)
+    const title = this.add.text(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - 40, ENDING_TITLE, { fontSize: '56px', color: '#f7e9d2' }).setOrigin(0.5).setDepth(5001).setAlpha(0);
+    const line = this.add.text(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 40, ENDING_LINE, { fontSize: '24px', color: '#d8cbe8', align: 'center', wordWrap: { width: CANVAS_WIDTH - 160 } }).setOrigin(0.5).setDepth(5001).setAlpha(0);
+    await new Promise<void>((resolve) => this.time.delayedCall(ENDING_BLACK_MS, resolve));
+    if (cardBg) this.tweens.add({ targets: cardBg, alpha: 1, duration: ENDING_FADE_MS });
+    this.tweens.add({ targets: title, alpha: 1, duration: ENDING_FADE_MS });
+    this.tweens.add({ targets: line, alpha: 1, duration: ENDING_FADE_MS, delay: ENDING_FADE_MS / 2 });
+    await new Promise<void>((resolve) => this.time.delayedCall(ENDING_FADE_MS * 1.5, resolve));
+    await new Promise<void>((resolve) => {
+      const done = () => {
+        this.input.off('pointerdown', done);
+        this.input.keyboard?.off('keydown', done);
+        resolve();
+      };
+      this.fxState.endingReady = true; // 제목이 다 떠오른 뒤부터 누를 수 있다
+      this.input.once('pointerdown', done);
+      this.input.keyboard?.once('keydown', done);
+    });
+    [cover, cardBg, title, line].forEach((o) => o?.destroy());
   }
 
   private async startBattle(encounterKey: string): Promise<StoryBattleResult> {

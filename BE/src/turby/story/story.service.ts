@@ -18,6 +18,7 @@ import {
   OBJECTIVE_BY_KEY,
   SEGMENT_AFTER_EVENT,
   SEGMENT_CHAIN_END,
+  CHAPTER_CODES,
   STAGE_CHAPTER,
   STORY_TRIGGERS,
   STORY_OBJECTIVES,
@@ -354,7 +355,7 @@ export class StoryService {
   // 지역 진입 때의 복귀 범위(그 지역 장의 구간만). 숲의 첫 길은 걷는 장면만 — 나머지는 숲 안의 지점이 이어 간다
   private resumePlay(snap: StorySnapshot, stageCode: string): StoryPlayDto | null {
     const seg = resumeOf(snap).segmentId;
-    if (!seg || STAGE_CHAPTER[stageCode] === undefined || !seg.startsWith(`ch0${STAGE_CHAPTER[stageCode]}.`)) return null;
+    if (!seg || STAGE_CHAPTER[stageCode] === undefined || !seg.startsWith(`${CHAPTER_CODES[STAGE_CHAPTER[stageCode]]}.`)) return null;
     if (seg === FIRST_PATH_INTRO.segmentId) return snap.events.has('forest_cut_thread_inspected') ? null : playOf(FIRST_PATH_INTRO);
     return playOf(seg);
   }
@@ -432,7 +433,7 @@ export class StoryService {
   // ---------- 대화·지역 데이터 ----------
 
   async dialogue(playerId: bigint, chapterCode: string) {
-    const chapter = chapterCode === 'opening' ? 0 : /^ch0[1-5]$/.test(chapterCode) ? Number(chapterCode.slice(2)) : -1;
+    const chapter = (CHAPTER_CODES as readonly string[]).indexOf(chapterCode); // opening 0 · ch01~ch05 · final 6
     if (chapter < 0) throw gameError(404, 'DIALOGUE_NOT_FOUND', '대화 데이터가 없습니다.');
     const state = await this.getState(playerId);
     // 스포일러 방지: 진행할 수 있는 장의 대화만 내려준다

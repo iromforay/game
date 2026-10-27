@@ -1,0 +1,36 @@
+{
+  "version": "home-core-layout-v1",
+  "size": { "width": 3200, "height": 2400 },
+  "corridors": [
+    { "id": "golden_path", "width": 200, "points": [[1600, 2200], [1600, 1440]], "note": "금빛 길의 끝(5장 금빛 실이 이끈 길) → 집의 중심. 사막의 실이 이 길이다" },
+    { "id": "forest_thread", "width": 170, "points": [[1250, 900], [900, 640], [620, 470]], "note": "먼지숲의 실(실뿌리) — 끝에 보풀이가 매달려 있다" },
+    { "id": "lake_thread", "width": 170, "points": [[1100, 1160], [640, 1160]], "note": "호수의 실(물빛) — 물들이가 붙잡고 있다" },
+    { "id": "underfloor_thread", "width": 170, "points": [[1240, 1390], [900, 1640], [660, 1800]], "note": "마루 밑의 실(오래된 물건) — 오래된 폭신이가 붙잡고 있다" },
+    { "id": "fridge_thread", "width": 170, "points": [[2100, 1160], [2560, 1160]], "note": "냉장고의 실(서리) — 가느리가 붙잡고 있다" }
+  ],
+  "areas": [
+    { "id": "golden_path_end", "kind": "ellipse", "cx": 1600, "cy": 2200, "rx": 260, "ry": 150, "note": "도착 자리" },
+    { "id": "core", "kind": "ellipse", "cx": 1600, "cy": 1120, "rx": 520, "ry": 360, "note": "집의 중심 — 다섯 실이 향하지만 닿지 못한 빈자리. 벽도 바닥도 없는 느낌(바닥은 걸을 수 있게 그린다)" },
+    { "id": "forest_end", "kind": "ellipse", "cx": 540, "cy": 420, "rx": 200, "ry": 150 },
+    { "id": "lake_end", "kind": "ellipse", "cx": 520, "cy": 1160, "rx": 170, "ry": 140 },
+    { "id": "underfloor_end", "kind": "ellipse", "cx": 580, "cy": 1850, "rx": 180, "ry": 140 },
+    { "id": "fridge_end", "kind": "ellipse", "cx": 2680, "cy": 1160, "rx": 170, "ry": 140 }
+  ],
+  "islands": [],
+  "gates": [],
+  "zones": [],
+  "mirages": [],
+  "points": [
+    { "id": "spawn", "x": 1600, "y": 2220 },
+    { "id": "final_arrival", "x": 1600, "y": 1560, "radius": 110, "what": "집의 중심 입구 — 다섯 실이 멈춘 중앙이 보인다(동료 합류, CHFINAL_STARTED)" },
+    { "id": "final_muldeuli", "x": 900, "y": 1160, "radius": 80, "what": "물들이(호수의 실)" },
+    { "id": "final_pokshini", "x": 1000, "y": 1570, "radius": 80, "what": "오래된 폭신이(마루 밑의 실)" },
+    { "id": "final_ganeuri", "x": 2300, "y": 1160, "radius": 80, "what": "가느리(냉장고의 실)" },
+    { "id": "final_bopuli", "x": 560, "y": 440, "radius": 90, "what": "보풀이(먼지숲의 실 끝에 매달려 있다)" },
+    { "id": "final_core", "x": 1600, "y": 1230, "radius": 110, "what": "중앙의 빈자리 — 다섯 기억의 결속(정체 공개)" },
+    { "id": "final_scissors", "x": 1600, "y": 1100, "radius": 100, "what": "검은 틈 — 가위 등장·최종 전투 입구" }
+  ],
+  "overlay_regions": [
+    { "id": "core_gap", "x": 1280, "y": 980, "width": 640, "height": 240, "note": "중앙의 검은 틈(다섯 실 사이를 가위로 자른 자국) — 최종 전투 승리 전까지 보인다" }
+  ]
+}

@@ -68,3 +68,11 @@ test('C5-6 QA-03·04 라벨: 끊긴 연결점은 HP 없이 상태만(완전히 �
   const tops = ['a', 'b', 'c'].map((id) => spots.get(id)!.top).sort((x, y) => x - y);
   assert.ok(tops[1] - tops[0] >= 20 && tops[2] - tops[1] >= 20, `세 라벨이 겹치지 않는다: ${tops.join(', ')}`);
 });
+
+test('F-6 QA-F01·F02 종장 라벨: 누비 환영은 큰 화면 "환영: 이름", 작은 화면 짧은 이름·HP 1 생략, 검정실·유물 매듭도 HP 1 생략', () => {
+  const ph = unit({ unitId: 'phantom_name', characterCode: 'nubi_phantom_name', name: '이름을 잊은 누비', phantom: true });
+  assert.equal(unitLabel(ph, false), '환영: 이름을 잊은 누비');
+  assert.equal(unitLabel(ph, true), '이름 환영');
+  assert.equal(unitLabel(unit({ characterCode: 'black_thread', name: '검정실', releases: 'phantom_name' }), true), '검정실');
+  assert.equal(unitLabel(unit({ characterCode: 'scissors_blade', name: '가위의 윗날', partOf: 'scissors', breakOrder: 1 }), true), '날');
+});
