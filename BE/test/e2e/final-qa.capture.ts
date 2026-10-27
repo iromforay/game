@@ -75,6 +75,8 @@ async function waitFx(g: Game, key: string) {
 }
 // 화면에 이 글자가 보일 때까지 대화를 넘긴다
 const textShown = (t: string) => `(() => window.__game.scene.getScenes(true).some((s) => s.children.list.some((o) => (o.text ?? '').includes(${JSON.stringify(t)}) && o.visible)) || window.__game.scene.getScenes(true).some((s) => s.layer && s.layer.list && s.layer.list.some((o) => (o.text ?? '').includes(${JSON.stringify(t)}))))()`;
+// 일시 안내(토스트 — 깊이 1000 상자)가 모두 사라질 때까지(작은 화면 하단 이름표 판정은 지나가는 안내를 빼고 본다)
+const toastsGone = (g: Game) => g.page.waitForFunction(() => !(window as any).__game.scene.getScene('Battle').children.list.some((o: any) => o.type === 'Container' && o.depth === 1000 && o.active && o.alpha > 0.05), null, { timeout: 15_000, polling: 100 }); // eslint-disable-line @typescript-eslint/no-explicit-any
 const stageIs = (n: number) => `(() => { const b = window.__game.scene.getScene('Battle'); return !!b && !!b.snap && !!b.snap.stage && b.snap.stage.index === ${n} && b.snap.currentPlayerId === b.myId; })()`;
 const snapHas = (expr: string) => `(() => { const b = window.__game.scene.getScene('Battle'); return !!b && !!b.snap && (${expr}); })()`;
 
@@ -185,8 +187,10 @@ test('종장 캡처 ③(640×360): 중앙 지도 · 최종 전투 2단계(환영
     await g.until('전투 화면', "s.scenes.includes('Battle') && s.battle && s.battle.units && s.battle.units.length > 0");
     await g.capture('m02_stage1');
     await g.playBattle(300_000, stageIs(1));
+    await toastsGone(g);
     await g.capture('m03_stage2');
     await g.playBattle(300_000, stageIs(2));
+    await toastsGone(g);
     await g.capture('m04_stage3');
   }, backend, device);
   await g.close();

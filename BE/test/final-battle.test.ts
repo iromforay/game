@@ -144,3 +144,10 @@ test('단계 전환: 앞 단계에서 끊긴 칸에 다음 단계 유닛이 놓�
   assert.equal(s.stageIndex, 2);
   assert.ok(!s.blocked!.includes('6,1') && !(s.cut ?? []).includes('6,1'), '윗날 자리는 열린다');
 });
+
+test('배치(F-6 재검수): 동료·표적이 맨 아래 줄에 없고, 1단계 길목(벽 사이 이어지는 칸과 그 다음 칸)을 막지 않는다', () => {
+  const all = [...FINAL.units, ...FINAL.stages!.flatMap((x) => x.units)];
+  assert.deepEqual(all.filter((x) => x.row === 7).map((x) => x.unitId), [], '640 하단 이름표가 잘리지 않게');
+  const path = new Set(['2,1', '3,1', '4,6', '5,6', '6,1', '7,1', '8,6', '9,6']);
+  assert.deepEqual([...FINAL.units, ...FINAL.stages![0].units].filter((x) => path.has(`${x.col},${x.row}`)).map((x) => x.unitId), [], '1단계 길목은 비어 있다');
+});

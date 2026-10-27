@@ -1176,7 +1176,8 @@ export class BattleScene extends Phaser.Scene {
       await wait(this, 250);
     } else if (ev.type === 'stage') {
       // 10-26 F-3a: 최종 전투 단계 전환 — 단계 이름과 안내를 차례로
-      showToast(this, ev.hint && this.hud?.mode !== 'compact' ? `${ev.label}\n${ev.hint}` : ev.label, { y: this.toastY }); // F-6 QA-F01: 작은 화면은 단계 이름만(안내는 목표 패널)
+      // F-6 재검수 P2-3: 작은 화면은 단계 안내를 띄우지 않는다 — 왼쪽 위 목표 버튼이 단계 이름을 보여 주고(안내 문장은 펼친 목표 패널), 어느 높이에 띄워도 위·아래 줄 유닛 이름표와 겹친다
+      if (this.hud?.mode !== 'compact') showToast(this, ev.hint ? `${ev.label}\n${ev.hint}` : ev.label, { y: this.toastY });
       await wait(this, 900);
     } else if (ev.type === 'phantom_hit') {
       showToast(this, '환영이었어요! 가위가 곁의 길을 끊었어요', { y: this.toastY, error: true });
