@@ -13,13 +13,13 @@ const src = process.argv[2];
 const doCopy = process.argv.includes('--copy');
 if (!src) throw new Error('Codex chapter-final-home 폴더 경로가 필요하다');
 
-// [전달 폴더, 파일 키, 런타임 경로, 너비, 높이, 알파] — to_codex/2026-10-26 v7(1차)·v9(2차)·v10(3차) 지시서 계약. 10-27 F-6 보정 4종(five-bind·thread-path·real-yarn-knot·mother-hand)은 delivery-v4가 대신한다
+// [전달 폴더, 파일 키, 런타임 경로, 너비, 높이, 알파] — to_codex/2026-10-26 v7(1차)·v9(2차)·v10(3차) 지시서 계약. 10-27 F-6 보정 4종(five-bind·thread-path·real-yarn-knot·mother-hand)은 delivery-v4가 대신한다(재검수 보정 five-bind·real-yarn-knot은 delivery-v5)
 const CONTRACT = [
   ['delivery-v1', 'home-core-base', 'world/home-core', 3200, 2400, false],
   ['delivery-v1', 'core-gap', 'world/home-core', 1280, 480, true],
   ['delivery-v1', 'final-dialogue-bg', 'world/home-core', 1280, 720, false],
   ['delivery-v1', 'nubi-origin', 'sprites/story', 512, 512, true],
-  ['delivery-v4', 'five-bind', 'fx/story', 768, 768, true],
+  ['delivery-v5', 'five-bind', 'fx/story', 768, 768, true],
   ['delivery-v1', 'origin-fall', 'fx/story', 768, 768, true],
   // to_codex/2026-10-26 v9(F-4 2차 — 최종 전투)
   ['delivery-v2', 'scissors-open-idle', 'sprites/bosses', 1024, 256, true],
@@ -43,7 +43,7 @@ const CONTRACT = [
   ['delivery-v3', 'five-unravel', 'fx/story', 768, 768, true],
   ['delivery-v4', 'thread-path', 'fx/story', 1280, 720, true],
   ['delivery-v3', 'real-world-bg', 'world/home-core', 1280, 720, false],
-  ['delivery-v4', 'real-yarn-knot', 'fx/story', 768, 768, true],
+  ['delivery-v5', 'real-yarn-knot', 'fx/story', 768, 768, true],
   ['delivery-v4', 'mother-hand', 'fx/story', 768, 768, true],
   ['delivery-v3', 'title-card-bg', 'world/home-core', 1280, 720, false],
 ];
