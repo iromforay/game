@@ -34,7 +34,7 @@ function normalizedClone(source: THREE.Object3D, targetHeight: number) {
   clone.position.y -= new THREE.Box3().setFromObject(clone).min.y;
   clone.traverse((object) => {
     if (!(object instanceof THREE.Mesh)) return;
-    object.castShadow = true; object.receiveShadow = true;
+    object.castShadow = false; object.receiveShadow = false;
     const materials = Array.isArray(object.material) ? object.material : [object.material];
     materials.forEach((material) => { material.side = THREE.DoubleSide; material.alphaTest = .32; });
   });
@@ -57,10 +57,11 @@ export function GreenTrackingScene({ onExit }: Props) {
     const random = seededRandom();
     const scene = new THREE.Scene(); scene.background = new THREE.Color(0xaec8ce); scene.fog = new THREE.FogExp2(0x9fb4a5, .009);
     const camera = new THREE.PerspectiveCamera(54, 1, .1, 180); camera.position.set(0, 1.72, 8);
-    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-    renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5)); renderer.outputColorSpace = THREE.SRGBColorSpace;
+    const compactDisplay = matchMedia('(max-width: 700px)').matches;
+    const renderer = new THREE.WebGLRenderer({ antialias: !compactDisplay, powerPreference: 'high-performance' });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, compactDisplay ? 1 : 1.25)); renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.22;
-    renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; mount.appendChild(renderer.domElement);
+    renderer.shadowMap.enabled = false; mount.appendChild(renderer.domElement);
 
     const pointers = new Map<number, { x: number; y: number }>();
     let targetYaw = 0; let currentYaw = 0; let targetFov = 54; let pinchDistance = 0;
@@ -90,8 +91,7 @@ export function GreenTrackingScene({ onExit }: Props) {
       vertexShader: 'varying float h;void main(){vec4 w=modelMatrix*vec4(position,1.);h=normalize(w.xyz).y;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
       fragmentShader: 'uniform vec3 topColor;uniform vec3 bottomColor;varying float h;void main(){float t=smoothstep(-.12,.55,h);gl_FragColor=vec4(mix(bottomColor,topColor,t),1.);}' }));
     scene.add(sky, new THREE.HemisphereLight(0xf0f5ef, 0x30452f, 2.2), new THREE.AmbientLight(0xc8d8cc, .34));
-    const sun = new THREE.DirectionalLight(0xfff0ce, 2.35); sun.position.set(-18, 25, 10); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
-    sun.shadow.camera.left = -24; sun.shadow.camera.right = 24; sun.shadow.camera.top = 28; sun.shadow.camera.bottom = -12; scene.add(sun);
+    const sun = new THREE.DirectionalLight(0xfff0ce, 2.35); sun.position.set(-18, 25, 10); scene.add(sun);
 
     const tl = new THREE.TextureLoader(); const [diffuse, normal, roughness] = [dirtDiffuseUrl, dirtNormalUrl, dirtRoughnessUrl].map((url) => tl.load(url));
     const [forestDiffuse, forestNormal, forestRoughness] = [forestDiffuseUrl, forestNormalUrl, forestRoughnessUrl].map((url) => tl.load(url));
@@ -117,11 +117,11 @@ export function GreenTrackingScene({ onExit }: Props) {
       };
       // Two overlapping tree strata keep branches and leaf clusters touching,
       // while the lower shrubs conceal repeated trunks and empty ground.
-      place(tree.scene, 150, [11.5, 18], 2.75, 13);
-      place(tree.scene, 96, [5.5, 10.5], 2.15, 9);
-      place(shrub.scene, 230, [1.3, 3.7], 1.9, 8);
-      place(shrub.scene, 130, [.55, 1.25], 1.65, 4.8);
-      place(fern.scene, 290, [.55, 1.45], 1.55, 6.5);
+      place(tree.scene, 72, [12.5, 19], 4, 12);
+      place(tree.scene, 36, [6, 11], 3.5, 8);
+      place(shrub.scene, 120, [1.4, 3.8], 2.4, 8);
+      place(shrub.scene, 60, [.6, 1.3], 2.15, 4.8);
+      place(fern.scene, 140, [.6, 1.5], 2.1, 6.5);
       setLoading(false);
     }).catch((error) => { console.error('3D forest assets failed', error); setLoading(false); });
 
