@@ -10,7 +10,9 @@ import { NAME_RULE_TEXT, nameReasonMessage, precheckName } from '../story/nameRu
 import type { OpeningStoryState, StoryClient } from '../story/storyClient';
 
 // 장 전용 대화 배경(한 장 그림, 화면 크기). 없으면 bg-<code> 타일(1·2장 숲·집)
-const DIALOGUE_BACKDROPS: Record<string, { key: string; alpha: number }> = { underfloor: { key: 'chapter03-dialogue-bg', alpha: 0.8 }, fridge: { key: 'chapter04-dialogue-bg', alpha: 0.8 }, desert: { key: 'chapter05-dialogue-bg', alpha: 0.8 }, home_core: { key: 'final-dialogue-bg', alpha: 0.8 }, real_world: { key: 'real-world-bg', alpha: 1 } };
+const DIALOGUE_BACKDROPS: Record<string, { key: string; alpha: number }> = { underfloor: { key: 'chapter03-dialogue-bg', alpha: 0.8 }, fridge: { key: 'chapter04-dialogue-bg', alpha: 0.8 }, desert: { key: 'chapter05-dialogue-bg', alpha: 0.8 }, home_core: { key: 'final-dialogue-bg', alpha: 0.8 }, real_world: { key: 'real-world-bg', alpha: 1 }, real_yarn_table: { key: 'real-yarn-table-scene', alpha: 1 } };
+// 10-27 F-6 재검수(Codex d11 보정값): 대화 배경을 화면 전체 장면으로 바꾸는 연출 — 연출 키 → DIALOGUE_BACKDROPS 키. 그림이 없으면 fallback 원형 연출
+const SCENE_BACKDROP_CUES: Record<string, { backdrop: string; fallback: string }> = { 'real-yarn-table-scene': { backdrop: 'real_yarn_table', fallback: 'real-yarn-knot' } };
 
 // M3 오프닝 — 서버 체크포인트가 지정한 구간부터 공용 대사 재생기(story/dialogueRunner.ts)로 재생한다.
 // 이 씬은 그리기와 입력만 맡는다. 진행·보상·체크포인트는 전부 서버가 판정한다.
@@ -254,6 +256,7 @@ export class OpeningScene extends Phaser.Scene {
     else if (cam === 'world-saturation-steady') this.setWorldSaturation(WORLD_SATURATION_STEADY);
     else if (cam === 'water-dye-yarn-rise') this.playRelicRise();
     else if (cam === 'nubi-color-restore') this.playNubiColorRestore();
+    else if (cam && SCENE_BACKDROP_CUES[cam]) this.playSceneBackdrop(cam);
     else if (cam && MEMORY_GLIMPSE_KEYS.includes(cam)) this.playMemoryGlimpse(cam);
     else if (cam === VOICE_CUE) this.playVoiceFrost();
     else if (cam === SCISSORS_GLIMPSE || cam === SCISSORS_REVEAL || cam === SCISSORS_FINAL_REVEAL || cam === THREAD_PATH) this.playEdgeGlimpse(cam);
@@ -340,6 +343,25 @@ export class OpeningScene extends Phaser.Scene {
     this.edgeGlimpse = img;
     this.tweens.add({ targets: img, alpha: 0.9, duration: 400, ease: 'Sine.easeOut' });
     this.tweens.add({ targets: img, alpha: 0, delay: 2000, duration: 600, onComplete: () => { img.destroy(); if (this.edgeGlimpse === img) this.edgeGlimpse = null; } });
+  }
+
+  // 10-27 F-6: 장면 전체 그림으로 대화 배경을 바꾼다(떠 있던 연출은 걷는다). 그림이 없으면 원형 연출로 대신한다
+  private playSceneBackdrop(cue: string) {
+    const c = SCENE_BACKDROP_CUES[cue];
+    this.fxState.glimpseShown.push(cue);
+    const target = DIALOGUE_BACKDROPS[c.backdrop];
+    if (!target || !this.textures.exists(target.key)) {
+      this.playMemoryGlimpse(c.fallback);
+      return;
+    }
+    this.clearEdgeGlimpse();
+    const memory = this.glimpse;
+    if (memory?.active) {
+      this.glimpse = null;
+      this.tweens.killTweensOf(memory);
+      memory.destroy();
+    }
+    this.setBackdrop(c.backdrop);
   }
 
   // 떠 있는 화면 전체 연출을 0.3초에 걸쳐 걷는다(다음 연출이 겹치지 않게 — 종장 실의 길 → 현실 세계)

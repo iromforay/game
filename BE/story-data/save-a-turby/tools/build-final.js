@@ -181,7 +181,7 @@ const file = {
       n(s, 278),
       n(s, 280, { cameraCue: 'mother-hand' }), // 3차 에셋 WF-FX-06(엄마의 손 — 손·팔까지)
       l(s, 282, 283, 'neutral'),
-      n(s, 285, { cameraCue: 'real-yarn-knot' }), // 3차 에셋 WF-FX-05(크림색 매듭·단수링이 달린 털실 — 움직이지 않는다)
+      n(s, 285, { cameraCue: 'real-yarn-table-scene' }), // 10-27 F-6 재검수: 거실 탁자 위 털실 장면 전체(Codex 보정값 — 이후 장면 끝까지 대화 배경). 그림이 없으면 real-yarn-knot 원형 연출
       n(s, 287),
       l(s, 289, 290, 'neutral'),
       n(s, 292),

@@ -793,7 +793,7 @@
           "kind": "narration",
           "dialogueId": "final.real_world.009",
           "text": "주인공은 탁자 위의 털실을 바라본다. 실 끝에는 처음 누비에게 묶어 주었던 작은 크림색 매듭이 남아 있다.",
-          "cameraCue": "real-yarn-knot",
+          "cameraCue": "real-yarn-table-scene",
           "soundCue": null
         },
         {

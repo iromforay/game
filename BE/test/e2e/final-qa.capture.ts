@@ -159,8 +159,8 @@ test('종장 캡처 ②(1280×720): 가위 등장 → 최종 전투 1·2·3단�
     await g.advanceDialogue(glimpseShown('mother-hand'));
     await waitFx(g, 'mother-hand');
     await g.capture('d10_real_world_mother_hand');
-    await g.advanceDialogue(glimpseShown('real-yarn-knot'));
-    await waitFx(g, 'real-yarn-knot');
+    await g.advanceDialogue(glimpseShown('real-yarn-table-scene'));
+    await g.page.waitForFunction(() => (window as any).__game.scene.getScenes(true).some((s: any) => s.children.list.some((o: any) => o.texture && ['real-yarn-table-scene', 'real-yarn-knot'].includes(o.texture.key) && o.alpha >= 0.8)), null, { timeout: 8000, polling: 50 }); // eslint-disable-line @typescript-eslint/no-explicit-any -- 장면 전체 그림(없으면 원형 연출)
     await g.capture('d11_real_yarn_knot');
     await g.advanceDialogue(fx('!!sc.fxState.endingReady'));
     await g.capture('e01_title_card');
