@@ -8,6 +8,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, write
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BE_ROOT, DEFAULT_E2E_DIR, assertFiles, hhmmss, readJson, runNodeTest, summaryLine } from './e2e-common.mjs';
+import { buildHub } from './e2e-build-hub.mjs';
 
 export const WORKERS = 2; // 이번에는 2로 고정(허용 범위도 2)
 const PORT_BASE = 41000; // shard N의 포트 범위: PORT_BASE + N*1000 ~ +999 (서로 겹치지 않는다)
@@ -65,6 +66,14 @@ async function main(argv) {
   console.log(`e2e-parallel: shard ${plan.shards.length}개 · 파일 ${plan.totalFiles}개(누락 0·중복 0) · 예상 시험 ${plan.totalTests}개`);
   for (const s of plan.shards) console.log(`  shard ${s.id}: 파일 ${s.files.length}개 · 시험 ${s.expectedTests}개 · 예상 ${s.estimatedSeconds ?? '?'}초 — ${s.files.join(', ')}`);
   if (opts.dryRun) return 0;
+
+  // 10-28: 허브 시험은 빌드 결과물을 연다 — 두 shard가 동시에 빌드하지 않게 시작 전에 한 번만(소스가 그대로면 건너뜀)
+  try {
+    buildHub({ ifStale: true });
+  } catch (e) {
+    console.error(`e2e-parallel: ${e instanceof Error ? e.message : e}`);
+    return 2;
+  }
 
   // shard별 고유 산출물 — 파일이 서로 덮어써지지 않게 한다
   const artifactsRoot = process.env.E2E_ARTIFACT_DIR ? resolve(process.env.E2E_ARTIFACT_DIR) : join(opts.e2eDir, '.artifacts');

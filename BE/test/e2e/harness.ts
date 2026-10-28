@@ -260,6 +260,66 @@ export async function startVite(root: string, env: Record<string, string>): Prom
   return { url: `http://127.0.0.1:${port}`, close: () => started.close() };
 }
 
+// ---------- 허브(빌드 결과물 정적 서버) ----------
+// 10-28: 허브는 개발 서버의 첫 변환이 무거워 병렬 shard에서 시간 초과가 났다 — 미리 빌드한 결과물(scripts/e2e-build-hub.mjs)을 연다.
+// 빌드에 박힌 터비 서버 자리표시 주소를 내려줄 때 이 시험의 서버 주소로 바꾼다(HTTP·소켓 모두 실제 주소로 접속). 다른 서버 주소는 .invalid로 막혀 있다.
+const HUB_TURBY_PLACEHOLDER = 'http://e2e-turby.invalid';
+const MIME: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif', '.ico': 'image/x-icon', '.woff': 'font/woff', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.wav': 'audio/wav', '.m4a': 'audio/mp4', '.mp4': 'video/mp4', '.webm': 'video/webm', '.wasm': 'application/wasm', '.txt': 'text/plain; charset=utf-8', '.webmanifest': 'application/manifest+json' };
+const TEXT_EXT = new Set(['.html', '.js', '.mjs', '.css', '.json', '.webmanifest']);
+
+export async function startHubBuild(turbyServerUrl: string): Promise<{ url: string; close: () => Promise<void> }> {
+  const { spawnSync } = await import('child_process');
+  const { readFileSync, statSync } = await import('fs');
+  const { createServer: createHttpServer } = await import('http');
+  const { extname, normalize, sep } = await import('path');
+  // 병렬 실행기는 shard 시작 전에 이미 빌드했다 — 따로 돌릴 때만 여기서 빌드한다(소스가 그대로면 건너뜀)
+  const built = spawnSync(process.execPath, [join(__dirname, '../../scripts/e2e-build-hub.mjs'), '--if-stale'], { stdio: 'inherit' });
+  if (built.status !== 0) throw new Error('허브 E2E 빌드 실패');
+  const dist = join(__dirname, '.artifacts', 'hub-dist');
+  const cache = new Map<string, Buffer>();
+  const read = (file: string): Buffer => {
+    let body = cache.get(file);
+    if (!body) {
+      body = readFileSync(file);
+      if (TEXT_EXT.has(extname(file))) body = Buffer.from(body.toString('utf8').split(HUB_TURBY_PLACEHOLDER).join(turbyServerUrl));
+      cache.set(file, body);
+    }
+    return body;
+  };
+  const server = createHttpServer((req, res) => {
+    const path = decodeURIComponent(new URL(req.url ?? '/', 'http://x').pathname);
+    let file = normalize(join(dist, path));
+    if (!file.startsWith(dist + sep) && file !== dist) file = join(dist, 'index.html');
+    if (!existsSync(file) || statSync(file).isDirectory()) file = extname(path) ? '' : join(dist, 'index.html'); // 화면 경로는 index.html, 없는 파일은 404
+    if (!file) {
+      res.writeHead(404).end();
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': MIME[extname(file)] ?? 'application/octet-stream', 'Cache-Control': 'no-store' });
+    res.end(read(file));
+  });
+  // 포트는 startVite와 같이 겹치면 제한된 횟수만 새 번호로 다시 시도한다
+  let port = 0;
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    port = await freePort();
+    try {
+      await new Promise<void>((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(port, '127.0.0.1', () => {
+          server.off('error', reject);
+          resolve();
+        });
+      });
+      return { url: `http://127.0.0.1:${port}`, close: () => new Promise<void>((resolve) => { server.close(() => resolve()); server.closeAllConnections(); }) }; // 브라우저의 keep-alive 연결이 닫기를 붙잡지 않게
+    } catch (e) {
+      lastError = e;
+      if ((e as NodeJS.ErrnoException).code !== 'EADDRINUSE') throw e;
+    }
+  }
+  throw lastError;
+}
+
 // ---------- 브라우저 ----------
 function chromePath(): string | undefined {
   const list = [process.env.CHROME_PATH, 'C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', '/usr/bin/google-chrome', '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'];

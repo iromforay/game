@@ -1,11 +1,11 @@
 // 10-02 v1 §5·§7: main 통합 회귀 — 허브 게임 목록에 터비 구하기와 광고게임이 함께 있고, 대표 광고게임 두 개가 허브에서 실제로 열린다.
-// 허브의 계정·커비·멀티 서버 주소는 쓰지 않는 로컬 포트로 막는다(운영 서버에 요청하지 않음).
+// 허브는 미리 빌드한 결과물을 연다(10-28, 병렬 시간 초과 대응). 계정·커비·멀티 등 다른 서버 주소는 빌드에서 .invalid로 막는다(운영 서버에 요청하지 않음).
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync } from 'fs';
 import { join } from 'path';
 import type { Browser } from 'playwright-core';
-import { Backend, ROOT, freePort, launchBrowser, startVite } from './harness';
+import { Backend, freePort, launchBrowser, startHubBuild } from './harness';
 
 let backend: Backend;
 let hub: { url: string; close: () => Promise<void> };
@@ -13,8 +13,7 @@ let browser: Browser;
 
 before(async () => {
   backend = new Backend(await freePort());
-  const dead = `http://127.0.0.1:${await freePort()}`; // 아무도 듣지 않는 포트
-  hub = await startVite(join(ROOT, 'hub'), { VITE_TURBY_SERVER_URL: `http://127.0.0.1:${backend.port}`, VITE_ACCOUNT_SERVER_URL: dead, VITE_KIRBY_SERVER_URL: dead, VITE_MULTIPLAYER_SERVER_URL: dead });
+  hub = await startHubBuild(`http://127.0.0.1:${backend.port}`); // 미리 빌드한 허브(scripts/e2e-build-hub.mjs) — 다른 서버 주소는 빌드에서 .invalid로 막는다
   browser = await launchBrowser();
 });
 after(async () => {

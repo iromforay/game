@@ -1,10 +1,10 @@
 // v5 §4·§7-6: 허브 임베드 화면 — 허브(Vite 개발 서버)에서 터비 구하기를 열어도 게임이 뜨고, 창 크기를 바꿔도 캔버스가 허브 영역 안에서 비율을 유지한다.
-// 허브의 계정·커비·멀티 서버 주소는 쓰지 않는 로컬 포트로 막는다(운영 서버에 요청하지 않음). 터비 서버는 테스트 Nest 앱.
+// 허브는 미리 빌드한 결과물을 연다(10-28, 병렬 시간 초과 대응). 계정·커비·멀티 등 다른 서버 주소는 빌드에서 .invalid로 막는다(운영 서버에 요청하지 않음). 터비 서버는 테스트 Nest 앱.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'path';
 import type { Browser, Page } from 'playwright-core';
-import { Backend, ROOT, freePort, launchBrowser, startVite } from './harness';
+import { Backend, freePort, launchBrowser, startHubBuild } from './harness';
 import { seedKnotReady } from './fixtures';
 
 let backend: Backend;
@@ -13,8 +13,7 @@ let browser: Browser;
 
 before(async () => {
   backend = new Backend(await freePort());
-  const dead = `http://127.0.0.1:${await freePort()}`; // 아무도 듣지 않는 포트
-  hub = await startVite(join(ROOT, 'hub'), { VITE_TURBY_SERVER_URL: `http://127.0.0.1:${backend.port}`, VITE_ACCOUNT_SERVER_URL: dead, VITE_KIRBY_SERVER_URL: dead, VITE_MULTIPLAYER_SERVER_URL: dead });
+  hub = await startHubBuild(`http://127.0.0.1:${backend.port}`); // 미리 빌드한 허브(scripts/e2e-build-hub.mjs) — 다른 서버 주소는 빌드에서 .invalid로 막는다
   browser = await launchBrowser();
 });
 after(async () => {
