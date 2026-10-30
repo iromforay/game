@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
-import { fetchSession, hasStoredToken, login, logout, register } from './accountClient';
+import { ensureHubJwt, fetchSession, hasStoredToken, login, logout, register } from './accountClient';
 import type { AccountSession } from './accountClient';
 import './AccountPanel.css';
 
@@ -41,7 +41,7 @@ export function AccountPanel({ onSession }: Props) {
     }
     if (location.pathname === '/login') setMode('login');
     if (!hasStoredToken()) return;
-    void fetchSession().then((s) => {
+    void ensureHubJwt().catch(() => null).then(() => fetchSession()).then((s) => {
       setSession(s);
       setChecking(false);
       onSession?.(s);

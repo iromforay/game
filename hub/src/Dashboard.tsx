@@ -4,7 +4,7 @@ import type { GameId } from './games';
 import kirbyGuideIconUrl from './assets/cards/icon-steal-a-kirby.png';
 import turbyGuideIconUrl from './assets/cards/icon-save-a-turby.png';
 import { AccountPanel } from './account/AccountPanel';
-import { getHubJwtCookie } from './account/accountClient';
+import { ensureHubJwt } from './account/accountClient';
 import type { AccountSession } from './account/accountClient';
 
 const MYPLAYMARKET_URL = import.meta.env.VITE_MYPLAYMARKET_URL ?? 'http://localhost:4000';
@@ -27,8 +27,8 @@ export function Dashboard({ onSelectGame, onOpenKirbyGuide, onOpenTurbyGuide, on
     if (!session || openingMarket) return;
     setOpeningMarket(true);
     try {
-      const token = getHubJwtCookie();
-      if (!token) throw new Error('BOMUL_HUB_TOKEN 쿠키가 없습니다. 다시 로그인해 주세요.');
+      const token = await ensureHubJwt();
+      if (!token) throw new Error('BOMUL_HUB_TOKEN을 재발급하지 못했습니다. 다시 로그인해 주세요.');
       const target = new URL(MYPLAYMARKET_URL);
       target.searchParams.set('BOMUL_HUB_TOKEN', token);
       location.href = target.href;
