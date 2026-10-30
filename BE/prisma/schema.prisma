@@ -500,6 +500,18 @@ model account_session {
   @@index([account_id], map: "idx_account_session_account")
 }
 
+// 거래소 SSO용 재발급 토큰. 원문은 브라우저 쿠키에만 두고 DB에는 SHA-256 해시만 저장한다.
+model account_refresh_token {
+  token_hash String    @id @db.Char(64)
+  account_id BigInt    @db.UnsignedBigInt
+  expires_at DateTime  @db.DateTime(0)
+  revoked_at DateTime? @db.DateTime(0)
+  created_at DateTime  @default(now()) @db.Timestamp(0)
+
+  @@index([account_id], map: "idx_account_refresh_account")
+  @@index([expires_at], map: "idx_account_refresh_expiry")
+}
+
 // 스코어보드(2026-09-28, prisma/sql/2026-09-28_score_record.sql, docs/dev/scoreboard.md) — 로그인 플레이어의 판 결과
 model score_record {
   id          BigInt            @id @default(autoincrement()) @db.UnsignedBigInt

@@ -186,6 +186,11 @@
   transform: translateY(0);
 }
 
+.dashboard-guide-button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
 .dashboard-guide-button:focus-visible {
   outline: 2px solid #ffe9a8;
   outline-offset: 3px;
@@ -197,6 +202,14 @@
   object-fit: contain;
   flex-shrink: 0;
   pointer-events: none;
+}
+
+.dashboard-market-icon {
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: linear-gradient(145deg, #66e3a4, #318ad8);
+  font-size: 23px;
 }
 
 .dashboard-guide-text {

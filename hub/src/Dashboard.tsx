@@ -4,6 +4,10 @@ import type { GameId } from './games';
 import kirbyGuideIconUrl from './assets/cards/icon-steal-a-kirby.png';
 import turbyGuideIconUrl from './assets/cards/icon-save-a-turby.png';
 import { AccountPanel } from './account/AccountPanel';
+import { getHubJwtCookie } from './account/accountClient';
+import type { AccountSession } from './account/accountClient';
+
+const MYPLAYMARKET_URL = import.meta.env.VITE_MYPLAYMARKET_URL ?? 'http://localhost:4000';
 
 interface DashboardProps {
   onSelectGame: (gameId: GameId) => void;
@@ -16,12 +20,30 @@ interface DashboardProps {
 
 export function Dashboard({ onSelectGame, onOpenKirbyGuide, onOpenTurbyGuide, onOpenRanking, onOpenAdmin, onOpenAdGames }: DashboardProps) {
   const [isAdmin, setIsAdmin] = useState(false);
+  const [session, setSession] = useState<AccountSession | null>(null);
+  const [openingMarket, setOpeningMarket] = useState(false);
+
+  const openMyplaymarket = async () => {
+    if (!session || openingMarket) return;
+    setOpeningMarket(true);
+    try {
+      const token = getHubJwtCookie();
+      if (!token) throw new Error('BOMUL_HUB_TOKEN 쿠키가 없습니다. 다시 로그인해 주세요.');
+      const target = new URL(MYPLAYMARKET_URL);
+      target.searchParams.set('BOMUL_HUB_TOKEN', token);
+      location.href = target.href;
+    } catch (error) {
+      alert(error instanceof Error ? error.message : '어린이 거래소 연결에 실패했습니다');
+      setOpeningMarket(false);
+    }
+  };
+
   return (
     <div className="dashboard">
       <div className="dashboard-header">
         <h1>게임 허브</h1>
         <p className="dashboard-subtitle">플레이할 게임을 선택하세요.</p>
-        <AccountPanel onSession={(s) => setIsAdmin(!!s?.isAdmin)} />
+        <AccountPanel onSession={(s) => { setSession(s); setIsAdmin(!!s?.isAdmin); }} />
       </div>
 
       <section className="dashboard-section dashboard-section-games" aria-label="게임 선택">
@@ -55,6 +77,18 @@ export function Dashboard({ onSelectGame, onOpenKirbyGuide, onOpenTurbyGuide, on
           </button>
         </div>
       </section>
+
+      {session && (
+        <section className="dashboard-section dashboard-section-guide" aria-label="어린이 거래소">
+          <button type="button" className="dashboard-guide-button" onClick={openMyplaymarket} disabled={openingMarket}>
+            <span className="dashboard-guide-icon dashboard-market-icon" aria-hidden="true">📈</span>
+            <span className="dashboard-guide-text">
+              <span className="dashboard-guide-title">어린이 거래소</span>
+              <span className="dashboard-guide-desc">{openingMarket ? '거래소 연결 중…' : '허브 로그인으로 안전하게 시작하기'}</span>
+            </span>
+          </button>
+        </section>
+      )}
 
       <section className="dashboard-section dashboard-section-guide" aria-label="랭킹">
         <button type="button" className="dashboard-guide-button" onClick={onOpenRanking}>

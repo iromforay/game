@@ -34,6 +34,7 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
   const token = readStorage(AUTH_TOKEN_KEY);
   const res = await fetch(`${BASE_URL}${path}`, {
     ...init,
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -87,6 +88,12 @@ export async function fetchSession(): Promise<AccountSession | null> {
     localStorage.removeItem(NICKNAME_KEY);
     return null;
   }
+}
+
+export function getHubJwtCookie() {
+  const prefix = 'BOMUL_HUB_TOKEN=';
+  const value = document.cookie.split(';').map((part) => part.trim()).find((part) => part.startsWith(prefix));
+  return value ? decodeURIComponent(value.slice(prefix.length)) : null;
 }
 
 export async function logout() {

@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
-import { createHash, randomBytes, scrypt as scryptCb, timingSafeEqual } from 'crypto';
+import { createHash, createHmac, randomBytes, scrypt as scryptCb, timingSafeEqual } from 'crypto';
 import { promisify } from 'util';
 import { PrismaService } from './prisma.service';
 
@@ -12,6 +12,25 @@ const PASSWORD_MIN = 6;
 const PASSWORD_MAX = 64;
 const KEY_LEN = 64;
 const NICKNAME_MAX = 12;
+const ACCESS_TOKEN_TTL_SECONDS = positiveInt(process.env.HUB_ACCESS_TOKEN_TTL_SECONDS, 60 * 60);
+const REFRESH_TOKEN_TTL_SECONDS = positiveInt(process.env.HUB_REFRESH_TOKEN_TTL_SECONDS, 14 * 24 * 60 * 60);
+
+export interface IssuedAccountSession {
+  token: string;
+  loginId: string;
+  nickname: string;
+  accessToken?: string;
+  refreshToken?: string;
+}
+
+function positiveInt(raw: string | undefined, fallback: number) {
+  const value = Number(raw);
+  return Number.isSafeInteger(value) && value > 0 ? value : fallback;
+}
+
+function base64Url(value: string | Buffer) {
+  return Buffer.from(value).toString('base64url');
+}
 
 export type AccountGame = 'kirby' | 'turby';
 
@@ -60,17 +79,47 @@ export class AccountService {
   }
 
   async login(loginIdRaw: unknown, password: unknown) {
-    const loginId = this.normalizeLoginId(loginIdRaw);
-    const account = typeof password === 'string' ? await this.prisma.account.findUnique({ where: { login_id: loginId } }) : null;
-    if (!account || !(await this.verifyPassword(password as string, account.password_hash))) {
-      throw new UnauthorizedException({ message: '아이디 또는 비밀번호가 올바르지 않습니다', code: 'INVALID_CREDENTIALS' });
-    }
+    const account = await this.authenticate(loginIdRaw, password);
     return this.issueSession(account.id, account.login_id, account.nickname);
+  }
+
+  // 거래소 BE 전용 로그인: 허브의 기존 Bearer 세션은 만들지 않고 SSO 토큰만 발급한다.
+  async loginForSso(loginIdRaw: unknown, password: unknown) {
+    const account = await this.authenticate(loginIdRaw, password);
+    const tokens = await this.issueSsoTokens(account.id, account.nickname);
+    return {
+      tokenType: 'Bearer',
+      accessToken: tokens.accessToken,
+      expiresIn: ACCESS_TOKEN_TTL_SECONDS,
+      refreshToken: tokens.refreshToken,
+      refreshExpiresIn: REFRESH_TOKEN_TTL_SECONDS,
+    };
   }
 
   async logout(token: string | undefined) {
     if (token) await this.prisma.account_session.deleteMany({ where: { token_hash: hashToken(token) } });
     return { ok: true };
+  }
+
+  async revokeRefreshToken(refreshToken: string | undefined) {
+    if (!refreshToken) return;
+    await this.prisma.account_refresh_token.updateMany({
+      where: { token_hash: hashToken(refreshToken), revoked_at: null },
+      data: { revoked_at: new Date() },
+    });
+  }
+
+  async refreshAccessToken(refreshToken: unknown) {
+    if (typeof refreshToken !== 'string' || !refreshToken) {
+      throw new UnauthorizedException({ message: '다시 로그인해 주세요', code: 'UNAUTHENTICATED' });
+    }
+    const stored = await this.prisma.account_refresh_token.findUnique({ where: { token_hash: hashToken(refreshToken) } });
+    if (!stored || stored.revoked_at || stored.expires_at <= new Date()) {
+      throw new UnauthorizedException({ message: '다시 로그인해 주세요', code: 'UNAUTHENTICATED' });
+    }
+    const account = await this.prisma.account.findUnique({ where: { id: stored.account_id } });
+    if (!account) throw new UnauthorizedException({ message: '다시 로그인해 주세요', code: 'UNAUTHENTICATED' });
+    return { accessToken: this.signAccessToken(account.id, account.nickname), expiresIn: ACCESS_TOKEN_TTL_SECONDS };
   }
 
   async me(token: string | undefined) {
@@ -130,14 +179,62 @@ export class AccountService {
     return accountId ? this.prisma.account.findUnique({ where: { id: accountId } }) : null;
   }
 
-  private async issueSession(accountId: bigint, loginId: string, nickname: string) {
+  private async issueSession(accountId: bigint, loginId: string, nickname: string): Promise<IssuedAccountSession> {
+    this.jwtSecret();
     const token = randomBytes(32).toString('hex');
     await this.prisma.account_session.create({ data: { token_hash: hashToken(token), account_id: accountId } });
-    return { token, loginId, nickname };
+    const sso = await this.issueSsoTokens(accountId, nickname);
+    return { token, loginId, nickname, ...sso };
+  }
+
+  private async issueSsoTokens(accountId: bigint, nickname: string) {
+    this.jwtSecret();
+    const refreshToken = randomBytes(32).toString('base64url');
+    await this.prisma.account_refresh_token.create({
+      data: {
+        token_hash: hashToken(refreshToken),
+        account_id: accountId,
+        expires_at: new Date(Date.now() + REFRESH_TOKEN_TTL_SECONDS * 1000),
+      },
+    });
+    return { accessToken: this.signAccessToken(accountId, nickname), refreshToken };
+  }
+
+  private signAccessToken(accountId: bigint, nickname: string) {
+    const now = Math.floor(Date.now() / 1000);
+    const header = base64Url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+    const payload = base64Url(JSON.stringify({
+      iss: 'game-hub',
+      aud: 'myplaymarket',
+      sub: accountId.toString(),
+      nickname,
+      iat: now,
+      exp: now + ACCESS_TOKEN_TTL_SECONDS,
+    }));
+    const unsigned = `${header}.${payload}`;
+    const signature = createHmac('sha256', this.jwtSecret()).update(unsigned).digest('base64url');
+    return `${unsigned}.${signature}`;
+  }
+
+  private jwtSecret() {
+    const secret = process.env.HUB_JWT_SECRET;
+    if (!secret || Buffer.byteLength(secret, 'utf8') < 32) {
+      throw new Error('HUB_JWT_SECRET must be at least 32 bytes for hub SSO');
+    }
+    return secret;
   }
 
   private normalizeLoginId(raw: unknown) {
     return typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  }
+
+  private async authenticate(loginIdRaw: unknown, password: unknown) {
+    const loginId = this.normalizeLoginId(loginIdRaw);
+    const account = typeof password === 'string' ? await this.prisma.account.findUnique({ where: { login_id: loginId } }) : null;
+    if (!account || !(await this.verifyPassword(password as string, account.password_hash))) {
+      throw new UnauthorizedException({ message: '아이디 또는 비밀번호가 올바르지 않습니다', code: 'INVALID_CREDENTIALS' });
+    }
+    return account;
   }
 
   private assertPassword(password: unknown) {
