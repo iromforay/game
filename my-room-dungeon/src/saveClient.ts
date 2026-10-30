@@ -32,7 +32,7 @@ export interface DungeonSettlementResponse extends DungeonSaveData {
 }
 
 const SERVER_URL: string = import.meta.env.VITE_MY_ROOM_DUNGEON_SERVER_URL
-  ?? 'http://localhost:3004';
+  ?? 'http://localhost:3001';
 const AUTH_TOKEN_KEY = 'bomul_auth_token';
 
 function token() {

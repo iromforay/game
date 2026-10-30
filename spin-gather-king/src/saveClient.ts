@@ -1,6 +1,6 @@
 import type { GameSave } from './save';
 
-const SERVER_URL: string = import.meta.env.SPIN_GATHER_SERVER_URL ?? 'http://localhost:3006';
+const SERVER_URL: string = import.meta.env.SPIN_GATHER_SERVER_URL ?? 'http://localhost:3001';
 const TOKEN_KEY = 'bomul_auth_token';
 const GUEST_KEY = 'spin-gather-guest-id';
 
