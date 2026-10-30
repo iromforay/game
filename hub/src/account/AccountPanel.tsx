@@ -23,12 +23,29 @@ export function AccountPanel({ onSession }: Props) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
+  const returnUrl = (() => {
+    const value = new URLSearchParams(location.search).get('returnUrl');
+    if (!value) return null;
+    try {
+      const url = new URL(value, location.origin);
+      const allowed = url.origin === location.origin || (url.protocol === 'https:' && (url.hostname === 'bomul.ai.kr' || url.hostname.endsWith('.bomul.ai.kr')));
+      return allowed ? url.href : null;
+    } catch { return null; }
+  })();
+
   useEffect(() => {
+    if (location.pathname === '/logout') {
+      setBusy(true);
+      void logout().finally(() => { location.href = returnUrl ?? '/'; });
+      return;
+    }
+    if (location.pathname === '/login') setMode('login');
     if (!hasStoredToken()) return;
     void fetchSession().then((s) => {
       setSession(s);
       setChecking(false);
       onSession?.(s);
+      if (s && location.pathname === '/login' && returnUrl) location.href = returnUrl;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -47,7 +64,8 @@ export function AccountPanel({ onSession }: Props) {
     try {
       if (mode === 'login') await login(loginId, password);
       else await register(loginId, password, nickname);
-      location.reload();
+      if (returnUrl) location.href = returnUrl;
+      else location.reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : '요청에 실패했습니다');
       setBusy(false);
