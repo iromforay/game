@@ -1,5 +1,5 @@
 @echo off
-rem Color Blasters dedicated NestJS and Socket.IO server.
+rem Color Blasters dedicated NestJS and Socket.IO server (not in service, local dev only).
 cd /d "%~dp0"
 
 rem Read the dedicated port from BE/.env when configured.

@@ -3,7 +3,7 @@ import { after, before, test } from 'node:test';
 import type { INestApplication } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { io, type Socket } from 'socket.io-client';
-import { AppModule } from '../src/app.module';
+import { ColorBlastersAppModule } from '../src/color-blasters-app.module';
 import { COLOR_BLASTERS_EVENTS } from '../src/color-blasters/color-blasters.types';
 
 type Ack = { ok: boolean; status?: 'waiting' | 'matched'; error?: string };
@@ -70,7 +70,7 @@ async function connectClient() {
 function delay(ms: number) { return new Promise((resolve) => setTimeout(resolve, ms)); }
 
 before(async () => {
-  app = await NestFactory.create(AppModule, { logger: false });
+  app = await NestFactory.create(ColorBlastersAppModule, { logger: false });
   await app.listen(0, '127.0.0.1');
   const address = app.getHttpServer().address();
   if (!address || typeof address === 'string') throw new Error('테스트 서버 포트를 확인할 수 없습니다.');

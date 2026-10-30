@@ -35,18 +35,8 @@ module.exports = {
         KIRBY_PORT: process.env.KIRBY_PORT || 3003,
       },
     },
-    {
-      // 내 방이 던전 전용 저장 API 프로세스
-      name: 'my-room-dungeon-be',
-      cwd: __dirname,
-      script: 'dist/my-room-dungeon-main.js',
-      instances: 1,
-      exec_mode: 'fork',
-      env: {
-        NODE_ENV: 'production',
-        MY_ROOM_DUNGEON_PORT: process.env.MY_ROOM_DUNGEON_PORT || 3004,
-      },
-    },
+    // 10-30: my-room-dungeon-be(3004)·spin-gather-be(3006)는 be(3001)로 통합,
+    // color-blasters-be(3007)는 미서비스라 운영 목록에서 뺌(개발은 npm run dev:color-blasters)
     {
       // 달콤상점 전용 API·Socket.IO 프로세스
       name: 'sweet-shop-be',
@@ -58,30 +48,6 @@ module.exports = {
         NODE_ENV: 'production',
         SWEET_SHOP_PORT: process.env.SWEET_SHOP_PORT || 3005,
         SWEET_SHOP_MULTIPLAYER_ENABLED: process.env.SWEET_SHOP_MULTIPLAYER_ENABLED || 'true',
-      },
-    },
-    {
-      // 빙글 채집왕 전용 영구 진행 저장 API 프로세스
-      name: 'spin-gather-be',
-      cwd: __dirname,
-      script: 'dist/spin-gather-main.js',
-      instances: 1,
-      exec_mode: 'fork',
-      env: {
-        NODE_ENV: 'production',
-        SPIN_GATHER_PORT: process.env.SPIN_GATHER_PORT || 3006,
-      },
-    },
-    {
-      // 컬러 블래스터즈 전용 Socket.IO 대전 서버
-      name: 'color-blasters-be',
-      cwd: __dirname,
-      script: 'dist/color-blasters-main.js',
-      instances: 1,
-      exec_mode: 'fork',
-      env: {
-        NODE_ENV: 'production',
-        COLOR_BLASTERS_PORT: process.env.COLOR_BLASTERS_PORT || 3007,
       },
     },
   ],

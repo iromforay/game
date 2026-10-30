@@ -16,7 +16,7 @@ async function bootstrap() {
 
   const port = process.env.PORT ? Number(process.env.PORT) : 3001;
   await app.listen(port);
-  console.log(`multiplayer server listening on :${port}${process.env.USE_REDIS_ADAPTER === 'true' ? ' (redis adapter enabled)' : ''}`);
+  console.log(`main server (rooms + my-room-dungeon + spin-gather) listening on :${port}${process.env.USE_REDIS_ADAPTER === 'true' ? ' (redis adapter enabled)' : ''}`);
 }
 
 bootstrap();

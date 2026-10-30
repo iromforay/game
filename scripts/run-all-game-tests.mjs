@@ -12,9 +12,9 @@ const backendByGame = {
   'save-a-turby': server('TURBY_TEST_SERVER_URL', 'VITE_TURBY_SERVER_URL', 'http://127.0.0.1:3002'),
   'steal_a_kirby': server('KIRBY_TEST_SERVER_URL', 'VITE_KIRBY_SERVER_URL', 'http://127.0.0.1:3003'),
   'merge-defense': server('ACCOUNT_TEST_SERVER_URL', ['VITE_ACCOUNT_SERVER_URL', 'VITE_KIRBY_SERVER_URL'], 'http://127.0.0.1:3003'),
-  'my-room-dungeon': server('MY_ROOM_DUNGEON_TEST_SERVER_URL', 'VITE_MY_ROOM_DUNGEON_SERVER_URL', 'http://127.0.0.1:3004'),
+  'my-room-dungeon': server('MY_ROOM_DUNGEON_TEST_SERVER_URL', 'VITE_MY_ROOM_DUNGEON_SERVER_URL', 'http://127.0.0.1:3001'),
   'sweet-shop': server('SWEET_SHOP_TEST_SERVER_URL', 'VITE_SWEET_SHOP_SERVER_URL', 'http://127.0.0.1:3005'),
-  'spin-gather-king': server('SPIN_GATHER_TEST_SERVER_URL', 'SPIN_GATHER_SERVER_URL', 'http://127.0.0.1:3006'),
+  'spin-gather-king': server('SPIN_GATHER_TEST_SERVER_URL', 'SPIN_GATHER_SERVER_URL', 'http://127.0.0.1:3001'),
   'number-hero-tower': server('ACCOUNT_TEST_SERVER_URL', ['VITE_ACCOUNT_SERVER_URL', 'VITE_KIRBY_SERVER_URL'], 'http://127.0.0.1:3003'),
   'number-gate-runner': server('ACCOUNT_TEST_SERVER_URL', ['VITE_ACCOUNT_SERVER_URL', 'VITE_KIRBY_SERVER_URL'], 'http://127.0.0.1:3003'),
 };

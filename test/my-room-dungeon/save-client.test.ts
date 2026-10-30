@@ -4,9 +4,9 @@ import test from 'node:test';
 
 const source = readFileSync(new URL('../../my-room-dungeon/src/saveClient.ts', import.meta.url), 'utf8');
 
-test('내방이 던전 FE는 전용 서버 환경변수와 기본 포트를 사용한다', () => {
+test('내방이 던전 FE는 서버 환경변수와 메인 BE 기본 포트를 사용한다', () => {
   assert.match(source, /VITE_MY_ROOM_DUNGEON_SERVER_URL/);
-  assert.match(source, /http:\/\/localhost:3004/);
+  assert.match(source, /http:\/\/localhost:3001/);
 });
 
 test('모든 저장 요청은 인증 토큰을 Bearer 헤더로 전달한다', () => {
