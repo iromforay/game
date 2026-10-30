@@ -96,6 +96,13 @@ export function getHubJwtCookie() {
   return value ? decodeURIComponent(value.slice(prefix.length)) : null;
 }
 
+export async function ensureHubJwt() {
+  const existing = getHubJwtCookie();
+  if (existing) return existing;
+  await request<{ expiresIn: number }>('/account/refresh', { method: 'POST' });
+  return getHubJwtCookie();
+}
+
 export async function logout() {
   await request('/account/logout', { method: 'POST' }).catch(() => undefined);
   localStorage.removeItem(AUTH_TOKEN_KEY);

@@ -81,6 +81,13 @@ export class AccountController {
     return { ok: true };
   }
 
+  @Post('refresh')
+  async refresh(@Req() req: HubRequest, @Res({ passthrough: true }) res: HubResponse) {
+    const refreshed = await this.accounts.refreshAccessToken(cookie(req, REFRESH_COOKIE));
+    res.cookie(ACCESS_COOKIE, refreshed.accessToken, cookieOptions(ACCESS_MAX_AGE_MS, false));
+    return { expiresIn: refreshed.expiresIn };
+  }
+
   @Get('me')
   me(@Headers('authorization') auth?: string) {
     return this.accounts.me(bearer(auth));
